@@ -1,15 +1,19 @@
 import Link from 'next/link';
+import { TodayShell } from '@/client/components/TodayShell';
 import { auth } from '@/server/auth/config';
 
 export const runtime = 'nodejs';
 
 /**
- * Phase 1 placeholder.
+ * Home is today, not a dashboard (R2).
  *
- * Home is "today, not a dashboard" (R2), but the Today screen is Phase 3 work
- * and the charm layer is gated behind Phase 2's exit gate. What this screen
- * proves is the Phase 1 Definition of Done: sign-in issues a JWT carrying
- * orgId and role.
+ * Phase 2 puts the Tally and the sync status here so the offline engine has a
+ * real path to exercise. The chore list, the flock picker, and the charm
+ * layer arrive in Phase 3.
+ *
+ * A session is required before anything can be queued: a mutation enqueued
+ * without one would be attributed to whoever signed in next, and the queue
+ * must not outlive a session boundary (session hygiene, C5).
  */
 export default async function Home(): Promise<React.ReactElement> {
   const session = await auth();
@@ -26,27 +30,13 @@ export default async function Home(): Promise<React.ReactElement> {
     );
   }
 
+  // Placeholder until flocks exist (Phase 3). Derived from the org so a
+  // device's logs stay attached to one subject across reloads.
+  const flockId = session.user.orgId;
+
   return (
     <main className="shell">
-      <header className="shell__status">
-        <p className="label">Signed in</p>
-        <p>{session.user.email}</p>
-      </header>
-
-      <section className="arch shell__card">
-        <p className="label">Session claims</p>
-        <dl className="shell__claims" data-numeric>
-          <dt className="label">Org</dt>
-          <dd>{session.user.orgId}</dd>
-          <dt className="label">Role</dt>
-          <dd>{session.user.role}</dd>
-        </dl>
-      </section>
-
-      <p className="shell__note">
-        Foundation only. The Today screen, the Tally, and the offline queue arrive with Phases 2
-        and 3.
-      </p>
+      <TodayShell flockId={flockId} />
     </main>
   );
 }

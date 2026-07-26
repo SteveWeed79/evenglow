@@ -252,6 +252,202 @@ summary {
   color: var(--muted);
 }
 
+/* ── The Tally ──────────────────────────────────────────────────────────── */
+
+.tally {
+  /* The lamp above the doorway. One gradient; it repeats nowhere else. */
+  background:
+    radial-gradient(
+      120% 80% at 50% 12%,
+      color-mix(in oklab, var(--lantern) 14%, transparent),
+      transparent 70%
+    ),
+    var(--raised);
+  padding: 2.5rem 1rem 1rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: var(--tap-gap);
+}
+
+.tally__count {
+  display: block;
+  font-family: var(--font-display);
+  font-variation-settings: 'SOFT' 30, 'WONK' 1, 'wght' 700;
+  font-size: var(--step-tally);
+  line-height: 0.9;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.tally__unit {
+  margin: 0;
+  color: var(--muted);
+}
+
+.tally__steps {
+  display: flex;
+  gap: var(--tap-gap);
+}
+
+.tally__step {
+  flex: 1;
+  min-height: var(--tap-primary);
+  border-radius: var(--arch);
+  border: var(--border);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--step-body);
+  cursor: pointer;
+}
+
+.tally__step:disabled {
+  opacity: 0.4;
+}
+
+.tally__commit {
+  min-height: var(--tap-primary);
+  border-radius: var(--arch);
+  border: none;
+  background: var(--lantern);
+  color: #201913;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tally__commit:disabled {
+  opacity: 0.5;
+}
+
+.tally__confirmation {
+  margin: 0;
+  min-height: 1.5rem;
+  color: var(--muted);
+}
+
+/* ── Sync status ────────────────────────────────────────────────────────── */
+
+/* Status, not an action — so it is flat, not arched. */
+.syncchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: var(--tap-min);
+  padding: 0 0.875rem;
+  border-radius: 8px;
+  border: var(--border);
+  background: var(--raised);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--step-label);
+  font-family: var(--font-data);
+  cursor: pointer;
+}
+
+.syncchip__dot {
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: none;
+}
+
+.syncchip[data-state='synced'] .syncchip__dot {
+  background: var(--leaf);
+}
+
+/* Damson, never red. Queued work is normal, not an emergency. */
+.syncchip[data-state='queued'] .syncchip__dot,
+.syncchip[data-state='syncing'] .syncchip__dot {
+  background: var(--damson);
+}
+
+.syncchip[data-state='rejected'] .syncchip__dot {
+  background: var(--rowan);
+}
+
+.sheet__scrim {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in oklab, var(--ink) 55%, transparent);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 50;
+}
+
+.sheet {
+  width: min(32rem, 100%);
+  max-height: 85dvh;
+  overflow-y: auto;
+  padding: 2rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom));
+}
+
+.sheet__rows {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.6rem 1rem;
+  margin: 0.75rem 0 0;
+  font-family: var(--font-data);
+  font-size: var(--step-body);
+}
+
+.sheet__rows dt {
+  color: var(--muted);
+}
+
+.sheet__rows dd {
+  margin: 0;
+  text-align: right;
+}
+
+.sheet__id {
+  overflow-wrap: anywhere;
+  font-size: var(--step-label);
+}
+
+.sheet__error,
+.sheet__warn {
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin: 1rem 0 0;
+}
+
+.sheet__error {
+  border: 2px solid var(--rowan);
+}
+
+.sheet__warn {
+  border: 2px solid var(--damson);
+}
+
+.sheet__actions {
+  display: flex;
+  gap: var(--tap-gap);
+  margin-top: 1.25rem;
+}
+
+.sheet__button {
+  flex: 1;
+  min-height: var(--tap-primary);
+  border-radius: var(--arch);
+  border: var(--border);
+  background: var(--raised);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.sheet__button--primary {
+  background: var(--lantern);
+  color: #201913;
+  border: none;
+  font-weight: 700;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

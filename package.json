@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "e2e": "playwright test",
     "db:indexes": "node --experimental-strip-types src/server/db/apply-indexes.mts",
     "db:seed": "node --experimental-strip-types src/server/db/seed.mts",
     "check:secrets": "node scripts/check-bundle-secrets.mjs",
@@ -27,6 +28,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -34,6 +36,7 @@
     "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^9",
     "eslint-config-next": "16.2.12",
+    "fake-indexeddb": "^6.2.5",
     "mongodb-memory-server": "^11.2.0",
     "tailwindcss": "^4",
     "typescript": "^5",

@@ -64,3 +64,21 @@ jobs:
 
       - name: Secret hygiene
         run: pnpm check:secrets
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      # The Phase 2 exit gate: airplane mode, 50 mutations, hard restart,
+      # reconnect, zero loss, zero duplicates. Runs against the build above.
+      - name: Exit gate (offline engine)
+        run: pnpm e2e
+        env:
+          AUTH_SECRET: phase-2-exit-gate-secret-value
+
+      - name: Upload traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7

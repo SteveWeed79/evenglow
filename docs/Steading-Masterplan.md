@@ -180,7 +180,7 @@ the plan already does:
 **Salvaged from the proposal** — three parts are worth keeping, none of which
 require a second store:
 
-1. **`clientSeq` gap detection.** The monotonic per-device sequence already exists, so a queue reading 1, 2, 3, 7 proves 4–6 were lost, at zero storage cost. Detects what the comparison would have detected. Belongs in the diagnostics sheet (§4 A6, Observability).
+1. **Cheap loss detection.** *(Built — `checkIntegrity()` in `src/client/sync/queue.ts`, surfaced in the diagnostics sheet.)* `clientSeq` increments exactly once per enqueue, so it doubles as the lifetime enqueue count; subtracting what the server acknowledged gives the expected queue depth, and a shortfall means records vanished. Two integers, O(1), detecting what comparing two full copies would have detected. Note that applied mutations are removed from anywhere in the range, so the outbox is legitimately non-contiguous — counting is correct where hunting for holes in the sequence would produce false alarms.
 2. **Offline export as the real second copy.** Recoverability already requires a full offline export. Writing that snapshot out through the file system or share sheet places it *outside* the origin, which is the only version of this idea that survives eviction.
 3. **A manual "re-download everything"** in the diagnostics sheet — an operator tool for a device whose local state is suspect, not an automatic integrity system.
 

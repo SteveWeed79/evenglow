@@ -54,6 +54,25 @@ const eslintConfig = defineConfig([
   },
 
   /**
+   * Destructuring to omit a field is the idiomatic way to drop it from an
+   * object, and `_`-prefixed bindings are an explicit "unused on purpose".
+   */
+  {
+    files: ['src/**/*.ts', 'src/**/*.tsx', 'tests/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+          ignoreRestSiblings: true,
+        },
+      ],
+    },
+  },
+
+  /**
    * Contracts are shared client/server, so they must stay free of server-only
    * imports — a Mongo type leaking into lib/contracts pulls the driver toward
    * the client bundle.

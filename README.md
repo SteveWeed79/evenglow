@@ -4,8 +4,9 @@ Offline-first PWA for farm operations — birds, iron, and chores in one place.
 
 Next.js (App Router) · TypeScript strict · MongoDB · Auth.js (JWT) · IndexedDB · Vercel
 
-**Status: Phase 1 — Foundation & Tenancy Primitives.** The domain features and
-the offline engine are not built yet; see [Phase status](#phase-status).
+**Status: Phase 2 — Offline Engine.** The exit gate passes: 50 mutations
+logged in airplane mode survive a hard browser restart and sync exactly once.
+The core domain is not built yet; see [Phase status](#phase-status).
 
 Planning docs, which are the source of truth:
 
@@ -38,7 +39,8 @@ owner are created by `db:seed`.
 |---|---|
 | `pnpm dev` | Development server |
 | `pnpm build` | Production build |
-| `pnpm test` | Vitest — unit, isolation, and sync suites |
+| `pnpm test` | Vitest — unit, offline, isolation, and sync suites |
+| `pnpm e2e` | Playwright — the Phase 2 exit gate (needs `pnpm build` first) |
 | `pnpm typecheck` | `tsc --noEmit` |
 | `pnpm lint` | ESLint, including the database guard |
 | `pnpm db:indexes` | Apply index definitions |
@@ -67,6 +69,22 @@ Every mutation gets its own result — `applied`, `duplicate`, `rejected`, or
 `conflict` — because a batch can be partly applied and nothing may be
 silently dropped.
 
+**`src/client/sync/queue.ts`** enqueues in a single IndexedDB transaction:
+mint the sequence number, write the outbox entry, advance the counter, and
+update the local projection together. Assigning `clientSeq` outside the
+transaction is how you end up with two mutations sharing a sequence number
+after a crash mid-write — at which point ordering is broken and nothing says
+so. If the counter is ever lost, the next sequence number is floored by the
+highest one still in the outbox rather than restarting at zero.
+
+**`src/client/sync/flush.ts`** is single-flight: concurrent callers share the
+in-flight promise instead of starting a second batch, which is what makes
+"never parallel" true when a timer, the `online` event, and a user action all
+fire at once. A mutation leaves the outbox only when the server says
+`applied` or `duplicate`; anything else parks in the rejected inbox, and a
+batch the server will never accept is parked after six attempts rather than
+looping forever.
+
 ### Two deviations from `docs/PHASE-1-SPEC.md`
 
 1. **No `bulkWrite`.** The spec exposes it with a note that callers must build
@@ -94,23 +112,41 @@ Suites split by what they need:
   the contracts, the role matrix, index discipline, and the R7 contrast and
   R4 tap-target checks, which parse `globals.css` so they guard the tokens
   the app actually ships.
+- **`tests/offline/`** — no database. The outbox and flush loop against
+  `fake-indexeddb`: sequence monotonicity, batch cap, single-flight,
+  retry-vs-reject routing, poison-batch parking, and the integrity check.
 - **`tests/isolation/`** and **`tests/sync/`** — need a real mongod. These are
   the Phase 1 exit gate.
+- **`tests/e2e/`** — needs a build and Chromium. The Phase 2 exit gate.
 
-Without a database the second group **skips loudly**. CI sets
+Without a database the mongod group **skips loudly**. CI sets
 `STEADING_REQUIRE_DB=1` against a `mongo:8` service container, so the gate
 cannot be met by a suite that quietly did not run.
+
+### The Phase 2 exit gate
+
+```bash
+pnpm build && pnpm e2e
+```
+
+Real Chromium, a **persistent on-disk profile**, and a real process kill. The
+profile matters: a fresh Playwright `BrowserContext` carries cookies and
+localStorage but *not* IndexedDB, so restarting into one would be asserting
+against an empty database. The gate is verified to fail — pointing the restart
+at a different profile makes it report `Received: 0`.
+
+It stubs `/api/sync` at the network layer, so no MongoDB is involved.
 
 ## Phase status
 
 - [x] **Phase 1 — Foundation & tenancy.** Scoped data layer, indexes, lint
       guard, contracts, auth, isolation suite, design tokens.
-- [ ] **Phase 2 — Offline engine.** IndexedDB stores, mutation log, Service
-      Worker, sequential flush, rejected-mutations inbox, sync dashboard.
-      *Exit gate: airplane mode → 50 mutations → hard restart → reconnect →
-      zero loss, zero duplicates.*
+- [x] **Phase 2 — Offline engine.** IndexedDB stores, mutation log, Service
+      Worker, sequential flush, rejected-mutations inbox, storage persistence,
+      diagnostics sheet. **Exit gate passes**: airplane mode → 50 mutations →
+      hard restart → reconnect → zero loss, zero duplicates.
 - [ ] **Phase 3 — Core domain.** Events, then entities, then photos. The charm
-      layer unlocks here and **not before Phase 2's gate passes**.
+      layer is now unlocked — Phase 2's gate passes.
 - [ ] **Phase 4 — Hardening.** Rate limiting, origin/CSRF verification,
       envelope migration, quota UX, export, Core Web Vitals.
 
