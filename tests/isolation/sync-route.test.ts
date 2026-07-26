@@ -1,0 +1,232 @@
+import { ulid } from 'ulid';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { SyncResponse } from '@/lib/contracts/mutation';
+import type { Role } from '@/lib/contracts/roles';
+import type { UserDoc } from '@/server/db/identity';
+import { startTestDb } from '../support/mongo';
+import { makeMutation } from '../support/fixtures';
+
+/**
+ * Cross-tenant isolation against the real route handler and a real mongod.
+ * This suite is the Phase 1 exit gate.
+ */
+
+const harness = await startTestDb('steading_isolation');
+
+// Point the app's Mongo client at the harness before the route imports it.
+if (harness) {
+  process.env.MONGODB_URI = harness.uri;
+  process.env.MONGODB_DB = 'steading_isolation';
+}
+
+interface TestSession {
+  user: { id: string; orgId: string; role: Role; email: string; name: string };
+}
+
+let currentSession: TestSession | null = null;
+
+vi.mock('@/server/auth/config', () => ({
+  auth: () => Promise.resolve(currentSession),
+  handlers: { GET: () => new Response(), POST: () => new Response() },
+  signIn: () => Promise.resolve(),
+  signOut: () => Promise.resolve(),
+}));
+
+const ORG_A = ulid();
+const ORG_B = ulid();
+
+const USERS = {
+  ownerA: { _id: ulid(), orgId: ORG_A, role: 'owner' as const },
+  ownerB: { _id: ulid(), orgId: ORG_B, role: 'owner' as const },
+  handA: { _id: ulid(), orgId: ORG_A, role: 'hand' as const },
+};
+
+function sessionFor(user: { _id: string; orgId: string; role: Role }): TestSession {
+  return {
+    user: {
+      id: user._id,
+      orgId: user.orgId,
+      role: user.role,
+      email: `${user._id}@example.test`,
+      name: 'Test User',
+    },
+  };
+}
+
+/** Typed handles, so assertions read the string _ids these collections use. */
+interface MutationDoc {
+  _id: string;
+  orgId: string;
+  clientSeq: number;
+  clientTs: number;
+  payload: unknown;
+  serverTs: Date;
+}
+
+const users = () => harness!.db.collection<UserDoc>('users');
+const mutations = () => harness!.db.collection<MutationDoc>('mutations');
+
+async function postSync(body: unknown): Promise<{ status: number; body: unknown }> {
+  const { POST } = await import('@/app/api/sync/route');
+  const res = await POST(
+    new Request('https://steading.test/api/sync', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  );
+  return { status: res.status, body: await res.json() };
+}
+
+const describeDb = harness ? describe : describe.skip;
+
+// File-level so every suite in this file gets a clean, seeded database —
+// not just the first one.
+afterAll(async () => {
+  await harness?.stop();
+});
+
+beforeEach(async () => {
+  if (!harness) return;
+  await mutations().deleteMany({});
+  await users().deleteMany({});
+
+  // requireMutationSession re-derives role and org from these documents.
+  await users().insertMany(
+    Object.values(USERS).map((u) => ({
+      _id: u._id,
+      email: `${u._id}@example.test`,
+      passwordHash: 'unused-in-this-suite',
+      name: 'Test User',
+      orgId: u.orgId,
+      role: u.role,
+      createdAt: new Date(),
+    })),
+  );
+
+  currentSession = sessionFor(USERS.ownerA);
+});
+
+describeDb('/api/sync — tenant isolation', () => {
+  it('rejects an unauthenticated request', async () => {
+    currentSession = null;
+    const res = await postSync({ mutations: [makeMutation()] });
+    expect(res.status).toBe(401);
+  });
+
+  it('rejects a payload-supplied orgId with 400 (C2)', async () => {
+    const res = await postSync({ orgId: ORG_B, mutations: [makeMutation()] });
+    expect(res.status).toBe(400);
+  });
+
+  it('stamps the session orgId, never one from the wire', async () => {
+    const mutation = makeMutation();
+    await postSync({ mutations: [mutation] });
+
+    const doc = await mutations().findOne({ _id: mutation.id });
+    expect(doc?.orgId).toBe(ORG_A);
+  });
+
+  it('does not disclose or touch another org document with the same id', async () => {
+    const mutation = makeMutation();
+    const applied = await postSync({ mutations: [mutation] });
+    expect((applied.body as SyncResponse).results[0]?.status).toBe('applied');
+
+    // Org B replays org A's exact mutation id — a deliberate collision, since
+    // ID guessability is explicitly not a security control (D5).
+    currentSession = sessionFor(USERS.ownerB);
+    const collided = await postSync({ mutations: [mutation] });
+    const result = (collided.body as SyncResponse).results[0];
+
+    // Never 'duplicate': that would confirm the foreign record exists.
+    expect(result?.status).toBe('rejected');
+    expect(JSON.stringify(collided.body)).not.toContain(ORG_A);
+
+    // Org A's document is untouched and still org A's.
+    const doc = await mutations().findOne({ _id: mutation.id });
+    expect(doc?.orgId).toBe(ORG_A);
+    expect(await mutations().countDocuments({})).toBe(1);
+  });
+
+  it('scopes reads so one org cannot see another org records', async () => {
+    await postSync({ mutations: [makeMutation(), makeMutation()] });
+
+    const { scoped } = await import('@/server/db/scoped');
+    const asB = await scoped(ORG_B);
+
+    expect(await asB.col('mutations').countDocuments()).toBe(0);
+    expect(await asB.col('mutations').findMany()).toEqual([]);
+
+    const asA = await scoped(ORG_A);
+    expect(await asA.col('mutations').countDocuments()).toBe(2);
+  });
+
+  it('returns null, not another org document, on a direct id lookup', async () => {
+    const mutation = makeMutation();
+    await postSync({ mutations: [mutation] });
+
+    // The scoped layer is what makes a cross-tenant fetch a 404 rather than a
+    // 403 at the route level: the record simply is not found.
+    const { scoped } = await import('@/server/db/scoped');
+    const asB = await scoped(ORG_B);
+    expect(await asB.col('mutations').findOne({ _id: mutation.id })).toBeNull();
+  });
+});
+
+describeDb('/api/sync — per-mutation authorization', () => {
+  // Runs after the file-level seed, so users exist and the queue is empty.
+  beforeEach(() => {
+    currentSession = sessionFor(USERS.handA);
+  });
+
+  it('lets a hand record an observation', async () => {
+    const res = await postSync({ mutations: [makeMutation()] });
+    expect((res.body as SyncResponse).results[0]?.status).toBe('applied');
+  });
+
+  it('refuses a hand creating a flock, without failing the whole batch', async () => {
+    const allowed = makeMutation();
+    const forbidden = makeMutation({
+      entity: 'flock',
+      op: 'create',
+      payload: { name: 'Layers', species: 'chicken', count: 12 },
+    });
+
+    const res = await postSync({ mutations: [allowed, forbidden] });
+    const results = (res.body as SyncResponse).results;
+
+    expect(res.status).toBe(200);
+    expect(results.find((r) => r.id === allowed.id)?.status).toBe('applied');
+    expect(results.find((r) => r.id === forbidden.id)?.status).toBe('rejected');
+  });
+
+  it('refuses an update to an append-only entity (D3)', async () => {
+    currentSession = sessionFor(USERS.ownerA);
+    const res = await postSync({
+      mutations: [makeMutation({ op: 'update', payload: { count: 99 } })],
+    });
+
+    expect((res.body as SyncResponse).results[0]?.status).toBe('rejected');
+  });
+
+  it('re-derives role from the database, not from the token', async () => {
+    // The session still claims owner; the user document says hand.
+    await users().updateOne({ _id: USERS.ownerA._id }, { $set: { role: 'hand' } });
+    currentSession = sessionFor(USERS.ownerA);
+
+    const res = await postSync({
+      mutations: [
+        makeMutation({ entity: 'flock', op: 'create', payload: { name: 'X', species: 'chicken', count: 1 } }),
+      ],
+    });
+
+    expect((res.body as SyncResponse).results[0]?.status).toBe('rejected');
+  });
+
+  it('refuses a disabled account even with a valid token', async () => {
+    await users().updateOne({ _id: USERS.handA._id }, { $set: { disabledAt: new Date() } });
+
+    const res = await postSync({ mutations: [makeMutation()] });
+    expect(res.status).toBe(401);
+  });
+});

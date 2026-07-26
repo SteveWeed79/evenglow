@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    services:
+      # A real mongod, so the isolation and idempotency suites actually run.
+      # STEADING_REQUIRE_DB below turns "no database" into a failure rather
+      # than a skip — the Phase 1 exit gate cannot be met by a suite that
+      # quietly did not execute.
+      mongo:
+        image: mongo:8
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      MONGODB_TEST_URI: mongodb://localhost:27017
+      STEADING_REQUIRE_DB: '1'
+      MONGODB_URI: mongodb://localhost:27017
+      MONGODB_DB: steading_ci
+      AUTH_SECRET: ci-only-secret-not-used-anywhere-else
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Blocking, per Phase 1 spec T5.
+      - name: Lint
+        run: pnpm lint
+
+      - name: No inline disables of the db guard
+        run: pnpm check:no-db-disables
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      # Includes the isolation suite (the exit gate) and the idempotency suite.
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Secret hygiene
+        run: pnpm check:secrets
