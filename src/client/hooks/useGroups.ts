@@ -1,12 +1,16 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import type { ActiveWithdrawal } from '@/lib/withdrawal';
 import { eggsToday, type Group, listGroups } from '../read/groups';
+import { withdrawalsBySubject } from '../read/withdrawals';
 import { subscribe } from '../sync/engine';
 
 export interface GroupsView {
   groups: Group[];
   eggs: Map<string, number>;
+  /** Open egg withdrawals per group (W2). */
+  withdrawals: Map<string, ActiveWithdrawal[]>;
   loading: boolean;
 }
 
@@ -20,12 +24,17 @@ export function useGroups(): GroupsView {
   const [view, setView] = useState<GroupsView>({
     groups: [],
     eggs: new Map(),
+    withdrawals: new Map(),
     loading: true,
   });
 
   const refresh = useCallback(async () => {
     const [groups, eggs] = await Promise.all([listGroups(), eggsToday()]);
-    setView({ groups, eggs, loading: false });
+    const withdrawals = await withdrawalsBySubject(
+      'egg',
+      groups.map((g) => g.id),
+    );
+    setView({ groups, eggs, withdrawals, loading: false });
   }, []);
 
   // subscribe() publishes immediately, so the subscription itself performs

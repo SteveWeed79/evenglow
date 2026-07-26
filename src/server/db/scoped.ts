@@ -25,6 +25,7 @@ export const COLLECTIONS = [
   'mutations',
   'flocks',
   'animals',
+  'medications',
   'eggLogs',
   'productionLogs',
   'feedLogs',

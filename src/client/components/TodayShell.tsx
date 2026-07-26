@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import { collectiveNoun, laysEggs } from '@/lib/contracts/entities';
+import { type ActiveWithdrawal, longestWithdrawal } from '@/lib/withdrawal';
 import { useGroups } from '../hooks/useGroups';
 import { useLog } from '../hooks/useSync';
 import type { Group } from '../read/groups';
@@ -9,6 +10,7 @@ import { AddGroup } from './AddGroup';
 import { ServiceWorker } from './ServiceWorker';
 import { SyncChip } from './SyncChip';
 import { Tally } from './Tally';
+import { WithdrawalBanner } from './WithdrawalBanner';
 
 /**
  * Today. Chores and milestones are still to come; what is here is the log
@@ -18,7 +20,7 @@ import { Tally } from './Tally';
  * radio off.
  */
 export function TodayShell(): React.ReactElement {
-  const { groups, eggs, loading } = useGroups();
+  const { groups, eggs, withdrawals, loading } = useGroups();
   const [adding, setAdding] = useState(false);
 
   return (
@@ -44,7 +46,12 @@ export function TodayShell(): React.ReactElement {
             <EmptyState onAdd={() => setAdding(true)} />
           ) : (
             groups.map((group) => (
-              <GroupCard key={group.id} group={group} eggs={eggs.get(group.id) ?? 0} />
+              <GroupCard
+                key={group.id}
+                group={group}
+                eggs={eggs.get(group.id) ?? 0}
+                withdrawal={longestWithdrawal(withdrawals.get(group.id) ?? [])}
+              />
             ))
           )}
 
@@ -77,15 +84,30 @@ function EmptyState({ onAdd }: { onAdd: () => void }): React.ReactElement {
   );
 }
 
-function GroupCard({ group, eggs }: { group: Group; eggs: number }): React.ReactElement {
+function GroupCard({
+  group,
+  eggs,
+  withdrawal,
+}: {
+  group: Group;
+  eggs: number;
+  withdrawal: ActiveWithdrawal | null;
+}): React.ReactElement {
   const log = useLog();
 
   const logEggs = useCallback(
-    async (count: number) => {
+    async (count: number, acknowledged: boolean) => {
       await log({
         entity: 'eggLog',
         op: 'create',
-        payload: { occurredAt: Date.now(), flockId: group.id, count },
+        payload: {
+          occurredAt: Date.now(),
+          flockId: group.id,
+          count,
+          // Recorded, not merely displayed: an acknowledged withdrawal is the
+          // audit trail for a decision someone made deliberately.
+          ...(acknowledged ? { withdrawalAcknowledged: true } : {}),
+        },
       });
     },
     [log, group.id],
@@ -112,9 +134,18 @@ function GroupCard({ group, eggs }: { group: Group; eggs: number }): React.React
         ) : null}
       </header>
 
+      {/* The band sits above the Tally and stays put — it informs, it does
+          not interrupt (R10). */}
+      {withdrawal ? <WithdrawalBanner withdrawal={withdrawal} /> : null}
+
       {/* Offered per species — a goat keeper is not shown an egg counter. */}
       {laysEggs(group.species) ? (
-        <Tally label={`Eggs from ${group.name}`} unit="eggs" onCommit={logEggs} />
+        <Tally
+          label={`Eggs from ${group.name}`}
+          unit="eggs"
+          requireConfirm={withdrawal !== null}
+          onCommit={logEggs}
+        />
       ) : null}
     </section>
   );

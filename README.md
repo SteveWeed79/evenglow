@@ -153,9 +153,10 @@ It stubs `/api/sync` at the network layer, so no MongoDB is involved.
 - [ ] **Phase 3 — Core domain.** *In progress.* Done: mutation projection into
       domain collections, archive-not-delete, hour-meter monotonicity,
       conflict-on-deleted-target, the mixed-livestock model, groups and egg
-      logging read local-first. Remaining: individual animal screens, equipment
-      and maintenance, photos, medication and withdrawal (W2), reporting. The
-      charm layer is unlocked — Phase 2's gate passes.
+      logging read local-first, and **medication with withdrawal tracking
+      (W2)** — the wedge feature. Remaining: individual animal screens, equipment
+      and maintenance, photos, reporting. The charm layer is unlocked —
+      Phase 2's gate passes.
 - [ ] **Phase 4 — Hardening.** Rate limiting, origin/CSRF verification,
       envelope migration, quota UX, export, Core Web Vitals.
 

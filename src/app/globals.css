@@ -425,6 +425,24 @@ summary {
   text-align: center;
 }
 
+/* The one warning allowed to outrank speed. A band that stays put — flat,
+   because it is information, not something you act on. */
+.withdrawal {
+  border-radius: 8px;
+  border: 2px solid var(--rowan);
+  background: color-mix(in oklab, var(--rowan) 8%, var(--raised));
+  color: var(--ink);
+  padding: 0.75rem;
+  margin: 0;
+}
+
+/* Armed for the confirm tap. Keeps the lantern fill — and so the dark-on-warm
+   contrast that holds in every theme — and marks the state with a rowan
+   inset rather than a new colour. */
+.tally__commit[data-armed] {
+  box-shadow: inset 0 0 0 3px var(--rowan);
+}
+
 /* ── Sync status ────────────────────────────────────────────────────────── */
 
 /* Status, not an action — so it is flat, not arched. */

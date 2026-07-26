@@ -217,6 +217,67 @@ export const productionLogCreateSchema = z
     message: 'A production log needs exactly one of flockId or animalId.',
   });
 
+// ── medication (mutable) ─────────────────────────────────────────────────────
+
+/**
+ * Treatment records with withdrawal-period tracking (W2).
+ *
+ * The highest-value single feature in the competitive analysis: requested in
+ * Flockstar reviews and unmet by every competitor at smallholding scale.
+ * Selling eggs or meat inside a withdrawal window is a real compliance
+ * failure, and the person who needs the reminder is holding a bucket at 6am.
+ *
+ * Mutable rather than append-only: a course gets ended early, a dose gets
+ * corrected, and a withdrawal period gets revised when the vet calls back.
+ */
+export const WITHDRAWAL_KINDS = ['egg', 'meat', 'milk'] as const;
+export const withdrawalKindSchema = z.enum(WITHDRAWAL_KINDS);
+export type WithdrawalKind = z.infer<typeof withdrawalKindSchema>;
+
+export const MEDICATION_ROUTES = [
+  'water',
+  'feed',
+  'injection',
+  'topical',
+  'oral',
+  'other',
+] as const;
+
+const medicationShape = {
+  flockId: z.string().length(26).optional(),
+  animalId: z.string().length(26).optional(),
+  name: z.string().min(1).max(120),
+  reason: z.string().max(200).optional(),
+  route: z.enum(MEDICATION_ROUTES).optional(),
+  dose: z.string().max(80).optional(),
+  administeredAt: z.number().int(),
+  /** Last day of treatment. Withdrawal counts from here, not from the first dose. */
+  treatmentEndsAt: z.number().int().optional(),
+  /**
+   * Withdrawal in whole days per produce kind. A medication with no entry for
+   * a kind imposes no withdrawal on it — a topical wound spray does not stop
+   * egg sales.
+   */
+  withdrawalDays: z
+    .object({
+      egg: z.number().int().nonnegative().max(365).optional(),
+      meat: z.number().int().nonnegative().max(365).optional(),
+      milk: z.number().int().nonnegative().max(365).optional(),
+    })
+    .strict()
+    .optional(),
+  note: z.string().max(500).optional(),
+};
+
+export const medicationCreateSchema = z
+  .object(medicationShape)
+  .strict()
+  .refine((v) => (v.flockId === undefined) !== (v.animalId === undefined), {
+    message: 'A treatment needs exactly one of flockId or animalId.',
+  });
+
+export const medicationUpdateSchema = z.object(medicationShape).partial().strict();
+
 // ── feedLog (append-only) ────────────────────────────────────────────────────
 
 export const feedLogCreateSchema = z

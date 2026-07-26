@@ -7,6 +7,8 @@ import {
   feedLogCreateSchema,
   flockCreateSchema,
   flockUpdateSchema,
+  medicationCreateSchema,
+  medicationUpdateSchema,
   mortalityCreateSchema,
   predatorCreateSchema,
   productionLogCreateSchema,
@@ -49,6 +51,10 @@ export const PAYLOAD_SCHEMAS: Partial<Record<PayloadKey, z.ZodType>> = {
   'animal:create': animalCreateSchema,
   'animal:update': animalUpdateSchema,
   'animal:delete': deleteSchema,
+
+  'medication:create': medicationCreateSchema,
+  'medication:update': medicationUpdateSchema,
+  'medication:delete': deleteSchema,
 
   'equipment:create': equipmentCreateSchema,
   'equipment:update': equipmentUpdateSchema,

@@ -17,6 +17,11 @@ export const INDEXES: Record<CollectionName, IndexDescription[]> = {
     { key: { orgId: 1, flockId: 1, archivedAt: 1 } },
     { key: { orgId: 1, tag: 1 } },
   ],
+  medications: [
+    // The withdrawal banner asks "what is active for this group, now?"
+    { key: { orgId: 1, flockId: 1, administeredAt: -1 } },
+    { key: { orgId: 1, animalId: 1, administeredAt: -1 } },
+  ],
   productionLogs: [
     { key: { orgId: 1, kind: 1, occurredAt: -1 } },
     { key: { orgId: 1, flockId: 1, occurredAt: -1 } },

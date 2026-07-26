@@ -23,6 +23,7 @@ export const MAX_BATCH_SIZE = 100;
 export const ENTITIES = [
   'flock',
   'animal',
+  'medication',
   'eggLog',
   'productionLog',
   'feedLog',

@@ -15,7 +15,13 @@ export interface TallyProps {
   unit: string;
   steps?: readonly number[];
   initial?: number;
-  onCommit: (value: number) => void | Promise<void>;
+  /**
+   * When set, committing takes a second deliberate tap and the value is
+   * recorded as acknowledged. Used for an open withdrawal window (W2) — the
+   * only case where a warning is allowed to cost a tap.
+   */
+  requireConfirm?: boolean;
+  onCommit: (value: number, acknowledged: boolean) => void | Promise<void>;
 }
 
 export function Tally({
@@ -23,10 +29,12 @@ export function Tally({
   unit,
   steps = [1, 6, 12],
   initial = 0,
+  requireConfirm = false,
   onCommit,
 }: TallyProps): React.ReactElement {
   const [count, setCount] = useState(initial);
   const [confirmation, setConfirmation] = useState<string | null>(null);
+  const [armed, setArmed] = useState(false);
 
   const bump = useCallback((by: number) => {
     setCount((c) => Math.max(0, c + by));
@@ -36,17 +44,27 @@ export function Tally({
 
   const commit = useCallback(async () => {
     if (count === 0) return;
+
+    // One confirm tap while a withdrawal is open. Not a modal, and not a
+    // block — the log still happens, it is just deliberate.
+    if (requireConfirm && !armed) {
+      setArmed(true);
+      return;
+    }
+
     const committed = count;
+    const acknowledged = requireConfirm;
 
     // Optimistic: clear immediately so the next tally can start, and let the
     // queue carry the work. Nothing here waits.
     setCount(0);
-    await onCommit(committed);
+    setArmed(false);
+    await onCommit(committed, acknowledged);
 
     // One short, plain sentence — the whole whimsy allowance on this path.
     setConfirmation(`${committed} ${unit} in the basket.`);
     setTimeout(() => setConfirmation(null), 3_000);
-  }, [count, unit, onCommit]);
+  }, [count, unit, onCommit, requireConfirm, armed]);
 
   return (
     <section className="tally arch" aria-labelledby="tally-label">
@@ -85,11 +103,12 @@ export function Tally({
       <button
         type="button"
         className="tally__commit"
+        data-armed={armed ? '' : undefined}
         onClick={() => void commit()}
         disabled={count === 0}
         data-testid="tally-commit"
       >
-        Log {count} {unit}
+        {armed ? `Log ${count} ${unit} anyway` : `Log ${count} ${unit}`}
       </button>
 
       <p className="tally__confirmation" aria-live="polite">
