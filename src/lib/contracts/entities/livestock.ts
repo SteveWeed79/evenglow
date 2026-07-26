@@ -53,35 +53,45 @@ export interface SpeciesTraits {
   collective: string;
   /** Drives whether egg logging is offered at all. */
   laysEggs: boolean;
+  /**
+   * Whether a milk withdrawal is worth asking about. Narrower than "could
+   * physically be milked" — alpacas can be, and nobody does.
+   */
+  givesMilk: boolean;
   group: SpeciesGroup;
 }
 
 export const SPECIES_TRAITS: Record<Species, SpeciesTraits> = {
-  chicken: { label: 'Chickens', collective: 'flock', laysEggs: true, group: 'poultry' },
-  duck: { label: 'Ducks', collective: 'flock', laysEggs: true, group: 'poultry' },
-  goose: { label: 'Geese', collective: 'gaggle', laysEggs: true, group: 'poultry' },
-  turkey: { label: 'Turkeys', collective: 'flock', laysEggs: true, group: 'poultry' },
-  quail: { label: 'Quail', collective: 'covey', laysEggs: true, group: 'poultry' },
-  guineafowl: { label: 'Guinea fowl', collective: 'flock', laysEggs: true, group: 'poultry' },
-  pigeon: { label: 'Pigeons', collective: 'loft', laysEggs: true, group: 'poultry' },
+  chicken: { label: 'Chickens', collective: 'flock', givesMilk: false, laysEggs: true, group: 'poultry' },
+  duck: { label: 'Ducks', collective: 'flock', givesMilk: false, laysEggs: true, group: 'poultry' },
+  goose: { label: 'Geese', collective: 'gaggle', givesMilk: false, laysEggs: true, group: 'poultry' },
+  turkey: { label: 'Turkeys', collective: 'flock', givesMilk: false, laysEggs: true, group: 'poultry' },
+  quail: { label: 'Quail', collective: 'covey', givesMilk: false, laysEggs: true, group: 'poultry' },
+  guineafowl: { label: 'Guinea fowl', collective: 'flock', givesMilk: false, laysEggs: true, group: 'poultry' },
+  pigeon: { label: 'Pigeons', collective: 'loft', givesMilk: false, laysEggs: true, group: 'poultry' },
 
-  emu: { label: 'Emu', collective: 'mob', laysEggs: true, group: 'ratite' },
-  ostrich: { label: 'Ostrich', collective: 'flock', laysEggs: true, group: 'ratite' },
-  rhea: { label: 'Rhea', collective: 'flock', laysEggs: true, group: 'ratite' },
+  emu: { label: 'Emu', collective: 'mob', givesMilk: false, laysEggs: true, group: 'ratite' },
+  ostrich: { label: 'Ostrich', collective: 'flock', givesMilk: false, laysEggs: true, group: 'ratite' },
+  rhea: { label: 'Rhea', collective: 'flock', givesMilk: false, laysEggs: true, group: 'ratite' },
 
-  goat: { label: 'Goats', collective: 'herd', laysEggs: false, group: 'ruminant' },
-  sheep: { label: 'Sheep', collective: 'flock', laysEggs: false, group: 'ruminant' },
-  cattle: { label: 'Cattle', collective: 'herd', laysEggs: false, group: 'ruminant' },
-  alpaca: { label: 'Alpacas', collective: 'herd', laysEggs: false, group: 'ruminant' },
-  llama: { label: 'Llamas', collective: 'herd', laysEggs: false, group: 'ruminant' },
+  goat: { label: 'Goats', collective: 'herd', givesMilk: true, laysEggs: false, group: 'ruminant' },
+  sheep: { label: 'Sheep', collective: 'flock', givesMilk: true, laysEggs: false, group: 'ruminant' },
+  cattle: { label: 'Cattle', collective: 'herd', givesMilk: true, laysEggs: false, group: 'ruminant' },
+  alpaca: { label: 'Alpacas', collective: 'herd', givesMilk: false, laysEggs: false, group: 'ruminant' },
+  llama: { label: 'Llamas', collective: 'herd', givesMilk: false, laysEggs: false, group: 'ruminant' },
 
-  pig: { label: 'Pigs', collective: 'drove', laysEggs: false, group: 'other' },
-  rabbit: { label: 'Rabbits', collective: 'colony', laysEggs: false, group: 'other' },
-  donkey: { label: 'Donkeys', collective: 'herd', laysEggs: false, group: 'other' },
-  horse: { label: 'Horses', collective: 'herd', laysEggs: false, group: 'other' },
+  pig: { label: 'Pigs', collective: 'drove', givesMilk: false, laysEggs: false, group: 'other' },
+  rabbit: { label: 'Rabbits', collective: 'colony', givesMilk: false, laysEggs: false, group: 'other' },
+  donkey: { label: 'Donkeys', collective: 'herd', givesMilk: false, laysEggs: false, group: 'other' },
+  horse: { label: 'Horses', collective: 'herd', givesMilk: false, laysEggs: false, group: 'other' },
 
-  other: { label: 'Other', collective: 'group', laysEggs: true, group: 'other' },
+  other: { label: 'Other', collective: 'group', givesMilk: false, laysEggs: true, group: 'other' },
 };
+
+/** Whether a milk withdrawal is worth asking about for this species. */
+export function givesMilk(species: Species): boolean {
+  return SPECIES_TRAITS[species].givesMilk;
+}
 
 /** The word for a group of this species — "herd", "flock", "drove". */
 export function collectiveNoun(species: Species): string {

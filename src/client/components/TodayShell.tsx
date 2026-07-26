@@ -9,6 +9,7 @@ import type { Group } from '../read/groups';
 import { AddGroup } from './AddGroup';
 import { ServiceWorker } from './ServiceWorker';
 import { SyncChip } from './SyncChip';
+import { RecordTreatment } from './RecordTreatment';
 import { Tally } from './Tally';
 import { WithdrawalBanner } from './WithdrawalBanner';
 
@@ -94,6 +95,7 @@ function GroupCard({
   withdrawal: ActiveWithdrawal | null;
 }): React.ReactElement {
   const log = useLog();
+  const [treating, setTreating] = useState(false);
 
   const logEggs = useCallback(
     async (count: number, acknowledged: boolean) => {
@@ -117,6 +119,17 @@ function GroupCard({
     group.species === 'other' && group.speciesOther
       ? group.speciesOther
       : collectiveNoun(group.species);
+
+  if (treating) {
+    return (
+      <RecordTreatment
+        flockId={group.id}
+        species={group.species}
+        groupName={group.name}
+        onDone={() => setTreating(false)}
+      />
+    );
+  }
 
   return (
     <section className="group">
@@ -147,6 +160,16 @@ function GroupCard({
           onCommit={logEggs}
         />
       ) : null}
+
+      {/* Secondary, so it stays out of the log path's way. */}
+      <button
+        type="button"
+        className="sheet__button"
+        onClick={() => setTreating(true)}
+        data-testid="record-treatment"
+      >
+        Record a treatment
+      </button>
     </section>
   );
 }

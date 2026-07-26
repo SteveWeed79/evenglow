@@ -443,6 +443,15 @@ summary {
   box-shadow: inset 0 0 0 3px var(--rowan);
 }
 
+.withdrawal__kind {
+  font-family: var(--font-data);
+  font-size: var(--step-label);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  min-width: 3.5rem;
+}
+
 /* ── Sync status ────────────────────────────────────────────────────────── */
 
 /* Status, not an action — so it is flat, not arched. */
