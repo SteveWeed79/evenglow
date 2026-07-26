@@ -142,5 +142,62 @@ Incubation and hatch runs, fertility rates per pairing, three-generation pedigre
 ## 5. Open Questions
 
 - Photo storage target: Vercel Blob vs. S3/R2. Affects Phase 3 upload path.
-- Does a Farm Hand get write access to events (egg counts) while remaining read-only on entities? Recommended: yes — it is the main reason a second user exists.
 - Retention policy for event collections: unbounded, or roll up after N years?
+
+---
+
+## 6. Resolved Questions
+
+Kept rather than deleted: the reasoning is the useful part, and a rejected idea
+that isn't written down gets re-proposed every few months.
+
+### Q1 — Redundant local storage for offline durability. **Rejected.**
+
+*Proposed:* write every record to two local stores, compare them on open, and
+offer a full re-download when they diverge.
+
+The mechanism does not address the failure it is aimed at, and it makes that
+failure more likely:
+
+| # | Problem |
+|---|---|
+| 1 | **The failure is correlated, so redundancy doesn't pay.** Browser eviction is per-origin: IndexedDB, Cache Storage, and localStorage are discarded together. A second copy inside the same origin does not survive the event that destroys the first. |
+| 2 | **It raises the eviction probability.** Eviction is driven by how much the origin is using. Doubling consumption — with photos, the dominant consumer — increases the risk of exactly the event being defended against. |
+| 3 | **It spends the release gates.** Every write doubles and a compare-on-open is an O(n) read at cold start, against R1 (≤3 taps, ≤5s from cold launch) and R6 (nothing waits). |
+| 4 | **The recovery path contradicts its trigger.** "Re-download everything" needs the network, but divergence is detected offline — the condition in which the app is expected to run. |
+
+**The reframe.** The server is already the second copy, and it is the only one
+stored independently. Everything flushed is durable server-side, so the real
+exposure is the *unflushed window* — mutations recorded since the last
+successful sync, typically one morning's chores and a few KB. The problem is
+not "store everything twice", it is "shrink and protect that window", which
+the plan already does:
+
+- `navigator.storage.persist()` (§4 A2) is the actual defence against eviction — a persisted origin is not evicted under pressure. One API call, and the only lever that materially moves this.
+- D1 + D3 + `$setOnInsert` make re-sending free and non-duplicating, so the cheap mitigation is to flush *more eagerly* — redundancy over the network, where the copy is genuinely independent. Idempotency is what buys that.
+- Phase 2's exit gate (50 mutations → hard restart → zero loss) is what proves durability. Local redundancy would let that gate be passed without earning it.
+
+**Salvaged from the proposal** — three parts are worth keeping, none of which
+require a second store:
+
+1. **`clientSeq` gap detection.** The monotonic per-device sequence already exists, so a queue reading 1, 2, 3, 7 proves 4–6 were lost, at zero storage cost. Detects what the comparison would have detected. Belongs in the diagnostics sheet (§4 A6, Observability).
+2. **Offline export as the real second copy.** Recoverability already requires a full offline export. Writing that snapshot out through the file system or share sheet places it *outside* the origin, which is the only version of this idea that survives eviction.
+3. **A manual "re-download everything"** in the diagnostics sheet — an operator tool for a device whose local state is suspect, not an automatic integrity system.
+
+**The one honest counter-argument:** a botched IndexedDB migration in our own
+code *is* a failure mode independent of eviction, and is the single case a
+second store would cover. It is cheaper to address at the source — A7 envelope
+versioning, plus never destructively migrating an append-only log — than by
+carrying a parallel store and its reconciliation logic year-round.
+
+### Q2 — Farm Hand write access to events. **Yes.**
+
+A Farm Hand may create every append-only observation (eggs, feed, mortality,
+predator sightings, hour readings) and is read-only on the entities that define
+the farm (flocks, equipment, maintenance schedules). Recording what happened is
+the main reason a second user exists; defining what things *are* is not.
+
+Two exceptions, both required for a hand to work a morning: completing an
+assigned chore (`task:update`) and attaching a photo (`photo:create`). Neither
+lets them define new work — only discharge and document work already assigned.
+Implemented in `src/lib/contracts/roles.ts`.
