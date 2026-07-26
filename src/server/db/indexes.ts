@@ -19,7 +19,11 @@ export const INDEXES: Record<CollectionName, IndexDescription[]> = {
     { key: { orgId: 1, birdId: 1, occurredAt: -1 } },
   ],
   feedLogs: [{ key: { orgId: 1, occurredAt: -1 } }, { key: { orgId: 1, flockId: 1, occurredAt: -1 } }],
-  mortality: [{ key: { orgId: 1, occurredAt: -1 } }, { key: { orgId: 1, flockId: 1, occurredAt: -1 } }],
+  mortality: [
+    { key: { orgId: 1, occurredAt: -1 } },
+    { key: { orgId: 1, flockId: 1, occurredAt: -1 } },
+    { key: { orgId: 1, animalId: 1, occurredAt: -1 } },
+  ],
   predatorLogs: [{ key: { orgId: 1, occurredAt: -1 } }],
   equipment: [{ key: { orgId: 1, _id: 1 } }, { key: { orgId: 1, archivedAt: 1 } }],
   hourReadings: [

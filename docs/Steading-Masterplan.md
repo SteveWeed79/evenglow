@@ -56,7 +56,8 @@ Redis rate limiting, origin/CSRF verification, envelope schema migration, quota-
 - **Session hygiene** — IndexedDB is wiped on logout **and on org switch**.
 
 ### Poultry & Livestock
-- **Multi-species from the schema up** — chickens, ducks, quail, turkeys, geese, other.
+- **Multi-species from the schema up** — poultry (chickens, ducks, geese, turkeys, quail, guinea fowl, pigeons), ratites (emu, ostrich, rhea), ruminants and camelids (goats, sheep, cattle, alpacas, llamas), plus pigs, rabbits, donkeys, horses, and free-text `other`. Smallholdings are mixed; a model that covers only poultry makes most of a working farm invisible. Poultry keeps the deepest features because that is where the wedge is (W2, W7), not because it is the only stock supported.
+- **Species-aware vocabulary** — the UI says herd, drove, or gaggle according to species. `flock` is the wire name only. Calling a cattle herd a flock tells the keeper the app was not built for them.
 - **Flock management** — counts, breed profiles, integration timelines. *(mutable entity)*
 - **Individual bird records** — photo, breed, traits, hatch date, weights. **Archive, never delete** — history survives. *(mutable entity)*
 - **Production events** — daily egg collection logged **by flock or by individual bird**; feed consumption. *(append-only)*

@@ -7,7 +7,7 @@ import {
   flockUpdateSchema,
   mortalityCreateSchema,
   predatorCreateSchema,
-} from './birds';
+} from './livestock';
 import {
   equipmentCreateSchema,
   equipmentUpdateSchema,
@@ -23,7 +23,7 @@ import {
   taskUpdateSchema,
 } from './ops';
 
-export * from './birds';
+export * from './livestock';
 export * from './iron';
 export * from './ops';
 

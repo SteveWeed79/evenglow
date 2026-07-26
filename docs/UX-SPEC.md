@@ -243,12 +243,12 @@ Four bottom tabs. Four, not six — every additional tab is a decision made at 6
 │   │   [   Log 18 eggs    ]   │     │  thumb zone
 │   └──────────────────────────┘     │
 ├────────────────────────────────────┤
-│  Today  │  Birds  │  Iron  │  More │  64px tabs
+│  Today  │  Stock  │  Iron  │  More │  64px tabs
 └────────────────────────────────────┘
 ```
 
 - **Today** — chores, the Tally, anything overdue.
-- **Birds** — flocks, individual birds, production, health, mortality.
+- **Stock** — groups, individual animals, production, health, mortality. Named *Stock*, not *Birds*: smallholdings are mixed, and a goat keeper should not have to look for their herd under a bird tab.
 - **Iron** — equipment, hour readings, maintenance due, parts.
 - **More** — inventory, reports, export, settings, diagnostics.
 
@@ -260,8 +260,8 @@ Everything else is one level below these four. If a feature needs a fifth tab, i
 
 Setup burden is the top cause of abandoned record keeping, so the first run collects almost nothing and pre-fills the rest.
 
-1. **What do you keep?** Species chips (chickens, ducks, quail, turkeys, geese, other). Multi-select.
-2. **How many?** One Tally screen. Individual bird profiles are optional and can wait.
+1. **What do you keep?** Species chips, multi-select, grouped so the list stays scannable: poultry (chickens, ducks, geese, turkeys, quail, guinea fowl, pigeons), ratites (emu, ostrich, rhea), ruminants (goats, sheep, cattle, alpacas, llamas), other stock (pigs, rabbits, donkeys, horses), and a free-text *something else*. Only the chosen groups appear anywhere later.
+2. **How many?** One Tally screen per group. Individual animal profiles are optional and can wait.
 3. **Any equipment?** Make/model picker → service intervals pre-populated from the preset library, Deere-style. Skippable.
 4. Done. Land on Today with three suggested chores already there.
 

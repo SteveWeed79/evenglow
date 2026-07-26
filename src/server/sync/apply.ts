@@ -8,14 +8,23 @@ import {
 import { canMutate } from '@/lib/contracts/roles';
 import type { SessionClaims } from '@/server/auth/session';
 import type { Scoped, Tenanted } from '@/server/db/scoped';
+import {
+  decideProjection,
+  ENTITY_COLLECTIONS,
+  type ProjectionDecision,
+} from './projections';
 
 /**
  * Per-mutation applier.
  *
- * Phase 1 records the mutation log idempotently and authorizes every entry.
- * Projecting mutations into their domain collections is Phase 3 work; the
- * log is the source of truth either way, so that projection is a rebuild,
- * not a migration.
+ * Two writes per mutation, in this order:
+ *  1. the mutation log, idempotently — the source of truth, and the audit
+ *     trail D3 gives us for free;
+ *  2. the domain projection, which is a derived read model.
+ *
+ * The order matters. If the process dies between them the log still holds the
+ * mutation, so the projection can be rebuilt; the reverse would leave a
+ * projected record with no record of what produced it.
  */
 
 /** A device offline across two deploys must still sync: accept N and N−1. */
@@ -32,6 +41,15 @@ interface MutationDoc extends Tenanted {
   schemaVersion: number;
   userId: string;
   serverTs: Date;
+}
+
+/** A projected domain record. Fields beyond these are entity-specific. */
+interface ProjectedDoc extends Tenanted {
+  archivedAt?: Date | null;
+  createdAt?: Date;
+  updatedAt?: Date;
+  updatedBy?: string;
+  updatedByDevice?: string;
 }
 
 function rejected(id: string, reason: string): MutationResult {
@@ -71,6 +89,13 @@ export async function applyMutation(
     return rejected(id, `That ${entity} is missing or has a bad value${where}.`);
   }
 
+  // Every entity schema produces an object. The check narrows `unknown`
+  // without a cast, and guards against a schema that stops doing so.
+  const payload: unknown = parsed.data;
+  if (typeof payload !== 'object' || payload === null) {
+    return rejected(id, `That ${entity} is not a valid record.`);
+  }
+
   // No _id and no orgId here: Mongo derives _id from the upsert filter's
   // equality term, and scoped() stamps orgId. Both are rejected by
   // assertSafeUpdate if a caller passes them, which is the point.
@@ -87,13 +112,14 @@ export async function applyMutation(
     serverTs: new Date(),
   };
 
+  let firstTime: boolean;
   try {
     // Idempotency (A3): $setOnInsert means a replayed batch writes nothing the
     // second time, and upsertedCount is what distinguishes the two cases.
     const res = await scope
       .col<MutationDoc>('mutations')
       .upsertOne({ _id: id }, { $setOnInsert: doc });
-    return res.upsertedCount ? { id, status: 'applied' } : { id, status: 'duplicate' };
+    firstTime = res.upsertedCount > 0;
   } catch (error) {
     // _id is unique collection-wide, so a mutation id already used by another
     // tenant fails the insert rather than matching the org-guarded filter.
@@ -103,6 +129,84 @@ export async function applyMutation(
     }
     throw error;
   }
+
+  // The projection runs even on a replay. It is idempotent by construction,
+  // and running it means a projection lost to a crash between the two writes
+  // repairs itself on the next flush rather than staying missing forever.
+  const projection = await project(scope, claims, mutation, payload);
+
+  if (projection.kind === 'conflict') {
+    return { id, status: 'conflict', reason: projection.reason };
+  }
+  if (projection.kind === 'rejected') {
+    return rejected(id, projection.reason);
+  }
+
+  return { id, status: firstTime ? 'applied' : 'duplicate' };
+}
+
+/** Writes the derived read model for one mutation. */
+async function project(
+  scope: Scoped,
+  claims: SessionClaims,
+  mutation: Mutation,
+  payload: object,
+): Promise<ProjectionDecision> {
+  const collection = ENTITY_COLLECTIONS[mutation.entity];
+  const col = scope.col<ProjectedDoc>(collection);
+
+  const existing = await col.findOne({ _id: mutation.targetId });
+
+  const decision = decideProjection(mutation.entity, mutation.op, payload, {
+    existing,
+    ...(mutation.entity === 'hourReading'
+      ? { lastHours: await highestHours(scope, payload) }
+      : {}),
+  });
+
+  const stamp = {
+    updatedAt: new Date(),
+    updatedBy: claims.userId,
+    updatedByDevice: mutation.deviceId,
+  };
+
+  switch (decision.kind) {
+    case 'insert':
+      await col.upsertOne(
+        { _id: mutation.targetId },
+        { $setOnInsert: { ...payload, ...stamp, createdAt: new Date() } },
+      );
+      break;
+
+    case 'update':
+      await col.updateOne({ _id: mutation.targetId }, { $set: { ...payload, ...stamp } });
+      break;
+
+    case 'archive':
+      // Archive, never delete — history survives (P13).
+      await col.updateOne({ _id: mutation.targetId }, { $set: { archivedAt: new Date(), ...stamp } });
+      break;
+
+    case 'noop':
+    case 'conflict':
+    case 'rejected':
+      break;
+  }
+
+  return decision;
+}
+
+/** The highest hours already recorded for the machine a reading belongs to. */
+async function highestHours(scope: Scoped, payload: object): Promise<number | null> {
+  const equipmentId = (payload as { equipmentId?: unknown }).equipmentId;
+  if (typeof equipmentId !== 'string') return null;
+
+  const readings = await scope
+    .col<ProjectedDoc & { equipmentId: string; hours: number }>('hourReadings')
+    .findMany({ equipmentId }, 500);
+
+  if (readings.length === 0) return null;
+  return readings.reduce((max, r) => (r.hours > max ? r.hours : max), Number.NEGATIVE_INFINITY);
 }
 
 /**
