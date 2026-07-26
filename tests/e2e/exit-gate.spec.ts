@@ -21,7 +21,9 @@ import { sessionCookie } from './support/session';
  */
 
 const ORIGIN = 'http://127.0.0.1:3100';
-const MUTATION_COUNT = 50;
+const EGG_LOGS = 50;
+/** The 50 egg logs plus the group they are logged against. */
+const TOTAL_MUTATIONS = EGG_LOGS + 1;
 
 const IDENTITY = {
   userId: ulid(),
@@ -109,6 +111,17 @@ async function logOneEgg(page: Page): Promise<void> {
   await page.getByTestId('tally-commit').click();
 }
 
+/**
+ * Creates a group so there is something to log against. Done offline in the
+ * gate, deliberately: it puts a mutable entity in the restart set alongside
+ * the append-only ones, so both projection paths are exercised.
+ */
+async function addGroup(page: Page): Promise<void> {
+  await page.getByTestId('add-first-group').click();
+  await page.getByTestId('addgroup-save').click();
+  await expect(page.getByTestId('tally-commit')).toBeVisible();
+}
+
 test('50 mutations survive airplane mode and a hard restart, then sync exactly once', async () => {
   const profile = await mkdtemp(join(tmpdir(), 'steading-gate-'));
   const log: ServerLog = { seen: [], batches: [] };
@@ -119,17 +132,19 @@ test('50 mutations survive airplane mode and a hard restart, then sync exactly o
 
   let page = context.pages()[0] ?? (await context.newPage());
   await page.goto('/');
-  await expect(page.getByTestId('tally-commit')).toBeVisible();
+  await expect(page.getByTestId('add-first-group')).toBeVisible();
 
   await context.setOffline(true);
 
-  for (let i = 0; i < MUTATION_COUNT; i++) {
+  // Both the group and its egg logs are created with no signal.
+  await addGroup(page);
+  for (let i = 0; i < EGG_LOGS; i++) {
     await logOneEgg(page);
   }
 
   const beforeRestart = await readQueue(page);
-  expect(beforeRestart.enqueued).toBe(MUTATION_COUNT);
-  expect(beforeRestart.outbox).toBe(MUTATION_COUNT);
+  expect(beforeRestart.enqueued).toBe(TOTAL_MUTATIONS);
+  expect(beforeRestart.outbox).toBe(TOTAL_MUTATIONS);
   expect(log.seen).toHaveLength(0);
 
   // ── Hard restart ─────────────────────────────────────────────────────────
@@ -144,7 +159,7 @@ test('50 mutations survive airplane mode and a hard restart, then sync exactly o
   await page.goto('/');
 
   // The queue must still be there before anything drains it.
-  expect((await readQueue(page)).outbox).toBe(MUTATION_COUNT);
+  expect((await readQueue(page)).outbox).toBe(TOTAL_MUTATIONS);
 
   // ── Reconnect ────────────────────────────────────────────────────────────
   await expect.poll(async () => (await readQueue(page)).outbox, { timeout: 60_000 }).toBe(0);
@@ -152,11 +167,11 @@ test('50 mutations survive airplane mode and a hard restart, then sync exactly o
   const afterSync = await readQueue(page);
 
   // Zero loss.
-  expect(new Set(log.seen).size).toBe(MUTATION_COUNT);
+  expect(new Set(log.seen).size).toBe(TOTAL_MUTATIONS);
   // Zero duplicates.
-  expect(log.seen).toHaveLength(MUTATION_COUNT);
+  expect(log.seen).toHaveLength(TOTAL_MUTATIONS);
   // No sequence number was reused across the restart.
-  expect(afterSync.enqueued).toBe(MUTATION_COUNT);
+  expect(afterSync.enqueued).toBe(TOTAL_MUTATIONS);
 
   // Ordering held within each batch, and across them (A4).
   for (const batch of log.batches) {
@@ -178,9 +193,10 @@ test('a log never waits on the network', async () => {
 
   const page = context.pages()[0] ?? (await context.newPage());
   await page.goto('/');
-  await expect(page.getByTestId('tally-commit')).toBeVisible();
+  await expect(page.getByTestId('add-first-group')).toBeVisible();
 
   await context.setOffline(true);
+  await addGroup(page);
 
   const started = Date.now();
   await logOneEgg(page);

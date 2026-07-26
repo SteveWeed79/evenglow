@@ -13,6 +13,15 @@ export const INDEXES: Record<CollectionName, IndexDescription[]> = {
     { key: { orgId: 1, deviceId: 1, clientSeq: 1 } },
   ],
   flocks: [{ key: { orgId: 1, _id: 1 } }, { key: { orgId: 1, species: 1, archivedAt: 1 } }],
+  animals: [
+    { key: { orgId: 1, flockId: 1, archivedAt: 1 } },
+    { key: { orgId: 1, tag: 1 } },
+  ],
+  productionLogs: [
+    { key: { orgId: 1, kind: 1, occurredAt: -1 } },
+    { key: { orgId: 1, flockId: 1, occurredAt: -1 } },
+    { key: { orgId: 1, animalId: 1, occurredAt: -1 } },
+  ],
   eggLogs: [
     { key: { orgId: 1, occurredAt: -1 } },
     { key: { orgId: 1, flockId: 1, occurredAt: -1 } },

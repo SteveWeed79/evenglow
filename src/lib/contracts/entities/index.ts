@@ -1,12 +1,15 @@
 import type { z } from 'zod';
 import { type Entity, isAppendOnly, type Op } from '../mutation';
 import {
+  animalCreateSchema,
+  animalUpdateSchema,
   eggLogCreateSchema,
   feedLogCreateSchema,
   flockCreateSchema,
   flockUpdateSchema,
   mortalityCreateSchema,
   predatorCreateSchema,
+  productionLogCreateSchema,
 } from './livestock';
 import {
   equipmentCreateSchema,
@@ -43,6 +46,10 @@ export const PAYLOAD_SCHEMAS: Partial<Record<PayloadKey, z.ZodType>> = {
   'flock:update': flockUpdateSchema,
   'flock:delete': deleteSchema,
 
+  'animal:create': animalCreateSchema,
+  'animal:update': animalUpdateSchema,
+  'animal:delete': deleteSchema,
+
   'equipment:create': equipmentCreateSchema,
   'equipment:update': equipmentUpdateSchema,
   'equipment:delete': deleteSchema,
@@ -61,6 +68,7 @@ export const PAYLOAD_SCHEMAS: Partial<Record<PayloadKey, z.ZodType>> = {
 
   // Append-only entities — create only, by construction
   'eggLog:create': eggLogCreateSchema,
+  'productionLog:create': productionLogCreateSchema,
   'feedLog:create': feedLogCreateSchema,
   'mortality:create': mortalityCreateSchema,
   'predator:create': predatorCreateSchema,

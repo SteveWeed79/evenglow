@@ -11,9 +11,20 @@ export const MUTATION_SCHEMA_VERSION = 1;
 /** Hard cap per batch. The server rejects anything larger outright. */
 export const MAX_BATCH_SIZE = 100;
 
+/**
+ * Widening this list is additive and does not bump MUTATION_SCHEMA_VERSION.
+ *
+ * The envelope shape is unchanged, and an old client simply never sends a new
+ * entity. The one ordering constraint is that the server must ship before a
+ * client that emits a new value, since an old server answers 400 for an
+ * entity it does not know — which is the correct, visible failure rather than
+ * a silent drop.
+ */
 export const ENTITIES = [
   'flock',
+  'animal',
   'eggLog',
+  'productionLog',
   'feedLog',
   'mortality',
   'predator',
@@ -38,6 +49,7 @@ export type Op = z.infer<typeof opSchema>;
  */
 export const APPEND_ONLY_ENTITIES = new Set<Entity>([
   'eggLog',
+  'productionLog',
   'feedLog',
   'mortality',
   'predator',

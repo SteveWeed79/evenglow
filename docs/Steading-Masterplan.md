@@ -61,7 +61,8 @@ Redis rate limiting, origin/CSRF verification, envelope schema migration, quota-
 - **Flock management** — counts, breed profiles, integration timelines. *(mutable entity)*
 - **Individual bird records** — photo, breed, traits, hatch date, weights. **Archive, never delete** — history survives. *(mutable entity)*
 - **Production events** — daily egg collection logged **by flock or by individual bird**; feed consumption. *(append-only)*
-- **Mortality log** — separate from flock count; cause, trend, and **cull weights** for meat-yield math. *(append-only)*
+- **Mortality log** — separate from head count; cause, trend, and **cull weights** for meat-yield math. *(append-only)*
+- **Production log** — milk, fibre, and honey volumes, by group or by individual animal. *(append-only)* Without it, ruminant support is head count and mortality only, which is not support. Records a volume, not a supply chain — see Out of Scope.
 - **Threat log** — predator sightings, time of day, losses. *(append-only)*
 - **Health & medication** — treatment records with **withdrawal-period tracking**. An active egg/meat withdrawal raises a persistent banner on the collection screen and requires confirmation to log through. *(Competitive wedge — requested by Flockstar users, unmet by every competitor.)*
 - **Breed presets** — expected lay rates and mature weights pre-filled on breed selection.
@@ -88,7 +89,9 @@ Redis rate limiting, origin/CSRF verification, envelope schema migration, quota-
 - **Import & export** — CSV in (migrating off Flockstar or a spreadsheet) and CSV/JSON out (Schedule F, no lock-in).
 
 ### Explicitly Out of Scope
-Crop planning and field mapping, satellite/weather imagery, e-commerce and CSA orders, double-entry accounting, GPS telematics hardware, dairy workflows. Farmbrite owns these and we will not beat it there.
+Crop planning and field mapping, satellite/weather imagery, e-commerce and CSA orders, double-entry accounting, GPS telematics hardware, and **dairy workflows** — creamery processing, milk testing, bulk-tank management. Farmbrite owns these and we will not beat it there.
+
+Note the boundary on that last one: *recording* a milk volume is one append-only number and belongs here, the same as an egg count. Everything downstream of the bucket does not.
 
 ### Deferred to v2 (designed for, not built)
 Incubation and hatch runs, fertility rates per pairing, three-generation pedigrees. Schema should not preclude them.

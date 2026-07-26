@@ -156,6 +156,67 @@ export const eggLogCreateSchema = z
     message: 'An egg log needs exactly one of flockId or birdId.',
   });
 
+// ── animal (mutable) ─────────────────────────────────────────────────────────
+
+/**
+ * An individual animal within a group (parity floor P1/P2).
+ *
+ * Archived, never deleted (P13): a hen's laying record and a doe's kidding
+ * history are the reason the record exists, and deleting the animal would
+ * take them with it.
+ */
+const animalShape = {
+  flockId: z.string().length(26),
+  name: z.string().min(1).max(80),
+  species: speciesSchema,
+  breed: z.string().max(80).optional(),
+  sex: z.enum(['female', 'male', 'unknown']).optional(),
+  /** Hatched, or born — one field, since the distinction is the species'. */
+  bornAt: z.number().int().optional(),
+  /** Leg band, ear tag, or ear notch. */
+  tag: z.string().max(40).optional(),
+  traits: z.array(z.string().max(40)).max(20).optional(),
+  weightGrams: z.number().int().positive().optional(),
+  note: z.string().max(500).optional(),
+};
+
+export const animalCreateSchema = z.object(animalShape).strict();
+export const animalUpdateSchema = z.object(animalShape).partial().strict();
+
+// ── productionLog (append-only) ──────────────────────────────────────────────
+
+/**
+ * Non-egg produce: milk, fibre, honey.
+ *
+ * Eggs keep their own entity because they were modelled first and carry the
+ * withdrawal interlock (W2); this covers everything else a smallholding takes
+ * off its animals. Without it, ruminant support would be head count and
+ * mortality only, which is not support.
+ *
+ * Out of scope, deliberately: creamery workflows, milk testing, and anything
+ * resembling dairy processing. This records a volume, not a supply chain.
+ */
+export const PRODUCE_KINDS = ['milk', 'fibre', 'honey', 'other'] as const;
+
+export const productionLogCreateSchema = z
+  .object({
+    ...observation,
+    flockId: z.string().length(26).optional(),
+    animalId: z.string().length(26).optional(),
+    kind: z.enum(PRODUCE_KINDS),
+    /** Millilitres for milk, grams for fibre and honey. Integers avoid drift. */
+    amount: z.number().int().positive().max(10_000_000),
+    unit: z.enum(['ml', 'g']),
+    /** Names the produce when kind is 'other'. */
+    label: z.string().max(80).optional(),
+    /** Set when logged through an active medication withdrawal (W2). */
+    withdrawalAcknowledged: z.boolean().optional(),
+  })
+  .strict()
+  .refine((v) => (v.flockId === undefined) !== (v.animalId === undefined), {
+    message: 'A production log needs exactly one of flockId or animalId.',
+  });
+
 // ── feedLog (append-only) ────────────────────────────────────────────────────
 
 export const feedLogCreateSchema = z

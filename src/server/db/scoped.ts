@@ -24,7 +24,9 @@ import { db } from './client';
 export const COLLECTIONS = [
   'mutations',
   'flocks',
+  'animals',
   'eggLogs',
+  'productionLogs',
   'feedLogs',
   'mortality',
   'predatorLogs',

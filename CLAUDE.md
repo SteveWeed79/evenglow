@@ -72,8 +72,9 @@ export const mutationSchema = z.object({
   schemaVersion: z.number().int().positive(),
   id: z.string().length(26),        // ULID — idempotency key, becomes _id
   targetId: z.string().length(26),  // ULID — entity id, minted offline
-  entity: z.enum(['flock', 'eggLog', 'feedLog', 'mortality', 'predator',
-                  'equipment', 'hourReading', 'maintenance', 'task', 'photo']),
+  entity: z.enum(['flock', 'animal', 'eggLog', 'productionLog', 'feedLog',
+                  'mortality', 'predator', 'equipment', 'hourReading',
+                  'maintenance', 'task', 'photo']),
   op: z.enum(['create', 'update', 'delete']),
   payload: z.unknown(),             // validated per-entity in server/sync/apply.ts
   deviceId: z.string().uuid(),
@@ -84,9 +85,13 @@ export const mutationSchema = z.object({
 export type Mutation = z.infer<typeof mutationSchema>;
 ```
 
-**Append-only entities** (`eggLog`, `feedLog`, `mortality`, `predator`, `hourReading`) accept `create` only. An `update`/`delete` on them is a 400. They cannot conflict — sync is insert-if-absent.
+**Append-only entities** (`eggLog`, `productionLog`, `feedLog`, `mortality`, `predator`, `hourReading`) accept `create` only. An `update`/`delete` on them is a 400. They cannot conflict — sync is insert-if-absent.
 
-**Mutable entities** (`flock`, `equipment`, `maintenance`, `task`) support update/delete and require conflict handling.
+**Mutable entities** (`flock`, `animal`, `equipment`, `maintenance`, `task`, `photo`) support update/delete and require conflict handling. They are **archived, never deleted** — a `delete` op sets `archivedAt` (P13).
+
+Widening the entity enum is additive and does **not** bump `MUTATION_SCHEMA_VERSION`: the envelope shape is unchanged and an old client never emits a new value. The only constraint is deploy order — the server ships before a client that emits a new entity, since an old server answers 400 for one it does not know.
+
+**Species are not just poultry.** `flock` is the wire name for any group of animals; the UI says herd, drove, or gaggle per species (`SPECIES_TRAITS` in `lib/contracts/entities/livestock.ts`). Do not reintroduce poultry-only assumptions — smallholdings are mixed, and egg logging is offered per species via `laysEggs()`.
 
 ---
 

@@ -30,13 +30,9 @@ export default async function Home(): Promise<React.ReactElement> {
     );
   }
 
-  // Placeholder until flocks exist (Phase 3). Derived from the org so a
-  // device's logs stay attached to one subject across reloads.
-  const flockId = session.user.orgId;
-
   return (
     <main className="shell">
-      <TodayShell flockId={flockId} />
+      <TodayShell />
     </main>
   );
 }

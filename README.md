@@ -4,9 +4,14 @@ Offline-first PWA for farm operations — birds, iron, and chores in one place.
 
 Next.js (App Router) · TypeScript strict · MongoDB · Auth.js (JWT) · IndexedDB · Vercel
 
-**Status: Phase 2 — Offline Engine.** The exit gate passes: 50 mutations
-logged in airplane mode survive a hard browser restart and sync exactly once.
-The core domain is not built yet; see [Phase status](#phase-status).
+**Status: Phase 3 — Core Domain, in progress.** Phase 2's exit gate passes:
+mutations logged in airplane mode survive a hard browser restart and sync
+exactly once. See [Phase status](#phase-status).
+
+Steading covers **mixed smallholdings**, not just poultry — poultry, ratites,
+ruminants and camelids, pigs, rabbits, equines, and free-text *other*. The UI
+says *herd*, *drove*, or *gaggle* per species, and egg logging is offered only
+where it applies.
 
 Planning docs, which are the source of truth:
 
@@ -145,8 +150,12 @@ It stubs `/api/sync` at the network layer, so no MongoDB is involved.
       Worker, sequential flush, rejected-mutations inbox, storage persistence,
       diagnostics sheet. **Exit gate passes**: airplane mode → 50 mutations →
       hard restart → reconnect → zero loss, zero duplicates.
-- [ ] **Phase 3 — Core domain.** Events, then entities, then photos. The charm
-      layer is now unlocked — Phase 2's gate passes.
+- [ ] **Phase 3 — Core domain.** *In progress.* Done: mutation projection into
+      domain collections, archive-not-delete, hour-meter monotonicity,
+      conflict-on-deleted-target, the mixed-livestock model, groups and egg
+      logging read local-first. Remaining: individual animal screens, equipment
+      and maintenance, photos, medication and withdrawal (W2), reporting. The
+      charm layer is unlocked — Phase 2's gate passes.
 - [ ] **Phase 4 — Hardening.** Rate limiting, origin/CSRF verification,
       envelope migration, quota UX, export, Core Web Vitals.
 

@@ -12,7 +12,9 @@ import { type Entity, isAppendOnly, type Op } from '@/lib/contracts/mutation';
 
 export const ENTITY_COLLECTIONS: Record<Entity, CollectionName> = {
   flock: 'flocks',
+  animal: 'animals',
   eggLog: 'eggLogs',
+  productionLog: 'productionLogs',
   feedLog: 'feedLogs',
   mortality: 'mortality',
   predator: 'predatorLogs',
