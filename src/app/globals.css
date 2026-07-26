@@ -1,0 +1,264 @@
+@import 'tailwindcss';
+
+/**
+ * Steading design tokens — UX-SPEC §2.
+ *
+ * These are decisions, not features: every component inherits them, so they
+ * land in Phase 1 while they are still cheap. The charm layer they enable
+ * (milestones, streaks, illustrations) is gated behind Phase 2's exit gate.
+ *
+ * Do not add colors, radii, or type scales here without changing the spec first.
+ */
+
+:root {
+  /* Daylight (default) — limewashed plaster. Sun is the harsher constraint
+     and daylight is simply the majority of use.                            */
+  --ground: #ede6d2; /* plaster, gold-green — not cream                     */
+  --raised: #f5f0e1; /* card surfaces                                       */
+  --ink: #241c14; /* deep loam brown                                        */
+  --muted: #6e6152; /* secondary text, dividers                             */
+
+  /* Accents — brass, garden, orchard. Shared across both modes.            */
+  --lantern: #e9b23c; /* primary action. Brass + lamplight                  */
+  --leaf: #6b8f52; /* complete, synced, healthy                             */
+  --rowan: #c4442c; /* overdue, withdrawal active, conflict                 */
+  --damson: #8a6484; /* queued / offline. Plum — calm, never alarming       */
+
+  /* Type — Fraunces carries the warmth, Alegreya Sans carries the load.
+     The --font-*-src vars are supplied by next/font in layout.tsx; the
+     fallbacks keep the page readable before the webfonts land.            */
+  --font-display: var(--font-fraunces), Georgia, serif; /* wonk 1, soft 30  */
+  --font-body: var(--font-alegreya-sans), system-ui, sans-serif;
+  --font-data: var(--font-plex-mono), ui-monospace, monospace;
+
+  --step-tally: clamp(4rem, 22vw, 7rem);
+  --step-title: 1.5rem;
+  --step-body: 1.0625rem; /* 17px floor — never smaller outdoors            */
+  --step-label: 0.8125rem; /* small caps, tracked, --font-data              */
+
+  /* Touch — coziness never costs a millimetre.                            */
+  --tap-min: 56px;
+  --tap-primary: 64px;
+  --tap-gap: 12px;
+
+  /* THE MOTIF: the round door. Top arched, bottom seated on the floor.
+     Load-bearing, not decorative: arch = something you can act on.        */
+  --arch: 999px 999px 8px 8px;
+  --border: 2px solid color-mix(in oklab, var(--ink) 22%, transparent);
+}
+
+/* Lamplight — the burrow at dawn. System-driven, plus a manual toggle in
+   the header for pre-sunrise chores.                                      */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: #201913; /* deep loam, warm not grey                          */
+    --raised: #2c2319; /* one step toward the fire                          */
+    --ink: #f0e7d5; /* candle-warm off-white                                */
+    --muted: #9c8e7a;
+  }
+}
+
+/* The header toggle sets data-theme explicitly, and must beat the media
+   query in both directions. */
+:root[data-theme='lamplight'] {
+  --ground: #201913;
+  --raised: #2c2319;
+  --ink: #f0e7d5;
+  --muted: #9c8e7a;
+}
+
+:root[data-theme='daylight'] {
+  --ground: #ede6d2;
+  --raised: #f5f0e1;
+  --ink: #241c14;
+  --muted: #6e6152;
+}
+
+/* Bright-sun override — one tap from the header. Warmth yields to
+   legibility, never the reverse. */
+[data-contrast='sun'] {
+  --ground: #fffdf6;
+  --raised: #ffffff;
+  --ink: #14100a;
+  --muted: #4a4238;
+  --lantern: #a66f00;
+  --border: 2px solid var(--ink);
+}
+
+[data-numeric] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Expose the tokens to Tailwind utilities so components can use either. */
+@theme inline {
+  --color-ground: var(--ground);
+  --color-raised: var(--raised);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-lantern: var(--lantern);
+  --color-leaf: var(--leaf);
+  --color-rowan: var(--rowan);
+  --color-damson: var(--damson);
+
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+  --font-data: var(--font-data);
+}
+
+html {
+  background: var(--ground);
+  /* Never zoom-lock: a gloved mis-tap must stay recoverable. */
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--step-body);
+  line-height: 1.5;
+  margin: 0;
+  /* Room for the four-tab bar plus the home indicator. */
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* R4 — every interactive element clears the glove floor by default, so
+   meeting the rule is the path of least resistance rather than a checklist
+   item. Opting out has to be deliberate. */
+button,
+[role='button'],
+a.tap,
+input,
+select,
+summary {
+  min-height: var(--tap-min);
+}
+
+/* R8 — no hover-dependent affordance, and focus is always visible. */
+:focus-visible {
+  outline: 3px solid var(--lantern);
+  outline-offset: 2px;
+}
+
+/* Section labels: pantry-label typography. Structural, not decorative. */
+.label {
+  font-family: var(--font-data);
+  font-size: var(--step-label);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+/* --arch means actionable. Flat rectangles are read-only. */
+.arch {
+  border-radius: var(--arch);
+  border: var(--border);
+  background: var(--raised);
+}
+
+/* ── Phase 1 screens ────────────────────────────────────────────────────── */
+
+.signin {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end; /* R3 — the action sits in the bottom third. */
+  min-height: 100dvh;
+  padding: 1.5rem 1.25rem calc(2rem + env(safe-area-inset-bottom));
+  gap: var(--tap-gap);
+  max-width: 32rem;
+  margin-inline: auto;
+}
+
+.signin__title {
+  font-family: var(--font-display);
+  font-variation-settings: 'SOFT' 30, 'WONK' 1;
+  font-size: var(--step-title);
+  margin: 0;
+}
+
+.signin__sub {
+  color: var(--muted);
+  margin: 0 0 auto;
+}
+
+.signin__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tap-gap);
+}
+
+.signin__form input {
+  border-radius: 8px; /* flat = a field, not an action */
+  border: var(--border);
+  background: var(--raised);
+  color: var(--ink);
+  font: inherit;
+  padding: 0 0.875rem;
+}
+
+.signin__submit {
+  min-height: var(--tap-primary);
+  border-radius: var(--arch); /* arched = actionable */
+  border: none;
+  background: var(--lantern);
+  color: #201913;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+}
+
+.signin__error {
+  border-radius: 8px;
+  border: 2px solid var(--rowan);
+  color: var(--ink);
+  padding: 0.75rem;
+  margin: 0;
+}
+
+.shell {
+  max-width: 32rem;
+  margin-inline: auto;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.shell__status p {
+  margin: 0;
+}
+
+.shell__card {
+  padding: 2rem 1.25rem 1.25rem;
+}
+
+.shell__claims {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.5rem 1rem;
+  margin: 0.5rem 0 0;
+  font-family: var(--font-data);
+  overflow-wrap: anywhere;
+}
+
+.shell__claims dd {
+  margin: 0;
+}
+
+.shell__note {
+  color: var(--muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
