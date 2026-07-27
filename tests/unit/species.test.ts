@@ -6,7 +6,7 @@ import {
   SPECIES,
   SPECIES_TRAITS,
   type Species,
-} from '@/lib/contracts/entities';
+} from '@steading/contracts';
 
 /**
  * Smallholdings are mixed. These assertions exist so the model cannot quietly

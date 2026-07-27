@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { db, readAllRecords, readOutboxBySeq } from '@/client/db/open';
 import { STORES } from '@/client/db/schema';
 import { checkIntegrity, enqueue, InvalidMutationError, queueDepth } from '@/client/sync/queue';
-import { newId } from '@/lib/ulid';
+import { newId } from '@steading/contracts';
 import { freshDb, simulateRestart } from '../support/idb';
 
 function eggLog(count = 18) {

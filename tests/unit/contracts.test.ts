@@ -5,15 +5,15 @@ import {
   isOpAllowed,
   maintenanceCreateSchema,
   payloadSchemaFor,
-} from '@/lib/contracts/entities';
+} from '@steading/contracts';
 import {
   ENTITIES,
   isAppendOnly,
   MAX_BATCH_SIZE,
   mutationSchema,
   syncRequestSchema,
-} from '@/lib/contracts/mutation';
-import { isUlid, newId } from '@/lib/ulid';
+} from '@steading/contracts';
+import { isUlid, newId } from '@steading/contracts';
 import { makeMutation } from '../support/fixtures';
 
 describe('ULIDs', () => {

@@ -1,8 +1,8 @@
 ---
 paths:
-  - "src/app/**/*.tsx"
-  - "src/client/**/*.tsx"
-  - "src/**/*.css"
+  - "apps/app/src/screens/**/*.tsx"
+  - "apps/app/src/components/**/*.tsx"
+  - "apps/app/src/**/*.css"
 ---
 
 # UI constraints

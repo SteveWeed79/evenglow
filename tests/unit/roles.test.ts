@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ENTITIES, isAppendOnly, OPS } from '@/lib/contracts/mutation';
-import { canMutate, isRole, ROLES } from '@/lib/contracts/roles';
+import { ENTITIES, isAppendOnly, OPS } from '@steading/contracts';
+import { canMutate, isRole, ROLES } from '@steading/contracts';
 
 describe('role matrix', () => {
   it('recognises exactly the three roles', () => {

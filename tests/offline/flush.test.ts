@@ -3,8 +3,8 @@ import { readOutboxBySeq } from '@/client/db/open';
 import { discardRejected, listRejected, retryRejected } from '@/client/sync/inbox';
 import { flushOnce, MAX_ATTEMPTS, type SyncTransport } from '@/client/sync/flush';
 import { checkIntegrity, enqueue, queueDepth } from '@/client/sync/queue';
-import { MAX_BATCH_SIZE, type Mutation, type MutationStatus } from '@/lib/contracts/mutation';
-import { newId } from '@/lib/ulid';
+import { MAX_BATCH_SIZE, type Mutation, type MutationStatus } from '@steading/contracts';
+import { newId } from '@steading/contracts';
 import { freshDb } from '../support/idb';
 
 function eggLog() {

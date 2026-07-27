@@ -71,7 +71,7 @@ Ship these or the app reads as a toy. Ordered by how visible their absence is.
 Where we win. Each is a real gap, not a spin on parity.
 
 **W1 — Offline-first, not offline-tolerant.**
-Competitors bolt offline onto a cloud app. Ours is a local-first database that happens to sync. Concretely: cold start to logged egg count in under five seconds with the radio off, and a visible, diagnosable queue. Nobody advertises what happens when sync *fails*, because in their apps it fails silently.
+Competitors bolt offline onto a cloud app. Ours is a native app over a local SQLite database that happens to sync — the data sits in the app sandbox, not in a browser storage bucket the OS is permitted to evict. Concretely: cold start to logged egg count in under five seconds with the radio off, and a visible, diagnosable queue. Nobody advertises what happens when sync *fails*, because in their apps it fails silently.
 
 **W2 — Medication and withdrawal tracking.**
 Requested in Flockstar reviews, unmet. Log a treatment, get an automatic egg/meat withdrawal window, and see a blocking warning on the egg-collection screen while the window is open. This is compliance-grade and nobody at homestead scale does it. **Highest-value single feature in this document.**
