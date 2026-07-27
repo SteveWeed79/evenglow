@@ -2,6 +2,27 @@ packages:
   - "apps/*"
   - "packages/*"
 
+# Every dependency carrying an install script needs a decision recorded here.
+# pnpm 10 only warns about the ones it skipped; later versions refuse the
+# install outright (ERR_PNPM_IGNORED_BUILDS), and because pnpm re-runs install
+# implicitly before a workspace script, an undeclared build script turns every
+# `pnpm <script>` into a failure. Declaring them keeps a fresh clone installable
+# on whatever pnpm the developer happens to have.
+#
+# esbuild is the one build that runs. Its install script copies the platform
+# binary out of the optional @esbuild/<platform> package; it downloads nothing,
+# and leaving it unbuilt is the usual cause of "you installed esbuild for
+# another platform" after a checkout moves between machines.
+onlyBuiltDependencies:
+  - esbuild
+
+# Skipped deliberately:
+#   mongodb-memory-server — prefetches a ~100 MB mongod. It downloads lazily on
+#                           first use instead, and most runs point at a real
+#                           mongod via MONGODB_TEST_URI anyway
+#   sharp, unrs-resolver  — prebuilt native bindings arrive as optional deps,
+#                           so the build step has nothing left to do
 ignoredBuiltDependencies:
+  - mongodb-memory-server
   - sharp
   - unrs-resolver

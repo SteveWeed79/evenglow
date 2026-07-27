@@ -2,7 +2,7 @@
 
 **Version:** 3.0 — Capacitor rewrite
 **Status:** Phases 1–3 implemented on the pre-D8 stack; the D8–D10 migration is in flight. See §0.1.
-**Name:** Steading — the farmhouse and its working buildings taken together. Birds, iron, and chores in one place.
+**Name:** Steading — the farmhouse and its working buildings taken together. Stock, iron, and chores under one roofline.
 
 **Stack**
 - **Client:** Capacitor 8 · Vite · React · TypeScript (strict) · SQLite (`@capacitor-community/sqlite`)

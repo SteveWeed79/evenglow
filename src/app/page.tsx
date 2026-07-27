@@ -22,7 +22,7 @@ export default async function Home(): Promise<React.ReactElement> {
     return (
       <main className="signin">
         <h1 className="signin__title">Steading</h1>
-        <p className="signin__sub">Birds, iron, and chores in one place.</p>
+        <p className="signin__sub">Stock, iron, and chores under one roofline.</p>
         <Link href="/sign-in" className="tap signin__submit">
           Sign in
         </Link>
