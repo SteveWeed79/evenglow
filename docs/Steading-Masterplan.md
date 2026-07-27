@@ -188,6 +188,18 @@ Incubation and hatch runs, fertility rates per pairing, three-generation pedigre
 
 ## 5. Open Questions
 
+**Purpose, breed, and the grow-out clock — proposal open for review.**
+[`docs/BREED-AND-PURPOSE.md`](BREED-AND-PURPOSE.md) sets out a model for what a
+flock is *for*. There is currently no such concept: `SPECIES_TRAITS` describes
+capability, and nothing describes intent, so nothing forward-looking can be
+expressed — no processing date, no expected onset of lay, no shearing interval.
+The proposal argues purpose is a *set* rather than a value (cattle give milk and
+meat; sheep give wool, meat and milk), that predictions must key on breed rather
+than species, and that a prediction without a known birth date should not be shown
+at all. It proposes D11 and D12 and closes with five questions that need answers
+before any of it becomes code.
+
+
 - Photo storage target: S3/R2 vs. self-hosted. Affects Phase 3 upload.
 - API hosting: same box as your other services, or a managed host?
 - Does a Farm Hand write events (egg counts) while staying read-only on entities? Recommended: yes — it's the main reason a second user exists.

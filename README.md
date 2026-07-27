@@ -29,6 +29,7 @@ Planning docs, which are the source of truth:
 | [`docs/PHASE-1-SPEC.md`](docs/PHASE-1-SPEC.md) | The task list, rewritten for the D8–D10 target |
 | [`docs/MIGRATION-PLAN.md`](docs/MIGRATION-PLAN.md) | How this tree becomes that one, stage by stage |
 | [`docs/NATIVE-PIVOT.md`](docs/NATIVE-PIVOT.md) | Why Capacitor rather than React Native |
+| [`docs/BREED-AND-PURPOSE.md`](docs/BREED-AND-PURPOSE.md) | Proposal: what a flock is *for*, breed data, and crowdsourcing |
 | [`CLAUDE.md`](CLAUDE.md) | Hard invariants |
 
 There is one rubric, and it is version 3.0. The v2.x masterplan has been
