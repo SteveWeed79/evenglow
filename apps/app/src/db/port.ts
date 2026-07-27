@@ -50,6 +50,15 @@ export interface PullResult {
   skipped: number;
 }
 
+/**
+ * How far this device has hydrated. Both halves, always — see `applyPulled`.
+ * `throughId` is null only before the first row has ever been read.
+ */
+export interface SnapshotWatermark {
+  through: number;
+  throughId: string | null;
+}
+
 export interface LocalStore {
   // ── Writing ───────────────────────────────────────────────────────────────
 
@@ -120,10 +129,21 @@ export interface LocalStore {
    * MUST skip any record with a pending local edit. A queued change visibly
    * reverting is the most alarming thing an offline app can do, so local
    * optimistic state wins until it flushes.
+   *
+   * The watermark is a PAIR, and this signature took a `through: number` until
+   * the SQLite implementation was written against it. That would have been a
+   * silent regression: serverTs is millisecond-resolution, so persisting the
+   * timestamp without its ULID resumes from the start of a millisecond and
+   * loses every row after a page boundary that falls inside one. The bug was
+   * fixed in the engine before this file was updated to match — a reminder
+   * that "implement the port" is only as correct as the port.
    */
-  applyPulled(mutations: readonly PulledMutation[], through: number): Promise<PullResult>;
+  applyPulled(
+    mutations: readonly PulledMutation[],
+    cursor: SnapshotWatermark,
+  ): Promise<PullResult>;
 
-  pulledThrough(): Promise<number>;
+  pulledThrough(): Promise<SnapshotWatermark>;
 
   // ── Bookkeeping ───────────────────────────────────────────────────────────
 

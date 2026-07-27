@@ -284,9 +284,29 @@ migrated and not being.
 The `indexedDB` ban S2 pre-armed on `apps/app/src/**` fires now that the
 directory exists — verified against a deliberate violation.*
 
-**S4b — the store itself.** Implement `LocalStore` over the driver, then
-retarget `tests/offline/**` at the port and run the suite against **both**
-implementations. Identical results is the bar.
+**S4b — the store itself ✅ done.** `LocalStore` implemented over the driver,
+covered by a contract suite asserting the MUSTs `port.ts` documents.
+
+**Writing it found the oracle out of date.** `applyPulled` took
+`through: number` — a single timestamp — because `port.ts` predates the
+same-millisecond cursor fix. Implementing it verbatim would have persisted the
+watermark without its ULID and silently reintroduced that data loss on the
+SQLite path only, visible only after a reinstall. The port is corrected to a
+`SnapshotWatermark` pair. Worth stating plainly: *"implement the port"* is only
+as correct as the port, and an oracle written before a fix does not know about
+it.
+
+The stored shapes moved to `apps/app/src/db/schema.ts` and the IndexedDB module
+re-exports them, so both engines validate against one declaration rather than
+two that can drift.
+
+*Exit, met: 23 contract assertions plus the 15 schema ones, against real SQLite
+in Node.*
+
+**S4c — wire the engine to the port.** `queue.ts`, `flush.ts` and `pull.ts`
+still call the IndexedDB functions directly, so `tests/offline` cannot yet run
+against both. Injecting the store is what makes the suite the shared oracle the
+plan describes, and it is the last step before the shell.
 
 Specific things to get right, each of which the IndexedDB version already
 handles and a fresh implementation tends not to:
