@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { describeLogFailure } from '../sync/failure';
 import { newId, SPECIES, SPECIES_TRAITS, type Species } from '@steading/contracts';
 import { useLog } from '../hooks/useSync';
+import { useGroups } from '../hooks/useGroups';
+import { defaultGroupName } from '../naming';
 
 /**
  * Adds a group of animals.
@@ -30,6 +32,17 @@ export function AddGroup({ onDone }: { onDone: () => void }): React.ReactElement
   const [failure, setFailure] = useState<string | null>(null);
 
   const traits = SPECIES_TRAITS[species];
+  const { groups } = useGroups();
+
+  /**
+   * What this group will be called if nothing is typed — shown as the
+   * placeholder, so the field states its own default rather than sitting
+   * there looking already answered.
+   */
+  const suggested = defaultGroupName(
+    traits.label,
+    groups.map((group) => group.name),
+  );
 
   async function save(): Promise<void> {
     if (saving) return;
@@ -41,7 +54,7 @@ export function AddGroup({ onDone }: { onDone: () => void }): React.ReactElement
         op: 'create',
         targetId: newId(),
         payload: {
-          name: name.trim() || traits.label,
+          name: name.trim() || suggested,
           species,
           ...(species === 'other' && other.trim() ? { speciesOther: other.trim() } : {}),
           count,
@@ -104,7 +117,7 @@ export function AddGroup({ onDone }: { onDone: () => void }): React.ReactElement
         id="group-name"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        placeholder={traits.label}
+        placeholder={suggested}
       />
 
       <p className="label">How many?</p>

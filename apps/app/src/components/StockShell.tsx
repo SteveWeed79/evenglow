@@ -5,6 +5,7 @@ import { collectiveNoun, SPECIES_TRAITS } from '@steading/contracts';
 import { useGroups } from '../hooks/useGroups';
 import type { Group } from '../read/groups';
 import { AddGroup } from './AddGroup';
+import { EditGroup } from './EditGroup';
 import { RecordTreatment } from './RecordTreatment';
 
 /**
@@ -18,8 +19,11 @@ export function StockShell(): React.ReactElement {
   const { groups, loading } = useGroups();
   const [adding, setAdding] = useState(false);
   const [treating, setTreating] = useState<Group | null>(null);
+  const [editing, setEditing] = useState<Group | null>(null);
 
   if (adding) return <AddGroup onDone={() => setAdding(false)} />;
+
+  if (editing) return <EditGroup group={editing} onDone={() => setEditing(null)} />;
 
   if (treating) {
     return (
@@ -71,14 +75,24 @@ export function StockShell(): React.ReactElement {
             </div>
           </header>
 
-          <button
-            type="button"
-            className="sheet__button"
-            onClick={() => setTreating(group)}
-            data-testid={`record-treatment-${group.id}`}
-          >
-            Record a treatment
-          </button>
+          <div className="sheet__actions">
+            <button
+              type="button"
+              className="sheet__button"
+              onClick={() => setEditing(group)}
+              data-testid={`edit-group-${group.id}`}
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              className="sheet__button"
+              onClick={() => setTreating(group)}
+              data-testid={`record-treatment-${group.id}`}
+            >
+              Record a treatment
+            </button>
+          </div>
         </section>
       ))}
 
