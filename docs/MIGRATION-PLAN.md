@@ -43,7 +43,7 @@ under test.
 The migration has an unusually good answer to "is the port correct?", and it
 should be used rather than re-derived.
 
-`src/client/db/port.ts` defines `LocalStore` — the storage dependency of the
+`apps/app/src/db/port.ts` defines `LocalStore` — the storage dependency of the
 entire sync engine, expressed as **atomic domain operations rather than
 key-value primitives**. That distinction is the whole point: `enqueue` mints a
 sequence number, writes the outbox row, advances the counter and updates the
@@ -59,6 +59,14 @@ against both implementations, and the port is proven.
 This is why `port.ts` was written before the pivot was decided, and it is why
 the existing engine must not be deleted early: it is the reference the port is
 checked against.
+
+**The oracle is not automatically right, and S4b proved it.** `applyPulled`
+still took a single `through: number` — because the port was written before the
+same-millisecond cursor fix. Implementing it faithfully would have persisted a
+watermark without its ULID and silently reintroduced that data loss on the
+SQLite path alone. An oracle written before a fix does not know about the fix,
+so when the two disagree, check which one is stale before assuming the
+implementation is wrong.
 
 ---
 
