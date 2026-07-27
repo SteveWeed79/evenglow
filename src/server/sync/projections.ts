@@ -1,5 +1,5 @@
 import type { CollectionName } from '@/server/db/scoped';
-import { type Entity, isAppendOnly, type Op } from '@/lib/contracts/mutation';
+import { type Entity, isAppendOnly, type Op } from '@steading/contracts';
 
 /**
  * Projection decisions, as pure functions.

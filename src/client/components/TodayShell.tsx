@@ -1,8 +1,7 @@
 'use client';
 
 import { useCallback } from 'react';
-import { laysEggs } from '@/lib/contracts/entities';
-import { type ActiveWithdrawal, longestWithdrawal } from '@/lib/withdrawal';
+import { laysEggs, longestWithdrawal, type ActiveWithdrawal } from '@steading/contracts';
 import { useGroups } from '../hooks/useGroups';
 import { useLog } from '../hooks/useSync';
 import type { Group } from '../read/groups';

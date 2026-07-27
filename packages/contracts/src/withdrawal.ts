@@ -1,4 +1,4 @@
-import type { WithdrawalKind } from './contracts/entities';
+import type { WithdrawalKind } from './entities';
 
 /**
  * Withdrawal-period arithmetic (W2).

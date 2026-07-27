@@ -1,11 +1,11 @@
 import { MongoServerError } from 'mongodb';
-import { payloadSchemaFor } from '@/lib/contracts/entities';
 import {
+  canMutate,
   MUTATION_SCHEMA_VERSION,
+  payloadSchemaFor,
   type Mutation,
   type MutationResult,
-} from '@/lib/contracts/mutation';
-import { canMutate } from '@/lib/contracts/roles';
+} from '@steading/contracts';
 import type { SessionClaims } from '@/server/auth/session';
 import type { Scoped, Tenanted } from '@/server/db/scoped';
 import {

@@ -2,7 +2,7 @@ import {
   type PullResponse,
   pullResponseSchema,
   type PulledMutation,
-} from '@/lib/contracts/mutation';
+} from '@steading/contracts';
 import { db } from '../db/open';
 import { toLocalRecord } from '../db/project';
 import { META, parseMeta, STORES } from '../db/schema';

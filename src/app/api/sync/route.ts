@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { syncRequestSchema, type SyncResponse } from '@/lib/contracts/mutation';
+import { syncRequestSchema, type SyncResponse } from '@steading/contracts';
 import { requireMutationSession } from '@/server/auth/session';
 import { scoped } from '@/server/db/scoped';
 import { errorResponse, HttpError } from '@/server/http';

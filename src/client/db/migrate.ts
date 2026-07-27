@@ -1,4 +1,4 @@
-import { MUTATION_SCHEMA_VERSION } from '@/lib/contracts/mutation';
+import { MUTATION_SCHEMA_VERSION } from '@steading/contracts';
 
 /**
  * Envelope migration (A7).

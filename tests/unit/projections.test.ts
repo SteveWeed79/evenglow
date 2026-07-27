@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ENTITIES, isAppendOnly } from '@/lib/contracts/mutation';
+import { ENTITIES, isAppendOnly } from '@steading/contracts';
 import {
   decideHourReading,
   decideProjection,

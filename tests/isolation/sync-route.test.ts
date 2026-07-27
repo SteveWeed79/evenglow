@@ -1,7 +1,6 @@
 import { ulid } from 'ulid';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PULL_PAGE_SIZE, type SyncResponse } from '@/lib/contracts/mutation';
-import type { Role } from '@/lib/contracts/roles';
+import { PULL_PAGE_SIZE, type Role, type SyncResponse } from '@steading/contracts';
 import type { UserDoc } from '@/server/db/identity';
 import { startTestDb } from '../support/mongo';
 import { makeMutation } from '../support/fixtures';

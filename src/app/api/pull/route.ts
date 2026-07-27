@@ -5,7 +5,7 @@ import {
   type PullResponse,
   PULL_PAGE_SIZE,
   type PulledMutation,
-} from '@/lib/contracts/mutation';
+} from '@steading/contracts';
 import { requireSession } from '@/server/auth/session';
 import { scoped, type Tenanted } from '@/server/db/scoped';
 import { errorResponse, HttpError } from '@/server/http';

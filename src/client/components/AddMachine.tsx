@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { newId } from '@/lib/ulid';
+import { newId } from '@steading/contracts';
 import { useLog } from '../hooks/useSync';
 
 /**

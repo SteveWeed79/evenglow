@@ -1,6 +1,6 @@
 import { ulid } from 'ulid';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import type { MutationResult } from '@/lib/contracts/mutation';
+import type { MutationResult } from '@steading/contracts';
 import type { SessionClaims } from '@/server/auth/session';
 import { scopedOn } from '@/server/db/scoped';
 import { applyBatch } from '@/server/sync/apply';

@@ -1,22 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
   appendOnlyOpsAreCreateOnly,
+  canMutate,
   eggLogCreateSchema,
+  ENTITIES,
   inventoryCreateSchema,
   inventoryUpdateSchema,
-  isOpAllowed,
-  maintenanceCreateSchema,
-  payloadSchemaFor,
-} from '@/lib/contracts/entities';
-import { canMutate } from '@/lib/contracts/roles';
-import {
-  ENTITIES,
   isAppendOnly,
+  isOpAllowed,
+  isUlid,
+  maintenanceCreateSchema,
   MAX_BATCH_SIZE,
   mutationSchema,
+  newId,
+  payloadSchemaFor,
   syncRequestSchema,
-} from '@/lib/contracts/mutation';
-import { isUlid, newId } from '@/lib/ulid';
+} from '@steading/contracts';
 import { makeMutation } from '../support/fixtures';
 
 describe('ULIDs', () => {

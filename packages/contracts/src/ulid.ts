@@ -1,5 +1,5 @@
 import { ulid } from 'ulid';
-import { ULID_PATTERN } from './contracts/mutation';
+import { ULID_PATTERN } from './mutation';
 
 /**
  * All syncable entity IDs are minted here, on the client, before the server

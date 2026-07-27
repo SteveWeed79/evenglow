@@ -1,6 +1,6 @@
 'use client';
 
-import { type ActiveWithdrawal, withdrawalMessage } from '@/lib/withdrawal';
+import { type ActiveWithdrawal, withdrawalMessage } from '@steading/contracts';
 
 /**
  * The one place a warning outranks speed (UX-SPEC §3).

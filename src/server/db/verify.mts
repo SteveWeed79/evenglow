@@ -20,7 +20,7 @@ import { ulid } from 'ulid';
 import { applyIndexes, INDEXES, leadingKey } from './indexes.ts';
 import { COLLECTIONS, scopedOn } from './scoped.ts';
 import { applyBatch } from '../sync/apply.ts';
-import { MUTATION_SCHEMA_VERSION } from '../../lib/contracts/mutation.ts';
+import { MUTATION_SCHEMA_VERSION } from '@steading/contracts';
 
 const VERIFY_DB = 'steading_verify';
 

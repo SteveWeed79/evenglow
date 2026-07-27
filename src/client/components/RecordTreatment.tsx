@@ -5,10 +5,10 @@ import {
   givesMilk,
   laysEggs,
   MEDICATION_ROUTES,
+  newId,
   type Species,
   type WithdrawalKind,
-} from '@/lib/contracts/entities';
-import { newId } from '@/lib/ulid';
+} from '@steading/contracts';
 import { useLog } from '../hooks/useSync';
 
 /**

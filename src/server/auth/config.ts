@@ -3,7 +3,7 @@ import NextAuth from 'next-auth';
 // augmented below.
 import type {} from 'next-auth/jwt';
 import Credentials from 'next-auth/providers/credentials';
-import { isRole, type Role } from '@/lib/contracts/roles';
+import { isRole, type Role } from '@steading/contracts';
 import { authorizeCredentials } from './credentials';
 
 /**
