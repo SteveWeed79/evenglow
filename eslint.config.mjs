@@ -16,6 +16,11 @@ const eslintConfig = defineConfig([
     // Vite's output. Linting a bundle produces a thousand warnings about
     // machine-written code and buries the ones that matter.
     'apps/*/dist/**',
+    // The native project. `cap sync` copies that same bundle into
+    // android/app/src/main/assets/public, so without this the bundle comes
+    // back through a second door — and the Gradle wrapper and plugin sources
+    // underneath it are nobody's code to lint either.
+    'apps/*/android/**',
   ]),
 
   /**

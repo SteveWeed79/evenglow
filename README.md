@@ -1,6 +1,6 @@
 # Steading
 
-Offline-first farm operations — birds, iron, and chores in one place.
+Offline-first farm operations — stock, iron, and chores under one roofline.
 
 Next.js (App Router) · TypeScript strict · MongoDB · Auth.js (JWT) · IndexedDB · Vercel
 
@@ -78,6 +78,37 @@ owner are created by `db:seed`.
 | `pnpm db:seed` | Create the first org and owner |
 | `pnpm check:secrets` | Fail if a secret reached the client bundle |
 | `pnpm check:no-db-disables` | Fail on inline disables of the db guard |
+| `pnpm build:app` | Vite build of the Capacitor client → `apps/app/dist` |
+| `pnpm cap:sync` | Build, then copy the bundle into the native project |
+| `pnpm cap:run:android` | Build, sync, and deploy to a device or emulator |
+| `pnpm cap:open:android` | Open the native project in Android Studio |
+
+## Android
+
+The APK is the target (D8); the browser is the fast development loop. Everything
+above the storage layer is identical between them — the one branch is in
+`apps/app/src/platform.ts`, which decides between SQLite on device and IndexedDB
+in a browser.
+
+You need Android Studio, and either a handset with USB debugging on or an
+emulator image. Then:
+
+```bash
+pnpm cap:run:android
+```
+
+That builds the web bundle, copies it into `apps/app/android`, and deploys.
+`cap:sync` always builds first on purpose — syncing a stale `dist` puts the last
+build in the APK and the change you are testing simply is not there.
+
+The native project is committed, so Gradle files and manifest edits are
+reviewable. The copied bundle and the generated Capacitor config are not: the
+template's `.gitignore` excludes them, because they are build output.
+
+**Verify on a device before calling any storage, camera, haptics or sync task
+done.** A WebView over native SQLite does not behave like a browser over
+IndexedDB, and the durability characteristics that D9 changed are exactly the
+ones a dev server cannot show you.
 
 ## Architecture
 
