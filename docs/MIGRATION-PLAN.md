@@ -43,7 +43,7 @@ under test.
 The migration has an unusually good answer to "is the port correct?", and it
 should be used rather than re-derived.
 
-`src/client/db/port.ts` defines `LocalStore` — the storage dependency of the
+`apps/app/src/db/port.ts` defines `LocalStore` — the storage dependency of the
 entire sync engine, expressed as **atomic domain operations rather than
 key-value primitives**. That distinction is the whole point: `enqueue` mints a
 sequence number, writes the outbox row, advances the counter and updates the
@@ -59,6 +59,14 @@ against both implementations, and the port is proven.
 This is why `port.ts` was written before the pivot was decided, and it is why
 the existing engine must not be deleted early: it is the reference the port is
 checked against.
+
+**The oracle is not automatically right, and S4b proved it.** `applyPulled`
+still took a single `through: number` — because the port was written before the
+same-millisecond cursor fix. Implementing it faithfully would have persisted a
+watermark without its ULID and silently reintroduced that data loss on the
+SQLite path alone. An oracle written before a fix does not know about the fix,
+so when the two disagree, check which one is stale before assuming the
+implementation is wrong.
 
 ---
 
@@ -253,11 +261,60 @@ green.*
 
 ### S4 — SQLite `LocalStore`
 
-The real work. Implement `LocalStore` against SQLite: schema, migrations,
-and the transactional `enqueue`.
+The real work. Split in two, because the schema and the store are separately
+testable and the first is a prerequisite for the second.
 
-Retarget `tests/offline/**` at the port interface and run the suite against
-**both** implementations. Identical results is the bar.
+**S4a — the SQL seam, schema, and migration ladder ✅ done.**
+
+`SqlDriver` is a deliberately narrow interface with two backings:
+`@capacitor-community/sqlite` on device (S5), and `node:sqlite` under test. The
+split is not tidiness — the storage layer is the highest-risk part of this
+migration, and a layer that can only be exercised on a handset is one that gets
+exercised rarely and late. Everything clever lives above the driver, where it
+is testable, rather than in two implementations that then have to agree.
+
+**Concurrent transactions are serialised, and nesting is refused.** A SQLite
+connection holds one transaction, so two overlapping calls are not two
+transactions — they are one, with either caller able to roll back the other's
+writes. For enqueue that means a committed half-write: a sequence number
+consumed with no outbox row, or a projection updated for a mutation that is not
+queued. Two taps on the Tally is enough to reach it. The first version of the
+driver tried to nest with savepoints and the concurrency test caught it
+unwinding into "no such savepoint" — the polite version of that failure.
+
+Migrations are additive only, enforced by a test rather than remembered: a
+`DROP` or `DELETE` in a migration discards work that exists nowhere else until
+it flushes. Each migration commits together with its version bump, so a failure
+part-way leaves the database at the previous version rather than claiming to be
+migrated and not being.
+
+*Exit, met: 15 schema and transaction assertions against real SQLite in Node.
+The `indexedDB` ban S2 pre-armed on `apps/app/src/**` fires now that the
+directory exists — verified against a deliberate violation.*
+
+**S4b — the store itself ✅ done.** `LocalStore` implemented over the driver,
+covered by a contract suite asserting the MUSTs `port.ts` documents.
+
+**Writing it found the oracle out of date.** `applyPulled` took
+`through: number` — a single timestamp — because `port.ts` predates the
+same-millisecond cursor fix. Implementing it verbatim would have persisted the
+watermark without its ULID and silently reintroduced that data loss on the
+SQLite path only, visible only after a reinstall. The port is corrected to a
+`SnapshotWatermark` pair. Worth stating plainly: *"implement the port"* is only
+as correct as the port, and an oracle written before a fix does not know about
+it.
+
+The stored shapes moved to `apps/app/src/db/schema.ts` and the IndexedDB module
+re-exports them, so both engines validate against one declaration rather than
+two that can drift.
+
+*Exit, met: 23 contract assertions plus the 15 schema ones, against real SQLite
+in Node.*
+
+**S4c — wire the engine to the port.** `queue.ts`, `flush.ts` and `pull.ts`
+still call the IndexedDB functions directly, so `tests/offline` cannot yet run
+against both. Injecting the store is what makes the suite the shared oracle the
+plan describes, and it is the last step before the shell.
 
 Specific things to get right, each of which the IndexedDB version already
 handles and a fresh implementation tends not to:
