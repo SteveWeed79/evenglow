@@ -83,10 +83,15 @@ function GroupTally({
           <p className="group__name">{group.name}</p>
           <p className="label">{group.count} head</p>
         </div>
+        {/* A bare number opposite the group's name could be anything — head
+            count, eggs, hours. It says what it is. */}
         {eggs > 0 ? (
-          <p className="group__today" data-numeric>
-            {eggs}
-          </p>
+          <div className="group__today">
+            <p className="group__todaycount" data-numeric>
+              {eggs}
+            </p>
+            <span className="label">Eggs today</span>
+          </div>
         ) : null}
       </header>
 
