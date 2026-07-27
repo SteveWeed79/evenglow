@@ -220,10 +220,22 @@ from.
 *Exit, met: 284 unit tests locally; the 24 new db-backed tests covering
 rotation, family revocation, and the routes run in CI.*
 
-**S3c — the routes, and the two-server proof.** `/sync` and `/snapshot` on
-Fastify, with the isolation and idempotency suites parameterised over both
-implementations. Running the same suite against both is the cheapest available
-evidence that the port did not weaken tenancy.
+**S3c — the routes, and the two-server proof ✅ done.** `/sync` and `/snapshot`
+on Fastify, with the tenancy assertions run against both implementations.
+
+The important move was not writing the Fastify handlers, it was **extracting
+what they do**. `sync/batch.ts` and `sync/snapshot.ts` now hold the batch
+handling and the hydration cursor, and both servers' routes are adapters over
+them. A second copy of the cursor is the last thing this migration should
+carry: a difference between the two would only surface after a reinstall, on
+whichever server that device happened to talk to.
+
+That makes the parity suite sharper than it looks. What it actually exercises
+is the part that is *not* shared — the two auth paths, and the two ways a
+request becomes a scope.
+
+*Exit, met: 310 unit tests; 24 db-backed parity assertions (12 × two servers)
+in CI.*
 
 Stand up `apps/api` with `server.ts` and `routes/{auth,sync,snapshot}.ts`
 wrapping the already-ported appliers. Token auth per `PHASE-1-SPEC.md` T7.
