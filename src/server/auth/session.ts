@@ -1,13 +1,15 @@
-import { isRole, type Role } from '@steading/contracts';
-import { findUserById } from '@/server/db/identity';
+import { isRole } from '@steading/contracts';
+import type { SessionClaims } from '@steading/api/auth/claims';
+import { findUserById } from '@steading/api/db/identity';
 import { HttpError } from '@/server/http';
 import { auth } from './config';
 
-export interface SessionClaims {
-  userId: string;
-  orgId: string;
-  role: Role;
-}
+/**
+ * Re-exported, not redeclared. The appliers take this shape and do not care
+ * how it was established; declaring a second copy here is how the Auth.js path
+ * and the token path would quietly drift apart while both are serving.
+ */
+export type { SessionClaims };
 
 /**
  * Read-path session. Claims come from the server-signed JWT, so they are

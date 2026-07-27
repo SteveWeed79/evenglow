@@ -11,14 +11,15 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
-    "db:indexes": "tsx src/server/db/apply-indexes.mts",
-    "db:seed": "tsx src/server/db/seed.mts",
+    "db:indexes": "pnpm --filter @steading/api db:indexes",
+    "db:seed": "pnpm --filter @steading/api db:seed",
     "check:secrets": "node scripts/check-bundle-secrets.mjs",
     "check:no-db-disables": "node scripts/check-no-db-disables.mjs",
-    "db:verify": "tsx src/server/db/verify.mts"
+    "db:verify": "pnpm --filter @steading/api db:verify"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.0.2",
+    "@steading/api": "workspace:*",
     "@steading/contracts": "workspace:*",
     "idb": "^8.0.3",
     "mongodb": "^7.5.0",

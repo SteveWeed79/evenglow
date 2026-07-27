@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { Role } from '@steading/contracts';
-import { findUserByEmail } from '@/server/db/identity';
+import { findUserByEmail } from '../db/identity';
 import { verifyPassword } from './password';
 
 /**

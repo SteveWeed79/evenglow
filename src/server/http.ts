@@ -1,25 +1,17 @@
 import { NextResponse } from 'next/server';
+import { errorBody } from '@steading/api/http';
+
+export { HttpError } from '@steading/api/http';
 
 /**
- * Thrown by server helpers, converted to a response at the route boundary.
- * Messages are user-facing, so they stay plain and literal (UX-SPEC §6).
+ * The Next adapter over the shared error shape.
+ *
+ * Thin on purpose: what a failure says is decided in the API package, so the
+ * Next routes and the Fastify routes cannot answer the same condition
+ * differently while both are serving. This file goes away with the rest of the
+ * Next surface in S7.
  */
-export class HttpError extends Error {
-  readonly status: number;
-
-  constructor(status: number, message: string) {
-    super(message);
-    this.name = 'HttpError';
-    this.status = status;
-  }
-}
-
 export function errorResponse(error: unknown): NextResponse {
-  if (error instanceof HttpError) {
-    return NextResponse.json({ error: error.message }, { status: error.status });
-  }
-
-  // Never leak an unexpected error's text — it can carry query or schema detail.
-  console.error('Unhandled route error:', error);
-  return NextResponse.json({ error: 'Something went wrong.' }, { status: 500 });
+  const { status, body } = errorBody(error);
+  return NextResponse.json(body, { status });
 }

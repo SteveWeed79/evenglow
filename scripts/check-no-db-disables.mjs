@@ -16,7 +16,7 @@ const DISABLE = /eslint-disable(?:-next-line|-line)?\s+([^\n*]+)/g;
  * the tree without updating this file is a loud failure — see the scanned-count
  * assertion below.
  */
-const SOURCE_ROOTS = ['src', 'packages'];
+const SOURCE_ROOTS = ['src', 'packages', 'apps'];
 
 /**
  * Skipped wholesale. `node_modules` matters most: pnpm links dependencies into

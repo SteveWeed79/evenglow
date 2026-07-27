@@ -7,7 +7,7 @@ import {
   type PulledMutation,
 } from '@steading/contracts';
 import { requireSession } from '@/server/auth/session';
-import { scoped, type Tenanted } from '@/server/db/scoped';
+import { scoped, type Tenanted } from '@steading/api/db/scoped';
 import { errorResponse, HttpError } from '@/server/http';
 
 /**
