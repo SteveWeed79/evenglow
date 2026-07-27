@@ -164,6 +164,54 @@ const eslintConfig = defineConfig([
         { name: 'sessionStorage', message: 'Use SQLite, or secure storage for tokens.' },
         { name: 'indexedDB', message: 'SQLite is the only client store (D9, invariant 6).' },
       ],
+
+      /**
+       * Reads go through the port, not around it.
+       *
+       * `db/open.ts` is the IndexedDB implementation. Importing it directly
+       * pins a caller to one backing, and in a browser that is invisible
+       * because the port resolves to the same database — so the mistake
+       * survives every test and every dev-server session, and only appears on
+       * a handset.
+       *
+       * It appeared on the first one. Every read module imported
+       * `readRecordsByEntity` from here, so a group added on device was
+       * written to SQLite and looked for in an IndexedDB that had never been
+       * touched. Adding stock did nothing at all, silently. Sign-out was
+       * worse: it wiped the browser store and left the previous farm's
+       * records on a shared tablet (C5).
+       */
+      /**
+       * Repeated from the shared-code block above, and that repetition is
+       * deliberate. Flat config REPLACES a rule's options for matching files
+       * rather than merging them, so listing only the new patterns here
+       * silently switched the Mongo-driver ban off for the whole Capacitor
+       * client. tests/unit/guards.test.ts caught it, which is the entire
+       * reason that suite exists.
+       */
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'mongodb',
+              message: 'Shared and client code must not import the Mongo driver.',
+            },
+          ],
+          patterns: [
+            {
+              group: ['@/server/*', '@/server'],
+              message: 'Client and shared code must not import server modules.',
+            },
+            {
+              group: ['**/db/open', '**/db/idb-store'],
+              message:
+                'Use localStore() from db/store — importing the IndexedDB implementation ' +
+                'directly works in a browser and silently reads the wrong database on device.',
+            },
+          ],
+        },
+      ],
     },
   },
 ]);

@@ -1,4 +1,4 @@
-import { closeDb, wipeLocalData } from '../db/open';
+import { localStore } from '../db/store';
 import { stopSync } from './engine';
 
 /**
@@ -16,7 +16,7 @@ import { stopSync } from './engine';
  */
 export async function clearSession(): Promise<void> {
   stopSync();
-  await wipeLocalData();
+  await localStore().wipe();
   // Reopen from scratch next time, so no handle outlives the wipe.
-  await closeDb();
+  await localStore().close();
 }

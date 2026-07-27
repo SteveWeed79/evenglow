@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { equipmentCreateSchema } from '@steading/contracts';
-import { readRecordsByEntity } from '../db/open';
+import { localStore } from '../db/store';
 
 /**
  * Local-first reads for equipment.
@@ -74,8 +74,8 @@ export function daysUntilDue(
 
 export async function listMachines(): Promise<Machine[]> {
   const [equipment, readings] = await Promise.all([
-    readRecordsByEntity('equipment'),
-    readRecordsByEntity('hourReading'),
+    localStore().readRecordsByEntity('equipment'),
+    localStore().readRecordsByEntity('hourReading'),
   ]);
 
   const byMachine = new Map<string, Reading[]>();

@@ -1,5 +1,3 @@
-import { db } from '../db/open';
-import { META, parseMeta, STORES } from '../db/idb-schema';
 
 /**
  * Storage durability (A2).
@@ -31,6 +29,7 @@ const PRESSURE_THRESHOLD = 0.8;
 type Backing = 'browser' | 'device';
 
 let backing: Backing = 'browser';
+let persistGranted = false;
 
 export function setStorageBacking(next: Backing): void {
   backing = next;
@@ -39,6 +38,7 @@ export function setStorageBacking(next: Backing): void {
 /** Exported for tests. */
 export function resetStorageBacking(): void {
   backing = 'browser';
+  persistGranted = false;
 }
 
 export interface StorageReport {
@@ -64,12 +64,13 @@ export async function requestPersistence(): Promise<boolean> {
 
   if (typeof navigator === 'undefined' || !navigator.storage?.persist) return false;
 
-  const cached = parseMeta('persistGranted', await (await db()).get(STORES.meta, META.persistGranted));
-  if (cached === true) return true;
+  // In memory rather than in a store. It is one boolean, persist() is
+  // idempotent, and reaching into IndexedDB for it meant this module knew
+  // which database the app was using — which, on device, it got wrong.
+  if (persistGranted) return true;
 
-  const granted = await navigator.storage.persist();
-  await (await db()).put(STORES.meta, granted, META.persistGranted);
-  return granted;
+  persistGranted = await navigator.storage.persist();
+  return persistGranted;
 }
 
 export async function storageReport(): Promise<StorageReport> {

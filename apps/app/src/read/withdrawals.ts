@@ -5,7 +5,7 @@ import {
   type TreatmentRecord,
   type WithdrawalKind,
 } from '@steading/contracts';
-import { readRecordsByEntity } from '../db/open';
+import { localStore } from '../db/store';
 
 /**
  * Reads treatments from the local projection so the withdrawal banner works
@@ -29,7 +29,7 @@ const storedMedication = z.object({
 });
 
 async function listTreatments(): Promise<TreatmentRecord[]> {
-  const records = await readRecordsByEntity('medication');
+  const records = await localStore().readRecordsByEntity('medication');
 
   return records
     .filter((record) => !record.deleted)
