@@ -77,6 +77,7 @@ export const META = {
   nextClientSeq: 'nextClientSeq',
   clearedCount: 'clearedCount',
   lastSyncAt: 'lastSyncAt',
+  pulledThrough: 'pulledThrough',
   lastError: 'lastError',
   persistGranted: 'persistGranted',
 } as const;
@@ -88,6 +89,8 @@ export const metaSchemas = {
   /** Mutations the server confirmed applied or duplicate, and which were removed. */
   clearedCount: z.number().int().nonnegative(),
   lastSyncAt: z.number().int(),
+  /** serverTs watermark for hydration — how far this device has caught up. */
+  pulledThrough: z.number().int(),
   lastError: z.string(),
   persistGranted: z.boolean(),
 } as const;

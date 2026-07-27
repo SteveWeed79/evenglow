@@ -68,6 +68,9 @@ export function DiagnosticsSheet({ onClose }: { onClose: () => void }): React.Re
           <dt>Last sent</dt>
           <dd>{report ? when(report.lastSyncAt) : '—'}</dd>
 
+          <dt>Caught up to</dt>
+          <dd>{report ? when(report.pulledThrough || null) : '—'}</dd>
+
           <dt>Storage used</dt>
           <dd>{storage ? megabytes(storage.usageBytes) : '—'}</dd>
 

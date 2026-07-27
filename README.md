@@ -82,6 +82,15 @@ after a crash mid-write — at which point ordering is broken and nothing says
 so. If the counter is ever lost, the next sequence number is floored by the
 highest one still in the outbox rather than restarting at zero.
 
+**`src/client/sync/pull.ts`** is the read half of sync. Without it the app is
+single-device: a reinstall or a second phone opens to an empty farm even
+though the server holds everything. It ships the *mutation log* rather than
+projected documents, because the client already knows how to turn a mutation
+into a local record — one projection path (`src/client/db/project.ts`) used by
+both enqueue and hydration, so the two cannot drift. A record with a pending
+local edit is skipped: a queued change visibly reverting is the most alarming
+thing an offline app can do.
+
 **`src/client/sync/flush.ts`** is single-flight: concurrent callers share the
 in-flight promise instead of starting a second batch, which is what makes
 "never parallel" true when a timer, the `online` event, and a user action all
@@ -153,8 +162,9 @@ It stubs `/api/sync` at the network layer, so no MongoDB is involved.
 - [ ] **Phase 3 — Core domain.** *In progress.* Done: mutation projection into
       domain collections, archive-not-delete, hour-meter monotonicity,
       conflict-on-deleted-target, the mixed-livestock model, groups and egg
-      logging read local-first, and **medication with withdrawal tracking
-      (W2)** — the wedge feature. Remaining: individual animal screens, equipment
+      logging read local-first, **medication with withdrawal tracking (W2)** —
+      the wedge feature — and pull sync, so a second device or a reinstall
+      hydrates. Remaining: individual animal screens, equipment
       and maintenance, photos, reporting. The charm layer is unlocked —
       Phase 2's gate passes.
 - [ ] **Phase 4 — Hardening.** Rate limiting, origin/CSRF verification,

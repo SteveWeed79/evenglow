@@ -1,6 +1,7 @@
 import { db, getMeta } from '../db/open';
 import { STORES } from '../db/schema';
 import { backoffDelay, flushOnce, type SyncTransport } from './flush';
+import { pullOnce, pulledThrough } from './pull';
 import { checkIntegrity, queueDepth, rejectedCount } from './queue';
 
 /**
@@ -58,7 +59,17 @@ function isOnline(): boolean {
 async function tick(transport?: SyncTransport): Promise<void> {
   if (!running) return;
 
-  if (!isOnline() || (await queueDepth()) === 0) {
+  if (!isOnline()) {
+    schedule(30_000, transport);
+    await publish();
+    return;
+  }
+
+  // Push first, then pull. Flushing before hydrating means local work is
+  // already on the server when the log comes back, so it returns as a record
+  // this device recognises rather than as a surprise.
+  if ((await queueDepth()) === 0) {
+    await pull();
     schedule(30_000, transport);
     await publish();
     return;
@@ -80,10 +91,21 @@ async function tick(transport?: SyncTransport): Promise<void> {
 
   await publish();
 
+  if (consecutiveFailures === 0) await pull();
+
   const remaining = await queueDepth();
   if (consecutiveFailures > 0) schedule(backoffDelay(consecutiveFailures), transport);
   else if (remaining > 0) schedule(0, transport); // more batches waiting
   else schedule(30_000, transport);
+}
+
+/** Hydration never fails the loop — a device with stale reads still logs fine. */
+async function pull(): Promise<void> {
+  try {
+    await pullOnce();
+  } catch (error) {
+    console.warn('Steading: pull failed', error);
+  }
 }
 
 function schedule(delay: number, transport?: SyncTransport): void {
@@ -131,6 +153,8 @@ export interface Diagnostics {
   outboxTotal: number;
   lastSyncAt: number | null;
   lastError: string | null;
+  /** How far this device has hydrated — a stuck watermark explains stale reads. */
+  pulledThrough: number;
   integrity: Awaited<ReturnType<typeof checkIntegrity>>;
 }
 
@@ -139,14 +163,16 @@ export interface Diagnostics {
  * device, with no network (Observability rubric).
  */
 export async function diagnostics(): Promise<Diagnostics> {
-  const [deviceId, lastSyncAt, lastError, queued, rejected, integrity] = await Promise.all([
-    getMeta('deviceId'),
-    getMeta('lastSyncAt'),
-    getMeta('lastError'),
-    queueDepth(),
-    rejectedCount(),
-    checkIntegrity(),
-  ]);
+  const [deviceId, lastSyncAt, lastError, queued, rejected, integrity, through] =
+    await Promise.all([
+      getMeta('deviceId'),
+      getMeta('lastSyncAt'),
+      getMeta('lastError'),
+      queueDepth(),
+      rejectedCount(),
+      checkIntegrity(),
+      pulledThrough(),
+    ]);
 
   const outboxTotal = await (await db()).count(STORES.outbox);
 
@@ -158,6 +184,7 @@ export async function diagnostics(): Promise<Diagnostics> {
     outboxTotal,
     lastSyncAt: lastSyncAt ?? null,
     lastError: lastError ?? null,
+    pulledThrough: through,
     integrity,
   };
 }

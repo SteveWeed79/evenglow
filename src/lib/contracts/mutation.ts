@@ -118,3 +118,31 @@ export interface SyncResponse {
   results: MutationResult[];
   serverTs: number;
 }
+
+// ── Pull ─────────────────────────────────────────────────────────────────────
+
+/** Page size for hydration. Kept modest so a cold device streams rather than stalls. */
+export const PULL_PAGE_SIZE = 200;
+
+/**
+ * A mutation as it comes back from the server, carrying the global ordering
+ * stamp. `serverTs` is the watermark a device pages through — clientTs is not
+ * usable for this, since it comes from clocks we do not trust (D6).
+ */
+export const pulledMutationSchema = mutationSchema.extend({
+  serverTs: z.number().int(),
+});
+
+export type PulledMutation = z.infer<typeof pulledMutationSchema>;
+
+export const pullResponseSchema = z
+  .object({
+    mutations: z.array(pulledMutationSchema),
+    /** Send this back as `since` next time. */
+    through: z.number().int(),
+    /** True when more remain beyond this page. */
+    more: z.boolean(),
+  })
+  .strict();
+
+export type PullResponse = z.infer<typeof pullResponseSchema>;

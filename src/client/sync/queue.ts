@@ -8,14 +8,8 @@ import {
 } from '@/lib/contracts/mutation';
 import { newId } from '@/lib/ulid';
 import { db } from '../db/open';
-import {
-  type LocalRecord,
-  META,
-  parseMeta,
-  type QueuedMutation,
-  recordKey,
-  STORES,
-} from '../db/schema';
+import { toLocalRecord } from '../db/project';
+import { META, parseMeta, type QueuedMutation, STORES } from '../db/schema';
 
 /**
  * The outbox. Everything the app writes goes through enqueue() — there is no
@@ -113,14 +107,9 @@ export async function enqueue(input: EnqueueInput): Promise<QueuedMutation> {
     enqueuedAt: Date.now(),
   };
 
-  const record: LocalRecord = {
-    key: recordKey(input.entity, targetId),
-    entity: input.entity,
-    targetId,
-    value: payload.data,
-    updatedAt: Date.now(),
-    deleted: input.op === 'delete',
-  };
+  // Same builder hydration uses, so a device's own writes and the same writes
+  // arriving back from the server cannot disagree.
+  const record = toLocalRecord(input.entity, targetId, input.op, payload.data, Date.now());
 
   await tx.objectStore(STORES.outbox).put(queued);
   await meta.put(clientSeq + 1, META.nextClientSeq);

@@ -201,12 +201,13 @@ async function highestHours(scope: Scoped, payload: object): Promise<number | nu
   const equipmentId = (payload as { equipmentId?: unknown }).equipmentId;
   if (typeof equipmentId !== 'string') return null;
 
-  const readings = await scope
+  // One indexed read rather than pulling the series and reducing it — the
+  // orgId+equipmentId+hours index makes this a single seek.
+  const [highest] = await scope
     .col<ProjectedDoc & { equipmentId: string; hours: number }>('hourReadings')
-    .findMany({ equipmentId }, 500);
+    .findMany({ equipmentId }, { limit: 1, sort: { hours: -1 } });
 
-  if (readings.length === 0) return null;
-  return readings.reduce((max, r) => (r.hours > max ? r.hours : max), Number.NEGATIVE_INFINITY);
+  return highest?.hours ?? null;
 }
 
 /**

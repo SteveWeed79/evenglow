@@ -66,6 +66,12 @@ interface MutationDoc {
 const users = () => harness!.db.collection<UserDoc>('users');
 const mutations = () => harness!.db.collection<MutationDoc>('mutations');
 
+async function getPull(since = 0): Promise<{ status: number; body: unknown }> {
+  const { GET } = await import('@/app/api/pull/route');
+  const res = await GET(new Request(`https://steading.test/api/pull?since=${since}`));
+  return { status: res.status, body: await res.json() };
+}
+
 async function postSync(body: unknown): Promise<{ status: number; body: unknown }> {
   const { POST } = await import('@/app/api/sync/route');
   const res = await POST(
@@ -228,5 +234,60 @@ describeDb('/api/sync — per-mutation authorization', () => {
 
     const res = await postSync({ mutations: [makeMutation()] });
     expect(res.status).toBe(401);
+  });
+});
+
+
+describeDb('/api/pull — tenant isolation', () => {
+  it('rejects an unauthenticated request', async () => {
+    currentSession = null;
+    expect((await getPull()).status).toBe(401);
+  });
+
+  it('ships only the caller org history', async () => {
+    const a1 = makeMutation();
+    const a2 = makeMutation();
+    await postSync({ mutations: [a1, a2] });
+
+    currentSession = sessionFor(USERS.ownerB);
+    const bOwn = makeMutation();
+    await postSync({ mutations: [bOwn] });
+
+    // Org B pulls from the beginning of time and must see only its own.
+    const res = await getPull(0);
+    const body = res.body as { mutations: { id: string }[] };
+
+    expect(res.status).toBe(200);
+    expect(body.mutations.map((m) => m.id)).toEqual([bOwn.id]);
+    expect(JSON.stringify(body)).not.toContain(a1.id);
+    expect(JSON.stringify(body)).not.toContain(a2.id);
+  });
+
+  it('does not disclose another org history through the watermark', async () => {
+    await postSync({ mutations: [makeMutation()] });
+
+    currentSession = sessionFor(USERS.ownerB);
+    const res = await getPull(0);
+    const body = res.body as { mutations: unknown[]; through: number };
+
+    // Nothing of org A's leaks, including its timestamps.
+    expect(body.mutations).toEqual([]);
+    expect(body.through).toBe(0);
+  });
+
+  it('rejects a malformed watermark rather than defaulting to everything', async () => {
+    const res = await getPull(Number.NaN as unknown as number);
+    expect(res.status).toBe(400);
+  });
+
+  it('pages through history in serverTs order', async () => {
+    const batch = [makeMutation(), makeMutation(), makeMutation()];
+    await postSync({ mutations: batch });
+
+    const res = await getPull(0);
+    const body = res.body as { mutations: { serverTs: number }[] };
+    const stamps = body.mutations.map((m) => m.serverTs);
+
+    expect(stamps).toEqual([...stamps].sort((a, b) => a - b));
   });
 });
