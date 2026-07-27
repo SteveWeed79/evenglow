@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useDiagnostics } from '../hooks/useSync';
-import { storageReport, type StorageReport } from '@steading/app/sync/storage';
+import { storageReport, type StorageReport } from '../sync/storage';
 
 /**
  * What makes a stuck queue debuggable from a barn (Observability rubric).

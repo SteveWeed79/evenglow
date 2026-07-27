@@ -4,7 +4,7 @@ import { useCallback } from 'react';
 import { laysEggs, longestWithdrawal, type ActiveWithdrawal } from '@steading/contracts';
 import { useGroups } from '../hooks/useGroups';
 import { useLog } from '../hooks/useSync';
-import type { Group } from '@steading/app/read/groups';
+import type { Group } from '../read/groups';
 import { Tally } from './Tally';
 import { WithdrawalBanner } from './WithdrawalBanner';
 

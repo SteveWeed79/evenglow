@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
  */
 
 const CSS = readFileSync(
-  fileURLToPath(new URL('../../src/app/globals.css', import.meta.url)),
+  fileURLToPath(new URL('../../apps/app/src/styles.css', import.meta.url)),
   'utf8',
 );
 

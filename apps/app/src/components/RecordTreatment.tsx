@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { describeLogFailure } from '@steading/app/sync/failure';
+import { describeLogFailure } from '../sync/failure';
 import {
   givesMilk,
   laysEggs,
