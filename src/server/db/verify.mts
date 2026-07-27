@@ -10,8 +10,10 @@
  * It needs no vitest, no mongodb-memory-server, and no CI. One command
  * against a local Docker container answers the question.
  *
- * SAFETY: always writes to a dedicated `steading_verify` database, whatever
- * MONGODB_DB says, and drops it at the end. It will not touch real data.
+ * SAFETY: this script DROPS the database it uses, so it deliberately does not
+ * use the app's database whatever MONGODB_URI or MONGODB_DB point at. The
+ * separate name is a safety control, not an environment label — pointing this
+ * at `steading` would delete a farm's records.
  */
 import { MongoClient } from 'mongodb';
 import { ulid } from 'ulid';

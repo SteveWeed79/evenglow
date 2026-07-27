@@ -55,7 +55,7 @@ export default defineConfig({
       // to match the one the test signs its session cookie with.
       AUTH_SECRET: process.env.AUTH_SECRET ?? 'phase-2-exit-gate-secret-value',
       MONGODB_URI: 'mongodb://127.0.0.1:27017',
-      MONGODB_DB: 'steading_e2e',
+      MONGODB_DB: 'steading',
       AUTH_TRUST_HOST: 'true',
     },
   },

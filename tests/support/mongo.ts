@@ -33,7 +33,13 @@ async function connect(uri: string, dbName: string, onStop: () => Promise<void>)
   };
 }
 
-export async function startTestDb(dbName = 'steading_test'): Promise<TestDb | null> {
+/**
+ * Database names are the app name, or the app name plus what the database
+ * holds — never an environment. Nothing here is called test, dev, staging, or
+ * prod: those labels drift from reality the moment someone points a staging
+ * app at a production cluster, and then the name is actively misleading.
+ */
+export async function startTestDb(dbName = 'steading'): Promise<TestDb | null> {
   const explicit = process.env.MONGODB_TEST_URI;
   if (explicit) {
     return connect(explicit, dbName, async () => {});

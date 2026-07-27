@@ -28,7 +28,7 @@ jobs:
       MONGODB_TEST_URI: mongodb://localhost:27017
       STEADING_REQUIRE_DB: '1'
       MONGODB_URI: mongodb://localhost:27017
-      MONGODB_DB: steading_ci
+      MONGODB_DB: steading
       AUTH_SECRET: ci-only-secret-not-used-anywhere-else
 
     steps:
