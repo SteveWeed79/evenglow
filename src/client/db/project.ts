@@ -1,4 +1,4 @@
-import type { Entity, Op } from '@/lib/contracts/mutation';
+import type { Entity, Op } from '@steading/contracts';
 import { type LocalRecord, recordKey } from './schema';
 
 /**

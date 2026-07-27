@@ -6,7 +6,7 @@ import {
   type TreatmentRecord,
   withdrawalClearsAt,
   withdrawalMessage,
-} from '@/lib/withdrawal';
+} from '@steading/contracts';
 
 /**
  * W2 is a compliance feature. These assertions are the reason it can be

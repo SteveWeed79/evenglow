@@ -1,5 +1,5 @@
 import type { Collection } from 'mongodb';
-import type { Role } from '@/lib/contracts/roles';
+import type { Role } from '@steading/contracts';
 import { db } from './client';
 
 /**

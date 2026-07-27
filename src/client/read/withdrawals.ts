@@ -1,6 +1,10 @@
 import { z } from 'zod';
-import type { WithdrawalKind } from '@/lib/contracts/entities';
-import { activeWithdrawals, type ActiveWithdrawal, type TreatmentRecord } from '@/lib/withdrawal';
+import {
+  activeWithdrawals,
+  type ActiveWithdrawal,
+  type TreatmentRecord,
+  type WithdrawalKind,
+} from '@steading/contracts';
 import { readRecordsByEntity } from '../db/open';
 
 /**

@@ -1,8 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { SPECIES, SPECIES_TRAITS, type Species } from '@/lib/contracts/entities';
-import { newId } from '@/lib/ulid';
+import { newId, SPECIES, SPECIES_TRAITS, type Species } from '@steading/contracts';
 import { useLog } from '../hooks/useSync';
 
 /**

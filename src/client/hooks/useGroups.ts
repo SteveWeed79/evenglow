@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import type { ActiveWithdrawal } from '@/lib/withdrawal';
+import type { ActiveWithdrawal } from '@steading/contracts';
 import { eggsToday, type Group, listGroups } from '../read/groups';
 import { withdrawalsBySubject } from '../read/withdrawals';
 import { subscribe } from '../sync/engine';

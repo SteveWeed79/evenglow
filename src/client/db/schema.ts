@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { mutationSchema } from '@/lib/contracts/mutation';
+import { mutationSchema } from '@steading/contracts';
 
 /**
  * IndexedDB schema for the offline engine.

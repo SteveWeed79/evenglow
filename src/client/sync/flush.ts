@@ -3,7 +3,7 @@ import {
   type Mutation,
   type MutationResult,
   type SyncResponse,
-} from '@/lib/contracts/mutation';
+} from '@steading/contracts';
 import { db, readOutboxBySeq } from '../db/open';
 import { META, parseMeta, type QueuedMutation, STORES } from '../db/schema';
 

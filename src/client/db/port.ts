@@ -1,4 +1,4 @@
-import type { Entity, MutationResult, Op, PulledMutation } from '@/lib/contracts/mutation';
+import type { Entity, MutationResult, Op, PulledMutation } from '@steading/contracts';
 import type { LocalRecord, Quarantined, QueuedMutation } from './schema';
 
 /**

@@ -1,6 +1,5 @@
 import { ulid } from 'ulid';
-import type { Mutation } from '@/lib/contracts/mutation';
-import { MUTATION_SCHEMA_VERSION } from '@/lib/contracts/mutation';
+import { MUTATION_SCHEMA_VERSION, type Mutation } from '@steading/contracts';
 
 export const DEVICE_ID = '00000000-0000-4000-8000-000000000001';
 

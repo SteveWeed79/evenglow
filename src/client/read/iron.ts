@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { equipmentCreateSchema } from '@/lib/contracts/entities';
+import { equipmentCreateSchema } from '@steading/contracts';
 import { readRecordsByEntity } from '../db/open';
 
 /**

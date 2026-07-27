@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { flockCreateSchema, type Species } from '@/lib/contracts/entities';
+import { flockCreateSchema, type Species } from '@steading/contracts';
 import { readRecordsByEntity } from '../db/open';
 
 /**

@@ -108,31 +108,50 @@ it.
 
 Each stage ends with a green tree. No stage may be merged red.
 
-### S1 — Workspace, contracts extracted
+### S1 — Workspace, contracts extracted ✅ done
 
-Create `apps/app`, `apps/api`, `packages/contracts`. Move `lib/contracts/**`,
-`lib/ulid.ts`, `lib/withdrawal.ts` into the package. **The Next app keeps
-working**, importing from `@steading/contracts` instead of `@/lib/contracts`.
+Move `lib/contracts/**`, `lib/ulid.ts`, `lib/withdrawal.ts` into
+`packages/contracts`. **The Next app keeps working**, importing
+`@steading/contracts` instead of `@/lib/contracts`. Regenerate
+`pnpm-lock.yaml` — a stale single-importer lockfile is what killed CI on the
+first attempt.
 
-Regenerate `pnpm-lock.yaml` — a stale single-importer lockfile is what killed
-CI on the first attempt.
+Two notes on how this landed, against the plan as first written:
 
-*Exit: full suite green, `pnpm build` green, e2e green, all through the new
-package boundary.*
+- **`apps/app` and `apps/api` were not created.** Empty scaffolding proves
+  nothing and cannot be verified. They arrive in S3 and S5, when there is
+  something to put in them.
+- **The guard work for the moved code happened here, not in S2.** Moving
+  contracts out of `src/` immediately un-scoped the rule keeping server-only
+  imports out of shared code, which was pinned to `src/lib/**` — the exact
+  failure this plan is written against, reproduced by the plan's own first
+  stage. A stage must not open a hole for a later stage to close, so the
+  guards were extended to `packages/*/src/**` and verified in the same step.
 
-### S2 — Guards repointed, before anything else moves
+The package ships TypeScript source with no build step. It is consumed only
+inside the workspace, and compiling between the schemas and their consumers
+would buy nothing and cost a stale artifact. Next needs `transpilePackages`;
+Vite will resolve the same source through the workspace link.
 
-Update `eslint.config.mjs` to the two-project form in `PHASE-1-SPEC.md` T6
+*Exit, met: typecheck, lint, 248 unit tests, `pnpm build`, `check:secrets`
+(13 assets), and all 5 e2e including the Phase 2 exit gate — green through the
+new package boundary. The tenancy guard was exercised against a deliberate
+violation placed inside `packages/contracts` and fires.*
+
+### S2 — Remaining guards repointed, before anything else moves
+
+`eslint.config.mjs` moves to the two-project form in `PHASE-1-SPEC.md` T6
 (`apps/api/src/**` for the collection guard, `apps/app/src/**` for the storage
-guard), and `SOURCE_ROOTS` / `CLIENT_DIRS` in the two check scripts.
+guard, which also gains the `no-restricted-globals` ban on `localStorage`,
+`sessionStorage` and `indexedDB`), and `CLIENT_DIRS` in `check-bundle-secrets`
+follows the build output from `.next/static` to the Vite `dist`.
 
-This is stage two, not stage nine, because everything after it moves code the
-guards are supposed to be watching. Both scripts now **fail when they scan
-nothing**, so a miss here is loud — but only if they are pointed correctly to
-begin with.
+This stays early, because everything after it moves code the guards watch. Both
+scripts now **fail when they scan nothing**, so a miss is loud — but only if
+they are aimed correctly to begin with.
 
-*Exit: guards fail on a deliberate violation in the new locations; the scripts
-report non-zero file and asset counts.*
+*Exit: guards fail on a deliberate violation in each new location; both scripts
+report non-zero counts.*
 
 ### S3 — Fastify API alongside the Next routes
 

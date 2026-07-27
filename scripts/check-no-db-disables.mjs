@@ -16,10 +16,19 @@ const DISABLE = /eslint-disable(?:-next-line|-line)?\s+([^\n*]+)/g;
  * the tree without updating this file is a loud failure — see the scanned-count
  * assertion below.
  */
-const SOURCE_ROOTS = ['src'];
+const SOURCE_ROOTS = ['src', 'packages'];
+
+/**
+ * Skipped wholesale. `node_modules` matters most: pnpm links dependencies into
+ * each workspace package, and statSync follows those links, so a naive walk
+ * descends into the entire dependency tree and reports disables in code we do
+ * not own.
+ */
+const SKIP_DIRS = new Set(['node_modules', '.next', 'dist', 'build', 'coverage']);
 
 function* walk(dir) {
   for (const entry of readdirSync(dir)) {
+    if (SKIP_DIRS.has(entry)) continue;
     const path = join(dir, entry);
     if (statSync(path).isDirectory()) yield* walk(path);
     else if (/\.(ts|tsx|mts)$/.test(path)) yield path;

@@ -24,7 +24,16 @@ const eslintConfig = defineConfig([
    * CI greps for disable comments naming these rules.
    */
   {
-    files: ['src/**/*.ts', 'src/**/*.tsx', 'src/**/*.mts'],
+    files: [
+      'src/**/*.ts',
+      'src/**/*.tsx',
+      'src/**/*.mts',
+      // First-party source lives in two places now that contracts is a
+      // workspace package. A guard listing only src/ would stop covering
+      // anything that moves out of it — which is precisely how the first
+      // attempt at the D8 restructure disarmed every check in this repo.
+      'packages/*/src/**/*.ts',
+    ],
     ignores: ['src/server/db/**'],
     rules: {
       'no-restricted-imports': [
@@ -58,7 +67,7 @@ const eslintConfig = defineConfig([
    * object, and `_`-prefixed bindings are an explicit "unused on purpose".
    */
   {
-    files: ['src/**/*.ts', 'src/**/*.tsx', 'tests/**/*.ts'],
+    files: ['src/**/*.ts', 'src/**/*.tsx', 'tests/**/*.ts', 'packages/*/src/**/*.ts'],
     rules: {
       '@typescript-eslint/no-unused-vars': [
         'error',
@@ -74,11 +83,15 @@ const eslintConfig = defineConfig([
 
   /**
    * Contracts are shared client/server, so they must stay free of server-only
-   * imports — a Mongo type leaking into lib/contracts pulls the driver toward
-   * the client bundle.
+   * imports — a Mongo type leaking into the contracts package pulls the driver
+   * toward the client bundle, and that bundle ships inside an APK.
    */
   {
-    files: ['src/lib/**/*.ts', 'src/client/**/*.ts', 'src/client/**/*.tsx'],
+    files: [
+      'packages/contracts/src/**/*.ts',
+      'src/client/**/*.ts',
+      'src/client/**/*.tsx',
+    ],
     rules: {
       'no-restricted-imports': [
         'error',
