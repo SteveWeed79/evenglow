@@ -8,6 +8,7 @@ import { wipeLocalData } from './db/open';
 // the ones that matter get scrolled past.
 import { setLocalStore } from './db/store';
 import { setApiBase } from './api';
+import { setStorageBacking } from './sync/storage';
 import { isNative } from './platform';
 import './styles.css';
 
@@ -57,6 +58,9 @@ async function bootstrap(): Promise<void> {
     ]);
 
     setLocalStore(await openSqliteStore(await openCapacitorSqlDriver()));
+
+    // The work is in the app sandbox now, not in the WebView's origin storage.
+    setStorageBacking('device');
 
     const { startNativeTriggers } = await import('./sync/native-triggers');
     await startNativeTriggers();

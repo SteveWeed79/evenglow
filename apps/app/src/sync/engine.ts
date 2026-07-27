@@ -1,5 +1,4 @@
-import { db, getMeta, quarantineCount } from '../db/open';
-import { STORES } from '../db/idb-schema';
+import { localStore } from '../db/store';
 import { backoffDelay, flushOnce, type SyncTransport } from './flush';
 import { SYNC_LOCK, withSyncLock } from './lock';
 import { pullOnce, pulledThrough } from './pull';
@@ -49,8 +48,11 @@ async function currentState(): Promise<SyncState> {
   if (syncing) return { kind: 'syncing', count: queued };
   if (queued > 0) return { kind: 'queued', count: queued };
 
-  const at = await getMeta('lastSyncAt');
-  return { kind: 'synced', at: at === undefined ? null : new Date(at) };
+  // Through the port, like everything else. Read directly from IndexedDB this
+  // said "Saved" with no time on a device that had synced, because it was
+  // asking a database the app had never written to.
+  const at = await localStore().getLastSyncAt();
+  return { kind: 'synced', at: at === null ? null : new Date(at) };
 }
 
 async function publish(): Promise<void> {
@@ -246,29 +248,41 @@ export interface Diagnostics {
  * device, with no network (Observability rubric).
  */
 export async function diagnostics(): Promise<Diagnostics> {
-  const [deviceId, lastSyncAt, lastError, queued, rejected, integrity, through] =
+  /**
+   * Every field comes from `localStore()`, and that is the whole point.
+   *
+   * Half of these used to be read straight out of IndexedDB while the other
+   * half went through the port. In a browser both are the same database and
+   * nothing looked wrong. On a handset the port is SQLite and the direct
+   * reads were answering from an IndexedDB that had never been written to, so
+   * the first device run reported one mutation queued and an outbox
+   * containing nothing — the two numbers are the same number.
+   *
+   * This is the screen someone opens when they are already worried their
+   * morning's work is gone. It is the last screen in the app that may
+   * describe a store the app is not using.
+   */
+  const store = localStore();
+
+  const [deviceId, lastSyncAt, lastError, counts, integrity, through, quarantined] =
     await Promise.all([
-      getMeta('deviceId'),
-      getMeta('lastSyncAt'),
-      getMeta('lastError'),
-      queueDepth(),
-      rejectedCount(),
+      store.getDeviceId(),
+      store.getLastSyncAt(),
+      store.getLastError(),
+      store.counts(),
       checkIntegrity(),
       pulledThrough(),
+      store.quarantineCount(),
     ]);
 
-  const quarantined = await quarantineCount();
-
-  const outboxTotal = await (await db()).count(STORES.outbox);
-
   return {
-    deviceId: deviceId ?? null,
+    deviceId,
     online: isOnline(),
-    queued,
-    rejected,
-    outboxTotal,
-    lastSyncAt: lastSyncAt ?? null,
-    lastError: lastError ?? null,
+    queued: counts.queued,
+    rejected: counts.rejected,
+    outboxTotal: counts.total,
+    lastSyncAt,
+    lastError,
     pulledThrough: through,
     quarantined,
     integrity,
