@@ -48,8 +48,16 @@ export function useSync(): SyncState {
  */
 export function useLog(): (input: EnqueueInput) => Promise<void> {
   return useCallback(async (input: EnqueueInput) => {
-    // Ask on first write, when the browser is most likely to grant it (A2).
-    void requestPersistence();
+    /**
+     * Ask on first write, when the browser is most likely to grant it (A2).
+     *
+     * Best-effort by definition, and its own failure is swallowed on purpose:
+     * it writes a meta row, so on a full device it throws first and would
+     * otherwise surface as an unhandled rejection *instead of* the enqueue
+     * error the user actually needs to see. Not being able to ask for durable
+     * storage is never a reason to fail a log.
+     */
+    void requestPersistence().catch(() => {});
 
     await enqueue(input);
     nudge();

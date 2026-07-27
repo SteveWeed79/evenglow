@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { describeLogFailure } from '../sync/failure';
 import { newId } from '@steading/contracts';
 import { useLog } from '../hooks/useSync';
 
@@ -19,22 +20,33 @@ export function AddMachine({ onDone }: { onDone: () => void }): React.ReactEleme
   const [model, setModel] = useState('');
   const [hasHourMeter, setHasHourMeter] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
 
   async function save(): Promise<void> {
     if (saving || name.trim().length === 0) return;
     setSaving(true);
 
-    await log({
-      entity: 'equipment',
-      op: 'create',
-      targetId: newId(),
-      payload: {
-        name: name.trim(),
-        ...(make.trim() ? { make: make.trim() } : {}),
-        ...(model.trim() ? { model: model.trim() } : {}),
-        hasHourMeter,
-      },
-    });
+    try {
+      await log({
+        entity: 'equipment',
+        op: 'create',
+        targetId: newId(),
+        payload: {
+          name: name.trim(),
+          ...(make.trim() ? { make: make.trim() } : {}),
+          ...(model.trim() ? { model: model.trim() } : {}),
+          hasHourMeter,
+        },
+      });
+    } catch (error) {
+      // `saving` must come back down. The guard at the top of save()
+      // reads it, so leaving it true on a throw makes the button
+      // permanently dead until the sheet is closed and reopened, with
+      // the typed-in work still on screen and nothing said.
+      setSaving(false);
+      setFailure(describeLogFailure(error));
+      return;
+    }
 
     onDone();
   }
@@ -99,6 +111,12 @@ export function AddMachine({ onDone }: { onDone: () => void }): React.ReactEleme
           ? 'Service intervals can run off engine hours.'
           : 'Service intervals will run off dates only.'}
       </p>
+
+      {failure ? (
+        <p className="log-error" role="alert">
+          {failure}
+        </p>
+      ) : null}
 
       <div className="sheet__actions">
         <button type="button" className="sheet__button" onClick={onDone}>

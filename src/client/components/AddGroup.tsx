@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { describeLogFailure } from '../sync/failure';
 import { newId, SPECIES, SPECIES_TRAITS, type Species } from '@steading/contracts';
 import { useLog } from '../hooks/useSync';
 
@@ -26,6 +27,7 @@ export function AddGroup({ onDone }: { onDone: () => void }): React.ReactElement
   const [count, setCount] = useState(0);
   const [other, setOther] = useState('');
   const [saving, setSaving] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
 
   const traits = SPECIES_TRAITS[species];
 
@@ -33,17 +35,27 @@ export function AddGroup({ onDone }: { onDone: () => void }): React.ReactElement
     if (saving) return;
     setSaving(true);
 
-    await log({
-      entity: 'flock',
-      op: 'create',
-      targetId: newId(),
-      payload: {
-        name: name.trim() || traits.label,
-        species,
-        ...(species === 'other' && other.trim() ? { speciesOther: other.trim() } : {}),
-        count,
-      },
-    });
+    try {
+      await log({
+        entity: 'flock',
+        op: 'create',
+        targetId: newId(),
+        payload: {
+          name: name.trim() || traits.label,
+          species,
+          ...(species === 'other' && other.trim() ? { speciesOther: other.trim() } : {}),
+          count,
+        },
+      });
+    } catch (error) {
+      // `saving` must come back down. The guard at the top of save()
+      // reads it, so leaving it true on a throw makes the button
+      // permanently dead until the sheet is closed and reopened, with
+      // the typed-in work still on screen and nothing said.
+      setSaving(false);
+      setFailure(describeLogFailure(error));
+      return;
+    }
 
     onDone();
   }
@@ -121,6 +133,12 @@ export function AddGroup({ onDone }: { onDone: () => void }): React.ReactElement
           +10
         </button>
       </div>
+
+      {failure ? (
+        <p className="log-error" role="alert">
+          {failure}
+        </p>
+      ) : null}
 
       <div className="sheet__actions">
         <button type="button" className="sheet__button" onClick={onDone}>
