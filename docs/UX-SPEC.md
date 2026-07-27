@@ -228,7 +228,7 @@ Four bottom tabs. Four, not six — every additional tab is a decision made at 6
 
 ```
 ┌────────────────────────────────────┐
-│  Tue 26 Jul        [3 waiting]  ○  │  status only, never actions
+│  Tue 26 Jul        [3 waiting]  ○  │  status, the sync chip, the lamp
 ├────────────────────────────────────┤
 │                                    │
 │   MORNING                    2/5   │  today's chores, tap to complete
@@ -244,12 +244,13 @@ Four bottom tabs. Four, not six — every additional tab is a decision made at 6
 │   │   [   Log 18 eggs    ]   │     │  thumb zone
 │   └──────────────────────────┘     │
 ├────────────────────────────────────┤
-│  Today  │  Birds  │  Iron  │  More │  64px tabs
+│  Today  │  Stock  │  Iron  │  More │  64px tabs
 └────────────────────────────────────┘
 ```
 
 - **Today** — chores, the Tally, anything overdue.
-- **Birds** — flocks, individual birds, production, health, mortality.
+- **Stock** — groups, individual animals, production, health, mortality. Named Stock, not Birds:
+  a smallholding is mixed, and a goat keeper should not look for their herd under a bird tab.
 - **Iron** — equipment, hour readings, maintenance due, parts.
 - **More** — inventory, reports, export, settings, diagnostics.
 
@@ -312,7 +313,7 @@ Warm and plainspoken — a well-kept notebook, not a greeting card. Specific alw
 
 ### The name
 
-**Steading** — the farmhouse and its working buildings taken together: barn, byre, stable, granary, yard. A Scottish word for the whole of a small farm rather than any one part of it, which is exactly the product's scope. Birds and iron and chores under one roofline.
+**Steading** — the farmhouse and its working buildings taken together: barn, byre, stable, granary, yard. A Scottish word for the whole of a small farm rather than any one part of it, which is exactly the product's scope. Stock and iron and chores under one roofline.
 
 It also sets the voice. A steading is unglamorous, well-kept, and built from what was to hand. Nothing in the interface should contradict that.
 

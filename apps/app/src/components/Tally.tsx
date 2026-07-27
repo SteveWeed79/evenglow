@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import { describeLogFailure } from '../sync/failure';
+import { loggedConfirmation } from '../voice';
 
 /**
  * The signature control (UX-SPEC §3).
@@ -22,6 +23,14 @@ export interface TallyProps {
    * only case where a warning is allowed to cost a tap.
    */
   requireConfirm?: boolean;
+  /**
+   * The sentence shown after a successful log. Defaults to the plain one.
+   *
+   * A caller opts into a warmer line only when it is true of what was logged
+   * — see basketConfirmation in voice.ts for why that is the caller's call
+   * and not this component's.
+   */
+  confirm?: (value: number) => string;
   onCommit: (value: number, acknowledged: boolean) => void | Promise<void>;
 }
 
@@ -31,6 +40,7 @@ export function Tally({
   steps = [1, 6, 12],
   initial = 0,
   requireConfirm = false,
+  confirm,
   onCommit,
 }: TallyProps): React.ReactElement {
   const [count, setCount] = useState(initial);
@@ -83,10 +93,10 @@ export function Tally({
       return;
     }
 
-    // One short, plain sentence — the whole whimsy allowance on this path.
-    setConfirmation(`${committed} ${unit} in the basket.`);
+    // One short sentence — the whole whimsy allowance on this path.
+    setConfirmation(confirm ? confirm(committed) : loggedConfirmation(committed, unit));
     setTimeout(() => setConfirmation(null), 3_000);
-  }, [count, unit, onCommit, requireConfirm, armed]);
+  }, [count, unit, confirm, onCommit, requireConfirm, armed]);
 
   return (
     <section className="tally arch" aria-labelledby="tally-label">

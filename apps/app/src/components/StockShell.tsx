@@ -37,8 +37,12 @@ export function StockShell(): React.ReactElement {
   if (groups.length === 0) {
     return (
       <section className="arch shell__card">
+        {/* Empty screens invite, and specific beats clever (UX-SPEC §6). */}
         <p className="label">Nothing here yet</p>
-        <p>Add what you keep and the day&rsquo;s logging comes with it.</p>
+        <p>
+          Add what you keep &mdash; a few hens, a pair of goats, the house cow &mdash; and the
+          day&rsquo;s logging comes with it.
+        </p>
         <button
           type="button"
           className="sheet__button sheet__button--primary"

@@ -5,6 +5,7 @@ import { laysEggs, longestWithdrawal, type ActiveWithdrawal } from '@steading/co
 import { useGroups } from '../hooks/useGroups';
 import { useLog } from '../hooks/useSync';
 import type { Group } from '../read/groups';
+import { basketConfirmation } from '../voice';
 import { Tally } from './Tally';
 import { WithdrawalBanner } from './WithdrawalBanner';
 
@@ -25,8 +26,9 @@ export function TodayShell(): React.ReactElement {
   if (layers.length === 0) {
     return (
       <section className="arch shell__card">
+        {/* Empty screens invite (UX-SPEC §6). */}
         <p className="label">Nothing to log yet</p>
-        <p>Add what you keep under Stock and today&rsquo;s tally appears here.</p>
+        <p>Add what you keep under Stock, and the morning&rsquo;s tally lands here.</p>
       </section>
     );
   }
@@ -95,6 +97,7 @@ function GroupTally({
         label={`Eggs from ${group.name}`}
         unit="eggs"
         requireConfirm={withdrawal !== null}
+        confirm={basketConfirmation}
         onCommit={logEggs}
       />
     </section>

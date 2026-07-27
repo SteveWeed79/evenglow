@@ -29,7 +29,7 @@ const plexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: 'Steading',
-  description: 'Birds, iron, and chores in one place.',
+  description: 'Stock, iron, and chores under one roofline.',
   manifest: '/manifest.webmanifest',
   appleWebApp: { capable: true, title: 'Steading', statusBarStyle: 'default' },
 };

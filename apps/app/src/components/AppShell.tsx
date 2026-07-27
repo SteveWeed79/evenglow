@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { IronShell } from './IronShell';
+import { LampToggle } from './LampToggle';
 import { ServiceWorker } from './ServiceWorker';
 import { SignOut } from './SignOut';
 import { StockShell } from './StockShell';
@@ -44,7 +45,10 @@ export function AppShell({ signOutAction }: { signOutAction: () => Promise<void>
               month: 'short',
             })}
           </p>
-          <SyncChip />
+          <div className="shell__lamps">
+            <SyncChip />
+            <LampToggle />
+          </div>
         </header>
 
         {tab === 'today' ? <TodayShell /> : null}
@@ -76,9 +80,10 @@ function More({ signOutAction }: { signOutAction: () => Promise<void> }): React.
     <>
       <section className="arch shell__card">
         <p className="label">More</p>
+        {/* Names what a keeper would look for, not the plan it lives in. */}
         <p className="shell__note">
-          Inventory, reports, and export arrive with Phase 4. Sync diagnostics are behind the chip
-          at the top of any screen.
+          Inventory, reports, and export aren&rsquo;t here yet. Sync diagnostics live behind the
+          chip at the top of any screen.
         </p>
       </section>
 

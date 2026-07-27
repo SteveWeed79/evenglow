@@ -167,6 +167,32 @@ summary {
   gap: var(--tap-gap);
   max-width: 32rem;
   margin-inline: auto;
+  /* This screen's lamp. It has no Tally, so the one glow is spent here —
+     light at the top of the wall, the arched door under your thumb. Without
+     it the first screen anyone sees carries none of §2 at all. */
+  background:
+    radial-gradient(
+      75% 40% at 50% 0%,
+      color-mix(in oklab, var(--lantern) 13%, transparent),
+      transparent 72%
+    ),
+    var(--ground);
+}
+
+/* The column is 32rem wide and the page is not. Paint the wall behind it so
+   a wide screen reads as a room rather than a stripe. */
+.signin::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(
+      60% 30% at 50% 0%,
+      color-mix(in oklab, var(--lantern) 9%, transparent),
+      transparent 70%
+    ),
+    var(--ground);
 }
 
 .signin__title {
@@ -231,6 +257,62 @@ summary {
   margin: 0;
 }
 
+/* Status only, never actions (R3). The chip and the lamp are the two
+   exceptions the spec draws into this row itself (§4), and neither is a
+   primary action — the log path lives entirely in the bottom third. */
+.shell__lamps {
+  display: flex;
+  align-items: center;
+  gap: var(--tap-gap);
+}
+
+/* ── The lamp ───────────────────────────────────────────────────────────────
+   UX-SPEC §6, warmth #1: lamplight is system-driven with a manual toggle for
+   pre-sunrise chores. Drawn, not lettered — a lit glass at dawn and a dark
+   one at noon, which is the same read at arm's length as at a glance.       */
+.lamp {
+  min-width: var(--tap-min);
+  display: grid;
+  place-items: center;
+  background: none;
+  border: var(--border);
+  border-radius: var(--arch);
+  cursor: pointer;
+  color: var(--ink);
+}
+
+/* Unlit at daylight: the lamp is on its hook, not burning. */
+.lamp__glass {
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 50%;
+  border: 2px solid var(--muted);
+  background: none;
+}
+
+/* Lit whenever the burrow is dark, however it got that way. Driven by CSS so
+   the glass can never disagree with the wall behind it for a frame. Order is
+   load-bearing: the explicit toggle has to beat the media query both ways. */
+@media (prefers-color-scheme: dark) {
+  .lamp__glass {
+    border-color: var(--lantern);
+    background: var(--lantern);
+    box-shadow: 0 0 0.5rem var(--lantern);
+  }
+}
+
+:root[data-theme='lamplight'] .lamp__glass {
+  border-color: var(--lantern);
+  background: var(--lantern);
+  box-shadow: 0 0 0.5rem var(--lantern);
+}
+
+:root[data-theme='daylight'] .lamp__glass {
+  border-color: var(--muted);
+  background: none;
+  box-shadow: none;
+}
+
 .shell__card {
   padding: 2rem 1.25rem 1.25rem;
 }
@@ -255,7 +337,8 @@ summary {
 /* ── The Tally ──────────────────────────────────────────────────────────── */
 
 .tally {
-  /* The lamp above the doorway. One gradient; it repeats nowhere else. */
+  /* The lamp above the doorway. One glow per screen, over whichever doorway
+     that screen is about — never two competing for the same eye. */
   background:
     radial-gradient(
       120% 80% at 50% 12%,

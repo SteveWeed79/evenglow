@@ -35,7 +35,7 @@ export default async function SignInPage({
   return (
     <main className="signin">
       <h1 className="signin__title">Steading</h1>
-      <p className="signin__sub">Birds, iron, and chores in one place.</p>
+      <p className="signin__sub">Stock, iron, and chores under one roofline.</p>
 
       <form action={signInAction} className="signin__form">
         {/* Plain and literal — charm here would be an insult (UX-SPEC §6). */}
