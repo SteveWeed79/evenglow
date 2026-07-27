@@ -114,7 +114,13 @@ async function applyPage(page: PullResponse): Promise<{ applied: number; skipped
   let applied = 0;
   let skipped = 0;
 
-  for (const mutation of page.mutations) {
+  /**
+   * Applied in the server's order, not the order the page happened to arrive
+   * in. Records are keyed by entity and targetId and written with put, so the
+   * last write for a target wins — applying two updates to the same record out
+   * of order silently leaves the older one in place.
+   */
+  for (const mutation of inServerOrder(page.mutations)) {
     if (pending.has(mutation.targetId)) {
       skipped += 1;
       continue;
@@ -148,7 +154,19 @@ export async function pulledThrough(): Promise<number> {
   return parseMeta('pulledThrough', await (await db()).get(STORES.meta, META.pulledThrough)) ?? 0;
 }
 
-/** Sorting is the server's job, but a defensive re-sort costs nothing. */
+/**
+ * Sorting is the server's job, but a defensive re-sort costs nothing — and
+ * until recently this was not called at all, so the defence the comment
+ * claimed did not exist.
+ *
+ * Ties break on `_id` to match the server's `(serverTs, _id)` cursor exactly.
+ * Sorting on the timestamp alone would leave same-millisecond rows in whatever
+ * order they arrived, which is the one case where getting it wrong is
+ * invisible: two updates to one record inside a millisecond, applied
+ * backwards, leave the older value in place with nothing to show for it.
+ */
 export function inServerOrder(mutations: readonly PulledMutation[]): PulledMutation[] {
-  return [...mutations].sort((a, b) => a.serverTs - b.serverTs);
+  return [...mutations].sort((a, b) =>
+    a.serverTs === b.serverTs ? a.id.localeCompare(b.id) : a.serverTs - b.serverTs,
+  );
 }

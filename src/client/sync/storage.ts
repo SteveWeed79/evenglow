@@ -84,10 +84,3 @@ export async function storageReport(): Promise<StorageReport> {
 
   return { persisted, usageBytes, quotaBytes, fractionUsed, atRisk: false };
 }
-
-/** Rough guard before a large write, so a photo cannot half-land. */
-export async function hasRoomFor(bytes: number): Promise<boolean> {
-  const report = await storageReport();
-  if (report.usageBytes === null || report.quotaBytes === null) return true;
-  return report.usageBytes + bytes < report.quotaBytes * 0.95;
-}

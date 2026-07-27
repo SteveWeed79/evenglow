@@ -16,7 +16,7 @@ import {
   STORES,
 } from './schema';
 
-export interface SteadingDB extends DBSchema {
+interface SteadingDB extends DBSchema {
   outbox: {
     key: string;
     value: QueuedMutation;
@@ -108,13 +108,6 @@ export async function closeDb(): Promise<void> {
 // it is counted in diagnostics, and — critically — it does not stop the rows
 // behind it from being read.
 
-export class CorruptRecordError extends Error {
-  constructor(store: string, key: string, issue: string) {
-    super(`Corrupt ${store} record "${key}": ${issue}`);
-    this.name = 'CorruptRecordError';
-  }
-}
-
 /**
  * Moves an unreadable row out of the way, keeping its raw value.
  *
@@ -161,14 +154,6 @@ export async function getMeta<K extends keyof typeof metaSchemas>(
 ): Promise<z.infer<(typeof metaSchemas)[K]> | undefined> {
   return parseMeta(key, await (await db()).get(STORES.meta, META[key]));
 }
-
-export async function setMeta<K extends keyof typeof metaSchemas>(
-  key: K,
-  value: z.infer<(typeof metaSchemas)[K]>,
-): Promise<void> {
-  await (await db()).put(STORES.meta, value, META[key]);
-}
-
 /**
  * Outbox entries ordered by clientSeq — the order they must be sent in (A4).
  *
@@ -233,18 +218,6 @@ export async function readOutboxBySeq(limit?: number): Promise<QueuedMutation[]>
 
   return limit === undefined ? parsed : parsed.slice(0, limit);
 }
-
-export async function readRecord(key: string): Promise<LocalRecord | undefined> {
-  const raw = await (await db()).get(STORES.records, key);
-  if (raw === undefined) return undefined;
-
-  const parsed = localRecordSchema.safeParse(raw);
-  if (parsed.success) return parsed.data;
-
-  await quarantine(STORES.records, key, raw, parsed.error.issues[0]?.message ?? 'unreadable');
-  return undefined;
-}
-
 /** Parses a batch of projections, quarantining any that no longer read. */
 async function parseRecords(raw: unknown[]): Promise<LocalRecord[]> {
   const good: LocalRecord[] = [];

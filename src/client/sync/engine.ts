@@ -36,7 +36,7 @@ export function subscribe(listener: Listener): () => void {
  * Rejections outrank a queue: a farmer needs to know something needs a look
  * more than they need to know work is pending.
  */
-export async function currentState(): Promise<SyncState> {
+async function currentState(): Promise<SyncState> {
   const [queued, rejected] = await Promise.all([queueDepth(), rejectedCount()]);
 
   if (rejected > 0) return { kind: 'rejected', count: rejected };

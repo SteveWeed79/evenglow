@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import {
-  currentState,
   type Diagnostics,
   diagnostics,
   nudge,
@@ -86,9 +85,4 @@ export function useDiagnostics(open: boolean): Diagnostics | null {
   }, [open]);
 
   return report;
-}
-
-/** Reads state once without subscribing — for one-off checks. */
-export async function readSyncState(): Promise<SyncState> {
-  return currentState();
 }

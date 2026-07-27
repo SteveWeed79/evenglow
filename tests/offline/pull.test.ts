@@ -132,6 +132,55 @@ describe('pull', () => {
     expect(await readAllRecords()).toHaveLength(2);
   });
 
+  /**
+   * The re-sort in applyPage was written, documented, and never called.
+   *
+   * Records are keyed by entity and targetId and written with put, so the last
+   * write for a target wins. Two updates to one record arriving out of order
+   * leave the older value in place — silently, and only on the device that
+   * hydrated.
+   */
+  it('applies a page in server order, not the order it arrived in', async () => {
+    const target = newId();
+    const older = pulled({
+      targetId: target,
+      op: 'update',
+      payload: { name: 'Older', species: 'goat', count: 1 },
+      serverTs: 500,
+    });
+    const newer = pulled({
+      targetId: target,
+      op: 'update',
+      payload: { name: 'Newer', species: 'goat', count: 2 },
+      serverTs: 900,
+    });
+
+    // Server order is older-then-newer; this page arrives reversed.
+    const { transport } = serve([{ mutations: [newer, older], through: 900, more: false }]);
+    await pullOnce(transport);
+
+    const [record] = await readAllRecords();
+    expect(record?.value).toMatchObject({ name: 'Newer', count: 2 });
+  });
+
+  it('breaks a same-millisecond tie on the ULID, as the server does', async () => {
+    const target = newId();
+    // Same serverTs, so only the id decides. ULIDs sort lexicographically in
+    // mint order, so the higher id is the later write.
+    const first = pulled({ targetId: target, op: 'update', payload: { name: 'First' }, serverTs: 700 });
+    const second = pulled({ targetId: target, op: 'update', payload: { name: 'Second' }, serverTs: 700 });
+    const [lower, higher] =
+      first.id < second.id ? [first, second] : [second, first];
+
+    const { transport } = serve([
+      { mutations: [higher, lower], through: 700, more: false },
+    ]);
+    await pullOnce(transport);
+
+    const [record] = await readAllRecords();
+    expect(record?.value).toMatchObject(higher.payload as Record<string, unknown>);
+  });
+
   it('stops when neither half of the cursor advances', async () => {
     const stuck = newId();
     const transport: PullTransport = () =>

@@ -22,7 +22,7 @@ export type EnvelopeMigration = (raw: Record<string, unknown>) => Record<string,
  * The ladder exists so that when v2 arrives there is one obvious place to put
  * the step, and the walk below is already proven by test.
  */
-export const ENVELOPE_MIGRATIONS: Record<number, EnvelopeMigration> = {};
+const ENVELOPE_MIGRATIONS: Record<number, EnvelopeMigration> = {};
 
 export class UnmigratableEnvelopeError extends Error {
   readonly from: number;

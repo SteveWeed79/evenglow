@@ -56,7 +56,3 @@ export async function insertUser(user: UserDoc): Promise<void> {
 export async function insertOrg(org: OrgDoc): Promise<void> {
   await (await orgs()).insertOne(org);
 }
-
-export async function findOrgById(id: string): Promise<OrgDoc | null> {
-  return (await orgs()).findOne({ _id: id });
-}

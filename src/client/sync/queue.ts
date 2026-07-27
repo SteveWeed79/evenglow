@@ -154,11 +154,6 @@ export async function queueDepth(): Promise<number> {
 export async function rejectedCount(): Promise<number> {
   return (await db()).countFromIndex(STORES.outbox, 'byStatus', 'rejected');
 }
-
-export async function outboxSize(): Promise<number> {
-  return (await db()).count(STORES.outbox);
-}
-
 /** Unsent work that a sign-out would destroy. The user is warned with this. */
 export async function unsentCount(): Promise<number> {
   const database = await db();

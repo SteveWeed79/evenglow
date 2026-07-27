@@ -13,7 +13,7 @@ import type {
 import { db } from './client';
 
 /** Re-exported so callers do not have to import from the driver directly. */
-export type Sort<T> = MongoSort & Partial<Record<keyof T & string, 1 | -1>>;
+type Sort<T> = MongoSort & Partial<Record<keyof T & string, 1 | -1>>;
 
 /**
  * The ONLY module that exposes collection handles (D2).
@@ -95,12 +95,12 @@ export function assertSafeUpdate<T extends Tenanted>(update: UpdateFilter<T>): v
   }
 }
 
-export interface FindOptions<T> {
+interface FindOptions<T> {
   limit?: number;
   sort?: Sort<T>;
 }
 
-export interface ScopedCollection<T extends Tenanted> {
+interface ScopedCollection<T extends Tenanted> {
   findOne(filter?: Filter<T>): Promise<WithId<T> | null>;
   findMany(filter?: Filter<T>, options?: FindOptions<T>): Promise<WithId<T>[]>;
   countDocuments(filter?: Filter<T>): Promise<number>;
