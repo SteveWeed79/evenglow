@@ -1,21 +1,38 @@
 # Steading
 
-Offline-first PWA for farm operations — birds, iron, and chores in one place.
+Offline-first farm operations — birds, iron, and chores in one place.
 
 Next.js (App Router) · TypeScript strict · MongoDB · Auth.js (JWT) · IndexedDB · Vercel
 
-**Status: Phase 1 — Foundation & Tenancy Primitives.** The domain features and
-the offline engine are not built yet; see [Phase status](#phase-status).
+**Status: Phase 3 — Core Domain, in progress.** Phase 2's exit gate passes:
+mutations logged in airplane mode survive a hard browser restart and sync
+exactly once. See [Phase status](#phase-status).
+
+> **The stack line above describes this tree, not the destination.** The
+> masterplan has settled on a Capacitor + SQLite + Fastify architecture
+> (D8–D10) and that migration is in flight on a separate branch. The commands
+> in this README are the ones that work today; the gap between the two is set
+> out in [`docs/Steading-Masterplan.md` §0.1](docs/Steading-Masterplan.md).
+
+Steading covers **mixed smallholdings**, not just poultry — poultry, ratites,
+ruminants and camelids, pigs, rabbits, equines, and free-text *other*. The UI
+says *herd*, *drove*, or *gaggle* per species, and egg logging is offered only
+where it applies.
 
 Planning docs, which are the source of truth:
 
 | Doc | What it settles |
 |---|---|
-| [`docs/Steading-Masterplan.md`](docs/Steading-Masterplan.md) | Decisions D1–D7, phases, security rubric |
+| [`docs/Steading-Masterplan.md`](docs/Steading-Masterplan.md) | Decisions D1–D10, phases, security rubric, migration status |
 | [`docs/UX-SPEC.md`](docs/UX-SPEC.md) | Rules R1–R10, tokens, voice |
 | [`docs/COMPETITIVE-ANALYSIS.md`](docs/COMPETITIVE-ANALYSIS.md) | Why each feature exists |
-| [`docs/PHASE-1-SPEC.md`](docs/PHASE-1-SPEC.md) | The task list this repo implements |
+| [`docs/PHASE-1-SPEC.md`](docs/PHASE-1-SPEC.md) | The task list, rewritten for the D8–D10 target |
+| [`docs/MIGRATION-PLAN.md`](docs/MIGRATION-PLAN.md) | How this tree becomes that one, stage by stage |
+| [`docs/NATIVE-PIVOT.md`](docs/NATIVE-PIVOT.md) | Why Capacitor rather than React Native |
 | [`CLAUDE.md`](CLAUDE.md) | Hard invariants |
+
+There is one rubric, and it is version 3.0. The v2.x masterplan has been
+removed rather than kept alongside it.
 
 ---
 
@@ -38,7 +55,8 @@ owner are created by `db:seed`.
 |---|---|
 | `pnpm dev` | Development server |
 | `pnpm build` | Production build |
-| `pnpm test` | Vitest — unit, isolation, and sync suites |
+| `pnpm test` | Vitest — unit, offline, isolation, and sync suites |
+| `pnpm e2e` | Playwright — the Phase 2 exit gate (needs `pnpm build` first) |
 | `pnpm typecheck` | `tsc --noEmit` |
 | `pnpm lint` | ESLint, including the database guard |
 | `pnpm db:indexes` | Apply index definitions |
@@ -67,6 +85,53 @@ Every mutation gets its own result — `applied`, `duplicate`, `rejected`, or
 `conflict` — because a batch can be partly applied and nothing may be
 silently dropped.
 
+**`src/client/sync/queue.ts`** enqueues in a single IndexedDB transaction:
+mint the sequence number, write the outbox entry, advance the counter, and
+update the local projection together. Assigning `clientSeq` outside the
+transaction is how you end up with two mutations sharing a sequence number
+after a crash mid-write — at which point ordering is broken and nothing says
+so. If the counter is ever lost, the next sequence number is floored by the
+highest one still in the outbox rather than restarting at zero.
+
+**`src/client/sync/pull.ts`** is the read half of sync. Without it the app is
+single-device: a reinstall or a second phone opens to an empty farm even
+though the server holds everything. It ships the *mutation log* rather than
+projected documents, because the client already knows how to turn a mutation
+into a local record — one projection path (`src/client/db/project.ts`) used by
+both enqueue and hydration, so the two cannot drift. A record with a pending
+local edit is skipped: a queued change visibly reverting is the most alarming
+thing an offline app can do.
+
+**`src/client/sync/flush.ts`** is single-flight: concurrent callers share the
+in-flight promise instead of starting a second batch, which is what makes
+"never parallel" true when a timer, the `online` event, and a user action all
+fire at once. A mutation leaves the outbox only when the server says
+`applied` or `duplicate`; anything else parks in the rejected inbox, and a
+batch the server will never accept is parked after six attempts rather than
+looping forever.
+
+### Local storage protections
+
+The local store is the only copy of work that has not synced yet, so it is
+treated as the most fragile thing in the system:
+
+| Protection | What it prevents |
+|---|---|
+| Single-transaction enqueue | Two mutations sharing a `clientSeq` after a crash mid-write |
+| Sequence floor from the outbox | Reusing sequence numbers when the counter is lost |
+| Corruption quarantine | One unreadable row wedging every mutation behind it |
+| Envelope migration ladder | A device offline across two deploys failing to sync (A7) |
+| Quota detection | A full disk half-writing a log instead of failing loudly |
+| Integrity check | Records vanishing without the server ever acknowledging them |
+| Web Locks | Two tabs racing the pull watermark |
+| Wipe on sign-out | The previous farm's records readable by the next user (C5) |
+| Rejected inbox | Work the server refused evaporating unseen (A6) |
+
+Nothing is deleted to make a problem go away. A corrupt row keeps its raw
+value in quarantine, a rejection stays in the inbox until a human decides,
+and a discard bumps the cleared counter so it is never later mistaken for
+data loss.
+
 ### Two deviations from `docs/PHASE-1-SPEC.md`
 
 1. **No `bulkWrite`.** The spec exposes it with a note that callers must build
@@ -94,23 +159,48 @@ Suites split by what they need:
   the contracts, the role matrix, index discipline, and the R7 contrast and
   R4 tap-target checks, which parse `globals.css` so they guard the tokens
   the app actually ships.
+- **`tests/offline/`** — no database. The outbox, flush loop, pull, and the
+  storage protections against `fake-indexeddb`: sequence monotonicity, batch
+  cap, single-flight, retry-vs-reject routing, poison-batch parking, the
+  integrity check, corruption quarantine, envelope migration, and the wipe.
 - **`tests/isolation/`** and **`tests/sync/`** — need a real mongod. These are
   the Phase 1 exit gate.
+- **`tests/e2e/`** — needs a build and Chromium. The Phase 2 exit gate.
 
-Without a database the second group **skips loudly**. CI sets
+Without a database the mongod group **skips loudly**. CI sets
 `STEADING_REQUIRE_DB=1` against a `mongo:8` service container, so the gate
 cannot be met by a suite that quietly did not run.
+
+### The Phase 2 exit gate
+
+```bash
+pnpm build && pnpm e2e
+```
+
+Real Chromium, a **persistent on-disk profile**, and a real process kill. The
+profile matters: a fresh Playwright `BrowserContext` carries cookies and
+localStorage but *not* IndexedDB, so restarting into one would be asserting
+against an empty database. The gate is verified to fail — pointing the restart
+at a different profile makes it report `Received: 0`.
+
+It stubs `/api/sync` at the network layer, so no MongoDB is involved.
 
 ## Phase status
 
 - [x] **Phase 1 — Foundation & tenancy.** Scoped data layer, indexes, lint
       guard, contracts, auth, isolation suite, design tokens.
-- [ ] **Phase 2 — Offline engine.** IndexedDB stores, mutation log, Service
-      Worker, sequential flush, rejected-mutations inbox, sync dashboard.
-      *Exit gate: airplane mode → 50 mutations → hard restart → reconnect →
-      zero loss, zero duplicates.*
-- [ ] **Phase 3 — Core domain.** Events, then entities, then photos. The charm
-      layer unlocks here and **not before Phase 2's gate passes**.
+- [x] **Phase 2 — Offline engine.** IndexedDB stores, mutation log, Service
+      Worker, sequential flush, rejected-mutations inbox, storage persistence,
+      diagnostics sheet. **Exit gate passes**: airplane mode → 50 mutations →
+      hard restart → reconnect → zero loss, zero duplicates.
+- [ ] **Phase 3 — Core domain.** *In progress.* Done: mutation projection into
+      domain collections, archive-not-delete, hour-meter monotonicity,
+      conflict-on-deleted-target, the mixed-livestock model, groups and egg
+      logging read local-first, **medication with withdrawal tracking (W2)** —
+      the wedge feature — and pull sync, so a second device or a reinstall
+      hydrates. Remaining: individual animal screens, equipment
+      and maintenance, photos, reporting. The charm layer is unlocked —
+      Phase 2's gate passes.
 - [ ] **Phase 4 — Hardening.** Rate limiting, origin/CSRF verification,
       envelope migration, quota UX, export, Core Web Vitals.
 

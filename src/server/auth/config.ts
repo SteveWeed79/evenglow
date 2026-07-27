@@ -3,10 +3,8 @@ import NextAuth from 'next-auth';
 // augmented below.
 import type {} from 'next-auth/jwt';
 import Credentials from 'next-auth/providers/credentials';
-import { z } from 'zod';
 import { isRole, type Role } from '@/lib/contracts/roles';
-import { findUserByEmail } from '@/server/db/identity';
-import { verifyPassword } from './password';
+import { authorizeCredentials } from './credentials';
 
 /**
  * Auth.js with the JWT session strategy.
@@ -15,11 +13,6 @@ import { verifyPassword } from './password';
  * cannot be validated offline, and they add a round trip to every request.
  * The claims below are what a device carries into an offline period.
  */
-
-const credentialsSchema = z.object({
-  email: z.string().email().max(320),
-  password: z.string().min(1).max(1024),
-});
 
 declare module 'next-auth' {
   interface User {
@@ -57,29 +50,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: 'Password', type: 'password' },
       },
 
-      /**
-       * Returns null for every failure mode — unknown email, wrong password,
-       * disabled account — so the response cannot be used to enumerate users.
-       */
-      async authorize(raw) {
-        const parsed = credentialsSchema.safeParse(raw);
-        if (!parsed.success) return null;
-
-        const user = await findUserByEmail(parsed.data.email);
-        if (!user || user.disabledAt) return null;
-
-        const ok = await verifyPassword(user.passwordHash, parsed.data.password);
-        if (!ok) return null;
-
-        // orgId and role are read from the user document, never from input.
-        return {
-          id: user._id,
-          email: user.email,
-          name: user.name,
-          orgId: user.orgId,
-          role: user.role,
-        };
-      },
+      // Lives in ./credentials so it can be exercised without booting the
+      // whole auth framework.
+      authorize: authorizeCredentials,
     }),
   ],
 

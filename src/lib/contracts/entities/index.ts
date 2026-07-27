@@ -1,13 +1,18 @@
 import type { z } from 'zod';
 import { type Entity, isAppendOnly, type Op } from '../mutation';
 import {
+  animalCreateSchema,
+  animalUpdateSchema,
   eggLogCreateSchema,
   feedLogCreateSchema,
   flockCreateSchema,
   flockUpdateSchema,
+  medicationCreateSchema,
+  medicationUpdateSchema,
   mortalityCreateSchema,
   predatorCreateSchema,
-} from './birds';
+  productionLogCreateSchema,
+} from './livestock';
 import {
   equipmentCreateSchema,
   equipmentUpdateSchema,
@@ -17,13 +22,15 @@ import {
 } from './iron';
 import {
   deleteSchema,
+  inventoryCreateSchema,
+  inventoryUpdateSchema,
   photoCreateSchema,
   photoUpdateSchema,
   taskCreateSchema,
   taskUpdateSchema,
 } from './ops';
 
-export * from './birds';
+export * from './livestock';
 export * from './iron';
 export * from './ops';
 
@@ -43,6 +50,14 @@ export const PAYLOAD_SCHEMAS: Partial<Record<PayloadKey, z.ZodType>> = {
   'flock:update': flockUpdateSchema,
   'flock:delete': deleteSchema,
 
+  'animal:create': animalCreateSchema,
+  'animal:update': animalUpdateSchema,
+  'animal:delete': deleteSchema,
+
+  'medication:create': medicationCreateSchema,
+  'medication:update': medicationUpdateSchema,
+  'medication:delete': deleteSchema,
+
   'equipment:create': equipmentCreateSchema,
   'equipment:update': equipmentUpdateSchema,
   'equipment:delete': deleteSchema,
@@ -55,12 +70,17 @@ export const PAYLOAD_SCHEMAS: Partial<Record<PayloadKey, z.ZodType>> = {
   'task:update': taskUpdateSchema,
   'task:delete': deleteSchema,
 
+  'inventory:create': inventoryCreateSchema,
+  'inventory:update': inventoryUpdateSchema,
+  'inventory:delete': deleteSchema,
+
   'photo:create': photoCreateSchema,
   'photo:update': photoUpdateSchema,
   'photo:delete': deleteSchema,
 
   // Append-only entities — create only, by construction
   'eggLog:create': eggLogCreateSchema,
+  'productionLog:create': productionLogCreateSchema,
   'feedLog:create': feedLogCreateSchema,
   'mortality:create': mortalityCreateSchema,
   'predator:create': predatorCreateSchema,

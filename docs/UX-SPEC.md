@@ -111,6 +111,7 @@ The counter remains the heart of the app: oversized numeral, `+1 / +6 / +12` and
 ```tsx
 'use client';
 import { useState, useCallback } from 'react';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
 
 type TallyProps = {
   label: string;
@@ -126,7 +127,7 @@ export function Tally({
   const [count, setCount] = useState(initial);
   const bump = useCallback((by: number) => {
     setCount((c) => Math.max(0, c + by));
-    if (navigator.vibrate) navigator.vibrate(8);   // confirmation through gloves
+    void Haptics.impact({ style: ImpactStyle.Light });   // confirmation through gloves
   }, []);
 
   return (
@@ -192,7 +193,7 @@ export function Tally({
 
 The lamp glow sits behind the numeral, above the arch's spring line — light coming in through a round door. It's one gradient; it does not repeat anywhere else in the app.
 
-Haptic feedback matters more than it sounds: through a glove it's often the only confirmation the tap registered.
+Haptic feedback matters more than it sounds: through a glove it's often the only confirmation the tap registered. This is a concrete argument for the native shell — the web `navigator.vibrate` API is unsupported in iOS Safari, so on a PWA this feature would simply not exist on half the phones in the world. The Capacitor plugin works everywhere.
 
 ### SyncChip
 
@@ -330,6 +331,9 @@ Reference it plainly: *Steading*, never *the Steading app*, never capitalized mi
 - [ ] Full keyboard navigation with visible focus; `prefers-reduced-motion` respected
 - [ ] Zero blocking spinners on any log path
 - [ ] Diagnostics sheet reachable in two taps from anywhere
+- [ ] Every gate above verified on a real Android device, not the dev server
+- [ ] Cold launch under 2s on a low-end device
+- [ ] Haptic confirmation fires on every Tally increment and commit
 - [ ] Bright-sun mode reachable in one tap from the header and holds ≥7:1 on all text
 - [ ] Every decorative element can be disabled without breaking a layout
 - [ ] No milestone, streak, or celebration adds a tap or delays a log

@@ -5,11 +5,15 @@ import type {
   Filter,
   InsertOneResult,
   OptionalUnlessRequiredId,
+  Sort as MongoSort,
   UpdateFilter,
   UpdateResult,
   WithId,
 } from 'mongodb';
 import { db } from './client';
+
+/** Re-exported so callers do not have to import from the driver directly. */
+export type Sort<T> = MongoSort & Partial<Record<keyof T & string, 1 | -1>>;
 
 /**
  * The ONLY module that exposes collection handles (D2).
@@ -24,7 +28,10 @@ import { db } from './client';
 export const COLLECTIONS = [
   'mutations',
   'flocks',
+  'animals',
+  'medications',
   'eggLogs',
+  'productionLogs',
   'feedLogs',
   'mortality',
   'predatorLogs',
@@ -88,9 +95,14 @@ export function assertSafeUpdate<T extends Tenanted>(update: UpdateFilter<T>): v
   }
 }
 
+export interface FindOptions<T> {
+  limit?: number;
+  sort?: Sort<T>;
+}
+
 export interface ScopedCollection<T extends Tenanted> {
   findOne(filter?: Filter<T>): Promise<WithId<T> | null>;
-  findMany(filter?: Filter<T>, limit?: number): Promise<WithId<T>[]>;
+  findMany(filter?: Filter<T>, options?: FindOptions<T>): Promise<WithId<T>[]>;
   countDocuments(filter?: Filter<T>): Promise<number>;
   insertOne(doc: Omit<T, 'orgId'>): Promise<InsertOneResult<T>>;
   updateOne(filter: Filter<T>, update: UpdateFilter<T>): Promise<UpdateResult<T>>;
@@ -120,8 +132,12 @@ export function scopedOn(database: Db, orgId: string): Scoped {
     return {
       findOne: (filter?: Filter<T>) => c.findOne(guardFilter<T>(orgId, filter)),
 
-      findMany: (filter?: Filter<T>, limit = 200) =>
-        c.find(guardFilter<T>(orgId, filter)).limit(limit).toArray(),
+      findMany: (filter?: Filter<T>, options?: FindOptions<T>) => {
+        // Sort is a projection concern, not a tenancy one — the filter is
+        // guarded before it ever reaches the cursor.
+        const cursor = c.find(guardFilter<T>(orgId, filter)).limit(options?.limit ?? 200);
+        return (options?.sort ? cursor.sort(options.sort) : cursor).toArray();
+      },
 
       countDocuments: (filter?: Filter<T>) => c.countDocuments(guardFilter<T>(orgId, filter)),
 

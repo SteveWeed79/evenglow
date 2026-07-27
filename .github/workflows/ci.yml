@@ -28,7 +28,7 @@ jobs:
       MONGODB_TEST_URI: mongodb://localhost:27017
       STEADING_REQUIRE_DB: '1'
       MONGODB_URI: mongodb://localhost:27017
-      MONGODB_DB: steading_ci
+      MONGODB_DB: steading
       AUTH_SECRET: ci-only-secret-not-used-anywhere-else
 
     steps:
@@ -59,8 +59,38 @@ jobs:
       - name: Test
         run: pnpm test
 
+      # The three scripts CI never invoked — which is exactly why two of them
+      # were broken from the day they were written. Running them here means a
+      # setup command cannot rot unnoticed again.
+      - name: Apply indexes (pnpm db:indexes)
+        run: pnpm db:indexes
+
+      - name: Seed the first org and owner (pnpm db:seed)
+        run: pnpm db:seed "CI Farm" ci-owner@example.test 'a properly long passphrase'
+
+      - name: Verify the server data path (pnpm db:verify)
+        run: pnpm db:verify
+
       - name: Build
         run: pnpm build
 
       - name: Secret hygiene
         run: pnpm check:secrets
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      # The Phase 2 exit gate: airplane mode, 50 mutations, hard restart,
+      # reconnect, zero loss, zero duplicates. Runs against the build above.
+      - name: Exit gate (offline engine)
+        run: pnpm e2e
+        env:
+          AUTH_SECRET: phase-2-exit-gate-secret-value
+
+      - name: Upload traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7

@@ -1,0 +1,11 @@
+{
+  "name": "Steading",
+  "short_name": "Steading",
+  "description": "Birds, iron, and chores in one place.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#EDE6D2",
+  "theme_color": "#EDE6D2",
+  "orientation": "portrait",
+  "categories": ["productivity", "utilities"]
+}

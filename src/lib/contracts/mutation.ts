@@ -11,9 +11,21 @@ export const MUTATION_SCHEMA_VERSION = 1;
 /** Hard cap per batch. The server rejects anything larger outright. */
 export const MAX_BATCH_SIZE = 100;
 
+/**
+ * Widening this list is additive and does not bump MUTATION_SCHEMA_VERSION.
+ *
+ * The envelope shape is unchanged, and an old client simply never sends a new
+ * entity. The one ordering constraint is that the server must ship before a
+ * client that emits a new value, since an old server answers 400 for an
+ * entity it does not know — which is the correct, visible failure rather than
+ * a silent drop.
+ */
 export const ENTITIES = [
   'flock',
+  'animal',
+  'medication',
   'eggLog',
+  'productionLog',
   'feedLog',
   'mortality',
   'predator',
@@ -21,6 +33,7 @@ export const ENTITIES = [
   'hourReading',
   'maintenance',
   'task',
+  'inventory',
   'photo',
 ] as const;
 
@@ -38,6 +51,7 @@ export type Op = z.infer<typeof opSchema>;
  */
 export const APPEND_ONLY_ENTITIES = new Set<Entity>([
   'eggLog',
+  'productionLog',
   'feedLog',
   'mortality',
   'predator',
@@ -105,3 +119,46 @@ export interface SyncResponse {
   results: MutationResult[];
   serverTs: number;
 }
+
+// ── Pull ─────────────────────────────────────────────────────────────────────
+
+/** Page size for hydration. Kept modest so a cold device streams rather than stalls. */
+export const PULL_PAGE_SIZE = 200;
+
+/**
+ * A mutation as it comes back from the server, carrying the global ordering
+ * stamp. `serverTs` is the watermark a device pages through — clientTs is not
+ * usable for this, since it comes from clocks we do not trust (D6).
+ */
+export const pulledMutationSchema = mutationSchema.extend({
+  serverTs: z.number().int(),
+});
+
+export type PulledMutation = z.infer<typeof pulledMutationSchema>;
+
+/**
+ * The hydration cursor is a PAIR, and it has to be.
+ *
+ * `serverTs` is millisecond-resolution and a batch applies in a tight
+ * sequential loop, so many mutations legitimately share a timestamp. Paging on
+ * the timestamp alone means a page boundary landing inside a same-millisecond
+ * group loses every row after the cut: the next request asks for `> that ms`
+ * and those rows are never offered again. Silent, permanent, and only visible
+ * after a reinstall.
+ *
+ * `_id` is a ULID, so it sorts lexicographically and breaks the tie with a
+ * total order the server can seek into.
+ */
+export const pullResponseSchema = z
+  .object({
+    mutations: z.array(pulledMutationSchema),
+    /** Send this back as `since` next time. */
+    through: z.number().int(),
+    /** Send this back as `sinceId`. Null only before the first row is ever read. */
+    throughId: z.string().length(26).nullable(),
+    /** True when more remain beyond this page. */
+    more: z.boolean(),
+  })
+  .strict();
+
+export type PullResponse = z.infer<typeof pullResponseSchema>;
