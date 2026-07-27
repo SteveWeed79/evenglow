@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { db, readAllRecords, readOutboxBySeq } from '@/client/db/open';
-import { STORES } from '@/client/db/schema';
-import { checkIntegrity, enqueue, InvalidMutationError, queueDepth } from '@/client/sync/queue';
+import { db, readAllRecords, readOutboxBySeq } from '@steading/app/db/open';
+import { STORES } from '@steading/app/db/idb-schema';
+import { checkIntegrity, enqueue, InvalidMutationError, queueDepth } from '@steading/app/sync/queue';
 import { newId } from '@steading/contracts';
 import { freshDb, simulateRestart } from '../support/idb';
 

@@ -75,7 +75,16 @@ const eslintConfig = defineConfig([
    * object, and `_`-prefixed bindings are an explicit "unused on purpose".
    */
   {
-    files: ['src/**/*.ts', 'src/**/*.tsx', 'tests/**/*.ts', 'packages/*/src/**/*.ts'],
+    files: [
+      'src/**/*.ts',
+      'src/**/*.tsx',
+      'tests/**/*.ts',
+      'packages/*/src/**/*.ts',
+      // apps/ too — the convention is repo-wide, and a rule scoped to the
+      // directories code used to live in is the recurring failure here.
+      'apps/*/src/**/*.ts',
+      'apps/*/src/**/*.tsx',
+    ],
     rules: {
       '@typescript-eslint/no-unused-vars': [
         'error',
@@ -128,12 +137,12 @@ const eslintConfig = defineConfig([
    * Invariant 6 — SQLite is the only client store, and tokens live in secure
    * storage.
    *
-   * Scoped to apps/app deliberately. That directory does not exist yet, so
-   * this bans nothing today: the working engine under src/client IS built on
-   * IndexedDB, knowingly, until S4 replaces it (masterplan §0.1). Arming the
-   * rule where the new client will live means the ban is already in force
-   * when the first file arrives, and cannot be reintroduced by a port that
-   * reaches for a familiar API.
+   * `apps/app/src/db/**` is exempt, and that exemption is doing real work
+   * right now rather than being a formality: the IndexedDB engine lives there
+   * during the migration, knowingly, until S7 deletes it (masterplan §0.1).
+   * Everything ABOVE the storage layer — sync, reads, screens — is already
+   * held to the ban, so a port cannot reintroduce browser storage by reaching
+   * for a familiar API on the way past.
    *
    * PHASE-1-SPEC T6 puts this rule on apps/app/src/**; that is what this is.
    */

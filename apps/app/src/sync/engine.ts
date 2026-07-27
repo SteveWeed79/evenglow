@@ -1,5 +1,5 @@
 import { db, getMeta, quarantineCount } from '../db/open';
-import { STORES } from '../db/schema';
+import { STORES } from '../db/idb-schema';
 import { backoffDelay, flushOnce, type SyncTransport } from './flush';
 import { SYNC_LOCK, withSyncLock } from './lock';
 import { pullOnce, pulledThrough } from './pull';

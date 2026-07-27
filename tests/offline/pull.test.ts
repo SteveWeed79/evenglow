@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { readAllRecords } from '@/client/db/open';
-import { pulledThrough, pullOnce, type PullTransport } from '@/client/sync/pull';
-import { enqueue, queueDepth } from '@/client/sync/queue';
-import { flushOnce } from '@/client/sync/flush';
+import { readAllRecords } from '@steading/app/db/open';
+import { pulledThrough, pullOnce, type PullTransport } from '@steading/app/sync/pull';
+import { enqueue, queueDepth } from '@steading/app/sync/queue';
+import { flushOnce } from '@steading/app/sync/flush';
 import { MUTATION_SCHEMA_VERSION, newId, type PulledMutation } from '@steading/contracts';
 import { freshDb } from '../support/idb';
 

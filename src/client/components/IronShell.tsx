@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AddMachine } from './AddMachine';
 import { LogHours } from './LogHours';
-import { listMachines, type Machine } from '../read/iron';
-import { subscribe } from '../sync/engine';
+import { listMachines, type Machine } from '@steading/app/read/iron';
+import { subscribe } from '@steading/app/sync/engine';
 
 /**
  * Iron — the other half of W3.

@@ -1,5 +1,5 @@
 import type { Entity, MutationResult, Op, PulledMutation } from '@steading/contracts';
-import type { LocalRecord, Quarantined, QueuedMutation } from './schema';
+import type { LocalRecord, Quarantined, QueuedMutation } from './idb-schema';
 
 /**
  * The storage port.

@@ -1,9 +1,9 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { describeLogFailure } from '../sync/failure';
+import { describeLogFailure } from '@steading/app/sync/failure';
 import { useLog } from '../hooks/useSync';
-import type { Machine } from '../read/iron';
+import type { Machine } from '@steading/app/read/iron';
 
 /**
  * Records an hour-meter reading.

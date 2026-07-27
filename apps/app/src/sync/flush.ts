@@ -5,7 +5,7 @@ import {
   type SyncResponse,
 } from '@steading/contracts';
 import { localStore } from '../db/store';
-import type { QueuedMutation } from '../db/schema';
+import type { QueuedMutation } from '../db/idb-schema';
 
 /**
  * The flush loop.

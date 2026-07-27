@@ -355,6 +355,33 @@ handles and a fresh implementation tends not to:
 
 ### S5 — Vite + Capacitor shell
 
+**S5a — the client moves into `apps/app` ✅ done.** `db/`, `sync/` and `read/`
+now live in the app package; the Next app imports them. Same shape as S3a: move
+first, where it is verifiable, then stand up the new shell against code that is
+already in place.
+
+Components and hooks stay in `src/client` for now. They are React and Next
+still renders them, so moving them buys nothing until Vite can serve them —
+and moving them early would mean the Next app importing its own screens across
+a package boundary for no gain.
+
+The `no-unused-vars` convention block had never been extended past
+`packages/*`, so the moved code came back with warnings the rest of the repo
+does not produce. Same failure as always, caught by the same habit of reading
+the counts.
+
+*Exit, met: 379 unit tests, 6 e2e including the Phase 2 exit gate, build, lint,
+typecheck, guard scan (82 files).*
+
+**S5b — the Vite client.** Entry, `vite.config.ts`, the components moved across,
+and `pnpm build:app` producing a static bundle.
+
+**S5c — the native shell.** `capacitor.config.ts`, the committed `android/`
+project, and the Capacitor `SqlDriver`. **This is the first stage that cannot
+be verified in this environment** — it needs the Android toolchain and a device
+or emulator. Everything before it is deliberately arranged so that what reaches
+S5c is a shell around code already under test.
+
 Vite entry, `capacitor.config.ts`, committed `android/` project. Mount the
 existing screens. Resume- and network-triggered flush via `@capacitor/app` and
 `@capacitor/network`.

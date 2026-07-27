@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { describeLogFailure } from '../sync/failure';
+import { describeLogFailure } from '@steading/app/sync/failure';
 
 /**
  * The signature control (UX-SPEC §3).

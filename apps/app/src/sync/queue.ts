@@ -1,8 +1,8 @@
 import { newId, payloadSchemaFor, type Entity, type Op } from '@steading/contracts';
-import { InvalidMutationError, StorageFullError } from '@steading/app/db/errors';
-import type { IntegrityReport } from '@steading/app/db/port';
+import { InvalidMutationError, StorageFullError } from '../db/errors';
+import type { IntegrityReport } from '../db/port';
 import { localStore } from '../db/store';
-import type { QueuedMutation } from '../db/schema';
+import type { QueuedMutation } from '../db/idb-schema';
 
 export { InvalidMutationError, StorageFullError };
 

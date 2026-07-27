@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { readOutboxBySeq } from '@/client/db/open';
-import { discardRejected, listRejected, retryRejected } from '@/client/sync/inbox';
-import { flushOnce, MAX_ATTEMPTS, type SyncTransport } from '@/client/sync/flush';
-import { checkIntegrity, enqueue, queueDepth } from '@/client/sync/queue';
+import { readOutboxBySeq } from '@steading/app/db/open';
+import { discardRejected, listRejected, retryRejected } from '@steading/app/sync/inbox';
+import { flushOnce, MAX_ATTEMPTS, type SyncTransport } from '@steading/app/sync/flush';
+import { checkIntegrity, enqueue, queueDepth } from '@steading/app/sync/queue';
 import { MAX_BATCH_SIZE, newId, type Mutation, type MutationStatus } from '@steading/contracts';
 import { freshDb } from '../support/idb';
 

@@ -1,5 +1,5 @@
 import type { Entity, Op } from '@steading/contracts';
-import { type LocalRecord, recordKey } from './schema';
+import { type LocalRecord, recordKey } from './idb-schema';
 
 /**
  * Turns a mutation into its local record.

@@ -12,7 +12,7 @@
  * shape is exactly how the two would come to disagree.
  */
 
-export * from '@steading/app/db/schema';
+export * from './schema';
 
 export const DB_NAME = 'steading';
 

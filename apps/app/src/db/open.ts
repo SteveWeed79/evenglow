@@ -14,7 +14,7 @@ import {
   type QueuedMutation,
   queuedMutationSchema,
   STORES,
-} from './schema';
+} from './idb-schema';
 
 interface SteadingDB extends DBSchema {
   outbox: {
