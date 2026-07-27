@@ -56,7 +56,7 @@ function rejected(id: string, reason: string): MutationResult {
   return { id, status: 'rejected', reason };
 }
 
-export async function applyMutation(
+async function applyMutation(
   scope: Scoped,
   claims: SessionClaims,
   mutation: Mutation,

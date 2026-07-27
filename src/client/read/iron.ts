@@ -112,13 +112,3 @@ export async function listMachines(): Promise<Machine[]> {
     })
     .sort((a, b) => a.name.localeCompare(b.name));
 }
-
-/**
- * The last reading recorded on this device, used to reject a lower one before
- * it is queued. The server checks this too and is the authority; doing it here
- * as well means the user finds out while the meter is still in front of them.
- */
-export async function lastHoursFor(equipmentId: string): Promise<number | null> {
-  const machines = await listMachines();
-  return machines.find((m) => m.id === equipmentId)?.hours ?? null;
-}

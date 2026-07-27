@@ -63,7 +63,7 @@ export const INDEXES: Record<CollectionName, IndexDescription[]> = {
 };
 
 /** Identity collections are not tenant-scoped; they need their own uniqueness rules. */
-export const IDENTITY_INDEXES: Record<string, IndexDescription[]> = {
+const IDENTITY_INDEXES: Record<string, IndexDescription[]> = {
   users: [{ key: { email: 1 }, unique: true }, { key: { orgId: 1, role: 1 } }],
   orgs: [{ key: { _id: 1 } }],
 };

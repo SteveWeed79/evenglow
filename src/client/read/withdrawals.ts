@@ -28,7 +28,7 @@ const storedMedication = z.object({
     .optional(),
 });
 
-export async function listTreatments(): Promise<TreatmentRecord[]> {
+async function listTreatments(): Promise<TreatmentRecord[]> {
   const records = await readRecordsByEntity('medication');
 
   return records

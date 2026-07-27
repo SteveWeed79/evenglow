@@ -82,8 +82,3 @@ export async function startTestDb(dbName = 'steading'): Promise<TestDb | null> {
     return null;
   }
 }
-
-export async function clearDb(db: Db): Promise<void> {
-  const names = await db.listCollections({}, { nameOnly: true }).toArray();
-  await Promise.all(names.map((c) => db.collection(c.name).deleteMany({})));
-}

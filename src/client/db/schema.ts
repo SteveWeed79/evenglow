@@ -28,8 +28,7 @@ export const STORES = {
 } as const;
 
 /** Local lifecycle, distinct from the server's per-mutation result status. */
-export const LOCAL_STATUSES = ['queued', 'sending', 'rejected'] as const;
-export type LocalStatus = (typeof LOCAL_STATUSES)[number];
+const LOCAL_STATUSES = ['queued', 'sending', 'rejected'] as const;
 
 /**
  * A mutation in the outbox: the wire envelope plus local bookkeeping.

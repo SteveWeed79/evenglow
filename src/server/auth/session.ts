@@ -1,4 +1,4 @@
-import { canMutate, isRole, type Entity, type Op, type Role } from '@steading/contracts';
+import { isRole, type Role } from '@steading/contracts';
 import { findUserById } from '@/server/db/identity';
 import { HttpError } from '@/server/http';
 import { auth } from './config';
@@ -50,13 +50,4 @@ export async function requireMutationSession(): Promise<SessionClaims> {
   }
 
   return { userId: user._id, orgId: user.orgId, role: user.role };
-}
-
-export function requireRole(role: Role, allowed: readonly Role[]): void {
-  if (!allowed.includes(role)) throw new HttpError(403, 'You do not have access to that.');
-}
-
-/** Per-mutation authorization. Rejects one mutation, never the whole batch. */
-export function mayMutate(role: Role, entity: Entity, op: Op): boolean {
-  return canMutate(role, entity, op);
 }
