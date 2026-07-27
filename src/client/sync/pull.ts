@@ -26,10 +26,14 @@ export interface PullOutcome {
   deferred?: string;
 }
 
-export type PullTransport = (since: number) => Promise<{ status: number; body: unknown }>;
+export type PullTransport = (
+  since: number,
+  sinceId: string | null,
+) => Promise<{ status: number; body: unknown }>;
 
-const defaultTransport: PullTransport = async (since) => {
-  const res = await fetch(`/api/pull?since=${since}`, {
+const defaultTransport: PullTransport = async (since, sinceId) => {
+  const query = sinceId === null ? `since=${since}` : `since=${since}&sinceId=${sinceId}`;
+  const res = await fetch(`/api/pull?${query}`, {
     headers: { 'x-steading-sync': '1' },
   });
   const body: unknown = await res.json().catch(() => null);
@@ -49,13 +53,15 @@ export function pullOnce(transport: PullTransport = defaultTransport): Promise<P
 async function runPull(transport: PullTransport): Promise<PullOutcome> {
   const database = await db();
   let since = parseMeta('pulledThrough', await database.get(STORES.meta, META.pulledThrough)) ?? 0;
+  let sinceId =
+    parseMeta('pulledThroughId', await database.get(STORES.meta, META.pulledThroughId)) ?? null;
 
   const outcome: PullOutcome = { applied: 0, skipped: 0, through: since, more: false };
 
   for (let page = 0; page < MAX_PAGES_PER_PASS; page++) {
     let response: { status: number; body: unknown };
     try {
-      response = await transport(since);
+      response = await transport(since, sinceId);
     } catch {
       return { ...outcome, deferred: 'offline' };
     }
@@ -76,9 +82,12 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
     outcome.through = parsed.data.through;
     outcome.more = parsed.data.more;
 
-    // A page that does not advance the watermark would loop forever.
-    if (parsed.data.through <= since && parsed.data.mutations.length === 0) break;
+    // A page that does not advance the cursor would loop forever. The cursor
+    // is the pair, so both halves have to stand still for that to be true —
+    // a page of same-millisecond rows advances the ULID while `through` holds.
+    if (parsed.data.through === since && parsed.data.throughId === sinceId) break;
     since = parsed.data.through;
+    sinceId = parsed.data.throughId;
 
     if (!parsed.data.more) break;
   }
@@ -123,7 +132,12 @@ async function applyPage(page: PullResponse): Promise<{ applied: number; skipped
     applied += 1;
   }
 
-  await tx.objectStore(STORES.meta).put(page.through, META.pulledThrough);
+  // Both halves of the cursor advance in the same transaction as the records
+  // they cover. A timestamp persisted without its ULID would resume from the
+  // start of a millisecond and re-apply rows already written.
+  const meta = tx.objectStore(STORES.meta);
+  await meta.put(page.through, META.pulledThrough);
+  if (page.throughId !== null) await meta.put(page.throughId, META.pulledThroughId);
   await tx.done;
 
   return { applied, skipped };

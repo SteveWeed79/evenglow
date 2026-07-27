@@ -23,6 +23,7 @@ export const ENTITY_COLLECTIONS: Record<Entity, CollectionName> = {
   hourReading: 'hourReadings',
   maintenance: 'maintenance',
   task: 'tasks',
+  inventory: 'inventory',
   photo: 'photos',
 };
 

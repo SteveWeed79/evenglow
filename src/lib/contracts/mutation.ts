@@ -33,6 +33,7 @@ export const ENTITIES = [
   'hourReading',
   'maintenance',
   'task',
+  'inventory',
   'photo',
 ] as const;
 
@@ -135,11 +136,26 @@ export const pulledMutationSchema = mutationSchema.extend({
 
 export type PulledMutation = z.infer<typeof pulledMutationSchema>;
 
+/**
+ * The hydration cursor is a PAIR, and it has to be.
+ *
+ * `serverTs` is millisecond-resolution and a batch applies in a tight
+ * sequential loop, so many mutations legitimately share a timestamp. Paging on
+ * the timestamp alone means a page boundary landing inside a same-millisecond
+ * group loses every row after the cut: the next request asks for `> that ms`
+ * and those rows are never offered again. Silent, permanent, and only visible
+ * after a reinstall.
+ *
+ * `_id` is a ULID, so it sorts lexicographically and breaks the tie with a
+ * total order the server can seek into.
+ */
 export const pullResponseSchema = z
   .object({
     mutations: z.array(pulledMutationSchema),
     /** Send this back as `since` next time. */
     through: z.number().int(),
+    /** Send this back as `sinceId`. Null only before the first row is ever read. */
+    throughId: z.string().length(26).nullable(),
     /** True when more remain beyond this page. */
     more: z.boolean(),
   })

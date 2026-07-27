@@ -25,15 +25,35 @@ function pulled(over: Partial<PulledMutation> = {}): PulledMutation {
   };
 }
 
-/** A server holding `pages`, handed out one at a time. */
-function serve(pages: { mutations: PulledMutation[]; through: number; more: boolean }[]) {
+interface Page {
+  mutations: PulledMutation[];
+  through: number;
+  more: boolean;
+  throughId?: string | null;
+}
+
+/**
+ * A server holding `pages`, handed out one at a time.
+ *
+ * `throughId` defaults to the last mutation on the page, which is what a real
+ * server returns — the cursor is the (serverTs, ULID) pair.
+ */
+function serve(pages: Page[]) {
   let call = 0;
-  const transport: PullTransport = () => {
-    const page = pages[call] ?? { mutations: [], through: 0, more: false };
+  const seen: { since: number; sinceId: string | null }[] = [];
+
+  const transport: PullTransport = (since, sinceId) => {
+    seen.push({ since, sinceId });
+    const page: Page = pages[call] ?? { mutations: [], through: 0, more: false };
     call += 1;
-    return Promise.resolve({ status: 200, body: page });
+    const throughId =
+      page.throughId !== undefined
+        ? page.throughId
+        : (page.mutations[page.mutations.length - 1]?.id ?? null);
+    return Promise.resolve({ status: 200, body: { ...page, throughId } });
   };
-  return { transport, calls: () => call };
+
+  return { transport, calls: () => call, seen: () => seen };
 }
 
 describe('pull', () => {
@@ -65,7 +85,12 @@ describe('pull', () => {
       seen.push(since);
       return Promise.resolve({
         status: 200,
-        body: { mutations: [], through: since === 0 ? 500 : since, more: false },
+        body: {
+          mutations: [],
+          through: since === 0 ? 500 : since,
+          throughId: null,
+          more: false,
+        },
       });
     };
 
@@ -73,6 +98,54 @@ describe('pull', () => {
     await pullOnce(transport);
 
     expect(seen).toEqual([0, 500]);
+  });
+
+  it('sends both halves of the cursor back on the next pass', async () => {
+    const first = pulled({ serverTs: 900 });
+    const { transport, seen } = serve([{ mutations: [first], through: 900, more: false }]);
+
+    await pullOnce(transport);
+    await pullOnce(transport);
+
+    // The second pass resumes from the pair, not from the timestamp alone.
+    expect(seen()[0]).toEqual({ since: 0, sinceId: null });
+    expect(seen()[1]).toEqual({ since: 900, sinceId: first.id });
+  });
+
+  /**
+   * The client half of the same-millisecond regression. Two pages sharing one
+   * serverTs: if the device resumed on the timestamp alone it would ask for
+   * "> 700" and the server could never hand back the rest of that millisecond.
+   */
+  it('advances through a millisecond that spans more than one page', async () => {
+    const a = pulled({ serverTs: 700 });
+    const b = pulled({ serverTs: 700 });
+    const { transport, seen } = serve([
+      { mutations: [a], through: 700, more: true },
+      { mutations: [b], through: 700, more: false },
+    ]);
+
+    const outcome = await pullOnce(transport);
+
+    expect(outcome.applied).toBe(2);
+    // Same timestamp both times — only the ULID moved, and that was enough.
+    expect(seen()[1]).toEqual({ since: 700, sinceId: a.id });
+    expect(await readAllRecords()).toHaveLength(2);
+  });
+
+  it('stops when neither half of the cursor advances', async () => {
+    const stuck = newId();
+    const transport: PullTransport = () =>
+      Promise.resolve({
+        status: 200,
+        body: { mutations: [], through: 42, throughId: stuck, more: true },
+      });
+
+    // First pass stores the cursor; the second must not spin on it.
+    await pullOnce(transport);
+    const outcome = await pullOnce(transport);
+
+    expect(outcome.applied).toBe(0);
   });
 
   it('follows pages until the server says there are no more', async () => {
@@ -92,7 +165,10 @@ describe('pull', () => {
   it('does not loop forever on a page that cannot advance', async () => {
     // A server stuck at the same watermark with nothing to give.
     const transport: PullTransport = () =>
-      Promise.resolve({ status: 200, body: { mutations: [], through: 0, more: true } });
+      Promise.resolve({
+        status: 200,
+        body: { mutations: [], through: 0, throughId: null, more: true },
+      });
 
     const outcome = await pullOnce(transport);
     expect(outcome.applied).toBe(0);
@@ -195,7 +271,10 @@ describe('pull', () => {
 
   it('runs one pass at a time', async () => {
     const transport = vi.fn<PullTransport>(() =>
-      Promise.resolve({ status: 200, body: { mutations: [], through: 1, more: false } }),
+      Promise.resolve({
+        status: 200,
+        body: { mutations: [], through: 1, throughId: null, more: false },
+      }),
     );
 
     await Promise.all([pullOnce(transport), pullOnce(transport), pullOnce(transport)]);

@@ -39,6 +39,38 @@ const photoShape = {
 export const photoCreateSchema = z.object(photoShape).strict();
 export const photoUpdateSchema = z.object(photoShape).partial().strict();
 
+// ── inventory (mutable) ──────────────────────────────────────────────────────
+
+/**
+ * Feed, bedding, medicine, and parts. Mutable rather than append-only: a stock
+ * level is a running quantity that gets corrected, not an observation.
+ *
+ * `reorderBelow` is what makes this more than a list. The masterplan ties part
+ * stock to upcoming service intervals so an alert fires before the window, and
+ * that needs a threshold to compare the level against.
+ */
+export const INVENTORY_KINDS = ['feed', 'bedding', 'medicine', 'part', 'other'] as const;
+
+/** Deliberately coarse. A smallholder counts bags and bales, not grams. */
+export const INVENTORY_UNITS = ['kg', 'lb', 'bag', 'bale', 'litre', 'gallon', 'dose', 'each'] as const;
+
+const inventoryShape = {
+  name: z.string().min(1).max(120),
+  kind: z.enum(INVENTORY_KINDS),
+  unit: z.enum(INVENTORY_UNITS),
+  /** Non-negative, and fractional on purpose — half a bale is a real quantity. */
+  quantity: z.number().nonnegative(),
+  /** Alert threshold. Absent means the item is tracked but never nags. */
+  reorderBelow: z.number().nonnegative().optional(),
+  /** Links a part to the machine it services, so W5 can warn before the window. */
+  equipmentId: z.string().length(26).optional(),
+  supplier: z.string().max(120).optional(),
+  note: z.string().max(500).optional(),
+};
+
+export const inventoryCreateSchema = z.object(inventoryShape).strict();
+export const inventoryUpdateSchema = z.object(inventoryShape).partial().strict();
+
 // ── shared ───────────────────────────────────────────────────────────────────
 
 /** Delete payload. Reason is optional and surfaces in the audit trail. */

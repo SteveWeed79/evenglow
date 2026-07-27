@@ -41,19 +41,44 @@ export async function GET(request: Request): Promise<NextResponse> {
   try {
     const claims = await requireSession();
 
-    const raw = new URL(request.url).searchParams.get('since') ?? '0';
+    const params = new URL(request.url).searchParams;
+
+    const raw = params.get('since') ?? '0';
     const since = Number(raw);
     if (!Number.isFinite(since) || since < 0) {
       throw new HttpError(400, 'That request is missing a valid starting point.');
     }
 
+    // The tie-breaking half of the cursor. Absent on a device's first pull.
+    const sinceId = params.get('sinceId');
+    if (sinceId !== null && sinceId.length !== 26) {
+      throw new HttpError(400, 'That request is missing a valid starting point.');
+    }
+
     const scope = await scoped(claims.orgId);
 
+    /**
+     * Seek past the cursor PAIR, not past the timestamp.
+     *
+     * serverTs is millisecond-resolution and a batch stamps many mutations
+     * inside the same millisecond, so "everything after this timestamp" drops
+     * every sibling row when a page boundary falls mid-millisecond. The $or
+     * takes rows in a later millisecond, plus rows in the same millisecond
+     * with a higher ULID — a total order, so no row can fall between pages.
+     *
+     * The $or is ANDed with the scoped layer's top-level orgId equality, so it
+     * cannot widen the result set beyond this tenant.
+     */
+    const after = new Date(since);
+    const cursor =
+      sinceId === null
+        ? { serverTs: { $gt: after } }
+        : { $or: [{ serverTs: { $gt: after } }, { serverTs: after, _id: { $gt: sinceId } }] };
+
     // One extra row tells us whether another page exists without a count.
-    const docs = await scope.col<MutationDoc>('mutations').findMany(
-      { serverTs: { $gt: new Date(since) } },
-      { limit: PULL_PAGE_SIZE + 1, sort: { serverTs: 1 } },
-    );
+    const docs = await scope
+      .col<MutationDoc>('mutations')
+      .findMany(cursor, { limit: PULL_PAGE_SIZE + 1, sort: { serverTs: 1, _id: 1 } });
 
     const more = docs.length > PULL_PAGE_SIZE;
     const page = more ? docs.slice(0, PULL_PAGE_SIZE) : docs;
@@ -85,8 +110,9 @@ export async function GET(request: Request): Promise<NextResponse> {
     // page made entirely of skipped rows still makes progress.
     const last = page[page.length - 1];
     const through = last ? last.serverTs.getTime() : since;
+    const throughId = last ? last._id : sinceId;
 
-    const response: PullResponse = { mutations, through, more };
+    const response: PullResponse = { mutations, through, throughId, more };
     return NextResponse.json(response, { status: 200 });
   } catch (error) {
     return errorResponse(error);

@@ -22,6 +22,8 @@ import {
 } from './iron';
 import {
   deleteSchema,
+  inventoryCreateSchema,
+  inventoryUpdateSchema,
   photoCreateSchema,
   photoUpdateSchema,
   taskCreateSchema,
@@ -67,6 +69,10 @@ export const PAYLOAD_SCHEMAS: Partial<Record<PayloadKey, z.ZodType>> = {
   'task:create': taskCreateSchema,
   'task:update': taskUpdateSchema,
   'task:delete': deleteSchema,
+
+  'inventory:create': inventoryCreateSchema,
+  'inventory:update': inventoryUpdateSchema,
+  'inventory:delete': deleteSchema,
 
   'photo:create': photoCreateSchema,
   'photo:update': photoUpdateSchema,

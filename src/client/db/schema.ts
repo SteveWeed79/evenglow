@@ -99,6 +99,7 @@ export const META = {
   clearedCount: 'clearedCount',
   lastSyncAt: 'lastSyncAt',
   pulledThrough: 'pulledThrough',
+  pulledThroughId: 'pulledThroughId',
   lastError: 'lastError',
   persistGranted: 'persistGranted',
 } as const;
@@ -112,6 +113,8 @@ export const metaSchemas = {
   lastSyncAt: z.number().int(),
   /** serverTs watermark for hydration — how far this device has caught up. */
   pulledThrough: z.number().int(),
+  /** The ULID half of that watermark. Breaks ties inside a single millisecond. */
+  pulledThroughId: z.string().length(26),
   lastError: z.string(),
   persistGranted: z.boolean(),
 } as const;

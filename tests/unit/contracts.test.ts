@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   appendOnlyOpsAreCreateOnly,
   eggLogCreateSchema,
+  inventoryCreateSchema,
+  inventoryUpdateSchema,
   isOpAllowed,
   maintenanceCreateSchema,
   payloadSchemaFor,
 } from '@/lib/contracts/entities';
+import { canMutate } from '@/lib/contracts/roles';
 import {
   ENTITIES,
   isAppendOnly,
@@ -107,5 +110,53 @@ describe('entity payloads', () => {
   it('rejects unknown payload fields', () => {
     const payload = { occurredAt: 1, count: 18, flockId: newId(), nope: 1 };
     expect(eggLogCreateSchema.safeParse(payload).success).toBe(false);
+  });
+
+  describe('inventory', () => {
+    const base = { name: 'Layer pellets', kind: 'feed', unit: 'bag', quantity: 6 } as const;
+
+    it('accepts a stock item', () => {
+      expect(inventoryCreateSchema.safeParse(base).success).toBe(true);
+    });
+
+    it('allows a fractional quantity', () => {
+      // Half a bale is a real quantity; forcing integers would make the user lie.
+      expect(inventoryCreateSchema.safeParse({ ...base, quantity: 2.5 }).success).toBe(true);
+    });
+
+    it('refuses a negative quantity', () => {
+      expect(inventoryCreateSchema.safeParse({ ...base, quantity: -1 }).success).toBe(false);
+    });
+
+    it('links a part to the machine it services', () => {
+      const withMachine = { ...base, kind: 'part', equipmentId: newId(), reorderBelow: 2 };
+      expect(inventoryCreateSchema.safeParse(withMachine).success).toBe(true);
+    });
+
+    it('rejects an equipmentId that is not a ULID', () => {
+      expect(inventoryCreateSchema.safeParse({ ...base, equipmentId: 'tractor' }).success).toBe(
+        false,
+      );
+    });
+
+    it('rejects an unknown unit rather than storing free text', () => {
+      expect(inventoryCreateSchema.safeParse({ ...base, unit: 'truckload' }).success).toBe(false);
+    });
+
+    it('allows a partial update', () => {
+      expect(inventoryUpdateSchema.safeParse({ quantity: 3 }).success).toBe(true);
+    });
+  });
+});
+
+describe('inventory authorization', () => {
+  it('is mutable, so a hand may not change stock levels', () => {
+    // Inventory defines what things are, not what happened — the same line
+    // that keeps flocks and equipment out of a hand's reach.
+    for (const op of ['create', 'update', 'delete'] as const) {
+      expect(canMutate('hand', 'inventory', op)).toBe(false);
+      expect(canMutate('owner', 'inventory', op)).toBe(true);
+      expect(canMutate('admin', 'inventory', op)).toBe(true);
+    }
   });
 });

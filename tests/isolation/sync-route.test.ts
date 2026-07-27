@@ -1,6 +1,6 @@
 import { ulid } from 'ulid';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SyncResponse } from '@/lib/contracts/mutation';
+import { PULL_PAGE_SIZE, type SyncResponse } from '@/lib/contracts/mutation';
 import type { Role } from '@/lib/contracts/roles';
 import type { UserDoc } from '@/server/db/identity';
 import { startTestDb } from '../support/mongo';
@@ -66,10 +66,21 @@ interface MutationDoc {
 const users = () => harness!.db.collection<UserDoc>('users');
 const mutations = () => harness!.db.collection<MutationDoc>('mutations');
 
-async function getPull(since = 0): Promise<{ status: number; body: unknown }> {
+async function getPull(
+  since = 0,
+  sinceId: string | null = null,
+): Promise<{ status: number; body: unknown }> {
   const { GET } = await import('@/app/api/pull/route');
-  const res = await GET(new Request(`https://steading.test/api/pull?since=${since}`));
+  const query = sinceId === null ? `since=${since}` : `since=${since}&sinceId=${sinceId}`;
+  const res = await GET(new Request(`https://steading.test/api/pull?${query}`));
   return { status: res.status, body: await res.json() };
+}
+
+interface PullBody {
+  mutations: { id: string; serverTs: number }[];
+  through: number;
+  throughId: string | null;
+  more: boolean;
 }
 
 async function postSync(body: unknown): Promise<{ status: number; body: unknown }> {
@@ -289,5 +300,67 @@ describeDb('/api/pull — tenant isolation', () => {
     const stamps = body.mutations.map((m) => m.serverTs);
 
     expect(stamps).toEqual([...stamps].sort((a, b) => a - b));
+  });
+
+  it('rejects a malformed sinceId rather than ignoring it', async () => {
+    expect((await getPull(0, 'too-short')).status).toBe(400);
+  });
+
+  /**
+   * The regression this cursor exists for.
+   *
+   * serverTs is millisecond-resolution and applyBatch stamps mutations in a
+   * tight sequential loop, so a real batch routinely puts many rows in one
+   * millisecond. Paging on the timestamp alone loses every row after the page
+   * cut: the next request asks for "> that millisecond" and they are never
+   * offered again. Silent, permanent, and only observable after a reinstall.
+   *
+   * Rows are written straight to the collection so the boundary is exact
+   * rather than dependent on how fast the applier happens to run.
+   */
+  it('loses no rows when a page boundary falls inside one millisecond', async () => {
+    const sameMs = new Date(1_700_000_000_000);
+    const docs = Array.from({ length: PULL_PAGE_SIZE + 1 }, () => {
+      const m = makeMutation();
+      return {
+        _id: m.id,
+        orgId: ORG_A,
+        targetId: m.targetId,
+        entity: m.entity,
+        op: m.op,
+        payload: m.payload,
+        deviceId: m.deviceId,
+        clientSeq: m.clientSeq,
+        clientTs: m.clientTs,
+        schemaVersion: m.schemaVersion,
+        serverTs: sameMs,
+      };
+    });
+    await mutations().insertMany(docs);
+
+    const first = (await getPull(0)).body as PullBody;
+    expect(first.mutations).toHaveLength(PULL_PAGE_SIZE);
+    expect(first.more).toBe(true);
+    // Every row shares the millisecond, so the timestamp alone cannot advance.
+    expect(first.through).toBe(sameMs.getTime());
+    expect(first.throughId).not.toBeNull();
+
+    const second = (await getPull(first.through, first.throughId)).body as PullBody;
+
+    const seen = new Set([...first.mutations, ...second.mutations].map((m) => m.id));
+    expect(seen.size).toBe(PULL_PAGE_SIZE + 1);
+    expect(seen).toEqual(new Set(docs.map((d) => d._id)));
+  });
+
+  it('does not re-serve a row the cursor has already passed', async () => {
+    await postSync({ mutations: [makeMutation(), makeMutation()] });
+
+    const first = (await getPull(0)).body as PullBody;
+    expect(first.mutations.length).toBe(2);
+
+    // Resuming from the returned cursor must yield nothing, not the last row
+    // again — an inclusive boundary would re-apply it on every pass.
+    const second = (await getPull(first.through, first.throughId)).body as PullBody;
+    expect(second.mutations).toEqual([]);
   });
 });

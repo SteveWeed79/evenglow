@@ -9,7 +9,15 @@ import { COLLECTIONS, type CollectionName } from './scoped';
 
 export const INDEXES: Record<CollectionName, IndexDescription[]> = {
   mutations: [
-    { key: { orgId: 1, serverTs: -1 } },
+    /**
+     * Hydration seeks into this on the (serverTs, _id) cursor pair and walks
+     * forward. It replaces the old { orgId, serverTs: -1 }, which it strictly
+     * subsumes: with orgId pinned by equality, Mongo walks this index in
+     * reverse to serve a serverTs-descending sort, so nothing that read
+     * newest-first has lost its index. Carrying both would cost a write on the
+     * hottest collection in the schema to buy nothing.
+     */
+    { key: { orgId: 1, serverTs: 1, _id: 1 } },
     { key: { orgId: 1, deviceId: 1, clientSeq: 1 } },
   ],
   flocks: [{ key: { orgId: 1, _id: 1 } }, { key: { orgId: 1, species: 1, archivedAt: 1 } }],
