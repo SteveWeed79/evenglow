@@ -99,6 +99,28 @@ fire at once. A mutation leaves the outbox only when the server says
 batch the server will never accept is parked after six attempts rather than
 looping forever.
 
+### Local storage protections
+
+The local store is the only copy of work that has not synced yet, so it is
+treated as the most fragile thing in the system:
+
+| Protection | What it prevents |
+|---|---|
+| Single-transaction enqueue | Two mutations sharing a `clientSeq` after a crash mid-write |
+| Sequence floor from the outbox | Reusing sequence numbers when the counter is lost |
+| Corruption quarantine | One unreadable row wedging every mutation behind it |
+| Envelope migration ladder | A device offline across two deploys failing to sync (A7) |
+| Quota detection | A full disk half-writing a log instead of failing loudly |
+| Integrity check | Records vanishing without the server ever acknowledging them |
+| Web Locks | Two tabs racing the pull watermark |
+| Wipe on sign-out | The previous farm's records readable by the next user (C5) |
+| Rejected inbox | Work the server refused evaporating unseen (A6) |
+
+Nothing is deleted to make a problem go away. A corrupt row keeps its raw
+value in quarantine, a rejection stays in the inbox until a human decides,
+and a discard bumps the cleared counter so it is never later mistaken for
+data loss.
+
 ### Two deviations from `docs/PHASE-1-SPEC.md`
 
 1. **No `bulkWrite`.** The spec exposes it with a note that callers must build
@@ -126,9 +148,10 @@ Suites split by what they need:
   the contracts, the role matrix, index discipline, and the R7 contrast and
   R4 tap-target checks, which parse `globals.css` so they guard the tokens
   the app actually ships.
-- **`tests/offline/`** — no database. The outbox and flush loop against
-  `fake-indexeddb`: sequence monotonicity, batch cap, single-flight,
-  retry-vs-reject routing, poison-batch parking, and the integrity check.
+- **`tests/offline/`** — no database. The outbox, flush loop, pull, and the
+  storage protections against `fake-indexeddb`: sequence monotonicity, batch
+  cap, single-flight, retry-vs-reject routing, poison-batch parking, the
+  integrity check, corruption quarantine, envelope migration, and the wipe.
 - **`tests/isolation/`** and **`tests/sync/`** — need a real mongod. These are
   the Phase 1 exit gate.
 - **`tests/e2e/`** — needs a build and Chromium. The Phase 2 exit gate.

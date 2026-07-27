@@ -81,6 +81,14 @@ export function DiagnosticsSheet({ onClose }: { onClose: () => void }): React.Re
           <dd className="sheet__id">{report?.deviceId ?? '—'}</dd>
         </dl>
 
+        {report && report.quarantined > 0 ? (
+          <p className="sheet__warn">
+            {report.quarantined} stored {report.quarantined === 1 ? 'entry' : 'entries'} could not
+            be read back and {report.quarantined === 1 ? 'was' : 'were'} set aside. Copy
+            diagnostics before clearing this device.
+          </p>
+        ) : null}
+
         {report?.lastError ? <p className="sheet__error">{report.lastError}</p> : null}
 
         {storage?.atRisk && storage.reason ? (

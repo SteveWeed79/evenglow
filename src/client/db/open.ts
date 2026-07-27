@@ -1,5 +1,6 @@
 import { type DBSchema, type IDBPDatabase, openDB } from 'idb';
 import type { z } from 'zod';
+import { migrateEnvelope } from './migrate';
 import {
   DB_NAME,
   DB_VERSION,
@@ -8,6 +9,8 @@ import {
   META,
   type metaSchemas,
   parseMeta,
+  type Quarantined,
+  quarantinedSchema,
   type QueuedMutation,
   queuedMutationSchema,
   STORES,
@@ -27,6 +30,10 @@ export interface SteadingDB extends DBSchema {
   meta: {
     key: string;
     value: unknown;
+  };
+  quarantine: {
+    key: string;
+    value: Quarantined;
   };
 }
 
@@ -54,6 +61,13 @@ export function db(): Promise<SteadingDatabase> {
         records.createIndex('byEntity', 'entity');
 
         database.createObjectStore(STORES.meta);
+      }
+
+      // v2 — corruption quarantine. Additive: existing queued work is
+      // untouched, which is the whole point of never destructively migrating
+      // an append-only outbox.
+      if (oldVersion < 2) {
+        database.createObjectStore(STORES.quarantine, { keyPath: 'key' });
       }
     },
 
@@ -89,8 +103,10 @@ export async function closeDb(): Promise<void> {
 }
 
 // ── Parsed reads ─────────────────────────────────────────────────────────────
-// Nothing below returns a raw IndexedDB value. A record that fails its schema
-// is treated as corrupt and reported, never silently coerced.
+// Nothing below returns a raw IndexedDB value, and nothing throws on a bad
+// one. A record that fails its schema is quarantined: it stays recoverable,
+// it is counted in diagnostics, and — critically — it does not stop the rows
+// behind it from being read.
 
 export class CorruptRecordError extends Error {
   constructor(store: string, key: string, issue: string) {
@@ -99,12 +115,39 @@ export class CorruptRecordError extends Error {
   }
 }
 
-function parseOrThrow<T>(schema: z.ZodType<T>, store: string, key: string, value: unknown): T {
-  const parsed = schema.safeParse(value);
-  if (!parsed.success) {
-    throw new CorruptRecordError(store, key, parsed.error.issues[0]?.message ?? 'unknown');
-  }
-  return parsed.data;
+/**
+ * Moves an unreadable row out of the way, keeping its raw value.
+ *
+ * Deliberately not a delete. "Never drop" applies to corruption too — the row
+ * cannot be sent, but a user is entitled to know it existed, and the raw value
+ * is the only chance of ever recovering what it said.
+ */
+export async function quarantine(
+  store: string,
+  key: string,
+  raw: unknown,
+  reason: string,
+): Promise<void> {
+  const record: Quarantined = {
+    key: `${store}:${key}`,
+    store,
+    raw,
+    reason,
+    quarantinedAt: Date.now(),
+  };
+  await (await db()).put(STORES.quarantine, record);
+}
+
+export async function quarantineCount(): Promise<number> {
+  return (await db()).count(STORES.quarantine);
+}
+
+export async function listQuarantined(): Promise<Quarantined[]> {
+  const raw = await (await db()).getAll(STORES.quarantine);
+  return raw.flatMap((value) => {
+    const parsed = quarantinedSchema.safeParse(value);
+    return parsed.success ? [parsed.data] : [];
+  });
 }
 
 /**
@@ -126,26 +169,124 @@ export async function setMeta<K extends keyof typeof metaSchemas>(
   await (await db()).put(STORES.meta, value, META[key]);
 }
 
-/** Outbox entries ordered by clientSeq — the order they must be sent in (A4). */
+/**
+ * Outbox entries ordered by clientSeq — the order they must be sent in (A4).
+ *
+ * An unreadable row is quarantined rather than thrown, so one bad record
+ * cannot stop every other mutation behind it from ever being sent.
+ */
 export async function readOutboxBySeq(limit?: number): Promise<QueuedMutation[]> {
-  const raw = await (await db()).getAllFromIndex(STORES.outbox, 'byClientSeq');
-  const parsed = raw.map((value, index) =>
-    parseOrThrow(queuedMutationSchema, STORES.outbox, String(index), value),
-  );
+  const database = await db();
+  const raw = await database.getAllFromIndex(STORES.outbox, 'byClientSeq');
+
+  const parsed: QueuedMutation[] = [];
+  const corrupt: { key: string; value: unknown; reason: string }[] = [];
+  const migrated: QueuedMutation[] = [];
+
+  for (const value of raw) {
+    // Envelope migration (A7) runs before validation: a mutation written by an
+    // older build is walked up to the current version rather than being
+    // condemned as corrupt for having an old shape.
+    let candidate: unknown = value;
+    let wasMigrated = false;
+
+    if (typeof value === 'object' && value !== null) {
+      try {
+        const upgraded = migrateEnvelope(value as Record<string, unknown>);
+        wasMigrated = upgraded !== value;
+        candidate = upgraded;
+      } catch {
+        // Falls through to the corrupt path below with its raw value intact.
+      }
+    }
+
+    const result = queuedMutationSchema.safeParse(candidate);
+    if (result.success) {
+      parsed.push(result.data);
+      if (wasMigrated) migrated.push(result.data);
+      continue;
+    }
+
+    // The id is the store's keyPath; if even that is unreadable, fall back to
+    // something stable enough to quarantine under.
+    const key =
+      typeof (value as { id?: unknown }).id === 'string'
+        ? (value as { id: string }).id
+        : `unknown-${corrupt.length}`;
+
+    corrupt.push({
+      key,
+      value,
+      reason: result.error.issues[0]?.message ?? 'unreadable',
+    });
+  }
+
+  // Persist the upgrade, so the walk happens once rather than on every read.
+  for (const record of migrated) {
+    await database.put(STORES.outbox, record).catch(() => undefined);
+  }
+
+  for (const bad of corrupt) {
+    await quarantine(STORES.outbox, bad.key, bad.value, bad.reason);
+    await database.delete(STORES.outbox, bad.key).catch(() => undefined);
+  }
+
   return limit === undefined ? parsed : parsed.slice(0, limit);
 }
 
 export async function readRecord(key: string): Promise<LocalRecord | undefined> {
   const raw = await (await db()).get(STORES.records, key);
   if (raw === undefined) return undefined;
-  return parseOrThrow(localRecordSchema, STORES.records, key, raw);
+
+  const parsed = localRecordSchema.safeParse(raw);
+  if (parsed.success) return parsed.data;
+
+  await quarantine(STORES.records, key, raw, parsed.error.issues[0]?.message ?? 'unreadable');
+  return undefined;
+}
+
+/** Parses a batch of projections, quarantining any that no longer read. */
+async function parseRecords(raw: unknown[]): Promise<LocalRecord[]> {
+  const good: LocalRecord[] = [];
+  const bad: { key: string; value: unknown; reason: string }[] = [];
+
+  for (const value of raw) {
+    const parsed = localRecordSchema.safeParse(value);
+    if (parsed.success) {
+      good.push(parsed.data);
+      continue;
+    }
+    const key =
+      typeof (value as { key?: unknown }).key === 'string'
+        ? (value as { key: string }).key
+        : `unknown-${bad.length}`;
+    bad.push({ key, value, reason: parsed.error.issues[0]?.message ?? 'unreadable' });
+  }
+
+  const database = await db();
+  for (const entry of bad) {
+    await quarantine(STORES.records, entry.key, entry.value, entry.reason);
+    await database.delete(STORES.records, entry.key).catch(() => undefined);
+  }
+
+  return good;
+}
+
+/**
+ * Projections for one entity kind.
+ *
+ * Indexed rather than a full scan: the read path runs on every sync publish,
+ * and parsing every record in the database to find the groups would get slower
+ * with each day's logging — exactly the wrong shape for a screen that has to
+ * be up in five seconds from cold.
+ */
+export async function readRecordsByEntity(entity: string): Promise<LocalRecord[]> {
+  const raw = await (await db()).getAllFromIndex(STORES.records, 'byEntity', entity);
+  return parseRecords(raw);
 }
 
 export async function readAllRecords(): Promise<LocalRecord[]> {
-  const raw = await (await db()).getAll(STORES.records);
-  return raw.map((value, index) =>
-    parseOrThrow(localRecordSchema, STORES.records, String(index), value),
-  );
+  return parseRecords(await (await db()).getAll(STORES.records));
 }
 
 /**
@@ -154,11 +295,15 @@ export async function readAllRecords(): Promise<LocalRecord[]> {
  */
 export async function wipeLocalData(): Promise<void> {
   const database = await db();
-  const tx = database.transaction([STORES.outbox, STORES.records, STORES.meta], 'readwrite');
+  const tx = database.transaction(
+    [STORES.outbox, STORES.records, STORES.meta, STORES.quarantine],
+    'readwrite',
+  );
   await Promise.all([
     tx.objectStore(STORES.outbox).clear(),
     tx.objectStore(STORES.records).clear(),
     tx.objectStore(STORES.meta).clear(),
+    tx.objectStore(STORES.quarantine).clear(),
     tx.done,
   ]);
 }

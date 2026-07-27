@@ -33,6 +33,26 @@ export class InvalidMutationError extends Error {
 }
 
 /**
+ * The device has no room left. Distinct from InvalidMutationError because the
+ * mutation is fine — the storage is not — and the two need different advice.
+ */
+export class StorageFullError extends Error {
+  constructor() {
+    super('This device is out of space. Sync to free room, then try again.');
+    this.name = 'StorageFullError';
+  }
+}
+
+function isQuotaError(error: unknown): boolean {
+  return (
+    error instanceof DOMException &&
+    (error.name === 'QuotaExceededError' ||
+      // Safari's older spelling.
+      error.name === 'NS_ERROR_DOM_QUOTA_REACHED')
+  );
+}
+
+/**
  * Enqueues a mutation and applies its optimistic projection.
  *
  * The whole thing is ONE IndexedDB transaction: mint the sequence number,
@@ -111,10 +131,18 @@ export async function enqueue(input: EnqueueInput): Promise<QueuedMutation> {
   // arriving back from the server cannot disagree.
   const record = toLocalRecord(input.entity, targetId, input.op, payload.data, Date.now());
 
-  await tx.objectStore(STORES.outbox).put(queued);
-  await meta.put(clientSeq + 1, META.nextClientSeq);
-  await tx.objectStore(STORES.records).put(record);
-  await tx.done;
+  try {
+    await tx.objectStore(STORES.outbox).put(queued);
+    await meta.put(clientSeq + 1, META.nextClientSeq);
+    await tx.objectStore(STORES.records).put(record);
+    await tx.done;
+  } catch (error) {
+    // A full disk must fail the log loudly rather than half-write it. The
+    // transaction aborts as a unit, so no sequence number is consumed and
+    // nothing partial is left behind.
+    if (isQuotaError(error)) throw new StorageFullError();
+    throw error;
+  }
 
   return queued;
 }
@@ -129,6 +157,16 @@ export async function rejectedCount(): Promise<number> {
 
 export async function outboxSize(): Promise<number> {
   return (await db()).count(STORES.outbox);
+}
+
+/** Unsent work that a sign-out would destroy. The user is warned with this. */
+export async function unsentCount(): Promise<number> {
+  const database = await db();
+  const [queued, rejected] = await Promise.all([
+    database.countFromIndex(STORES.outbox, 'byStatus', 'queued'),
+    database.countFromIndex(STORES.outbox, 'byStatus', 'rejected'),
+  ]);
+  return queued + rejected;
 }
 
 export interface IntegrityReport {

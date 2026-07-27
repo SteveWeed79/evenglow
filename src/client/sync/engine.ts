@@ -1,6 +1,7 @@
-import { db, getMeta } from '../db/open';
+import { db, getMeta, quarantineCount } from '../db/open';
 import { STORES } from '../db/schema';
 import { backoffDelay, flushOnce, type SyncTransport } from './flush';
+import { SYNC_LOCK, withSyncLock } from './lock';
 import { pullOnce, pulledThrough } from './pull';
 import { checkIntegrity, queueDepth, rejectedCount } from './queue';
 
@@ -79,8 +80,9 @@ async function tick(transport?: SyncTransport): Promise<void> {
   await publish();
 
   try {
-    const outcome = await flushOnce(transport);
-    consecutiveFailures = outcome.deferred ? consecutiveFailures + 1 : 0;
+    // Null means another tab holds the lock and is already doing this.
+    const outcome = await withSyncLock(SYNC_LOCK, () => flushOnce(transport));
+    if (outcome) consecutiveFailures = outcome.deferred ? consecutiveFailures + 1 : 0;
   } catch (error) {
     // A failure here must never wedge the loop; the work is still queued.
     console.warn('Steading: flush failed', error);
@@ -102,7 +104,7 @@ async function tick(transport?: SyncTransport): Promise<void> {
 /** Hydration never fails the loop — a device with stale reads still logs fine. */
 async function pull(): Promise<void> {
   try {
-    await pullOnce();
+    await withSyncLock(SYNC_LOCK, () => pullOnce());
   } catch (error) {
     console.warn('Steading: pull failed', error);
   }
@@ -155,6 +157,8 @@ export interface Diagnostics {
   lastError: string | null;
   /** How far this device has hydrated — a stuck watermark explains stale reads. */
   pulledThrough: number;
+  /** Rows that could not be read back and were set aside rather than dropped. */
+  quarantined: number;
   integrity: Awaited<ReturnType<typeof checkIntegrity>>;
 }
 
@@ -174,6 +178,8 @@ export async function diagnostics(): Promise<Diagnostics> {
       pulledThrough(),
     ]);
 
+  const quarantined = await quarantineCount();
+
   const outboxTotal = await (await db()).count(STORES.outbox);
 
   return {
@@ -185,6 +191,7 @@ export async function diagnostics(): Promise<Diagnostics> {
     lastSyncAt: lastSyncAt ?? null,
     lastError: lastError ?? null,
     pulledThrough: through,
+    quarantined,
     integrity,
   };
 }

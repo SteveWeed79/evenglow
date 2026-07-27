@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { flockCreateSchema, type Species } from '@/lib/contracts/entities';
-import { readAllRecords } from '../db/open';
+import { readRecordsByEntity } from '../db/open';
 
 /**
  * Local-first reads.
@@ -26,10 +26,10 @@ export interface Group {
 const storedGroup = flockCreateSchema.partial({ count: true });
 
 export async function listGroups(): Promise<Group[]> {
-  const records = await readAllRecords();
+  const records = await readRecordsByEntity('flock');
 
   return records
-    .filter((record) => record.entity === 'flock' && !record.deleted)
+    .filter((record) => !record.deleted)
     .flatMap((record) => {
       const parsed = storedGroup.safeParse(record.value);
       // A record that no longer matches the contract is skipped rather than
@@ -71,11 +71,11 @@ export async function eggsToday(now = new Date()): Promise<Map<string, number>> 
   start.setHours(0, 0, 0, 0);
   const from = start.getTime();
 
-  const records = await readAllRecords();
+  const records = await readRecordsByEntity('eggLog');
   const totals = new Map<string, number>();
 
   for (const record of records) {
-    if (record.entity !== 'eggLog' || record.deleted) continue;
+    if (record.deleted) continue;
 
     const parsed = storedEggLog.safeParse(record.value);
     if (!parsed.success) continue;

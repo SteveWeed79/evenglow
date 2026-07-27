@@ -18,12 +18,13 @@ export const DB_NAME = 'steading';
  * the cheap answer to the one failure mode a second local store would cover
  * (masterplan Q1).
  */
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 
 export const STORES = {
   outbox: 'outbox',
   records: 'records',
   meta: 'meta',
+  quarantine: 'quarantine',
 } as const;
 
 /** Local lifecycle, distinct from the server's per-mutation result status. */
@@ -70,6 +71,26 @@ export type LocalRecord = z.infer<typeof localRecordSchema>;
 export function recordKey(entity: string, targetId: string): string {
   return `${entity}:${targetId}`;
 }
+
+/**
+ * A row that could not be parsed back out of storage.
+ *
+ * Corruption must not be able to wedge the queue: one unreadable row would
+ * otherwise fail every flush, and the whole outbox behind it would stop
+ * moving. Quarantined rows keep their raw value so nothing is silently
+ * dropped and the count is visible in diagnostics.
+ */
+export const quarantinedSchema = z
+  .object({
+    key: z.string(),
+    store: z.string(),
+    raw: z.unknown(),
+    reason: z.string(),
+    quarantinedAt: z.number().int(),
+  })
+  .strict();
+
+export type Quarantined = z.infer<typeof quarantinedSchema>;
 
 /** Meta keys. Each is parsed with its own schema on read. */
 export const META = {

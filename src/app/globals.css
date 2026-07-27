@@ -452,6 +452,34 @@ summary {
   min-width: 3.5rem;
 }
 
+.inbox {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.inbox__item {
+  border-top: var(--border);
+  padding-top: 1rem;
+}
+
+.inbox__what {
+  margin: 0;
+  font-weight: 700;
+}
+
+.inbox__item .label {
+  margin: 0.25rem 0 0;
+}
+
+.inbox__reason {
+  margin: 0.5rem 0 0;
+  color: var(--ink);
+}
+
 /* ── Sync status ────────────────────────────────────────────────────────── */
 
 /* Status, not an action — so it is flat, not arched. */

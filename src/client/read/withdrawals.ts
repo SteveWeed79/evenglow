@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { WithdrawalKind } from '@/lib/contracts/entities';
 import { activeWithdrawals, type ActiveWithdrawal, type TreatmentRecord } from '@/lib/withdrawal';
-import { readAllRecords } from '../db/open';
+import { readRecordsByEntity } from '../db/open';
 
 /**
  * Reads treatments from the local projection so the withdrawal banner works
@@ -25,10 +25,10 @@ const storedMedication = z.object({
 });
 
 export async function listTreatments(): Promise<TreatmentRecord[]> {
-  const records = await readAllRecords();
+  const records = await readRecordsByEntity('medication');
 
   return records
-    .filter((record) => record.entity === 'medication' && !record.deleted)
+    .filter((record) => !record.deleted)
     .flatMap((record) => {
       const parsed = storedMedication.safeParse(record.value);
       if (!parsed.success) return [];
