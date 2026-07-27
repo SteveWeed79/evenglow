@@ -100,4 +100,42 @@ async function bootstrap(): Promise<void> {
   );
 }
 
-void bootstrap();
+/**
+ * A failed bootstrap has to say so on the screen.
+ *
+ * Everything above is fatal on purpose — an APK that silently falls back to
+ * the browser store would write a morning's work somewhere the next launch
+ * does not read. But "fatal" was implemented as an unhandled rejection, which
+ * on a handset means a blank page and nothing else: no message, no devtools
+ * unless the build allows them, and no way for the person holding the phone
+ * to tell a crash from a slow start.
+ *
+ * Deliberately no React, no imports, no tokens — this has to work when the
+ * reason it is running is that something upstream did not.
+ */
+function fatal(error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error('Steading: bootstrap failed', error);
+
+  const root = document.getElementById('root') ?? document.body;
+  root.textContent = '';
+
+  const panel = document.createElement('div');
+  panel.setAttribute(
+    'style',
+    'padding:1.5rem;font:16px/1.5 system-ui,sans-serif;color:#241c14;background:#ede6d2;min-height:100vh',
+  );
+
+  const heading = document.createElement('h1');
+  heading.textContent = 'Steading could not start';
+  heading.setAttribute('style', 'font-size:1.25rem;margin:0 0 0.75rem');
+
+  const detail = document.createElement('p');
+  detail.textContent = message;
+  detail.setAttribute('style', 'margin:0;overflow-wrap:anywhere');
+
+  panel.append(heading, detail);
+  root.append(panel);
+}
+
+void bootstrap().catch(fatal);
