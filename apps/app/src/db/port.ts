@@ -77,10 +77,23 @@ export interface LocalStore {
   /**
    * Applies a batch's server results as one unit: applied and duplicate are
    * removed and counted as cleared, anything else is marked rejected with its
-   * reason and KEPT. A mutation absent from `results` stays queued — resending
-   * is safe, so silence must never be read as success.
+   * reason and KEPT.
+   *
+   * A mutation absent from `results` stays queued with its attempt count
+   * incremented — resending is safe, so silence must never be read as success,
+   * but it must also not retry forever unnoticed.
    */
   resolveBatch(batch: readonly QueuedMutation[], results: readonly MutationResult[]): Promise<void>;
+
+  /**
+   * Records a successful exchange with the server: stamps the sync time and
+   * clears the last error.
+   *
+   * One call rather than two, because a sync that succeeded and a stale error
+   * message on the diagnostics sheet must not be able to coexist — which is
+   * exactly what happens if a caller remembers one and forgets the other.
+   */
+  markSynced(at: number): Promise<void>;
 
   /** Increments attempts and records the error, without changing status. */
   recordAttempt(batch: readonly QueuedMutation[], error: string): Promise<void>;

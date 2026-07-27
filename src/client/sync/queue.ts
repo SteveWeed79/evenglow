@@ -1,15 +1,10 @@
-import {
-  MUTATION_SCHEMA_VERSION,
-  mutationSchema,
-  newId,
-  payloadSchemaFor,
-  type Entity,
-  type Mutation,
-  type Op,
-} from '@steading/contracts';
-import { db } from '../db/open';
-import { toLocalRecord } from '../db/project';
-import { META, parseMeta, type QueuedMutation, STORES } from '../db/schema';
+import { newId, payloadSchemaFor, type Entity, type Op } from '@steading/contracts';
+import { InvalidMutationError, StorageFullError } from '@steading/app/db/errors';
+import type { IntegrityReport } from '@steading/app/db/port';
+import { localStore } from '../db/store';
+import type { QueuedMutation } from '../db/schema';
+
+export { InvalidMutationError, StorageFullError };
 
 /**
  * The outbox. Everything the app writes goes through enqueue() — there is no
@@ -25,42 +20,14 @@ export interface EnqueueInput {
   payload: unknown;
 }
 
-export class InvalidMutationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'InvalidMutationError';
-  }
-}
-
-/**
- * The device has no room left. Distinct from InvalidMutationError because the
- * mutation is fine — the storage is not — and the two need different advice.
- */
-export class StorageFullError extends Error {
-  constructor() {
-    super('This device is out of space. Sync to free room, then try again.');
-    this.name = 'StorageFullError';
-  }
-}
-
-function isQuotaError(error: unknown): boolean {
-  return (
-    error instanceof DOMException &&
-    (error.name === 'QuotaExceededError' ||
-      // Safari's older spelling.
-      error.name === 'NS_ERROR_DOM_QUOTA_REACHED')
-  );
-}
-
 /**
  * Enqueues a mutation and applies its optimistic projection.
  *
- * The whole thing is ONE IndexedDB transaction: mint the sequence number,
- * write the outbox entry, advance the counter, and update the local record
- * together. Assigning clientSeq outside the transaction is the classic way to
- * end up with two mutations holding the same sequence number after a crash
- * mid-write — at which point ordering (A4) is quietly broken and nothing
- * reports it.
+ * Validation lives here, storage lives in the LocalStore. The atomicity that
+ * matters — mint the sequence number, write the outbox entry, advance the
+ * counter and update the projection as ONE unit — is the store's guarantee
+ * now, stated in `port.ts` and asserted against every implementation. That is
+ * what lets the same suite prove IndexedDB and SQLite alike.
  */
 export async function enqueue(input: EnqueueInput): Promise<QueuedMutation> {
   const targetId = input.targetId ?? newId();
@@ -79,119 +46,29 @@ export async function enqueue(input: EnqueueInput): Promise<QueuedMutation> {
     );
   }
 
-  const database = await db();
-  const tx = database.transaction([STORES.outbox, STORES.meta, STORES.records], 'readwrite');
-  const meta = tx.objectStore(STORES.meta);
-
-  // A corrupt or missing deviceId is safe to replace: it only groups a
-  // device's own mutations for ordering, and a new one starts a new group.
-  let deviceId = parseMeta('deviceId', await meta.get(META.deviceId));
-  if (deviceId === undefined) {
-    deviceId = crypto.randomUUID();
-    await meta.put(deviceId, META.deviceId);
-  }
-
-  // A corrupt or missing nextClientSeq is NOT safe to replace with zero —
-  // that reuses sequence numbers and silently breaks ordering. Take the
-  // highest seq still in the outbox as a floor, so monotonicity survives
-  // losing the counter as long as the queue itself survived.
-  const stored = parseMeta('nextClientSeq', await meta.get(META.nextClientSeq)) ?? 0;
-  const highest = await tx.objectStore(STORES.outbox).index('byClientSeq').openCursor(null, 'prev');
-  const floor = highest ? highest.value.clientSeq + 1 : 0;
-  const clientSeq = Math.max(stored, floor);
-
-  const envelope: Mutation = {
-    schemaVersion: MUTATION_SCHEMA_VERSION,
-    id: newId(),
-    targetId,
+  // Storage is the store's job from here. Everything above is contract
+  // validation, which is the same whatever is underneath.
+  const queued = await localStore().enqueue({
     entity: input.entity,
     op: input.op,
+    targetId,
     payload: payload.data,
-    deviceId,
-    clientSeq,
-    clientTs: Date.now(), // recorded, never trusted for ordering (D6)
-  };
-
-  // Belt and braces: the envelope is validated before it can reach storage,
-  // so a malformed record cannot be created by a bug upstream of here.
-  const checked = mutationSchema.safeParse(envelope);
-  if (!checked.success) {
-    tx.abort();
-    throw new InvalidMutationError('Could not build a valid mutation.');
-  }
-
-  const queued: QueuedMutation = {
-    ...envelope,
-    status: 'queued',
-    attempts: 0,
-    enqueuedAt: Date.now(),
-  };
-
-  // Same builder hydration uses, so a device's own writes and the same writes
-  // arriving back from the server cannot disagree.
-  const record = toLocalRecord(input.entity, targetId, input.op, payload.data, Date.now());
-
-  try {
-    await tx.objectStore(STORES.outbox).put(queued);
-    await meta.put(clientSeq + 1, META.nextClientSeq);
-    await tx.objectStore(STORES.records).put(record);
-    await tx.done;
-  } catch (error) {
-    /**
-     * Abort explicitly. This used to rely on the transaction failing as a
-     * unit, which is only true when the failure arrives through the REQUEST.
-     * A synchronous throw from put() — which is how a quota exception can
-     * surface, and how a DataCloneError always does — leaves the transaction
-     * with no pending work, so IndexedDB auto-commits it: the outbox row and
-     * the advanced counter land, and the projection does not.
-     *
-     * That is queue-and-view divergence, which is the exact state invariant 5
-     * exists to make impossible. Found by holding this engine and the SQLite
-     * one to the same suite.
-     */
-    try {
-      tx.abort();
-    } catch {
-      // Already settled — the failure did abort it, which is the other path.
-    }
-
-    // The abort rejects tx.done, and nothing is awaiting it once we are here.
-    // Left alone it surfaces as an unhandled rejection that has nothing to do
-    // with what actually went wrong.
-    void tx.done.catch(() => undefined);
-
-    // A full disk must fail the log loudly rather than half-write it.
-    if (isQuotaError(error)) throw new StorageFullError();
-    throw error;
-  }
+  });
 
   return queued;
 }
 
 export async function queueDepth(): Promise<number> {
-  return (await db()).countFromIndex(STORES.outbox, 'byStatus', 'queued');
+  return (await localStore().counts()).queued;
 }
 
 export async function rejectedCount(): Promise<number> {
-  return (await db()).countFromIndex(STORES.outbox, 'byStatus', 'rejected');
+  return (await localStore().counts()).rejected;
 }
 /** Unsent work that a sign-out would destroy. The user is warned with this. */
 export async function unsentCount(): Promise<number> {
-  const database = await db();
-  const [queued, rejected] = await Promise.all([
-    database.countFromIndex(STORES.outbox, 'byStatus', 'queued'),
-    database.countFromIndex(STORES.outbox, 'byStatus', 'rejected'),
-  ]);
+  const { queued, rejected } = await localStore().counts();
   return queued + rejected;
-}
-
-export interface IntegrityReport {
-  everEnqueued: number;
-  cleared: number;
-  expectedInOutbox: number;
-  actualInOutbox: number;
-  /** Positive when records left storage without the server ever acknowledging them. */
-  missing: number;
 }
 
 /**
@@ -206,22 +83,7 @@ export interface IntegrityReport {
  * integers instead of a duplicate of the entire store.
  */
 export async function checkIntegrity(): Promise<IntegrityReport> {
-  const database = await db();
-  const tx = database.transaction([STORES.outbox, STORES.meta], 'readonly');
-  const meta = tx.objectStore(STORES.meta);
-
-  const everEnqueued = parseMeta('nextClientSeq', await meta.get(META.nextClientSeq)) ?? 0;
-  const cleared = parseMeta('clearedCount', await meta.get(META.clearedCount)) ?? 0;
-  const actualInOutbox = await tx.objectStore(STORES.outbox).count();
-  await tx.done;
-
-  const expectedInOutbox = everEnqueued - cleared;
-
-  return {
-    everEnqueued,
-    cleared,
-    expectedInOutbox,
-    actualInOutbox,
-    missing: Math.max(0, expectedInOutbox - actualInOutbox),
-  };
+  return localStore().checkIntegrity();
 }
+
+export type { IntegrityReport };

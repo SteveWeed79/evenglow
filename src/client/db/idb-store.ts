@@ -16,7 +16,7 @@ import type {
 import { closeDb, db, listQuarantined, quarantineCount, readOutboxBySeq, readRecordsByEntity, wipeLocalData } from './open';
 import { toLocalRecord } from './project';
 import { META, parseMeta, type QueuedMutation, type Quarantined, STORES } from './schema';
-import { InvalidMutationError, StorageFullError } from '../sync/queue';
+import { InvalidMutationError, StorageFullError } from '@steading/app/db/errors';
 
 /**
  * `LocalStore` over IndexedDB.
@@ -129,9 +129,12 @@ export function idbLocalStore(): LocalStore {
 
       for (const mutation of batch) {
         const result: MutationResult | undefined = byId.get(mutation.id);
-        // Absent from the results: resending is safe, so silence must never be
-        // read as success.
-        if (!result) continue;
+        if (!result) {
+          // Answered without mentioning it. Stays queued — resending is safe —
+          // but the attempt is counted so it cannot retry forever unseen.
+          await outbox.put({ ...mutation, attempts: mutation.attempts + 1 });
+          continue;
+        }
 
         if (result.status === 'applied' || result.status === 'duplicate') {
           await outbox.delete(mutation.id);
@@ -152,6 +155,15 @@ export function idbLocalStore(): LocalStore {
         await meta.put(current + cleared, META.clearedCount);
       }
 
+      await tx.done;
+    },
+
+    async markSynced(at): Promise<void> {
+      const database = await db();
+      const tx = database.transaction(STORES.meta, 'readwrite');
+      const meta = tx.objectStore(STORES.meta);
+      await meta.put(at, META.lastSyncAt);
+      await meta.delete(META.lastError);
       await tx.done;
     },
 
@@ -225,8 +237,10 @@ export function idbLocalStore(): LocalStore {
       const outbox = tx.objectStore(STORES.outbox);
       const meta = tx.objectStore(STORES.meta);
 
+      // ONLY a rejected mutation. Without the status check a stray call
+      // deletes queued work that has not been sent yet.
       const current = await outbox.get(id);
-      if (!current) {
+      if (!current || current.status !== 'rejected') {
         await tx.done;
         return;
       }

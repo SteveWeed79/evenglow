@@ -6,6 +6,7 @@ import {
   type PulledMutation,
 } from '@steading/contracts';
 import type { SqlDriver, SqlValue } from './driver';
+import { InvalidMutationError, StorageFullError } from './errors';
 import { migrate } from './migrations';
 import type {
   EnqueueRequest,
@@ -36,20 +37,6 @@ import {
  * exists, and why the old engine is not deleted until it has.
  */
 
-/** A full disk must fail the log loudly rather than half-write it. */
-export class StorageFullError extends Error {
-  constructor() {
-    super('This device is out of space. Sync to free room, then try again.');
-    this.name = 'StorageFullError';
-  }
-}
-
-export class InvalidMutationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'InvalidMutationError';
-  }
-}
 
 /** SQLite reports a full disk and a full database differently. Both are full. */
 function isFullError(error: unknown): boolean {
@@ -291,7 +278,14 @@ export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
 
         for (const mutation of batch) {
           const result: MutationResult | undefined = byId.get(mutation.id);
-          if (!result) continue;
+          if (!result) {
+            // Answered without mentioning it. Stays queued — resending is safe
+            // — but the attempt is counted so it cannot retry forever unseen.
+            await driver.run('UPDATE outbox SET attempts = attempts + 1 WHERE id = ?', [
+              mutation.id,
+            ]);
+            continue;
+          }
 
           if (result.status === 'applied' || result.status === 'duplicate') {
             await driver.run('DELETE FROM outbox WHERE id = ?', [mutation.id]);
@@ -306,6 +300,13 @@ export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
         }
 
         if (cleared > 0) await bumpCleared(cleared);
+      });
+    },
+
+    async markSynced(at): Promise<void> {
+      await driver.transaction(async () => {
+        await writeMeta(META.lastSyncAt, at);
+        await driver.run('DELETE FROM meta WHERE key = ?', [META.lastError]);
       });
     },
 
@@ -367,10 +368,14 @@ export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
      */
     async discardRejected(id): Promise<void> {
       await driver.transaction(async () => {
-        const existing = await driver.get<{ id: string }>('SELECT id FROM outbox WHERE id = ?', [
-          id,
-        ]);
-        if (!existing) return;
+        // ONLY a rejected mutation. Without the status check a stray call
+        // deletes queued work that has not been sent yet — the one thing the
+        // outbox exists to make impossible.
+        const existing = await driver.get<{ status: string }>(
+          'SELECT status FROM outbox WHERE id = ?',
+          [id],
+        );
+        if (!existing || existing.status !== 'rejected') return;
 
         await driver.run('DELETE FROM outbox WHERE id = ?', [id]);
         await bumpCleared(1);
