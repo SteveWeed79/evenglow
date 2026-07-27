@@ -74,6 +74,12 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # Both bundles, because the secret check scans both. The Vite output was
+      # previously committed, so what got scanned was whatever had last been
+      # built by hand — a stale bundle can pass while the current source leaks.
+      - name: Build the Vite client
+        run: pnpm build:app
+
       - name: Secret hygiene
         run: pnpm check:secrets
 

@@ -48,3 +48,8 @@ next-env.d.ts
 /test-results/
 /playwright-report/
 /blob-report/
+
+# Vite build output. The bundle is produced by `pnpm build:app`; committing it
+# means every UI change carries a 300 kB diff, and a stale copy would satisfy
+# the secret scan while the current source leaked.
+apps/*/dist/
