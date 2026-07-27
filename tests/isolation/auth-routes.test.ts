@@ -140,7 +140,11 @@ describeDb('POST /auth/login', () => {
       codes.push(res.statusCode);
     }
 
+    // 429 specifically, not merely "blocked". A client that reads a 500 here
+    // treats throttling as a server fault and retries straight back into the
+    // limiter instead of waiting — which CI caught this doing.
     expect(codes).toContain(429);
+    expect(codes).not.toContain(500);
     await app.close();
   });
 });
@@ -231,9 +235,11 @@ describeDb('the service itself', () => {
       payload: '{not json',
     });
 
-    expect(res.statusCode).toBeGreaterThanOrEqual(400);
+    // 400, not 500. A bad request reported as a server fault sends someone
+    // looking for an outage that is not there.
+    expect(res.statusCode).toBe(400);
     expect(res.json().error).toBeTypeOf('string');
-    expect(res.json().error).not.toMatch(/JSON|parse|SyntaxError/i);
+    expect(res.json().error).not.toMatch(/JSON|parse|SyntaxError|content-type|FST_ERR/i);
     await app.close();
   });
 });
