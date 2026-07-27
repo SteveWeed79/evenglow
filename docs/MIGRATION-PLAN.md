@@ -138,20 +138,38 @@ Vite will resolve the same source through the workspace link.
 new package boundary. The tenancy guard was exercised against a deliberate
 violation placed inside `packages/contracts` and fires.*
 
-### S2 — Remaining guards repointed, before anything else moves
+### S2 — Guards pre-armed and proven ✅ done
 
-`eslint.config.mjs` moves to the two-project form in `PHASE-1-SPEC.md` T6
-(`apps/api/src/**` for the collection guard, `apps/app/src/**` for the storage
-guard, which also gains the `no-restricted-globals` ban on `localStorage`,
-`sessionStorage` and `indexedDB`), and `CLIENT_DIRS` in `check-bundle-secrets`
-follows the build output from `.next/static` to the Vite `dist`.
+**This stage was mis-sequenced as originally written, and the correction is the
+interesting part.** The plan said to repoint `eslint.config.mjs` at
+`apps/api/src/**` and `apps/app/src/**`. Those directories do not exist until
+S3 and S5 — so doing that literally would have aimed every rule at nothing,
+which is the exact defect this plan was written against, committed in the name
+of preventing it. Two of the three items were likewise premature: `CLIENT_DIRS`
+cannot follow a Vite build that does not exist, and banning `indexedDB` would
+flag the working offline engine, which is IndexedDB by design until S4.
 
-This stays early, because everything after it moves code the guards watch. Both
-scripts now **fail when they scan nothing**, so a miss is loud — but only if
-they are aimed correctly to begin with.
+The underlying mistake was treating "the config lists this directory" as the
+unit of work. It is a convention, and conventions do not survive a tree move.
+So S2 became: make coverage **executable**, and arm it ahead of the code.
 
-*Exit: guards fail on a deliberate violation in each new location; both scripts
-report non-zero counts.*
+- The guard globs now include `apps/*/src/**`, and the storage-globals ban is
+  scoped to `apps/app/src/**`. Both cover directories that do not exist yet.
+  That is deliberate: the rule is in force the moment the first file lands,
+  rather than being remembered afterwards. The `indexedDB` ban therefore
+  arrives with the new client and never touches the old one.
+- `tests/unit/guards.test.ts` runs ESLint against deliberate violations and
+  requires each rule to fire. ESLint resolves config from a file's *path*, not
+  its existence, so the guard for `apps/api` is proven before `apps/api`
+  exists. It also asserts the db layer stays exempt, and that the storage ban
+  does **not** fire on the pre-migration client.
+- `CLIENT_DIRS` lists both build outputs, so the secret scan spans the
+  migration instead of being repointed on the day the client changes — the day
+  it is most easily forgotten.
+
+*Exit, met: 12 guard assertions pass. Verified against the historical failure
+by deleting the `apps/*` globs, which fails exactly the two pre-armed cases and
+nothing else.*
 
 ### S3 — Fastify API alongside the Next routes
 
