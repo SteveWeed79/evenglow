@@ -83,6 +83,11 @@ jobs:
       - name: Secret hygiene
         run: pnpm check:secrets
 
+      # The native build reaches its database through a dynamic import, and a
+      # dynamic import is the easiest thing in a bundle to lose silently.
+      - name: Native chunks survived the bundler
+        run: pnpm check:chunks
+
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
 

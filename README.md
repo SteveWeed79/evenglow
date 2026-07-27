@@ -78,10 +78,12 @@ owner are created by `db:seed`.
 | `pnpm db:seed` | Create the first org and owner |
 | `pnpm check:secrets` | Fail if a secret reached the client bundle |
 | `pnpm check:no-db-disables` | Fail on inline disables of the db guard |
+| `pnpm check:chunks` | Fail if the native build lost its sqlite driver |
 | `pnpm build:app` | Vite build of the Capacitor client → `apps/app/dist` |
 | `pnpm cap:sync` | Build, then copy the bundle into the native project |
 | `pnpm cap:run:android` | Build, sync, and deploy to a device or emulator |
 | `pnpm cap:open:android` | Open the native project in Android Studio |
+| `pnpm dev:api` | Fastify with watch — what the native build talks to |
 
 ## Android
 
@@ -100,6 +102,28 @@ pnpm cap:run:android
 That builds the web bundle, copies it into `apps/app/android`, and deploys.
 `cap:sync` always builds first on purpose — syncing a stale `dist` puts the last
 build in the APK and the change you are testing simply is not there.
+
+### Reaching the API from a device
+
+The APK serves the app from its own origin, so a relative `/sync` resolves to
+the bundle rather than to a server. The native build needs an absolute one:
+
+```bash
+cp apps/app/.env.example apps/app/.env.local   # then edit VITE_API_BASE_URL
+pnpm dev:api                                   # Fastify, port 3001
+```
+
+- **Emulator** — the host machine is `10.0.2.2`, never `localhost`.
+- **Handset** — your machine's LAN address, e.g. `http://192.168.1.20:3001`.
+
+Set it wrong and the app refuses to start rather than starting and never
+syncing: a device that queues all morning and only admits it when someone
+checks the sync chip is much the worse failure.
+
+The API's `CORS_ORIGINS` must include the WebView's origin, which is
+`https://localhost` — a different origin from the Vite dev server, so add it
+alongside rather than replacing it.
+
 
 The native project is committed, so Gradle files and manifest edits are
 reviewable. The copied bundle and the generated Capacitor config are not: the
