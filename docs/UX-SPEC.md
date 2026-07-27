@@ -111,6 +111,7 @@ The counter remains the heart of the app: oversized numeral, `+1 / +6 / +12` and
 ```tsx
 'use client';
 import { useState, useCallback } from 'react';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
 
 type TallyProps = {
   label: string;
@@ -126,7 +127,7 @@ export function Tally({
   const [count, setCount] = useState(initial);
   const bump = useCallback((by: number) => {
     setCount((c) => Math.max(0, c + by));
-    if (navigator.vibrate) navigator.vibrate(8);   // confirmation through gloves
+    void Haptics.impact({ style: ImpactStyle.Light });   // confirmation through gloves
   }, []);
 
   return (
@@ -192,7 +193,7 @@ export function Tally({
 
 The lamp glow sits behind the numeral, above the arch's spring line — light coming in through a round door. It's one gradient; it does not repeat anywhere else in the app.
 
-Haptic feedback matters more than it sounds: through a glove it's often the only confirmation the tap registered.
+Haptic feedback matters more than it sounds: through a glove it's often the only confirmation the tap registered. This is a concrete argument for the native shell — the web `navigator.vibrate` API is unsupported in iOS Safari, so on a PWA this feature would simply not exist on half the phones in the world. The Capacitor plugin works everywhere.
 
 ### SyncChip
 
@@ -243,12 +244,12 @@ Four bottom tabs. Four, not six — every additional tab is a decision made at 6
 │   │   [   Log 18 eggs    ]   │     │  thumb zone
 │   └──────────────────────────┘     │
 ├────────────────────────────────────┤
-│  Today  │  Stock  │  Iron  │  More │  64px tabs
+│  Today  │  Birds  │  Iron  │  More │  64px tabs
 └────────────────────────────────────┘
 ```
 
 - **Today** — chores, the Tally, anything overdue.
-- **Stock** — groups, individual animals, production, health, mortality. Named *Stock*, not *Birds*: smallholdings are mixed, and a goat keeper should not have to look for their herd under a bird tab.
+- **Birds** — flocks, individual birds, production, health, mortality.
 - **Iron** — equipment, hour readings, maintenance due, parts.
 - **More** — inventory, reports, export, settings, diagnostics.
 
@@ -260,8 +261,8 @@ Everything else is one level below these four. If a feature needs a fifth tab, i
 
 Setup burden is the top cause of abandoned record keeping, so the first run collects almost nothing and pre-fills the rest.
 
-1. **What do you keep?** Species chips, multi-select, grouped so the list stays scannable: poultry (chickens, ducks, geese, turkeys, quail, guinea fowl, pigeons), ratites (emu, ostrich, rhea), ruminants (goats, sheep, cattle, alpacas, llamas), other stock (pigs, rabbits, donkeys, horses), and a free-text *something else*. Only the chosen groups appear anywhere later.
-2. **How many?** One Tally screen per group. Individual animal profiles are optional and can wait.
+1. **What do you keep?** Species chips (chickens, ducks, quail, turkeys, geese, other). Multi-select.
+2. **How many?** One Tally screen. Individual bird profiles are optional and can wait.
 3. **Any equipment?** Make/model picker → service intervals pre-populated from the preset library, Deere-style. Skippable.
 4. Done. Land on Today with three suggested chores already there.
 
@@ -330,6 +331,9 @@ Reference it plainly: *Steading*, never *the Steading app*, never capitalized mi
 - [ ] Full keyboard navigation with visible focus; `prefers-reduced-motion` respected
 - [ ] Zero blocking spinners on any log path
 - [ ] Diagnostics sheet reachable in two taps from anywhere
+- [ ] Every gate above verified on a real Android device, not the dev server
+- [ ] Cold launch under 2s on a low-end device
+- [ ] Haptic confirmation fires on every Tally increment and commit
 - [ ] Bright-sun mode reachable in one tap from the header and holds ≥7:1 on all text
 - [ ] Every decorative element can be disabled without breaking a layout
 - [ ] No milestone, streak, or celebration adds a tap or delays a log

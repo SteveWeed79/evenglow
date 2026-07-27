@@ -1,12 +1,18 @@
 # Steading
 
-Offline-first PWA for farm operations — birds, iron, and chores in one place.
+Offline-first farm operations — birds, iron, and chores in one place.
 
 Next.js (App Router) · TypeScript strict · MongoDB · Auth.js (JWT) · IndexedDB · Vercel
 
 **Status: Phase 3 — Core Domain, in progress.** Phase 2's exit gate passes:
 mutations logged in airplane mode survive a hard browser restart and sync
 exactly once. See [Phase status](#phase-status).
+
+> **The stack line above describes this tree, not the destination.** The
+> masterplan has settled on a Capacitor + SQLite + Fastify architecture
+> (D8–D10) and that migration is in flight on a separate branch. The commands
+> in this README are the ones that work today; the gap between the two is set
+> out in [`docs/Steading-Masterplan.md` §0.1](docs/Steading-Masterplan.md).
 
 Steading covers **mixed smallholdings**, not just poultry — poultry, ratites,
 ruminants and camelids, pigs, rabbits, equines, and free-text *other*. The UI
@@ -17,11 +23,15 @@ Planning docs, which are the source of truth:
 
 | Doc | What it settles |
 |---|---|
-| [`docs/Steading-Masterplan.md`](docs/Steading-Masterplan.md) | Decisions D1–D7, phases, security rubric |
+| [`docs/Steading-Masterplan.md`](docs/Steading-Masterplan.md) | Decisions D1–D10, phases, security rubric, migration status |
 | [`docs/UX-SPEC.md`](docs/UX-SPEC.md) | Rules R1–R10, tokens, voice |
 | [`docs/COMPETITIVE-ANALYSIS.md`](docs/COMPETITIVE-ANALYSIS.md) | Why each feature exists |
-| [`docs/PHASE-1-SPEC.md`](docs/PHASE-1-SPEC.md) | The task list this repo implements |
+| [`docs/PHASE-1-SPEC.md`](docs/PHASE-1-SPEC.md) | The task list, rewritten for the D8–D10 target |
+| [`docs/NATIVE-PIVOT.md`](docs/NATIVE-PIVOT.md) | Why Capacitor rather than React Native |
 | [`CLAUDE.md`](CLAUDE.md) | Hard invariants |
+
+There is one rubric, and it is version 3.0. The v2.x masterplan has been
+removed rather than kept alongside it.
 
 ---
 
