@@ -1,16 +1,19 @@
 import { NextResponse } from 'next/server';
-import { syncRequestSchema, type SyncResponse } from '@steading/contracts';
-import { requireMutationSession } from '@/server/auth/session';
 import { scoped } from '@steading/api/db/scoped';
+import { handleSyncBatch } from '@steading/api/sync/batch';
+import { requireMutationSession } from '@/server/auth/session';
 import { errorResponse, HttpError } from '@/server/http';
-import { applyBatch } from '@steading/api/sync/apply';
 
 /**
- * The only write path for offline data.
+ * The Next adapter over the shared batch handler.
  *
- * Never answers a bare 200: the body is a per-mutation result array, because a
- * batch can be partly applied and the client has to know exactly which entries
- * to clear from its queue and which to route to the rejected inbox (A6).
+ * Everything about what is accepted and what is rejected lives in
+ * `@steading/api/sync/batch`, which the Fastify route also calls. Both servers
+ * are live during the migration, and a batch endpoint that differed between
+ * them would reach a user as work landing in the rejected inbox depending on
+ * which host happened to answer.
+ *
+ * This file goes away with the rest of the Next surface in S7.
  */
 
 // Mongo driver and argon2 are Node-only.
@@ -25,20 +28,8 @@ export async function POST(request: Request): Promise<NextResponse> {
       throw new HttpError(400, 'That request body is not valid JSON.');
     });
 
-    // .strict() makes a payload-supplied orgId a hard 400 rather than a
-    // silently ignored field (C2). orgId comes from the session, only.
-    const parsed = syncRequestSchema.safeParse(body);
-    if (!parsed.success) {
-      const first = parsed.error.issues[0];
-      const where = first && first.path.length > 0 ? ` (${first.path.join('.')})` : '';
-      throw new HttpError(400, `That batch could not be read${where}.`);
-    }
-
     const scope = await scoped(claims.orgId);
-    const results = await applyBatch(scope, claims, parsed.data.mutations);
-
-    const response: SyncResponse = { results, serverTs: Date.now() };
-    return NextResponse.json(response, { status: 200 });
+    return NextResponse.json(await handleSyncBatch(scope, claims, body), { status: 200 });
   } catch (error) {
     return errorResponse(error);
   }
