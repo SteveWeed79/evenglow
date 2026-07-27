@@ -1,21 +1,19 @@
-'use client';
-
 import { useState } from 'react';
+import { SignOut } from '../components/SignOut';
+import { SyncChip } from '../components/SyncChip';
 import { IronShell } from './IronShell';
-import { ServiceWorker } from './ServiceWorker';
-import { SignOut } from './SignOut';
 import { StockShell } from './StockShell';
-import { SyncChip } from './SyncChip';
 import { TodayShell } from './TodayShell';
 
 /**
  * The four tabs (UX-SPEC §4). Four, not six — every additional tab is a
  * decision made at 6am.
  *
- * Tabs are client-side state rather than routes on purpose. The Service
- * Worker precaches one shell; separate routes would each need the network on
- * first visit, which is the wrong trade for an app whose whole claim is that
- * it works with the radio off.
+ * Tabs are client-side state rather than routes on purpose. The whole bundle
+ * ships inside the APK, so there is no first-visit fetch to avoid — but four
+ * routes would still mean four back-stack entries, and Android's back button
+ * landing a farmer on a different tab than the one they left is a worse
+ * outcome than a shallow history.
  */
 
 const TABS = [
@@ -32,8 +30,6 @@ export function AppShell({ signOutAction }: { signOutAction: () => Promise<void>
 
   return (
     <>
-      <ServiceWorker />
-
       <main className="shell">
         {/* Status only — never actions (R3). */}
         <header className="shell__status">

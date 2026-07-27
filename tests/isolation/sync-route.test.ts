@@ -2,7 +2,7 @@ import { ulid } from 'ulid';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SyncResponse } from '@steading/contracts';
 import type { Role } from '@steading/contracts';
-import type { UserDoc } from '@/server/db/identity';
+import type { UserDoc } from '../../apps/api/src/db/identity';
 import { startTestDb } from '../support/mongo';
 import { makeMutation } from '../support/fixtures';
 
@@ -25,7 +25,7 @@ interface TestSession {
 
 let currentSession: TestSession | null = null;
 
-vi.mock('@/server/auth/config', () => ({
+vi.mock('../../apps/api/src/auth/config', () => ({
   auth: () => Promise.resolve(currentSession),
   handlers: { GET: () => new Response(), POST: () => new Response() },
   signIn: () => Promise.resolve(),
@@ -157,7 +157,7 @@ describeDb('/api/sync — tenant isolation', () => {
   it('scopes reads so one org cannot see another org records', async () => {
     await postSync({ mutations: [makeMutation(), makeMutation()] });
 
-    const { scoped } = await import('@/server/db/scoped');
+    const { scoped } = await import('../../apps/api/src/db/scoped');
     const asB = await scoped(ORG_B);
 
     expect(await asB.col('mutations').countDocuments()).toBe(0);
@@ -173,7 +173,7 @@ describeDb('/api/sync — tenant isolation', () => {
 
     // The scoped layer is what makes a cross-tenant fetch a 404 rather than a
     // 403 at the route level: the record simply is not found.
-    const { scoped } = await import('@/server/db/scoped');
+    const { scoped } = await import('../../apps/api/src/db/scoped');
     const asB = await scoped(ORG_B);
     expect(await asB.col('mutations').findOne({ _id: mutation.id })).toBeNull();
   });

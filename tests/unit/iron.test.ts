@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { daysUntilDue, usagePerDay } from '@/client/read/iron';
+import { daysUntilDue, usagePerDay } from '../../apps/app/src/read/iron';
 
 const DAY = 86_400_000;
 const T0 = new Date('2026-07-01T08:00:00Z').getTime();

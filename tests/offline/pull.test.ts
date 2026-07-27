@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { readAllRecords } from '@/client/db/open';
-import { pulledThrough, pullOnce, type PullTransport } from '@/client/sync/pull';
-import { enqueue, queueDepth } from '@/client/sync/queue';
-import { flushOnce } from '@/client/sync/flush';
+import { readAllRecords } from '../../apps/app/src/db/open';
+import { pulledThrough, pullOnce, type PullTransport } from '../../apps/app/src/sync/pull';
+import { enqueue, queueDepth } from '../../apps/app/src/sync/queue';
+import { flushOnce } from '../../apps/app/src/sync/flush';
 import { MUTATION_SCHEMA_VERSION, type PulledMutation } from '@steading/contracts';
 import { newId } from '@steading/contracts';
-import { freshDb } from '../support/idb';
+import { freshDb } from '../support/sqlite';
 
 const DEVICE = '00000000-0000-4000-8000-0000000000ff';
 

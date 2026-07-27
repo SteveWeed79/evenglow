@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { collectiveNoun, SPECIES_TRAITS } from '@steading/contracts';
 import { useGroups } from '../hooks/useGroups';
 import type { Group } from '../read/groups';
-import { AddGroup } from './AddGroup';
+import { AddGroup } from '../components/AddGroup';
 import { RecordTreatment } from './RecordTreatment';
 
 /**

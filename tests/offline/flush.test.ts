@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { readOutboxBySeq } from '@/client/db/open';
-import { discardRejected, listRejected, retryRejected } from '@/client/sync/inbox';
-import { flushOnce, MAX_ATTEMPTS, type SyncTransport } from '@/client/sync/flush';
-import { checkIntegrity, enqueue, queueDepth } from '@/client/sync/queue';
+import { readOutboxBySeq } from '../../apps/app/src/db/open';
+import { discardRejected, listRejected, retryRejected } from '../../apps/app/src/sync/inbox';
+import { flushOnce, MAX_ATTEMPTS, type SyncTransport } from '../../apps/app/src/sync/flush';
+import { checkIntegrity, enqueue, queueDepth } from '../../apps/app/src/sync/queue';
 import { MAX_BATCH_SIZE, type Mutation, type MutationStatus } from '@steading/contracts';
 import { newId } from '@steading/contracts';
-import { freshDb } from '../support/idb';
+import { freshDb } from '../support/sqlite';
 
 function eggLog() {
   return {

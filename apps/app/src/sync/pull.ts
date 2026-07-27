@@ -3,9 +3,7 @@ import {
   pullResponseSchema,
   type PulledMutation,
 } from '@steading/contracts';
-import { db } from '../db/open';
-import { toLocalRecord } from '../db/project';
-import { META, parseMeta, STORES } from '../db/schema';
+import { store } from '../db/open';
 
 /**
  * Hydration — the read half of sync.
@@ -47,8 +45,7 @@ export function pullOnce(transport: PullTransport = defaultTransport): Promise<P
 }
 
 async function runPull(transport: PullTransport): Promise<PullOutcome> {
-  const database = await db();
-  let since = parseMeta('pulledThrough', await database.get(STORES.meta, META.pulledThrough)) ?? 0;
+  let since = await (await store()).pulledThrough();
 
   const outcome: PullOutcome = { applied: 0, skipped: 0, through: since, more: false };
 
@@ -86,52 +83,21 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
   return outcome;
 }
 
+/**
+ * Applying a page and advancing the watermark is one transaction in the store.
+ * Advancing it separately would let a crash between the two skip a page for
+ * good — the device would never ask for it again.
+ *
+ * The store also skips any record with a pending local edit, so a queued change
+ * cannot visibly revert while it waits to flush.
+ */
 async function applyPage(page: PullResponse): Promise<{ applied: number; skipped: number }> {
-  const database = await db();
-  const tx = database.transaction([STORES.outbox, STORES.records, STORES.meta], 'readwrite');
-  const records = tx.objectStore(STORES.records);
-
-  /**
-   * Anything this device is still holding is newer than what the server can
-   * tell us about it, so local optimistic state wins until it flushes.
-   * Overwriting here would make a queued edit visibly revert — the single
-   * most alarming thing an offline app can do.
-   */
-  const pending = new Set<string>();
-  for (const queued of await tx.objectStore(STORES.outbox).getAll()) {
-    pending.add(queued.targetId);
-  }
-
-  let applied = 0;
-  let skipped = 0;
-
-  for (const mutation of page.mutations) {
-    if (pending.has(mutation.targetId)) {
-      skipped += 1;
-      continue;
-    }
-
-    await records.put(
-      toLocalRecord(
-        mutation.entity,
-        mutation.targetId,
-        mutation.op,
-        mutation.payload,
-        mutation.serverTs,
-      ),
-    );
-    applied += 1;
-  }
-
-  await tx.objectStore(STORES.meta).put(page.through, META.pulledThrough);
-  await tx.done;
-
-  return { applied, skipped };
+  return (await store()).applyPulled(inServerOrder(page.mutations), page.through);
 }
 
 /** Exported for the diagnostics sheet and for tests. */
 export async function pulledThrough(): Promise<number> {
-  return parseMeta('pulledThrough', await (await db()).get(STORES.meta, META.pulledThrough)) ?? 0;
+  return (await store()).pulledThrough();
 }
 
 /** Sorting is the server's job, but a defensive re-sort costs nothing. */

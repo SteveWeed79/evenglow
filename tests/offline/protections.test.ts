@@ -1,25 +1,23 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import {
-  db,
   listQuarantined,
   quarantineCount,
   readAllRecords,
   readOutboxBySeq,
   readRecordsByEntity,
   wipeLocalData,
-} from '@/client/db/open';
+} from '../../apps/app/src/db/open';
 import {
   type EnvelopeMigration,
   migrateEnvelope,
   UnmigratableEnvelopeError,
-} from '@/client/db/migrate';
-import { STORES } from '@/client/db/schema';
-import { enqueue, queueDepth, unsentCount } from '@/client/sync/queue';
-import { flushOnce } from '@/client/sync/flush';
-import { listRejected } from '@/client/sync/inbox';
+} from '../../apps/app/src/db/migrate';
+import { enqueue, queueDepth, unsentCount } from '../../apps/app/src/sync/queue';
+import { flushOnce } from '../../apps/app/src/sync/flush';
+import { listRejected } from '../../apps/app/src/sync/inbox';
 import { MUTATION_SCHEMA_VERSION } from '@steading/contracts';
 import { newId } from '@steading/contracts';
-import { freshDb } from '../support/idb';
+import { cleanup, freshDb, raw } from '../support/sqlite';
 
 function eggLog() {
   return {
@@ -29,9 +27,45 @@ function eggLog() {
   };
 }
 
-/** Writes a row straight into the outbox, bypassing every guard. */
-async function corruptRow(value: unknown): Promise<void> {
-  await (await db()).put(STORES.outbox, value as never);
+afterAll(cleanup);
+
+/**
+ * Writes a row straight into the outbox, bypassing every guard.
+ *
+ * The columns are populated with values of the wrong shape rather than left
+ * NULL, because that is what a botched migration or a hand-edited database
+ * actually leaves behind: a row SQLite is perfectly happy with and the schema
+ * is not.
+ */
+async function corruptRow(overrides: Record<string, string | number> = {}): Promise<string> {
+  const id = typeof overrides.id === 'string' ? overrides.id : newId();
+
+  await raw((database) =>
+    database
+      .prepare(
+        `INSERT INTO outbox
+           (id, schemaVersion, targetId, entity, op, payload, deviceId, clientSeq, clientTs,
+            status, attempts, enqueuedAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        id,
+        1,
+        'not-a-ulid',
+        'eggLog',
+        'create',
+        JSON.stringify({ marker: overrides.marker ?? 'x' }),
+        'not-a-uuid',
+        // clientSeq must be an integer; a text value here is the corruption.
+        String(overrides.clientSeq ?? 'not a number'),
+        Date.now(),
+        'queued',
+        0,
+        Date.now(),
+      ),
+  );
+
+  return id;
 }
 
 describe('corruption does not wedge the queue', () => {
@@ -42,7 +76,7 @@ describe('corruption does not wedge the queue', () => {
     await enqueue(eggLog());
 
     // The shape a botched migration or a devtools edit would leave behind.
-    await corruptRow({ id: newId(), clientSeq: 'not a number', status: 'queued' });
+    await corruptRow();
 
     const queue = await readOutboxBySeq();
 
@@ -52,18 +86,18 @@ describe('corruption does not wedge the queue', () => {
   });
 
   it('keeps the raw value rather than deleting it', async () => {
-    const id = newId();
-    await corruptRow({ id, clientSeq: 'bad', marker: 'keep me' });
+    const id = await corruptRow({ marker: 'keep me' });
 
     await readOutboxBySeq();
 
     const [held] = await listQuarantined();
-    expect(held?.raw).toMatchObject({ marker: 'keep me' });
+    expect(held?.key).toBe(id);
+    expect(held?.raw).toMatchObject({ payload: { marker: 'keep me' } });
     expect(held?.reason).toBeTruthy();
   });
 
   it('removes the bad row from the outbox so it is not re-read forever', async () => {
-    await corruptRow({ id: newId(), clientSeq: 'bad' });
+    await corruptRow();
 
     await readOutboxBySeq();
     await readOutboxBySeq();
@@ -74,7 +108,7 @@ describe('corruption does not wedge the queue', () => {
 
   it('lets a flush proceed past a corrupt row', async () => {
     await enqueue(eggLog());
-    await corruptRow({ id: newId(), clientSeq: 'bad', status: 'queued' });
+    await corruptRow();
 
     const outcome = await flushOnce((mutations) =>
       Promise.resolve({
@@ -92,7 +126,14 @@ describe('corruption does not wedge the queue', () => {
 
   it('quarantines an unreadable projection without failing the read', async () => {
     await enqueue(eggLog());
-    await (await db()).put(STORES.records, { key: 'flock:bad', entity: 'flock' } as never);
+    await raw((database) =>
+      database
+        .prepare(
+          `INSERT INTO records (key, entity, targetId, value, updatedAt, deleted)
+           VALUES ('flock:bad', 'flock', 'bad', '{}', 'not a timestamp', 0)`,
+        )
+        .run(),
+    );
 
     const records = await readAllRecords();
 
@@ -153,7 +194,7 @@ describe('session hygiene (C5)', () => {
       op: 'create',
       payload: { name: 'The Dexters', species: 'cattle', count: 4 },
     });
-    await corruptRow({ id: newId(), clientSeq: 'bad' });
+    await corruptRow();
     await readOutboxBySeq();
 
     expect(await quarantineCount()).toBe(1);
@@ -167,8 +208,10 @@ describe('session hygiene (C5)', () => {
     expect(await quarantineCount()).toBe(0);
     expect(await readRecordsByEntity('flock')).toEqual([]);
 
-    const database = await db();
-    expect(await database.count(STORES.meta)).toBe(0);
+    const [meta] = await raw((database) =>
+      database.prepare('SELECT COUNT(*) AS n FROM meta').all(),
+    );
+    expect((meta as { n: number } | undefined)?.n).toBe(0);
   });
 
   it('counts unsent work so the user can be warned before losing it', async () => {

@@ -6,8 +6,8 @@ import { type ActiveWithdrawal, longestWithdrawal } from '@steading/contracts';
 import { useGroups } from '../hooks/useGroups';
 import { useLog } from '../hooks/useSync';
 import type { Group } from '../read/groups';
-import { Tally } from './Tally';
-import { WithdrawalBanner } from './WithdrawalBanner';
+import { Tally } from '../components/Tally';
+import { WithdrawalBanner } from '../components/WithdrawalBanner';
 
 /**
  * Today — the log path, and nothing that competes with it (R1, R2).

@@ -9,7 +9,7 @@
     "cap:sync": "pnpm build:app && pnpm --filter @steading/app exec cap sync",
     "cap:run:android": "pnpm --filter @steading/app exec cap run android",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -p packages/contracts && tsc -p apps/api && tsc -p apps/app && tsc -p tests",
     "lint": "eslint",
     "db:indexes": "pnpm --filter @steading/api db:indexes",
     "db:seed": "pnpm --filter @steading/api db:seed",
@@ -18,10 +18,12 @@
     "check:no-db-disables": "node scripts/check-no-db-disables.mjs"
   },
   "devDependencies": {
+    "@steading/contracts": "workspace:*",
     "@types/node": "^20",
     "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^9",
     "typescript": "^5",
+    "ulid": "^3.0.2",
     "vitest": "^4.1.10"
   }
 }

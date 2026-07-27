@@ -4,8 +4,8 @@ import {
   type MutationResult,
   type SyncResponse,
 } from '@steading/contracts';
-import { db, readOutboxBySeq } from '../db/open';
-import { META, parseMeta, type QueuedMutation, STORES } from '../db/schema';
+import { readOutboxBySeq, store } from '../db/open';
+import type { QueuedMutation } from '../db/schema';
 
 /**
  * The flush loop.
@@ -142,92 +142,45 @@ async function runFlush(transport: SyncTransport): Promise<FlushOutcome> {
   return applyResults(batch, response.body.results, outcome);
 }
 
+/**
+ * The counting is here; the writing is in the store, as one transaction.
+ *
+ * Splitting it the other way — flush writing rows itself — is how a batch ends
+ * up half-resolved after a crash, with some mutations cleared and the cleared
+ * counter still at its old value, which then reads as data loss forever.
+ */
 async function applyResults(
   batch: QueuedMutation[],
   results: MutationResult[],
   outcome: FlushOutcome,
 ): Promise<FlushOutcome> {
-  const byId = new Map(results.map((r) => [r.id, r]));
-  const database = await db();
-  const tx = database.transaction([STORES.outbox, STORES.meta], 'readwrite');
-  const outbox = tx.objectStore(STORES.outbox);
-  const meta = tx.objectStore(STORES.meta);
+  await (await store()).resolveBatch(batch, results);
 
-  let cleared = parseMeta('clearedCount', await meta.get(META.clearedCount)) ?? 0;
+  const byId = new Map(results.map((r) => [r.id, r]));
   const next = { ...outcome };
 
   for (const queued of batch) {
     const result = byId.get(queued.id);
+    // No result means the mutation is still queued — not an outcome to count.
+    if (!result) continue;
 
-    if (!result) {
-      // The server answered without mentioning this mutation. Keep it queued
-      // rather than assume either outcome — resending is safe (D1 + $setOnInsert).
-      await outbox.put({ ...queued, attempts: queued.attempts + 1 });
-      continue;
-    }
-
-    if (result.status === 'applied' || result.status === 'duplicate') {
-      await outbox.delete(queued.id);
-      cleared += 1;
-      if (result.status === 'applied') next.applied += 1;
-      else next.duplicate += 1;
-      continue;
-    }
-
-    // rejected | conflict → the inbox. Never deleted (A6).
-    await outbox.put({
-      ...queued,
-      status: 'rejected',
-      attempts: queued.attempts + 1,
-      rejectedReason: result.reason ?? 'The server would not accept that.',
-      rejectedAt: Date.now(),
-    });
-    next.rejected += 1;
+    if (result.status === 'applied') next.applied += 1;
+    else if (result.status === 'duplicate') next.duplicate += 1;
+    else next.rejected += 1;
   }
-
-  await meta.put(cleared, META.clearedCount);
-  await meta.put(Date.now(), META.lastSyncAt);
-  await meta.delete(META.lastError);
-  await tx.done;
 
   return next;
 }
 
 async function recordAttempt(batch: QueuedMutation[], error: string): Promise<void> {
-  const database = await db();
-  const tx = database.transaction([STORES.outbox, STORES.meta], 'readwrite');
-  const outbox = tx.objectStore(STORES.outbox);
-
-  for (const queued of batch) {
-    await outbox.put({ ...queued, attempts: queued.attempts + 1, lastError: error });
-  }
-
-  await tx.objectStore(STORES.meta).put(error, META.lastError);
-  await tx.done;
+  await (await store()).recordAttempt(batch, error);
 }
 
 /** Routes mutations past the attempt ceiling to the inbox so the queue can drain. */
 async function rejectExhausted(batch: QueuedMutation[], reason: string): Promise<void> {
-  const database = await db();
-  const tx = database.transaction(STORES.outbox, 'readwrite');
-  const outbox = tx.objectStore(STORES.outbox);
-
-  for (const queued of batch) {
-    const current = await outbox.get(queued.id);
-    if (!current || current.status === 'rejected') continue;
-    if (current.attempts < MAX_ATTEMPTS) continue;
-
-    await outbox.put({
-      ...current,
-      status: 'rejected',
-      rejectedReason: reason,
-      rejectedAt: Date.now(),
-    });
-  }
-
-  await tx.done;
+  await (await store()).rejectExhausted(batch, MAX_ATTEMPTS, reason);
 }
 
 async function setLastError(message: string): Promise<void> {
-  await (await db()).put(STORES.meta, message, META.lastError);
+  await (await store()).setLastError(message);
 }

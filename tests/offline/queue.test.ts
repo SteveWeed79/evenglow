@@ -1,9 +1,8 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { db, readAllRecords, readOutboxBySeq } from '@/client/db/open';
-import { STORES } from '@/client/db/schema';
-import { checkIntegrity, enqueue, InvalidMutationError, queueDepth } from '@/client/sync/queue';
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { newId } from '@steading/contracts';
-import { freshDb, simulateRestart } from '../support/idb';
+import { readAllRecords, readOutboxBySeq } from '../../apps/app/src/db/open';
+import { checkIntegrity, enqueue, InvalidMutationError, queueDepth } from '../../apps/app/src/sync/queue';
+import { cleanup, freshDb, raw, simulateRestart } from '../support/sqlite';
 
 function eggLog(count = 18) {
   return {
@@ -12,6 +11,8 @@ function eggLog(count = 18) {
     payload: { occurredAt: 1_700_000_000_000, flockId: newId(), count },
   };
 }
+
+afterAll(cleanup);
 
 describe('enqueue', () => {
   beforeEach(freshDb);
@@ -41,7 +42,7 @@ describe('enqueue', () => {
 
     // Simulate a corrupted counter — the failure mode that would silently
     // reuse sequence numbers and break ordering.
-    await (await db()).delete(STORES.meta, 'nextClientSeq');
+    await raw((db) => db.prepare("DELETE FROM meta WHERE key = 'nextClientSeq'").run());
     await simulateRestart();
 
     await enqueue(eggLog());
@@ -93,6 +94,24 @@ describe('enqueue', () => {
     await enqueue(eggLog());
     expect((await readOutboxBySeq()).map((m) => m.clientSeq)).toEqual([0, 1]);
   });
+
+  it('rolls the projection back when the outbox write fails', async () => {
+    await enqueue(eggLog());
+
+    // A duplicate primary key aborts the transaction partway through, after
+    // the row insert and before the projection write would have committed.
+    // Invariant 5: neither half may survive alone.
+    const before = await readAllRecords();
+
+    await raw((db) =>
+      db.prepare('CREATE TRIGGER fail_records BEFORE INSERT ON records BEGIN SELECT RAISE(ABORT, \'boom\'); END').run(),
+    );
+
+    await expect(enqueue(eggLog())).rejects.toThrow();
+
+    expect(await readOutboxBySeq()).toHaveLength(1);
+    expect(await readAllRecords()).toHaveLength(before.length);
+  });
 });
 
 describe('integrity check', () => {
@@ -110,11 +129,13 @@ describe('integrity check', () => {
   it('detects records that vanished without being acknowledged', async () => {
     for (let i = 0; i < 4; i++) await enqueue(eggLog());
 
-    // Eviction, a failed migration, a devtools wipe — something removed work
-    // the server never confirmed.
+    // Eviction, a failed migration, a hand-edited database — something removed
+    // work the server never confirmed.
     const queue = await readOutboxBySeq();
-    await (await db()).delete(STORES.outbox, queue[1]!.id);
-    await (await db()).delete(STORES.outbox, queue[2]!.id);
+    await raw((db) => {
+      db.prepare('DELETE FROM outbox WHERE id = ?').run(queue[1]!.id);
+      db.prepare('DELETE FROM outbox WHERE id = ?').run(queue[2]!.id);
+    });
 
     const report = await checkIntegrity();
     expect(report.expectedInOutbox).toBe(4);

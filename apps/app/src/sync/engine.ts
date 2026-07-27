@@ -1,9 +1,8 @@
-import { db, getMeta, quarantineCount } from '../db/open';
-import { STORES } from '../db/schema';
+import { quarantineCount, store } from '../db/open';
 import { backoffDelay, flushOnce, type SyncTransport } from './flush';
 import { SYNC_LOCK, withSyncLock } from './lock';
 import { pullOnce, pulledThrough } from './pull';
-import { checkIntegrity, queueDepth, rejectedCount } from './queue';
+import { checkIntegrity, outboxSize, queueDepth, rejectedCount } from './queue';
 
 /**
  * Drives the flush loop.
@@ -43,8 +42,8 @@ export async function currentState(): Promise<SyncState> {
   if (syncing) return { kind: 'syncing', count: queued };
   if (queued > 0) return { kind: 'queued', count: queued };
 
-  const at = await getMeta('lastSyncAt');
-  return { kind: 'synced', at: at === undefined ? null : new Date(at) };
+  const at = await (await store()).getLastSyncAt();
+  return { kind: 'synced', at: at === null ? null : new Date(at) };
 }
 
 async function publish(): Promise<void> {
@@ -167,29 +166,29 @@ export interface Diagnostics {
  * device, with no network (Observability rubric).
  */
 export async function diagnostics(): Promise<Diagnostics> {
-  const [deviceId, lastSyncAt, lastError, queued, rejected, integrity, through] =
+  const local = await store();
+
+  const [deviceId, lastSyncAt, lastError, queued, rejected, integrity, through, outboxTotal, quarantined] =
     await Promise.all([
-      getMeta('deviceId'),
-      getMeta('lastSyncAt'),
-      getMeta('lastError'),
+      local.getDeviceId(),
+      local.getLastSyncAt(),
+      local.getLastError(),
       queueDepth(),
       rejectedCount(),
       checkIntegrity(),
       pulledThrough(),
+      outboxSize(),
+      quarantineCount(),
     ]);
 
-  const quarantined = await quarantineCount();
-
-  const outboxTotal = await (await db()).count(STORES.outbox);
-
   return {
-    deviceId: deviceId ?? null,
+    deviceId,
     online: isOnline(),
     queued,
     rejected,
     outboxTotal,
-    lastSyncAt: lastSyncAt ?? null,
-    lastError: lastError ?? null,
+    lastSyncAt,
+    lastError,
     pulledThrough: through,
     quarantined,
     integrity,

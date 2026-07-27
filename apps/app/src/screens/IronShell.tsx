@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { AddMachine } from './AddMachine';
-import { LogHours } from './LogHours';
+import { AddMachine } from '../components/AddMachine';
+import { LogHours } from '../components/LogHours';
 import { listMachines, type Machine } from '../read/iron';
 import { subscribe } from '../sync/engine';
 
