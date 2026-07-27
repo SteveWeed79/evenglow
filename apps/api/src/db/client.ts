@@ -15,7 +15,14 @@ declare global {
 
 function connect(): Promise<MongoClient> {
   const uri = process.env.MONGODB_URI;
-  if (!uri) throw new Error('MONGODB_URI is not set');
+  if (!uri) {
+    // Naming the file matters: the usual cause is not a missing value but a
+    // .env.local that nothing loaded, and "MONGODB_URI is not set" sends you
+    // looking in the wrong place.
+    throw new Error(
+      'MONGODB_URI is not set. Copy .env.example to .env.local at the repo root and fill it in.',
+    );
+  }
 
   // Cached across HMR reloads in dev; a fresh pool per cold start in prod.
   const existing = globalThis.__steadingMongoClient;
