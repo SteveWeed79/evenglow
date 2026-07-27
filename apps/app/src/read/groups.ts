@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { flockCreateSchema, type Species } from '@steading/contracts';
-import { readRecordsByEntity } from '../db/open';
+import { localStore } from '../db/store';
 
 /**
  * Local-first reads.
@@ -26,7 +26,7 @@ export interface Group {
 const storedGroup = flockCreateSchema.partial({ count: true });
 
 export async function listGroups(): Promise<Group[]> {
-  const records = await readRecordsByEntity('flock');
+  const records = await localStore().readRecordsByEntity('flock');
 
   return records
     .filter((record) => !record.deleted)
@@ -71,7 +71,7 @@ export async function eggsToday(now = new Date()): Promise<Map<string, number>> 
   start.setHours(0, 0, 0, 0);
   const from = start.getTime();
 
-  const records = await readRecordsByEntity('eggLog');
+  const records = await localStore().readRecordsByEntity('eggLog');
   const totals = new Map<string, number>();
 
   for (const record of records) {

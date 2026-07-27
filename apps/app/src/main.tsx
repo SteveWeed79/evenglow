@@ -1,12 +1,11 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AppShell } from './components/AppShell';
-import { wipeLocalData } from './db/open';
 // Static, unlike the two below. The sync layer imports this module anyway,
 // so a dynamic import cannot move it to its own chunk — it only produces a
 // build warning nobody can act on, and warnings nobody can act on are how
 // the ones that matter get scrolled past.
-import { setLocalStore } from './db/store';
+import { localStore, setLocalStore } from './db/store';
 import { setApiBase } from './api';
 import { setStorageBacking } from './sync/storage';
 import { isNative } from './platform';
@@ -31,7 +30,7 @@ import './styles.css';
  * lands it calls POST /auth/logout, which S3b already built and tested.
  */
 async function signOut(): Promise<void> {
-  await wipeLocalData();
+  await localStore().wipe();
   window.location.reload();
 }
 

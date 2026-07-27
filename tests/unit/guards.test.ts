@@ -117,3 +117,38 @@ describe('shared code guard', () => {
     expect(fired).toContain('no-restricted-imports');
   });
 });
+
+/**
+ * The port is the only way to the local store.
+ *
+ * `db/open.ts` is the IndexedDB implementation. Importing it directly works
+ * perfectly in a browser, because there the port resolves to the same
+ * database — so the mistake survives every test and every dev-server session
+ * and only appears on a handset.
+ *
+ * It appeared on the first one. Every read module imported
+ * `readRecordsByEntity` from there, so a group added on device was written to
+ * SQLite and looked for in an IndexedDB that had never been touched: adding
+ * stock did nothing at all, and said nothing. Sign-out was worse — it wiped
+ * the browser store and left the previous farm's records on a shared tablet
+ * (C5).
+ */
+const PORT_BYPASS = "import { readRecordsByEntity } from '../db/open';\nexport const x = readRecordsByEntity;\n";
+
+describe('local store port guard', () => {
+  it('blocks reaching past the port in the Capacitor client', async () => {
+    expect(await rulesFiredIn('apps/app/src/read/probe.ts', PORT_BYPASS)).toContain(
+      'no-restricted-imports',
+    );
+  });
+
+  /**
+   * The storage layer itself is exempt, and has to be: db/store.ts chooses
+   * between the two implementations, so it imports one by name.
+   */
+  it('exempts the storage layer, which is what does the choosing', async () => {
+    expect(await rulesFiredIn('apps/app/src/db/probe.ts', PORT_BYPASS)).not.toContain(
+      'no-restricted-imports',
+    );
+  });
+});

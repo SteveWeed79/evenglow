@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug builds only. This directory is a build-type source set, so none of it
+  is merged into a release APK — the release build keeps Android's default,
+  which refuses cleartext outright.
+
+  The dev API runs over plain http on a developer's machine, and the WebView
+  serves the app from https://localhost, so every sync request was blocked as
+  mixed content. Rather than relaxing the app's posture everywhere, cleartext
+  is permitted here to the two hosts a development device can mean by "my
+  machine", and to nothing else.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- The Android emulator's alias for the host machine. -->
+        <domain includeSubdomains="false">10.0.2.2</domain>
+        <!-- A device on the same network, reached over adb reverse. -->
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>
