@@ -21,7 +21,16 @@ function connect(): Promise<MongoClient> {
   const existing = globalThis.__steadingMongoClient;
   if (existing) return existing;
 
-  const created = new MongoClient(uri).connect();
+  /**
+   * Five seconds, not the driver's default thirty.
+   *
+   * A request that hangs for half a minute is worse than one that fails: the
+   * client queues offline work and retries with backoff, so a fast, clear
+   * failure is something it already knows how to handle, while a stalled
+   * connection just holds a socket and delays the retry that would have
+   * worked.
+   */
+  const created = new MongoClient(uri, { serverSelectionTimeoutMS: 5_000 }).connect();
   if (process.env.NODE_ENV !== 'production') {
     globalThis.__steadingMongoClient = created;
   }

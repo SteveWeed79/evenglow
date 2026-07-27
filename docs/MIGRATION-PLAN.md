@@ -194,8 +194,31 @@ declaration is exactly how the Auth.js path and the token path would drift.
 the new package boundary. The tenancy guard was exercised against a real file
 in `apps/api/src/sync` and fires; `apps/api/src/db` is exempt.*
 
-**S3b — token auth.** `jose`, `POST /auth/login`, `POST /auth/refresh`, rotating
-refresh with family revocation on reuse (`PHASE-1-SPEC.md` T7).
+**S3b — token auth ✅ done.** The Fastify service, `jose` access tokens, and
+rotating refresh with family revocation (`PHASE-1-SPEC.md` T7).
+
+Two decisions worth finding here rather than in review:
+
+- **`refreshTokens` is a third non-tenant-scoped collection**, alongside
+  `users` and `orgs`. A refresh happens before any `orgId` exists, so
+  `scoped()` cannot serve it. It follows `identity.ts` — narrow purpose-built
+  functions, no handle escapes the module, and it sits in `db/` so the lint
+  exemption covers it. It is safe for a specific reason rather than by
+  assumption: every row is keyed by the hash of a 256-bit secret, so no query
+  in that module takes an org or a user that a caller could widen. Presenting
+  the token *is* the lookup.
+- **Only Fastify gets refresh semantics.** Auth.js keeps its JWT-only session
+  until S7 removes it, so the two live servers genuinely differ in session
+  behaviour for the duration. That is a real divergence, not a cosmetic one,
+  and it is bounded by the fact that no client talks to both.
+
+Reuse detection is a conditional update, not a read-then-write: two concurrent
+exchanges of one token cannot both win, and the loser is treated as theft —
+which, from the server's position, is exactly what it cannot be distinguished
+from.
+
+*Exit, met: 284 unit tests locally; the 24 new db-backed tests covering
+rotation, family revocation, and the routes run in CI.*
 
 **S3c — the routes, and the two-server proof.** `/sync` and `/snapshot` on
 Fastify, with the isolation and idempotency suites parameterised over both
