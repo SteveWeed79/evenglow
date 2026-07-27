@@ -311,10 +311,30 @@ two that can drift.
 *Exit, met: 23 contract assertions plus the 15 schema ones, against real SQLite
 in Node.*
 
-**S4c — wire the engine to the port.** `queue.ts`, `flush.ts` and `pull.ts`
-still call the IndexedDB functions directly, so `tests/offline` cannot yet run
-against both. Injecting the store is what makes the suite the shared oracle the
-plan describes, and it is the last step before the shell.
+**S4c — one suite, both stores ✅ done.** The IndexedDB `LocalStore` adapter,
+and 23 assertions run against each implementation. The faults are expressed per
+backing so the assertions can stay shared.
+
+It found a latent bug in the *existing* engine: `enqueue`'s rollback relied on
+the transaction failing as a unit, which is only true when the failure arrives
+through the request. A synchronous throw from `put()` leaves IndexedDB to
+auto-commit the outbox row and counter without the projection — queue-and-view
+divergence, in the code whose comment said it could not happen.
+
+**S4d — the engine on the port ✅ done.** `queue.ts`, `flush.ts`, `pull.ts` and
+`inbox.ts` now go through `LocalStore`. `tests/offline/engine-on-sqlite.test.ts`
+swaps the implementation and drives the real paths — enqueue, sequential flush,
+the rejected inbox, retry, hydration — proving the engine is storage-agnostic
+rather than asserting it.
+
+The port grew `markSynced` in the process: stamping the sync time and clearing
+the last error are one call, because a successful sync and a stale error on the
+diagnostics sheet must not be able to coexist, which is exactly what happens
+when a caller remembers one and forgets the other.
+
+Rewiring also dropped a guard, and the existing suite caught it:
+`discardRejected` must apply only to *rejected* rows. Without the status check
+a stray call deletes queued work that has never been sent.
 
 Specific things to get right, each of which the IndexedDB version already
 handles and a fresh implementation tends not to:

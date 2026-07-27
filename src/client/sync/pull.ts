@@ -3,9 +3,7 @@ import {
   pullResponseSchema,
   type PulledMutation,
 } from '@steading/contracts';
-import { db } from '../db/open';
-import { toLocalRecord } from '../db/project';
-import { META, parseMeta, STORES } from '../db/schema';
+import { localStore } from '../db/store';
 
 /**
  * Hydration — the read half of sync.
@@ -51,10 +49,9 @@ export function pullOnce(transport: PullTransport = defaultTransport): Promise<P
 }
 
 async function runPull(transport: PullTransport): Promise<PullOutcome> {
-  const database = await db();
-  let since = parseMeta('pulledThrough', await database.get(STORES.meta, META.pulledThrough)) ?? 0;
-  let sinceId =
-    parseMeta('pulledThroughId', await database.get(STORES.meta, META.pulledThroughId)) ?? null;
+  const watermark = await localStore().pulledThrough();
+  let since = watermark.through;
+  let sinceId = watermark.throughId;
 
   const outcome: PullOutcome = { applied: 0, skipped: 0, through: since, more: false };
 
@@ -96,62 +93,19 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
 }
 
 async function applyPage(page: PullResponse): Promise<{ applied: number; skipped: number }> {
-  const database = await db();
-  const tx = database.transaction([STORES.outbox, STORES.records, STORES.meta], 'readwrite');
-  const records = tx.objectStore(STORES.records);
-
-  /**
-   * Anything this device is still holding is newer than what the server can
-   * tell us about it, so local optimistic state wins until it flushes.
-   * Overwriting here would make a queued edit visibly revert — the single
-   * most alarming thing an offline app can do.
-   */
-  const pending = new Set<string>();
-  for (const queued of await tx.objectStore(STORES.outbox).getAll()) {
-    pending.add(queued.targetId);
-  }
-
-  let applied = 0;
-  let skipped = 0;
-
-  /**
-   * Applied in the server's order, not the order the page happened to arrive
-   * in. Records are keyed by entity and targetId and written with put, so the
-   * last write for a target wins — applying two updates to the same record out
-   * of order silently leaves the older one in place.
-   */
-  for (const mutation of inServerOrder(page.mutations)) {
-    if (pending.has(mutation.targetId)) {
-      skipped += 1;
-      continue;
-    }
-
-    await records.put(
-      toLocalRecord(
-        mutation.entity,
-        mutation.targetId,
-        mutation.op,
-        mutation.payload,
-        mutation.serverTs,
-      ),
-    );
-    applied += 1;
-  }
-
-  // Both halves of the cursor advance in the same transaction as the records
-  // they cover. A timestamp persisted without its ULID would resume from the
-  // start of a millisecond and re-apply rows already written.
-  const meta = tx.objectStore(STORES.meta);
-  await meta.put(page.through, META.pulledThrough);
-  if (page.throughId !== null) await meta.put(page.throughId, META.pulledThroughId);
-  await tx.done;
-
-  return { applied, skipped };
+  // Skipping a record with a pending local edit, and advancing BOTH halves of
+  // the watermark in the same transaction as the records they cover, are the
+  // store's guarantees now — stated in port.ts and asserted against every
+  // implementation.
+  return localStore().applyPulled(inServerOrder(page.mutations), {
+    through: page.through,
+    throughId: page.throughId,
+  });
 }
 
 /** Exported for the diagnostics sheet and for tests. */
 export async function pulledThrough(): Promise<number> {
-  return parseMeta('pulledThrough', await (await db()).get(STORES.meta, META.pulledThrough)) ?? 0;
+  return (await localStore().pulledThrough()).through;
 }
 
 /**
