@@ -22,6 +22,7 @@
     "db:verify": "pnpm --filter @steading/api db:verify",
     "build:app": "pnpm --filter @steading/app build",
     "dev:app": "pnpm --filter @steading/app dev",
+    "dev:api": "pnpm --filter @steading/api dev",
     "cap:sync": "pnpm build:app && pnpm --filter @steading/app cap:sync",
     "cap:run:android": "pnpm cap:sync && pnpm --filter @steading/app cap:run:android",
     "cap:open:android": "pnpm --filter @steading/app cap:open:android"

@@ -3,6 +3,7 @@ import {
   pullResponseSchema,
   type PulledMutation,
 } from '@steading/contracts';
+import { apiUrl } from '../api';
 import { localStore } from '../db/store';
 
 /**
@@ -31,7 +32,7 @@ export type PullTransport = (
 
 const defaultTransport: PullTransport = async (since, sinceId) => {
   const query = sinceId === null ? `since=${since}` : `since=${since}&sinceId=${sinceId}`;
-  const res = await fetch(`/api/pull?${query}`, {
+  const res = await fetch(apiUrl('snapshot', query), {
     headers: { 'x-steading-sync': '1' },
   });
   const body: unknown = await res.json().catch(() => null);

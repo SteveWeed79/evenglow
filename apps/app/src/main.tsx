@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AppShell } from './components/AppShell';
 import { wipeLocalData } from './db/open';
+import { setApiBase } from './api';
 import { isNative } from './platform';
 import './styles.css';
 
@@ -42,6 +43,22 @@ async function signOut(): Promise<void> {
  */
 async function bootstrap(): Promise<void> {
   if (isNative()) {
+    /**
+     * The APK serves the app from its own origin, so a relative `/sync`
+     * resolves to the bundle rather than to a server. Absent, this fails at
+     * bootstrap rather than at the first flush — a device that queues all
+     * morning and only reveals the problem when someone checks the sync chip
+     * is the worse of the two failures by a wide margin.
+     */
+    const apiBase = import.meta.env.VITE_API_BASE_URL;
+    if (apiBase === undefined || apiBase === '') {
+      throw new Error(
+        'VITE_API_BASE_URL is not set. The native build needs an absolute API origin — ' +
+          'a relative path resolves to the app bundle. See the README, Android section.',
+      );
+    }
+    setApiBase(apiBase);
+
     const [{ openCapacitorSqlDriver }, { openSqliteStore }, { setLocalStore }] = await Promise.all([
       import('./db/capacitor-driver'),
       import('./db/sqlite-store'),
