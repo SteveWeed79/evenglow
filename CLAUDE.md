@@ -96,9 +96,9 @@ export const mutationSchema = z.object({
   schemaVersion: z.number().int().positive(),
   id: z.string().length(26),        // ULID — idempotency key, becomes _id
   targetId: z.string().length(26),  // ULID — entity id, minted offline
-  entity: z.enum(['flock', 'bird', 'eggLog', 'feedLog', 'mortality', 'predator',
-                  'medication', 'equipment', 'hourReading', 'maintenance',
-                  'task', 'inventory', 'photo']),
+  entity: z.enum(['flock', 'animal', 'medication', 'eggLog', 'productionLog',
+                  'feedLog', 'mortality', 'predator', 'equipment',
+                  'hourReading', 'maintenance', 'task', 'inventory', 'photo']),
   op: z.enum(['create', 'update', 'delete']),
   payload: z.unknown(),             // validated per-entity in sync/apply.ts
   deviceId: z.string().uuid(),
@@ -107,9 +107,11 @@ export const mutationSchema = z.object({
 }).strict();
 ```
 
-**Append-only entities** (`eggLog`, `feedLog`, `mortality`, `predator`, `hourReading`) accept `create` only; `update`/`delete` on them is a 400. They cannot conflict.
+**Append-only entities** (`eggLog`, `productionLog`, `feedLog`, `mortality`, `predator`, `hourReading`) accept `create` only; `update`/`delete` on them is a 400. They cannot conflict.
 
-**Mutable entities** (`flock`, `bird`, `equipment`, `maintenance`, `task`, `inventory`) support update/delete and need conflict handling.
+**Mutable entities** (`flock`, `animal`, `medication`, `equipment`, `maintenance`, `task`, `inventory`, `photo`) support update/delete and need conflict handling. They are **archived, never deleted** — `delete` sets `archivedAt` (P13).
+
+**Stock is mixed, not poultry.** `animal`, not `bird`: goats and cattle die, get treated, and get weighed too. `flock` is the wire name for any group; the UI says herd, drove, or gaggle per species via `SPECIES_TRAITS`. Egg logging is offered per species through `laysEggs()`, and `productionLog` carries milk, fibre, and honey so ruminants are not head-count-only. Do not reintroduce poultry-only assumptions.
 
 ---
 

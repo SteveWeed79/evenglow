@@ -64,11 +64,13 @@ Redis rate limiting, refresh-token rotation and revocation, envelope schema migr
 - **Session hygiene** — the SQLite database is dropped and recreated on logout **and on org switch**.
 
 ### Poultry & Livestock
-- **Multi-species from the schema up** — chickens, ducks, quail, turkeys, geese, other.
+- **Multi-species from the schema up** — poultry (chickens, ducks, geese, turkeys, quail, guinea fowl, pigeons), ratites (emu, ostrich, rhea), ruminants and camelids (goats, sheep, cattle, alpacas, llamas), plus pigs, rabbits, donkeys, horses, and free-text `other`. Smallholdings are mixed; a model covering only poultry makes most of a working farm invisible. Poultry keeps the deepest features because that is where the wedge is, not because it is the only stock supported.
+- **Species-aware vocabulary** — the UI says herd, drove, or gaggle by species. `flock` is the wire name only. Calling a cattle herd a flock tells the keeper the app was not built for them.
 - **Flock management** — counts, breed profiles, integration timelines. *(mutable)*
-- **Individual bird records** — photo, breed, traits, hatch date, weights. **Archive, never delete.** *(mutable)*
+- **Individual animal records** — photo, breed, traits, birth or hatch date, weights, tag. **Archive, never delete.** *(mutable)*
 - **Production events** — daily egg collection by flock **or by individual bird**; feed consumption. *(append-only)*
 - **Mortality log** — cause, trend, and **cull weights** for meat-yield math. *(append-only)*
+- **Production log** — milk, fibre, and honey by group or individual. *(append-only)* Without it, ruminant support is head count and mortality only, which is not support. Records a volume, not a supply chain — dairy *workflows* stay out of scope.
 - **Threat log** — predator sightings, time of day, losses. *(append-only)*
 - **Health & medication** — treatments with **withdrawal-period tracking**. An active egg/meat withdrawal raises a persistent banner on the collection screen and requires confirmation to log through. *(Competitive wedge — requested by Flockstar users, unmet everywhere.)*
 - **Breed presets** — expected lay rates and mature weights pre-filled on selection.
