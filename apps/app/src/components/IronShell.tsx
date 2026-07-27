@@ -79,9 +79,12 @@ function MachineCard({
           {description ? <p className="label">{description}</p> : null}
         </div>
         {machine.hours !== null ? (
-          <p className="group__today" data-numeric>
-            {machine.hours} h
-          </p>
+          <div className="group__today">
+            <p className="group__todaycount" data-numeric>
+              {machine.hours} h
+            </p>
+            <span className="label">Hour meter</span>
+          </div>
         ) : null}
       </header>
 

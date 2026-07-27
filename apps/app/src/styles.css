@@ -535,11 +535,29 @@ summary {
   margin: 0.25rem 0 0;
 }
 
+/* The day's result, opposite the group's name.
+   Right-aligned so the digits line up down a list of groups. */
 .group__today {
+  text-align: right;
+  flex: none;
+}
+
+/* --ink, not --muted. This is the answer to "how did today go", and it was
+   set in secondary-text colour — which R7 only holds to 4.5:1, below the bar
+   for anything actually being read. The label beneath it is the part that
+   should recede. */
+.group__todaycount {
   font-family: var(--font-data);
   font-size: var(--step-title);
-  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
   margin: 0;
+  line-height: 1.1;
+}
+
+.group__today .label {
+  display: block;
+  margin: 0.125rem 0 0;
 }
 
 .addgroup {
