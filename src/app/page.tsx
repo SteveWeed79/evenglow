@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { AppShell } from '@/client/components/AppShell';
+import { AppShell } from '@steading/app/components/AppShell';
 import { auth, signOut } from '@/server/auth/config';
 
 export const runtime = 'nodejs';

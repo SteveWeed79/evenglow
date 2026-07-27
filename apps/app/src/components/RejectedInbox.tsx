@@ -1,9 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import type { QueuedMutation } from '@steading/app/db/schema';
-import { discardRejected, listRejected, retryRejected } from '@steading/app/sync/inbox';
-import { nudge } from '@steading/app/sync/engine';
+import type { QueuedMutation } from '../db/schema';
+import { discardRejected, listRejected, retryRejected } from '../sync/inbox';
+import { nudge } from '../sync/engine';
 
 /**
  * The rejected-mutations inbox (A6).

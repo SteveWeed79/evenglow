@@ -13,6 +13,9 @@ const eslintConfig = defineConfig([
     'build/**',
     'next-env.d.ts',
     'coverage/**',
+    // Vite's output. Linting a bundle produces a thousand warnings about
+    // machine-written code and buries the ones that matter.
+    'apps/*/dist/**',
   ]),
 
   /**

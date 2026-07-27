@@ -9,9 +9,9 @@ import {
   stopSync,
   subscribe,
   type SyncState,
-} from '@steading/app/sync/engine';
-import { type EnqueueInput, enqueue } from '@steading/app/sync/queue';
-import { requestPersistence } from '@steading/app/sync/storage';
+} from '../sync/engine';
+import { type EnqueueInput, enqueue } from '../sync/queue';
+import { requestPersistence } from '../sync/storage';
 
 const SERVER_STATE: SyncState = { kind: 'synced', at: null };
 

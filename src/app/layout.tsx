@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Alegreya_Sans, Fraunces, IBM_Plex_Mono } from 'next/font/google';
-import './globals.css';
+import '@steading/app/styles.css';
 
 /**
  * Fraunces is the display face — SOFT and WONK are what stop it reading as a

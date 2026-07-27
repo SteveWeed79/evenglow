@@ -373,8 +373,32 @@ the counts.
 *Exit, met: 379 unit tests, 6 e2e including the Phase 2 exit gate, build, lint,
 typecheck, guard scan (82 files).*
 
-**S5b — the Vite client.** Entry, `vite.config.ts`, the components moved across,
-and `pnpm build:app` producing a static bundle.
+**S5b — the Vite client ✅ done.** Entry, `vite.config.ts`, the components and
+styles moved across, and `pnpm build:app` producing a static bundle — 320 kB of
+JS, 16 kB of CSS.
+
+Both shells now render the same modules. Next imports them from the package and
+`main.tsx` mounts them; the only thing that differs is where they mount, which
+is the one genuine difference between a server-rendered page and a static
+bundle in a WebView.
+
+The package's `exports` map needed explicit per-directory patterns. A fallback
+array (`["./src/*.ts", "./src/*.tsx"]`) reads well and Vite honours it, but
+webpack does not follow it for wildcards, so the Next build could not resolve a
+single component. Worth knowing before the same trick is reached for again.
+
+`CLIENT_DIRS` needed no change: S2 pre-armed it with `apps/app/dist` before that
+directory existed, so the Vite bundle came under the secret scan the moment it
+appeared — 13 assets became 16 with nothing to remember.
+
+*Exit, met: 379 unit tests, 6 e2e including the Phase 2 exit gate, both builds,
+lint, typecheck, guard scan, secret scan across both outputs.*
+
+**Sign-out on the Vite entry is deliberately partial.** It clears the device,
+which is the half that matters for a shared barn tablet (C5). It does not
+revoke the refresh token, because there is no token client on this entry to
+hold one — when that lands it calls `POST /auth/logout`, which S3b already
+built and tested.
 
 **S5c — the native shell.** `capacitor.config.ts`, the committed `android/`
 project, and the Capacitor `SqlDriver`. **This is the first stage that cannot

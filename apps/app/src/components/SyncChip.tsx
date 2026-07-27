@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useSync } from '../hooks/useSync';
-import type { SyncState } from '@steading/app/sync/engine';
+import type { SyncState } from '../sync/engine';
 import { DiagnosticsSheet } from './DiagnosticsSheet';
 import { RejectedInbox } from './RejectedInbox';
 

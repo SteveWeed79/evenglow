@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { ActiveWithdrawal } from '@steading/contracts';
-import { eggsToday, type Group, listGroups } from '@steading/app/read/groups';
-import { withdrawalsBySubject } from '@steading/app/read/withdrawals';
-import { subscribe } from '@steading/app/sync/engine';
+import { eggsToday, type Group, listGroups } from '../read/groups';
+import { withdrawalsBySubject } from '../read/withdrawals';
+import { subscribe } from '../sync/engine';
 
 export interface GroupsView {
   groups: Group[];
