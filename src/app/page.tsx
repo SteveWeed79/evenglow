@@ -1,6 +1,5 @@
 import Link from 'next/link';
-import { SignOut } from '@/client/components/SignOut';
-import { TodayShell } from '@/client/components/TodayShell';
+import { AppShell } from '@/client/components/AppShell';
 import { auth, signOut } from '@/server/auth/config';
 
 export const runtime = 'nodejs';
@@ -36,10 +35,5 @@ export default async function Home(): Promise<React.ReactElement> {
     await signOut({ redirectTo: '/sign-in' });
   }
 
-  return (
-    <main className="shell">
-      <TodayShell />
-      <SignOut action={signOutAction} />
-    </main>
-  );
+  return <AppShell signOutAction={signOutAction} />;
 }

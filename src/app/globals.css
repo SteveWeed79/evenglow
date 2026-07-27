@@ -327,6 +327,42 @@ summary {
   color: var(--muted);
 }
 
+/* ── The four tabs ──────────────────────────────────────────────────────── */
+
+.tabs {
+  position: sticky;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: var(--raised);
+  border-top: var(--border);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.tabs__tab {
+  min-height: var(--tap-primary);
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-family: var(--font-data);
+  font-size: var(--step-label);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+.tabs__tab[aria-current='page'] {
+  color: var(--ink);
+  font-weight: 700;
+  box-shadow: inset 0 3px 0 var(--lantern);
+}
+
+/* The tab bar is fixed, so the scrolling content needs room beneath it. */
+.shell {
+  padding-bottom: calc(1.25rem + var(--tap-primary));
+}
+
 /* ── Groups ─────────────────────────────────────────────────────────────── */
 
 .group {

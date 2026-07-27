@@ -64,13 +64,15 @@ test('a withdrawal warns, and logging through it is recorded as deliberate', asy
 
   const page = context.pages()[0] ?? (await context.newPage());
   await page.goto('/');
-  await expect(page.getByTestId('add-first-group')).toBeVisible();
+  await expect(page.getByTestId('tab-stock')).toBeVisible();
 
   await context.setOffline(true);
 
   // A flock to treat.
+  await page.getByTestId('tab-stock').click();
   await page.getByTestId('add-first-group').click();
   await page.getByTestId('addgroup-save').click();
+  await page.getByTestId('tab-today').click();
   await expect(page.getByTestId('tally-commit')).toBeVisible();
 
   // No treatment yet, so no band and a single-tap commit.
@@ -84,10 +86,12 @@ test('a withdrawal warns, and logging through it is recorded as deliberate', asy
   expect(beforeTreatment[0]?.withdrawalAcknowledged).toBeUndefined();
 
   // ── Record a treatment with a seven-day egg withdrawal ──────────────────
-  await page.getByTestId('record-treatment').click();
+  await page.getByTestId('tab-stock').click();
+  await page.locator('[data-testid^="record-treatment-"]').first().click();
   await page.getByTestId('med-name').fill('Amprolium');
   await page.getByTestId('withdrawal-egg-plus-7').click();
   await page.getByTestId('med-save').click();
+  await page.getByTestId('tab-today').click();
 
   // ── The band appears, naming the medication ────────────────────────────
   const band = page.getByText(/Eggs withheld/);

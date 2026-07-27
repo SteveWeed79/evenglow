@@ -72,13 +72,15 @@ test('signing out clears every local store', async () => {
 
   const page = context.pages()[0] ?? (await context.newPage());
   await page.goto('/');
-  await expect(page.getByTestId('add-first-group')).toBeVisible();
+  await expect(page.getByTestId('tab-stock')).toBeVisible();
 
   await context.setOffline(true);
 
   // Record something worth protecting.
+  await page.getByTestId('tab-stock').click();
   await page.getByTestId('add-first-group').click();
   await page.getByTestId('addgroup-save').click();
+  await page.getByTestId('tab-today').click();
   await expect(page.getByTestId('tally-commit')).toBeVisible();
   await page.getByTestId('tally-plus-1').click();
   await page.getByTestId('tally-commit').click();
@@ -93,6 +95,7 @@ test('signing out clears every local store', async () => {
   // Back online: ending the server session needs the network. The offline
   // case is covered separately below.
   await context.setOffline(false);
+  await page.getByTestId('tab-more').click();
   await page.getByTestId('sign-out').click();
 
   // Unsent work is destroyed by the wipe, so the user is told first.
@@ -119,13 +122,16 @@ test('signing out offline still clears the device, and says so', async () => {
 
   const page = context.pages()[0] ?? (await context.newPage());
   await page.goto('/');
-  await expect(page.getByTestId('add-first-group')).toBeVisible();
+  await expect(page.getByTestId('tab-stock')).toBeVisible();
 
   await context.setOffline(true);
+  await page.getByTestId('tab-stock').click();
   await page.getByTestId('add-first-group').click();
   await page.getByTestId('addgroup-save').click();
+  await page.getByTestId('tab-today').click();
   await expect(page.getByTestId('tally-commit')).toBeVisible();
 
+  await page.getByTestId('tab-more').click();
   await page.getByTestId('sign-out').click();
   await page.getByTestId('sign-out-confirm').click();
 

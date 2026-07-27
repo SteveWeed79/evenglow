@@ -1,91 +1,52 @@
 'use client';
 
-import { useCallback, useState } from 'react';
-import { collectiveNoun, laysEggs } from '@/lib/contracts/entities';
+import { useCallback } from 'react';
+import { laysEggs } from '@/lib/contracts/entities';
 import { type ActiveWithdrawal, longestWithdrawal } from '@/lib/withdrawal';
 import { useGroups } from '../hooks/useGroups';
 import { useLog } from '../hooks/useSync';
 import type { Group } from '../read/groups';
-import { AddGroup } from './AddGroup';
-import { ServiceWorker } from './ServiceWorker';
-import { SyncChip } from './SyncChip';
-import { RecordTreatment } from './RecordTreatment';
 import { Tally } from './Tally';
 import { WithdrawalBanner } from './WithdrawalBanner';
 
 /**
- * Today. Chores and milestones are still to come; what is here is the log
- * path, which is the thing that has to be three taps from cold (R1).
+ * Today — the log path, and nothing that competes with it (R1, R2).
  *
  * Reads entirely from the local projection, so it renders the same with the
- * radio off.
+ * radio off. Defining groups and recording treatments live under Stock; what
+ * is here is what a person does at 6am with a bucket in one hand.
  */
 export function TodayShell(): React.ReactElement {
   const { groups, eggs, withdrawals, loading } = useGroups();
-  const [adding, setAdding] = useState(false);
+
+  if (loading) return <></>;
+
+  const layers = groups.filter((g) => laysEggs(g.species));
+
+  if (layers.length === 0) {
+    return (
+      <section className="arch shell__card">
+        <p className="label">Nothing to log yet</p>
+        <p>Add what you keep under Stock and today&rsquo;s tally appears here.</p>
+      </section>
+    );
+  }
 
   return (
     <>
-      <ServiceWorker />
-
-      <header className="shell__status">
-        <p className="label">
-          {new Date().toLocaleDateString(undefined, {
-            weekday: 'short',
-            day: 'numeric',
-            month: 'short',
-          })}
-        </p>
-        <SyncChip />
-      </header>
-
-      {adding ? (
-        <AddGroup onDone={() => setAdding(false)} />
-      ) : (
-        <>
-          {loading ? null : groups.length === 0 ? (
-            <EmptyState onAdd={() => setAdding(true)} />
-          ) : (
-            groups.map((group) => (
-              <GroupCard
-                key={group.id}
-                group={group}
-                eggs={eggs.get(group.id) ?? 0}
-                withdrawal={longestWithdrawal(withdrawals.get(group.id) ?? [])}
-              />
-            ))
-          )}
-
-          {groups.length > 0 ? (
-            <button type="button" className="sheet__button" onClick={() => setAdding(true)}>
-              Add another group
-            </button>
-          ) : null}
-        </>
-      )}
+      {layers.map((group) => (
+        <GroupTally
+          key={group.id}
+          group={group}
+          eggs={eggs.get(group.id) ?? 0}
+          withdrawal={longestWithdrawal(withdrawals.get(group.id) ?? [])}
+        />
+      ))}
     </>
   );
 }
 
-/** Empty screens invite (UX-SPEC §6). Warm here, because nothing depends on it. */
-function EmptyState({ onAdd }: { onAdd: () => void }): React.ReactElement {
-  return (
-    <section className="arch shell__card">
-      <p className="label">Nothing here yet</p>
-      <p>Add what you keep and the day&rsquo;s logging comes with it.</p>
-      <button
-        type="button"
-        className="sheet__button sheet__button--primary"
-        onClick={onAdd}
-        data-testid="add-first-group"
-      >
-        Add animals
-      </button>
-    </section>
-  );
-}
-
-function GroupCard({
+function GroupTally({
   group,
   eggs,
   withdrawal,
@@ -95,7 +56,6 @@ function GroupCard({
   withdrawal: ActiveWithdrawal | null;
 }): React.ReactElement {
   const log = useLog();
-  const [treating, setTreating] = useState(false);
 
   const logEggs = useCallback(
     async (count: number, acknowledged: boolean) => {
@@ -115,30 +75,12 @@ function GroupCard({
     [log, group.id],
   );
 
-  const descriptor =
-    group.species === 'other' && group.speciesOther
-      ? group.speciesOther
-      : collectiveNoun(group.species);
-
-  if (treating) {
-    return (
-      <RecordTreatment
-        flockId={group.id}
-        species={group.species}
-        groupName={group.name}
-        onDone={() => setTreating(false)}
-      />
-    );
-  }
-
   return (
     <section className="group">
       <header className="group__head">
         <div>
           <p className="group__name">{group.name}</p>
-          <p className="label">
-            {group.count} head &middot; {descriptor}
-          </p>
+          <p className="label">{group.count} head</p>
         </div>
         {eggs > 0 ? (
           <p className="group__today" data-numeric>
@@ -147,29 +89,15 @@ function GroupCard({
         ) : null}
       </header>
 
-      {/* The band sits above the Tally and stays put — it informs, it does
-          not interrupt (R10). */}
+      {/* Informs, does not interrupt (R10). */}
       {withdrawal ? <WithdrawalBanner withdrawal={withdrawal} /> : null}
 
-      {/* Offered per species — a goat keeper is not shown an egg counter. */}
-      {laysEggs(group.species) ? (
-        <Tally
-          label={`Eggs from ${group.name}`}
-          unit="eggs"
-          requireConfirm={withdrawal !== null}
-          onCommit={logEggs}
-        />
-      ) : null}
-
-      {/* Secondary, so it stays out of the log path's way. */}
-      <button
-        type="button"
-        className="sheet__button"
-        onClick={() => setTreating(true)}
-        data-testid="record-treatment"
-      >
-        Record a treatment
-      </button>
+      <Tally
+        label={`Eggs from ${group.name}`}
+        unit="eggs"
+        requireConfirm={withdrawal !== null}
+        onCommit={logEggs}
+      />
     </section>
   );
 }

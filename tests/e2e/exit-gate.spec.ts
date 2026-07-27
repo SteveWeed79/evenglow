@@ -117,8 +117,10 @@ async function logOneEgg(page: Page): Promise<void> {
  * the append-only ones, so both projection paths are exercised.
  */
 async function addGroup(page: Page): Promise<void> {
+  await page.getByTestId('tab-stock').click();
   await page.getByTestId('add-first-group').click();
   await page.getByTestId('addgroup-save').click();
+  await page.getByTestId('tab-today').click();
   await expect(page.getByTestId('tally-commit')).toBeVisible();
 }
 
@@ -132,7 +134,7 @@ test('50 mutations survive airplane mode and a hard restart, then sync exactly o
 
   let page = context.pages()[0] ?? (await context.newPage());
   await page.goto('/');
-  await expect(page.getByTestId('add-first-group')).toBeVisible();
+  await expect(page.getByTestId('tab-stock')).toBeVisible();
 
   await context.setOffline(true);
 
@@ -193,7 +195,7 @@ test('a log never waits on the network', async () => {
 
   const page = context.pages()[0] ?? (await context.newPage());
   await page.goto('/');
-  await expect(page.getByTestId('add-first-group')).toBeVisible();
+  await expect(page.getByTestId('tab-stock')).toBeVisible();
 
   await context.setOffline(true);
   await addGroup(page);
