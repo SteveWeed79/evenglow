@@ -400,18 +400,44 @@ revoke the refresh token, because there is no token client on this entry to
 hold one — when that lands it calls `POST /auth/logout`, which S3b already
 built and tested.
 
-**S5c — the native shell.** `capacitor.config.ts`, the committed `android/`
-project, and the Capacitor `SqlDriver`. **This is the first stage that cannot
-be verified in this environment** — it needs the Android toolchain and a device
-or emulator. Everything before it is deliberately arranged so that what reaches
-S5c is a shell around code already under test.
+**S5c — the native shell — built, not yet verified.** Capacitor 8:
+`capacitor.config.ts`, the committed `android/` project (53 files; the
+template's own `.gitignore` already excludes the copied bundle, the generated
+config and the Gradle build directories), `openCapacitorSqlDriver`, platform
+selection on the Vite entry, and resume/network triggers via `@capacitor/app`
+and `@capacitor/network`.
 
-Vite entry, `capacitor.config.ts`, committed `android/` project. Mount the
-existing screens. Resume- and network-triggered flush via `@capacitor/app` and
-`@capacitor/network`.
+**This is the first stage that cannot be finished in this environment.** The
+code is written, typechecked, linted and bundled, and `pnpm cap:sync` copies it
+into the native project — but nothing here can install an APK. The exit
+condition below is the developer's to meet, and until they do, S5c is *written*
+rather than *done*.
+
+Three decisions worth recording:
+
+*The device driver mirrors `tests/support/sqlite.ts` statement for statement,*
+including the serialised transaction chain and the refusal to nest. The two
+drivers are held to one suite, so any behaviour that differs between them is
+behaviour the suite cannot see — which makes it precisely what surfaces on a
+handset at 6am with a morning's counts queued. Two things are deliberately
+*not* mirrored: `journal_mode = WAL` and `synchronous = FULL`, which is what
+keeps a committed transaction committed through an Android force-stop. Under
+`node:sqlite` in a process that exits cleanly they would prove nothing; here
+they are the whole claim S6 tests.
+
+*The plugin wraps `run` and `execute` in their own transaction by default,* and
+every call passes `transaction: false`. Left on, each statement inside our
+`BEGIN` opens a nested one and invariant 5 — outbox row and projection write
+committing as a unit — quietly stops holding.
+
+*The driver is dynamically imported.* A static import would pull the sqlite
+plugin into the browser bundle, where it cannot work; the split also keeps
+`capacitor-driver.ts`, the only file allowed to touch the plugin, out of every
+build with no plugin to touch. `pnpm build:app` shows it as its own 15 kB
+chunk, which is the check that this stayed true.
 
 *Exit: debug APK installs on a device and shows an authenticated screen —
-Phase 1's exit gate under D8.*
+Phase 1's exit gate under D8. Not yet met.*
 
 ### S6 — Re-earn the Phase 2 exit gate on hardware
 

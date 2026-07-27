@@ -2,15 +2,16 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AppShell } from './components/AppShell';
 import { wipeLocalData } from './db/open';
+import { isNative } from './platform';
 import './styles.css';
 
 /**
  * The Vite entry.
  *
  * Deliberately thin. The shell, the tabs and every screen are the same modules
- * Next renders today — this only decides where they mount, which is the one
- * thing that genuinely differs between a server-rendered page and a static
- * bundle in a WebView.
+ * Next renders today — this only decides where they mount and what they mount
+ * over, which are the two things that genuinely differ between a browser and a
+ * WebView shipping inside an APK.
  */
 
 /**
@@ -27,11 +28,40 @@ async function signOut(): Promise<void> {
   window.location.reload();
 }
 
-const root = document.getElementById('root');
-if (!root) throw new Error('No #root element — index.html and main.tsx disagree.');
+/**
+ * On device, swap the store to SQLite before anything renders.
+ *
+ * Dynamically imported, and that is not a nicety: a static import would pull
+ * the sqlite plugin into the browser bundle, where it cannot work and has no
+ * business being. It also keeps `capacitor-driver.ts` — the one file allowed
+ * to touch the plugin — out of every build that has no plugin to touch.
+ *
+ * A failure here is fatal on purpose. Falling back to IndexedDB on a handset
+ * would produce an app that looks fine and writes a morning's work to a store
+ * the next launch does not read.
+ */
+async function bootstrap(): Promise<void> {
+  if (isNative()) {
+    const [{ openCapacitorSqlDriver }, { openSqliteStore }, { setLocalStore }] = await Promise.all([
+      import('./db/capacitor-driver'),
+      import('./db/sqlite-store'),
+      import('./db/store'),
+    ]);
 
-createRoot(root).render(
-  <StrictMode>
-    <AppShell signOutAction={signOut} />
-  </StrictMode>,
-);
+    setLocalStore(await openSqliteStore(await openCapacitorSqlDriver()));
+
+    const { startNativeTriggers } = await import('./sync/native-triggers');
+    await startNativeTriggers();
+  }
+
+  const root = document.getElementById('root');
+  if (!root) throw new Error('No #root element — index.html and main.tsx disagree.');
+
+  createRoot(root).render(
+    <StrictMode>
+      <AppShell signOutAction={signOut} />
+    </StrictMode>,
+  );
+}
+
+void bootstrap();
