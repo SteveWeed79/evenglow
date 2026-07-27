@@ -59,6 +59,18 @@ jobs:
       - name: Test
         run: pnpm test
 
+      # The three scripts CI never invoked — which is exactly why two of them
+      # were broken from the day they were written. Running them here means a
+      # setup command cannot rot unnoticed again.
+      - name: Apply indexes (pnpm db:indexes)
+        run: pnpm db:indexes
+
+      - name: Seed the first org and owner (pnpm db:seed)
+        run: pnpm db:seed "CI Farm" ci-owner@example.test 'a properly long passphrase'
+
+      - name: Verify the server data path (pnpm db:verify)
+        run: pnpm db:verify
+
       - name: Build
         run: pnpm build
 
