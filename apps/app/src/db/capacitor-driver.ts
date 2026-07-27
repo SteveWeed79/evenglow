@@ -40,6 +40,60 @@ export interface CapacitorSqlDriverOptions {
   database?: string;
 }
 
+/**
+ * The two methods `applyPragmas` needs, and no more.
+ *
+ * Narrow on purpose so the pragma sequence can be exercised against a fake —
+ * see the note below for why that is worth a seam.
+ */
+export interface PragmaTarget {
+  execute(statement: string, transaction: boolean): Promise<unknown>;
+  query(statement: string): Promise<{ values?: unknown[] }>;
+}
+
+/**
+ * Connection settings, and a lesson about which plugin method to use.
+ *
+ * `execute()` maps to Android's `SQLiteDatabase.execSQL`, which **refuses any
+ * statement that returns rows** — it fails with "Queries can be performed
+ * using SQLiteDatabase query or rawQuery methods only". `PRAGMA journal_mode`
+ * returns the resulting mode as a row, so running it through `execute` throws,
+ * and threw: it took down the whole bootstrap on the first emulator run, with
+ * no error anywhere except the WebView console.
+ *
+ * `query()` maps to `rawQuery`, which is happy with both. So the row-returning
+ * pragma goes through `query` and the silent one through `execute`. Nothing
+ * about the types says which is which, which is exactly why this is a seam
+ * with a test rather than four lines inline.
+ *
+ * Foreign keys are deliberately absent: the plugin already calls
+ * `setForeignKeyConstraintsEnabled(true)` when it opens the database.
+ */
+export async function applyPragmas(db: PragmaTarget): Promise<void> {
+  /**
+   * Write-ahead logging. Not in the test driver, because `node:sqlite` in a
+   * process about to exit cleanly cannot show the difference — here it is the
+   * difference, in how a committed transaction survives an Android force-stop.
+   *
+   * Not fatal if it does not take. Android may already have chosen WAL, and
+   * `synchronous = FULL` below is what actually forces the fsync on commit;
+   * refusing to start the app over a journal mode would be a worse trade than
+   * running in the default one.
+   */
+  const journal = await db.query('PRAGMA journal_mode = WAL;');
+  const mode = (journal.values ?? [])[0];
+  if (
+    typeof mode !== 'object' ||
+    mode === null ||
+    String((mode as Record<string, unknown>).journal_mode).toLowerCase() !== 'wal'
+  ) {
+    console.warn('Steading: could not enable WAL; continuing in the default journal mode', mode);
+  }
+
+  // Returns nothing, so execute() is correct here.
+  await db.execute('PRAGMA synchronous = FULL;', false);
+}
+
 export async function openCapacitorSqlDriver(
   options: CapacitorSqlDriverOptions = {},
 ): Promise<SqlDriver> {
@@ -62,20 +116,7 @@ export async function openCapacitorSqlDriver(
 
   if (!(await db.isDBOpen()).result) await db.open();
 
-  // Matching the test driver: nothing uses foreign keys yet, but a later table
-  // that does should not silently lose its constraint on one backing only.
-  await db.execute('PRAGMA foreign_keys = ON;', false);
-
-  /**
-   * Write-ahead logging.
-   *
-   * Not in the test driver because `node:sqlite` in a process that is about to
-   * exit cleanly cannot show the difference. Here it is the difference: WAL is
-   * what keeps a committed transaction committed when Android force-stops the
-   * process, which is the entire claim the Phase 2 gate exists to test.
-   */
-  await db.execute('PRAGMA journal_mode = WAL;', false);
-  await db.execute('PRAGMA synchronous = FULL;', false);
+  await applyPragmas(db);
 
   /**
    * Transactions run one at a time, chained off this promise. See
@@ -119,15 +160,26 @@ export async function openCapacitorSqlDriver(
         throw new Error('Nested transactions are not supported; see SqlDriver.transaction.');
       }
 
+      /**
+       * The plugin's own transaction methods, not `execute('BEGIN;')`.
+       *
+       * They call Android's `SQLiteDatabase.beginTransaction` family, which is
+       * where that class keeps its own transaction bookkeeping. Issuing raw
+       * BEGIN/COMMIT through `execSQL` runs underneath all of it, so the two
+       * disagree about whether a transaction is open — and the failure lands
+       * on whichever write happens to be in flight, not on the line that
+       * caused it. The test driver talks straight to SQLite and has no such
+       * layer, which is why it cannot catch this one.
+       */
       const run = async (): Promise<T> => {
-        await db.execute('BEGIN;', NO_IMPLICIT_TRANSACTION);
+        await db.beginTransaction();
         inTransaction = true;
         try {
           const result = await work();
-          await db.execute('COMMIT;', NO_IMPLICIT_TRANSACTION);
+          await db.commitTransaction();
           return result;
         } catch (error) {
-          await db.execute('ROLLBACK;', NO_IMPLICIT_TRANSACTION);
+          await db.rollbackTransaction();
           throw error;
         } finally {
           inTransaction = false;
