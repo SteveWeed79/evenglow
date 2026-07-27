@@ -21,10 +21,15 @@ const config: CapacitorConfig = {
      */
     allowMixedContent: false,
     /**
-     * Web debugging follows the build type, so a release APK cannot be
-     * inspected with devtools while a debug build still can.
+     * `webContentsDebuggingEnabled` is deliberately unset.
+     *
+     * Capacitor's default already does the right thing — inspectable on a
+     * debug build, not on a release one. Pinning it to `false` looked like
+     * good hygiene and was actively harmful: the first emulator run failed
+     * with a blank screen and no way to attach devtools, on a debug build,
+     * because of this line. Security posture that only ever costs the
+     * developer is not security posture.
      */
-    webContentsDebuggingEnabled: false,
   },
 
   plugins: {

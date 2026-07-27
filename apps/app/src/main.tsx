@@ -138,4 +138,40 @@ function fatal(error: unknown): void {
   root.append(panel);
 }
 
-void bootstrap().catch(fatal);
+/**
+ * A bootstrap that never finishes has to say so too.
+ *
+ * The first emulator run produced no error and no app: the plaster background
+ * and nothing else, no exception in logcat, and none of the native listeners
+ * registered. Nothing had failed — it was still waiting, inside a plugin call
+ * that never came back. A rejection handler cannot see that, and from the
+ * outside a hang and a slow start are the same picture.
+ *
+ * Generous, because this is a diagnosis of last resort and a cold start on a
+ * tired handset is allowed to be slow. It does not cancel anything: if the
+ * plugin does eventually answer, the app carries on behind the message.
+ */
+const BOOTSTRAP_TIMEOUT_MS = 15_000;
+
+let started = false;
+
+const watchdog = setTimeout(() => {
+  if (started) return;
+  fatal(
+    new Error(
+      `Startup did not finish within ${BOOTSTRAP_TIMEOUT_MS / 1_000}s. ` +
+        'The device database did not respond — nothing has been lost, but this ' +
+        'build cannot record anything until it does.',
+    ),
+  );
+}, BOOTSTRAP_TIMEOUT_MS);
+
+void bootstrap()
+  .then(() => {
+    started = true;
+    clearTimeout(watchdog);
+  })
+  .catch((error: unknown) => {
+    clearTimeout(watchdog);
+    fatal(error);
+  });
