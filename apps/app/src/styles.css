@@ -42,8 +42,16 @@
   --tap-gap: 12px;
 
   /* THE MOTIF: the round door. Top arched, bottom seated on the floor.
-     Load-bearing, not decorative: arch = something you can act on.        */
-  --arch: 999px 999px 8px 8px;
+     Load-bearing, not decorative: arch = something you can act on.
+
+     Elliptical, and that is the whole trick. A doorway is a wide shallow
+     head sitting on straight jambs, which is two different radii — 50% of
+     the width across, a fixed 2rem down. A single circular radius cannot be
+     both: 999px made every control a semicircular dome with no jambs at all
+     (and ate its own padding, which is why card text sat outside the curve),
+     while a radius small enough to fix that turned the Tally into a rounded
+     rectangle. The slash separates horizontal radii from vertical ones.    */
+  --arch: 50% 50% 0.5rem 0.5rem / 2rem 2rem 0.5rem 0.5rem;
   --border: 2px solid color-mix(in oklab, var(--ink) 22%, transparent);
 }
 
@@ -120,6 +128,22 @@ body {
   margin: 0;
   /* Room for the four-tab bar plus the home indicator. */
   padding-bottom: env(safe-area-inset-bottom);
+  /* The tab bar is the last thing in the document, and `sticky` can only
+     hold an element up to its natural position. On a viewport taller than
+     the content that position is directly under the last card, which is how
+     the bar ended up floating in the middle of the page with a void beneath
+     it. Filling the viewport puts the floor back on the floor. */
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Vite mounts into #root; Next renders straight into <body>. Without this the
+   flex column above has exactly one child on the Vite entry and the floor
+   goes back to floating. `contents` makes the shell and the tab bar the
+   body's own children on both entries, so one rule covers both. */
+#root {
+  display: contents;
 }
 
 /* R4 — every interactive element clears the glove floor by default, so
@@ -152,6 +176,16 @@ summary {
 /* --arch means actionable. Flat rectangles are read-only. */
 .arch {
   border-radius: var(--arch);
+  border: var(--border);
+  background: var(--raised);
+}
+
+/* The other half of that signal, which had no class and so was never used.
+   A panel that only tells you something wears no door — Today's empty state
+   and the More card were both arched with nothing inside to act on, which
+   makes the arch decorative exactly where it is supposed to be load-bearing. */
+.panel {
+  border-radius: 0.5rem;
   border: var(--border);
   background: var(--raised);
 }
@@ -245,6 +279,11 @@ summary {
 }
 
 .shell {
+  /* width:100% is load-bearing next to margin-inline:auto. As a flex item of
+     the body column, auto side margins eat the free space and leave the
+     shell shrink-wrapped to its content — the column has to be told to fill
+     first and be capped second. */
+  width: 100%;
   max-width: 32rem;
   margin-inline: auto;
   padding: 1.25rem;
@@ -434,6 +473,12 @@ summary {
   background: var(--raised);
   border-top: var(--border);
   padding-bottom: env(safe-area-inset-bottom);
+  /* Same column as the content above it. Left full-bleed, four tabs spread
+     across a desktop monitor land nowhere near the thumb the layout is drawn
+     for, and the bar stops reading as part of the same app. */
+  width: 100%;
+  max-width: 32rem;
+  margin-inline: auto;
 }
 
 .tabs__tab {
@@ -455,8 +500,12 @@ summary {
   box-shadow: inset 0 3px 0 var(--lantern);
 }
 
-/* The tab bar is fixed, so the scrolling content needs room beneath it. */
+/* The tab bar sticks, so content scrolls under it and needs room beneath.
+   Growing to fill is what pushes the bar to the bottom of a tall viewport —
+   without it the last card and the tab bar sat together in the middle of the
+   screen, and the primary action ended up clipped behind the bar. */
 .shell {
+  flex: 1;
   padding-bottom: calc(1.25rem + var(--tap-primary));
 }
 

@@ -78,7 +78,7 @@ export function AppShell({ signOutAction }: { signOutAction: () => Promise<void>
 function More({ signOutAction }: { signOutAction: () => Promise<void> }): React.ReactElement {
   return (
     <>
-      <section className="arch shell__card">
+      <section className="panel shell__card">
         <p className="label">More</p>
         {/* Names what a keeper would look for, not the plan it lives in. */}
         <p className="shell__note">

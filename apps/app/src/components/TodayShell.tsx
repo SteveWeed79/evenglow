@@ -25,7 +25,7 @@ export function TodayShell(): React.ReactElement {
 
   if (layers.length === 0) {
     return (
-      <section className="arch shell__card">
+      <section className="panel shell__card">
         {/* Empty screens invite (UX-SPEC §6). */}
         <p className="label">Nothing to log yet</p>
         <p>Add what you keep under Stock, and the morning&rsquo;s tally lands here.</p>

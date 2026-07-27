@@ -64,8 +64,11 @@ Two deliberate swerves away from the obvious:
   --tap-primary: 64px;
   --tap-gap:     12px;
 
-  /* THE MOTIF: the round door. Top arched, bottom seated on the floor. */
-  --arch: 999px 999px 8px 8px;
+  /* THE MOTIF: the round door. Top arched, bottom seated on the floor.
+     Elliptical: 50% of the width across, a fixed 2rem down. A doorway is a
+     wide shallow head sitting on straight jambs, and one circular radius
+     cannot be both — see "the motif" below.                              */
+  --arch: 50% 50% 0.5rem 0.5rem / 2rem 2rem 0.5rem 0.5rem;
   --border: 2px solid color-mix(in oklab, var(--ink) 22%, transparent);
 }
 
@@ -94,7 +97,9 @@ Two deliberate swerves away from the obvious:
 
 `--arch` is the one shape the whole app is built from. Every card, the Tally frame, primary buttons, sheets, and the empty-state panels are arched at the top and squared at the base — a doorway seated on a floor. It appears everywhere, costs nothing, needs no illustration, and makes the app recognizable from across a room.
 
-It is also load-bearing: **arch = something you can act on.** Flat rectangles are read-only. That's a real affordance, not decoration.
+It is also load-bearing: **arch = something you can act on.** Flat rectangles are read-only. That's a real affordance, not decoration — so a card that only tells you something wears no door. Use `.panel` for those.
+
+**Why the radius is elliptical.** This token was `999px 999px 8px 8px` until it was looked at on a screen. When corner radii would overlap, CSS scales all four by a single factor, so on any element wider than it is tall the top corners meet in the middle: a semicircular dome with no jambs at all. Every chip, button and card rendered as a tombstone, and the curve ate its own padding badly enough that card text sat outside the border. A radius small enough to fix that flattened the Tally into a rounded rectangle. Two radii — wide across, shallow down — give a head and jambs at any size, which is what a door is.
 
 ### Signature element — the Tally, in its doorway
 
@@ -191,7 +196,7 @@ export function Tally({
 .tally__commit { background: var(--lantern); color: #201913; width: 100%; }
 ```
 
-The lamp glow sits behind the numeral, above the arch's spring line — light coming in through a round door. It's one gradient; it does not repeat anywhere else in the app.
+The lamp glow sits behind the numeral, above the arch's spring line — light coming in through a round door. **One glow per screen**, over whichever doorway that screen is about. A screen with no Tally spends it elsewhere: sign-in, which has no counter, lights its own doorway.
 
 Haptic feedback matters more than it sounds: through a glove it's often the only confirmation the tap registered. This is a concrete argument for the native shell — the web `navigator.vibrate` API is unsupported in iOS Safari, so on a PWA this feature would simply not exist on half the phones in the world. The Capacitor plugin works everywhere.
 
