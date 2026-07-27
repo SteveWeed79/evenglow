@@ -20,6 +20,7 @@
   "dependencies": {
     "@node-rs/argon2": "^2.0.2",
     "@steading/api": "workspace:*",
+    "@steading/app": "workspace:*",
     "@steading/contracts": "workspace:*",
     "idb": "^8.0.3",
     "mongodb": "^7.5.0",
@@ -33,7 +34,7 @@
   "devDependencies": {
     "@playwright/test": "^1.62.0",
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitest/coverage-v8": "^4.1.10",

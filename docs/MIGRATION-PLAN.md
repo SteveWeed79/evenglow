@@ -253,11 +253,40 @@ green.*
 
 ### S4 — SQLite `LocalStore`
 
-The real work. Implement `LocalStore` against SQLite: schema, migrations,
-and the transactional `enqueue`.
+The real work. Split in two, because the schema and the store are separately
+testable and the first is a prerequisite for the second.
 
-Retarget `tests/offline/**` at the port interface and run the suite against
-**both** implementations. Identical results is the bar.
+**S4a — the SQL seam, schema, and migration ladder ✅ done.**
+
+`SqlDriver` is a deliberately narrow interface with two backings:
+`@capacitor-community/sqlite` on device (S5), and `node:sqlite` under test. The
+split is not tidiness — the storage layer is the highest-risk part of this
+migration, and a layer that can only be exercised on a handset is one that gets
+exercised rarely and late. Everything clever lives above the driver, where it
+is testable, rather than in two implementations that then have to agree.
+
+**Concurrent transactions are serialised, and nesting is refused.** A SQLite
+connection holds one transaction, so two overlapping calls are not two
+transactions — they are one, with either caller able to roll back the other's
+writes. For enqueue that means a committed half-write: a sequence number
+consumed with no outbox row, or a projection updated for a mutation that is not
+queued. Two taps on the Tally is enough to reach it. The first version of the
+driver tried to nest with savepoints and the concurrency test caught it
+unwinding into "no such savepoint" — the polite version of that failure.
+
+Migrations are additive only, enforced by a test rather than remembered: a
+`DROP` or `DELETE` in a migration discards work that exists nowhere else until
+it flushes. Each migration commits together with its version bump, so a failure
+part-way leaves the database at the previous version rather than claiming to be
+migrated and not being.
+
+*Exit, met: 15 schema and transaction assertions against real SQLite in Node.
+The `indexedDB` ban S2 pre-armed on `apps/app/src/**` fires now that the
+directory exists — verified against a deliberate violation.*
+
+**S4b — the store itself.** Implement `LocalStore` over the driver, then
+retarget `tests/offline/**` at the port and run the suite against **both**
+implementations. Identical results is the bar.
 
 Specific things to get right, each of which the IndexedDB version already
 handles and a fresh implementation tends not to:
