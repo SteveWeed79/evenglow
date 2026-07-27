@@ -28,13 +28,21 @@ const eslintConfig = defineConfig([
       'src/**/*.ts',
       'src/**/*.tsx',
       'src/**/*.mts',
-      // First-party source lives in two places now that contracts is a
-      // workspace package. A guard listing only src/ would stop covering
-      // anything that moves out of it — which is precisely how the first
-      // attempt at the D8 restructure disarmed every check in this repo.
+      // First-party source lives in more than one place now, and will live in
+      // more still. A guard listing only src/ stops covering anything that
+      // moves out of it — precisely how the first attempt at the D8
+      // restructure disarmed every check in this repo.
       'packages/*/src/**/*.ts',
+      // Pre-armed for the migration. These directories do not exist yet; the
+      // globs are here so the guard is in force the moment the first file
+      // lands in them, rather than being remembered afterwards. That they
+      // actually fire is asserted in tests/unit/guards.test.ts, which is what
+      // makes this a guarantee rather than an intention.
+      'apps/*/src/**/*.ts',
+      'apps/*/src/**/*.tsx',
+      'apps/*/src/**/*.mts',
     ],
-    ignores: ['src/server/db/**'],
+    ignores: ['src/server/db/**', 'apps/api/src/db/**'],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -91,6 +99,9 @@ const eslintConfig = defineConfig([
       'packages/contracts/src/**/*.ts',
       'src/client/**/*.ts',
       'src/client/**/*.tsx',
+      // Pre-armed for the migration, as above.
+      'apps/app/src/**/*.ts',
+      'apps/app/src/**/*.tsx',
     ],
     rules: {
       'no-restricted-imports': [
@@ -109,6 +120,32 @@ const eslintConfig = defineConfig([
             },
           ],
         },
+      ],
+    },
+  },
+
+  /**
+   * Invariant 6 — SQLite is the only client store, and tokens live in secure
+   * storage.
+   *
+   * Scoped to apps/app deliberately. That directory does not exist yet, so
+   * this bans nothing today: the working engine under src/client IS built on
+   * IndexedDB, knowingly, until S4 replaces it (masterplan §0.1). Arming the
+   * rule where the new client will live means the ban is already in force
+   * when the first file arrives, and cannot be reintroduced by a port that
+   * reaches for a familiar API.
+   *
+   * PHASE-1-SPEC T6 puts this rule on apps/app/src/**; that is what this is.
+   */
+  {
+    files: ['apps/app/src/**/*.ts', 'apps/app/src/**/*.tsx'],
+    ignores: ['apps/app/src/db/**'],
+    rules: {
+      'no-restricted-globals': [
+        'error',
+        { name: 'localStorage', message: 'Use SQLite, or secure storage for tokens.' },
+        { name: 'sessionStorage', message: 'Use SQLite, or secure storage for tokens.' },
+        { name: 'indexedDB', message: 'SQLite is the only client store (D9, invariant 6).' },
       ],
     },
   },

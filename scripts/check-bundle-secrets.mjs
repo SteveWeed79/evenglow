@@ -10,7 +10,20 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-const CLIENT_DIRS = ['.next/static'];
+/**
+ * Both build outputs, so the check spans the migration rather than being
+ * repointed on the day the client changes — the day it would most easily be
+ * forgotten. Whichever exists is scanned; if neither does, the scanned-count
+ * assertion below fails rather than reporting a vacuous pass.
+ *
+ * The stakes rise after D8: today this output is served from a host that can
+ * be redeployed. Afterwards it ships inside an APK, which is trivially
+ * unpacked and cannot be recalled from a device.
+ */
+const CLIENT_DIRS = [
+  '.next/static', // Next, today
+  'apps/app/dist', // Vite, from S5
+];
 
 /** Env vars whose values must never appear in client-side output. */
 const SECRET_VARS = [
