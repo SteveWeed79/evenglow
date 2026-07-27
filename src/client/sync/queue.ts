@@ -137,9 +137,30 @@ export async function enqueue(input: EnqueueInput): Promise<QueuedMutation> {
     await tx.objectStore(STORES.records).put(record);
     await tx.done;
   } catch (error) {
-    // A full disk must fail the log loudly rather than half-write it. The
-    // transaction aborts as a unit, so no sequence number is consumed and
-    // nothing partial is left behind.
+    /**
+     * Abort explicitly. This used to rely on the transaction failing as a
+     * unit, which is only true when the failure arrives through the REQUEST.
+     * A synchronous throw from put() — which is how a quota exception can
+     * surface, and how a DataCloneError always does — leaves the transaction
+     * with no pending work, so IndexedDB auto-commits it: the outbox row and
+     * the advanced counter land, and the projection does not.
+     *
+     * That is queue-and-view divergence, which is the exact state invariant 5
+     * exists to make impossible. Found by holding this engine and the SQLite
+     * one to the same suite.
+     */
+    try {
+      tx.abort();
+    } catch {
+      // Already settled — the failure did abort it, which is the other path.
+    }
+
+    // The abort rejects tx.done, and nothing is awaiting it once we are here.
+    // Left alone it surfaces as an unhandled rejection that has nothing to do
+    // with what actually went wrong.
+    void tx.done.catch(() => undefined);
+
+    // A full disk must fail the log loudly rather than half-write it.
     if (isQuotaError(error)) throw new StorageFullError();
     throw error;
   }

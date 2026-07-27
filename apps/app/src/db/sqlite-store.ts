@@ -156,11 +156,15 @@ export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
     raw: unknown,
     reason: string,
   ): Promise<void> {
+    // Composite key, matching the IndexedDB engine. An outbox id and a record
+    // key are drawn from different spaces and could otherwise collide here,
+    // and a quarantine that overwrites a quarantined row defeats the point of
+    // keeping the raw value at all.
     await driver.run(
       `INSERT INTO quarantine (key, store, raw, reason, quarantinedAt)
        VALUES (?, ?, ?, ?, ?)
        ON CONFLICT(key) DO UPDATE SET raw = excluded.raw, reason = excluded.reason`,
-      [key, store, JSON.stringify(raw ?? null), reason, Date.now()],
+      [`${store}:${key}`, store, JSON.stringify(raw ?? null), reason, Date.now()],
     );
   }
 
