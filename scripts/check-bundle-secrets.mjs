@@ -29,7 +29,7 @@ function* walk(dir) {
   try {
     entries = readdirSync(dir);
   } catch {
-    return; // Directory absent — nothing built, nothing to check.
+    return; // Absent — the scanned-count assertion below decides what that means.
   }
   for (const entry of entries) {
     const path = join(dir, entry);
@@ -65,6 +65,22 @@ for (const name of Object.keys(process.env)) {
   if (name.startsWith('NEXT_PUBLIC_') && SUSPICIOUS_PUBLIC.test(name)) {
     failures.push(`${name} is exposed to the client but is named like a secret`);
   }
+}
+
+/**
+ * 3. The scan must have covered something.
+ *
+ * This runs after `pnpm build` in CI, so an empty client directory means the
+ * build output moved and this check is now aimed at nothing — reporting
+ * "passed, 0 assets scanned" while a secret sits in the bundle. A restructure
+ * did exactly this to every guard in the repo, so the vacuous pass is now a
+ * failure instead.
+ */
+if (scanned === 0) {
+  failures.push(
+    `no client assets found in ${CLIENT_DIRS.join(', ')} — run after a build, ` +
+      'or update CLIENT_DIRS if the build output moved',
+  );
 }
 
 if (failures.length > 0) {
