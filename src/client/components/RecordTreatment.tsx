@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { describeLogFailure } from '../sync/failure';
 import {
   givesMilk,
   laysEggs,
@@ -54,6 +55,7 @@ export function RecordTreatment({
   const [ends, setEnds] = useState(todayValue());
   const [days, setDays] = useState<Record<WithdrawalKind, number>>({ egg: 0, meat: 0, milk: 0 });
   const [saving, setSaving] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
 
   // Only ask about produce this species actually gives. Meat always applies.
   const kinds: WithdrawalKind[] = [
@@ -77,21 +79,31 @@ export function RecordTreatment({
       kinds.filter((kind) => days[kind] > 0).map((kind) => [kind, days[kind]]),
     );
 
-    await log({
-      entity: 'medication',
-      op: 'create',
-      targetId: newId(),
-      payload: {
-        flockId,
-        name: name.trim(),
-        ...(reason.trim() ? { reason: reason.trim() } : {}),
-        route,
-        ...(dose.trim() ? { dose: dose.trim() } : {}),
-        administeredAt: dateToMs(administered),
-        treatmentEndsAt: dateToMs(ends),
-        ...(Object.keys(withdrawalDays).length > 0 ? { withdrawalDays } : {}),
-      },
-    });
+    try {
+      await log({
+        entity: 'medication',
+        op: 'create',
+        targetId: newId(),
+        payload: {
+          flockId,
+          name: name.trim(),
+          ...(reason.trim() ? { reason: reason.trim() } : {}),
+          route,
+          ...(dose.trim() ? { dose: dose.trim() } : {}),
+          administeredAt: dateToMs(administered),
+          treatmentEndsAt: dateToMs(ends),
+          ...(Object.keys(withdrawalDays).length > 0 ? { withdrawalDays } : {}),
+        },
+      });
+    } catch (error) {
+      // `saving` must come back down. The guard at the top of save()
+      // reads it, so leaving it true on a throw makes the button
+      // permanently dead until the sheet is closed and reopened, with
+      // the typed-in work still on screen and nothing said.
+      setSaving(false);
+      setFailure(describeLogFailure(error));
+      return;
+    }
 
     onDone();
   }
@@ -196,6 +208,12 @@ export function RecordTreatment({
       <p className="shell__note">
         Zero days means no withhold for that produce. Take the numbers from the label.
       </p>
+
+      {failure ? (
+        <p className="log-error" role="alert">
+          {failure}
+        </p>
+      ) : null}
 
       <div className="sheet__actions">
         <button type="button" className="sheet__button" onClick={onDone}>

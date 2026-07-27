@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
+import { describeLogFailure } from '../sync/failure';
 import { useLog } from '../hooks/useSync';
 import type { Machine } from '../read/iron';
 
@@ -23,6 +24,7 @@ export function LogHours({
   const log = useLog();
   const [value, setValue] = useState(machine.hours === null ? '' : String(machine.hours));
   const [saving, setSaving] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
 
   const hours = Number(value);
   const valid = value.trim() !== '' && Number.isFinite(hours) && hours >= 0;
@@ -42,11 +44,21 @@ export function LogHours({
     if (saving || !valid || tooLow) return;
     setSaving(true);
 
-    await log({
-      entity: 'hourReading',
-      op: 'create',
-      payload: { occurredAt: Date.now(), equipmentId: machine.id, hours },
-    });
+    try {
+      await log({
+        entity: 'hourReading',
+        op: 'create',
+        payload: { occurredAt: Date.now(), equipmentId: machine.id, hours },
+      });
+    } catch (error) {
+      // `saving` must come back down. The guard at the top of save()
+      // reads it, so leaving it true on a throw makes the button
+      // permanently dead until the sheet is closed and reopened, with
+      // the typed-in work still on screen and nothing said.
+      setSaving(false);
+      setFailure(describeLogFailure(error));
+      return;
+    }
 
     onDone();
   }
@@ -91,6 +103,12 @@ export function LogHours({
         <p className="sheet__error" data-testid="hours-too-low">
           That hour reading is below the last one recorded ({machine.hours} h). Check the meter and
           try again.
+        </p>
+      ) : null}
+
+      {failure ? (
+        <p className="log-error" role="alert">
+          {failure}
         </p>
       ) : null}
 

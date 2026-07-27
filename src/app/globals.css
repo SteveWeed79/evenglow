@@ -327,6 +327,20 @@ summary {
   color: var(--muted);
 }
 
+/* A write that did not land. Same construction as .withdrawal: the text is
+   --ink so it holds 7:1 in every theme (R7), and rowan carries the signal in
+   the border and an 8% tint. Rowan as a text colour would sit near 4.5:1 on
+   both grounds, which is below the floor for anything a keeper has to read
+   outdoors — and this is the one message they must not miss. */
+.log-error {
+  margin: 0.5rem 0 0;
+  padding: 0.625rem 0.75rem;
+  border: 2px solid var(--rowan);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--rowan) 8%, var(--raised));
+  color: var(--ink);
+}
+
 /* ── The four tabs ──────────────────────────────────────────────────────── */
 
 .tabs {
