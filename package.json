@@ -19,6 +19,7 @@
     "db:seed": "pnpm --filter @steading/api db:seed",
     "check:secrets": "node scripts/check-bundle-secrets.mjs",
     "check:no-db-disables": "node scripts/check-no-db-disables.mjs",
+    "check:chunks": "node scripts/check-native-chunks.mjs",
     "db:verify": "pnpm --filter @steading/api db:verify",
     "build:app": "pnpm --filter @steading/app build",
     "dev:app": "pnpm --filter @steading/app dev",

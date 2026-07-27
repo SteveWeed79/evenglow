@@ -78,6 +78,7 @@ owner are created by `db:seed`.
 | `pnpm db:seed` | Create the first org and owner |
 | `pnpm check:secrets` | Fail if a secret reached the client bundle |
 | `pnpm check:no-db-disables` | Fail on inline disables of the db guard |
+| `pnpm check:chunks` | Fail if the native build lost its sqlite driver |
 | `pnpm build:app` | Vite build of the Capacitor client → `apps/app/dist` |
 | `pnpm cap:sync` | Build, then copy the bundle into the native project |
 | `pnpm cap:run:android` | Build, sync, and deploy to a device or emulator |
