@@ -20,6 +20,12 @@ export type SyncState =
 
 type Listener = (state: SyncState) => void;
 
+/** How long to stand off when another tab holds the sync lock. */
+const LOCK_HELD_MS = 1_000;
+
+/** The resting cadence, when there is nothing queued and nothing failing. */
+const IDLE_MS = 30_000;
+
 const listeners = new Set<Listener>();
 let timer: ReturnType<typeof setTimeout> | null = null;
 let consecutiveFailures = 0;
@@ -61,7 +67,7 @@ async function tick(transport?: SyncTransport): Promise<void> {
   if (!running) return;
 
   if (!isOnline()) {
-    schedule(30_000, transport);
+    schedule(IDLE_MS, transport);
     await publish();
     return;
   }
@@ -71,7 +77,7 @@ async function tick(transport?: SyncTransport): Promise<void> {
   // this device recognises rather than as a surprise.
   if ((await queueDepth()) === 0) {
     await pull();
-    schedule(30_000, transport);
+    schedule(IDLE_MS, transport);
     await publish();
     return;
   }
@@ -79,10 +85,25 @@ async function tick(transport?: SyncTransport): Promise<void> {
   syncing = true;
   await publish();
 
+  /**
+   * How many rows this tick actually resolved, and whether it got to try.
+   *
+   * `schedule(0)` below is only safe when the last batch moved. Without that,
+   * any tick that leaves the queue exactly as it found it reschedules itself
+   * for zero milliseconds and the loop runs flat out.
+   */
+  let resolved = 0;
+  let heldElsewhere = false;
+
   try {
     // Null means another tab holds the lock and is already doing this.
     const outcome = await withSyncLock(SYNC_LOCK, () => flushOnce(transport));
-    if (outcome) consecutiveFailures = outcome.deferred ? consecutiveFailures + 1 : 0;
+    if (outcome === null) {
+      heldElsewhere = true;
+    } else {
+      consecutiveFailures = outcome.deferred ? consecutiveFailures + 1 : 0;
+      resolved = outcome.applied + outcome.duplicate + outcome.rejected;
+    }
   } catch (error) {
     // A failure here must never wedge the loop; the work is still queued.
     console.warn('Steading: flush failed', error);
@@ -93,12 +114,70 @@ async function tick(transport?: SyncTransport): Promise<void> {
 
   await publish();
 
+  /**
+   * The other tab is mid-flush. Pulling would take the same lock and get the
+   * same answer, so there is nothing to do this millisecond — and retrying at
+   * zero delay would spin the CPU for as long as the other tab holds it.
+   */
+  if (heldElsewhere) {
+    schedule(LOCK_HELD_MS, transport);
+    return;
+  }
+
   if (consecutiveFailures === 0) await pull();
 
-  const remaining = await queueDepth();
-  if (consecutiveFailures > 0) schedule(backoffDelay(consecutiveFailures), transport);
-  else if (remaining > 0) schedule(0, transport); // more batches waiting
-  else schedule(30_000, transport);
+  const next = nextDelay({
+    consecutiveFailures,
+    remaining: await queueDepth(),
+    resolved,
+  });
+
+  // A fruitless round trip is a failure for pacing even though nothing threw,
+  // so the backoff it just earned has to be remembered for the tick after.
+  consecutiveFailures = next.consecutiveFailures;
+  schedule(next.delay, transport);
+}
+
+export interface TickResult {
+  /** Consecutive deferrals or errors before this tick's outcome is applied. */
+  consecutiveFailures: number;
+  /** Mutations still in the outbox after the flush. */
+  remaining: number;
+  /** Rows this tick actually cleared or rejected — how much the queue moved. */
+  resolved: number;
+}
+
+/**
+ * When to run the next tick, and what the failure count becomes.
+ *
+ * Pulled out of `tick` because this is where the loop lived. A server that
+ * answers 200 without mentioning the batch leaves the queue exactly as it
+ * found it: nothing throws, nothing is deferred, and `remaining > 0` is still
+ * true — so the old rule ("work left, go again now") rescheduled for zero
+ * milliseconds forever. Roughly sixty flush-and-pull pairs a second against
+ * the server and the device, changing nothing, for as long as the tab was
+ * open.
+ *
+ * The rule that replaces it: **go again immediately only if the last batch
+ * actually moved.** Progress earns the fast path; the absence of an error
+ * does not.
+ *
+ * Exported for tests. Pure, so the pacing can be asserted without a clock.
+ */
+export function nextDelay(result: TickResult): { delay: number; consecutiveFailures: number } {
+  const { consecutiveFailures: failures, remaining, resolved } = result;
+
+  if (failures > 0) return { delay: backoffDelay(failures), consecutiveFailures: failures };
+
+  // More batches waiting, and the last one moved.
+  if (remaining > 0 && resolved > 0) return { delay: 0, consecutiveFailures: 0 };
+
+  // Work left and nothing moved. Back off, and count it.
+  if (remaining > 0) {
+    return { delay: backoffDelay(failures + 1), consecutiveFailures: failures + 1 };
+  }
+
+  return { delay: IDLE_MS, consecutiveFailures: 0 };
 }
 
 /** Hydration never fails the loop — a device with stale reads still logs fine. */

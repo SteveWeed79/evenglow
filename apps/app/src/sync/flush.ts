@@ -156,6 +156,25 @@ async function applyResults(
   await localStore().resolveBatch(batch, results);
   await localStore().markSynced(Date.now());
 
+  /**
+   * Answered, but without mentioning these.
+   *
+   * resolveBatch keeps them queued and counts the attempt, because resending
+   * is safe and silence must never be read as success. But counting an
+   * attempt only bounds the retry if something eventually acts on the count —
+   * and nothing did, so a server that consistently omits a mutation had it
+   * resent forever. The malformed-batch path above already routes to the
+   * inbox on exhaustion; this is the same reasoning for a well-formed
+   * response with a hole in it.
+   */
+  const unanswered = batch.filter((queued) => !byId.has(queued.id));
+  if (unanswered.length > 0) {
+    await rejectExhausted(
+      unanswered,
+      'The server kept answering without saying what happened to this record.',
+    );
+  }
+
   const next = { ...outcome };
   for (const queued of batch) {
     const result = byId.get(queued.id);
