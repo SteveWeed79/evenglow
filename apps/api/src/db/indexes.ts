@@ -66,6 +66,18 @@ export const INDEXES: Record<CollectionName, IndexDescription[]> = {
 const IDENTITY_INDEXES: Record<string, IndexDescription[]> = {
   users: [{ key: { email: 1 }, unique: true }, { key: { orgId: 1, role: 1 } }],
   orgs: [{ key: { _id: 1 } }],
+  refreshTokens: [
+    // Family revocation touches every row in a family, on the theft path where
+    // latency matters least but correctness matters most.
+    { key: { familyId: 1 } },
+    /**
+     * Expired tokens delete themselves. Revocation state is the security
+     * control and it lives in the row, so a row that has outlived its own
+     * expiry protects nothing — it is just a growing table of dead secrets to
+     * lose in a disclosure.
+     */
+    { key: { expiresAt: 1 }, expireAfterSeconds: 0 },
+  ],
 };
 
 /** The first key of an index description, or undefined if it has none. */
