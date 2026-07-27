@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
-import { closeDb, resetDbHandle } from '@/client/db/open';
-import { DB_NAME } from '@/client/db/schema';
+import { closeDb, resetDbHandle } from '@steading/app/db/open';
+import { DB_NAME } from '@steading/app/db/idb-schema';
 
 /** Deletes the database and forgets the handle, so each test starts clean. */
 export async function freshDb(): Promise<void> {

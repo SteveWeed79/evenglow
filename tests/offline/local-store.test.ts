@@ -3,10 +3,10 @@ import { newId } from '@steading/contracts';
 import type { SqlDriver } from '@steading/app/db/driver';
 import type { LocalStore } from '@steading/app/db/port';
 import { openSqliteStore } from '@steading/app/db/sqlite-store';
-import { idbLocalStore } from '@/client/db/idb-store';
+import { idbLocalStore } from '@steading/app/db/idb-store';
 import { nodeSqlDriver } from '../support/sqlite';
 import { freshDb } from '../support/idb';
-import { db as idb } from '@/client/db/open';
+import { db as idb } from '@steading/app/db/open';
 
 /**
  * One suite, both stores.

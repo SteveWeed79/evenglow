@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { describeLogFailure } from '../sync/failure';
+import { describeLogFailure } from '@steading/app/sync/failure';
 import { newId } from '@steading/contracts';
 import { useLog } from '../hooks/useSync';
 

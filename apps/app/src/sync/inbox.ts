@@ -1,5 +1,5 @@
 import { localStore } from '../db/store';
-import type { QueuedMutation } from '../db/schema';
+import type { QueuedMutation } from '../db/idb-schema';
 
 /**
  * The rejected-mutations inbox (A6).

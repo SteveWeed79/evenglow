@@ -7,16 +7,16 @@ import {
   readOutboxBySeq,
   readRecordsByEntity,
   wipeLocalData,
-} from '@/client/db/open';
+} from '@steading/app/db/open';
 import {
   type EnvelopeMigration,
   migrateEnvelope,
   UnmigratableEnvelopeError,
-} from '@/client/db/migrate';
-import { STORES } from '@/client/db/schema';
-import { enqueue, queueDepth, unsentCount } from '@/client/sync/queue';
-import { flushOnce } from '@/client/sync/flush';
-import { listRejected } from '@/client/sync/inbox';
+} from '@steading/app/db/migrate';
+import { STORES } from '@steading/app/db/idb-schema';
+import { enqueue, queueDepth, unsentCount } from '@steading/app/sync/queue';
+import { flushOnce } from '@steading/app/sync/flush';
+import { listRejected } from '@steading/app/sync/inbox';
 import { MUTATION_SCHEMA_VERSION, newId } from '@steading/contracts';
 import { freshDb } from '../support/idb';
 

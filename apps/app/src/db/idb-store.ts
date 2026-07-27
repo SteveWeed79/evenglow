@@ -12,11 +12,11 @@ import type {
   PullResult,
   QueueCounts,
   SnapshotWatermark,
-} from '@steading/app/db/port';
+} from './port';
 import { closeDb, db, listQuarantined, quarantineCount, readOutboxBySeq, readRecordsByEntity, wipeLocalData } from './open';
 import { toLocalRecord } from './project';
-import { META, parseMeta, type QueuedMutation, type Quarantined, STORES } from './schema';
-import { InvalidMutationError, StorageFullError } from '@steading/app/db/errors';
+import { META, parseMeta, type QueuedMutation, type Quarantined, STORES } from './idb-schema';
+import { InvalidMutationError, StorageFullError } from './errors';
 
 /**
  * `LocalStore` over IndexedDB.

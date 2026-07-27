@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { clearSession } from '../sync/session';
-import { unsentCount } from '../sync/queue';
+import { clearSession } from '@steading/app/sync/session';
+import { unsentCount } from '@steading/app/sync/queue';
 
 /**
  * Sign-out, which clears every local store (C5).

@@ -1,4 +1,4 @@
-import type { LocalStore } from '@steading/app/db/port';
+import type { LocalStore } from './port';
 import { idbLocalStore } from './idb-store';
 
 /**

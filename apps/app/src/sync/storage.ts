@@ -1,5 +1,5 @@
 import { db } from '../db/open';
-import { META, parseMeta, STORES } from '../db/schema';
+import { META, parseMeta, STORES } from '../db/idb-schema';
 
 /**
  * Storage durability (A2).
