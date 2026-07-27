@@ -77,9 +77,9 @@ import type { Db, Document, Filter, OptionalUnlessRequiredId, UpdateFilter } fro
 import { db } from './client';
 
 export const COLLECTIONS = [
-  'mutations', 'flocks', 'birds', 'eggLogs', 'feedLogs', 'mortality',
-  'predatorLogs', 'medications', 'equipment', 'hourReadings', 'maintenance',
-  'tasks', 'inventory', 'photos',
+  'mutations', 'flocks', 'animals', 'medications', 'eggLogs', 'productionLogs',
+  'feedLogs', 'mortality', 'predatorLogs', 'equipment', 'hourReadings',
+  'maintenance', 'tasks', 'inventory', 'photos',
 ] as const;
 export type CollectionName = (typeof COLLECTIONS)[number];
 
@@ -95,15 +95,14 @@ export async function scoped(orgId: string) {
 
     return {
       findOne: (f?: Filter<T>) => c.findOne(guard(f)),
-      findMany: (f?: Filter<T>, limit = 500) => c.find(guard(f)).limit(limit).toArray(),
-      changedSince: (since: Date, limit = 500) =>
-        c.find(guard({ serverTs: { $gt: since } } as Filter<T>))
-         .sort({ serverTs: 1 }).limit(limit).toArray(),
+      findMany: (f?: Filter<T>, opts?: { limit?: number; sort?: Sort<T> }) => { /* ... */ },
       insertOne: (doc: Omit<OptionalUnlessRequiredId<T>, 'orgId'>) =>
         c.insertOne({ ...doc, orgId } as OptionalUnlessRequiredId<T>),
-      updateOne: (f: Filter<T>, u: UpdateFilter<T>) => c.updateOne(guard(f), u),
-      upsertOne: (f: Filter<T>, u: UpdateFilter<T>) =>
-        c.updateOne(guard(f), u, { upsert: true }),
+      updateOne: (f: Filter<T>, u: UpdateFilter<T>) => {
+        assertSafeUpdate(u);
+        return c.updateOne(guard(f), u);
+      },
+      upsertOne: (f: Filter<T>, u: UpdateFilter<T>) => { /* stamps orgId into $setOnInsert */ },
       deleteOne: (f: Filter<T>) => c.deleteOne(guard(f)),
     };
   };
@@ -114,6 +113,22 @@ export async function scoped(orgId: string) {
 
 `bulkWrite` is deliberately absent — it cannot be transparently guarded, and sequential flush does not need it.
 
+**Two things the sketch above elides, both load-bearing. Port the implemented
+version rather than retyping this one.**
+
+- **`assertSafeUpdate` is not optional.** `guard()` stops you *reaching* another
+  org's document; it does nothing about *pushing* one of yours into another org
+  via `$set: { orgId }`. The implemented layer rejects any operator touching
+  `orgId` or `_id`, and `tests/unit/scoped.test.ts` covers it.
+- **`changedSince` has been removed from this sketch on purpose.** The obvious
+  form — filter `serverTs > since`, sort by `serverTs` — loses data. `serverTs`
+  is millisecond-resolution and a batch stamps many rows inside one
+  millisecond, so a page boundary falling mid-millisecond drops every row after
+  the cut permanently. Hydration must page on the `(serverTs, _id)` pair —
+  `_id` is a ULID, so it sorts lexicographically and supplies the total order
+  to seek into. The implemented pull route and its two regression tests are the
+  reference.
+
 ---
 
 ## T5 — Indexes (`apps/api/src/db/indexes.ts`)
@@ -122,11 +137,14 @@ Every collection gets a compound index led by `orgId`. Applied by `pnpm db:index
 
 ```ts
 await database.collection('mutations').createIndexes([
-  { key: { orgId: 1, serverTs: -1 } },
+  // Ascending, with _id as the tiebreaker: /snapshot seeks into this on the
+  // (serverTs, _id) cursor pair. It also serves a newest-first read by reverse
+  // traversal, so a separate { serverTs: -1 } would buy nothing.
+  { key: { orgId: 1, serverTs: 1, _id: 1 } },
   { key: { orgId: 1, deviceId: 1, clientSeq: 1 } },
 ]);
 await database.collection('eggLogs').createIndex({ orgId: 1, occurredAt: -1 });
-await database.collection('birds').createIndex({ orgId: 1, archivedAt: 1 });
+await database.collection('animals').createIndex({ orgId: 1, archivedAt: 1 });
 // ...one per collection, orgId first, always
 ```
 

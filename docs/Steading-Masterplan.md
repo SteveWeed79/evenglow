@@ -63,6 +63,8 @@ implementation and the test suite that proves the port is correct — a new
 storage layer is correct exactly when it passes the same suite (see
 `client/db/port.ts`, which exists for this reason).
 
+The route across the gap, stage by stage, is `MIGRATION-PLAN.md`.
+
 ---
 
 ## 1. Development Plan
@@ -78,7 +80,7 @@ SQLite schema and migrations, the mutation log, transactional enqueue-plus-proje
 **Exit gate:** airplane mode → 50 mutations → force-stop the app → reopen → reconnect → zero loss, zero duplicates, and a second device reaches identical state from `/snapshot`.
 
 ### Phase 3 — Core Domain
-Events first (egg collection, feed, mortality, predator, hour readings), then mutable entities (flocks, birds, equipment, maintenance, tasks, inventory), then the native camera and deferred photo upload.
+Events first (egg collection, feed, mortality, predator, hour readings, production), then mutable entities (flocks, animals, medications, equipment, maintenance, tasks, inventory), then the native camera and deferred photo upload.
 
 The charm layer (milestones, streaks, leaderboard, spot illustrations) unlocks here and **not before Phase 2's exit gate passes**. Design tokens and the arch motif land in Phase 1 — those are decisions every component inherits.
 

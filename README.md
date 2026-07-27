@@ -27,6 +27,7 @@ Planning docs, which are the source of truth:
 | [`docs/UX-SPEC.md`](docs/UX-SPEC.md) | Rules R1–R10, tokens, voice |
 | [`docs/COMPETITIVE-ANALYSIS.md`](docs/COMPETITIVE-ANALYSIS.md) | Why each feature exists |
 | [`docs/PHASE-1-SPEC.md`](docs/PHASE-1-SPEC.md) | The task list, rewritten for the D8–D10 target |
+| [`docs/MIGRATION-PLAN.md`](docs/MIGRATION-PLAN.md) | How this tree becomes that one, stage by stage |
 | [`docs/NATIVE-PIVOT.md`](docs/NATIVE-PIVOT.md) | Why Capacitor rather than React Native |
 | [`CLAUDE.md`](CLAUDE.md) | Hard invariants |
 
