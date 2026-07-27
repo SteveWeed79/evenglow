@@ -38,6 +38,17 @@ removed rather than kept alongside it.
 
 ## Getting started
 
+Node 22+ and pnpm. This is a pnpm workspace: internal packages are linked with
+`workspace:*`, a protocol npm cannot resolve, so `npm install` fails here with
+`EUNSUPPORTEDPROTOCOL`. That is not a broken tree — it is the wrong tool.
+
+```bash
+corepack enable                # installs the pnpm pinned in packageManager
+```
+
+If `corepack` is missing from your Node install, `npm install -g pnpm` works
+too; the `packageManager` pin then keeps you on the version CI uses.
+
 ```bash
 pnpm install
 cp .env.example .env.local     # fill in MONGODB_URI and AUTH_SECRET
@@ -45,6 +56,10 @@ pnpm db:indexes                # apply orgId-leading indexes
 pnpm db:seed "Hollow Farm" you@example.com 'a long passphrase'
 pnpm dev
 ```
+
+`AUTH_SECRET` ships blank. Generate one with `openssl rand -base64 32`.
+`MONGODB_URI` defaults to a local mongod — `docker run -d -p 27017:27017
+mongo:8` is enough if you do not have one installed.
 
 There is no invite flow yet (D7 is single-farm-first), so the first org and
 owner are created by `db:seed`.
