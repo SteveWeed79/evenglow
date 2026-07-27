@@ -1,7 +1,7 @@
 import { ulid } from 'ulid';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PULL_PAGE_SIZE, type Role, type SyncResponse } from '@steading/contracts';
-import type { UserDoc } from '@/server/db/identity';
+import type { UserDoc } from '@steading/api/db/identity';
 import { startTestDb } from '../support/mongo';
 import { makeMutation } from '../support/fixtures';
 
@@ -167,7 +167,7 @@ describeDb('/api/sync — tenant isolation', () => {
   it('scopes reads so one org cannot see another org records', async () => {
     await postSync({ mutations: [makeMutation(), makeMutation()] });
 
-    const { scoped } = await import('@/server/db/scoped');
+    const { scoped } = await import('@steading/api/db/scoped');
     const asB = await scoped(ORG_B);
 
     expect(await asB.col('mutations').countDocuments()).toBe(0);
@@ -183,7 +183,7 @@ describeDb('/api/sync — tenant isolation', () => {
 
     // The scoped layer is what makes a cross-tenant fetch a 404 rather than a
     // 403 at the route level: the record simply is not found.
-    const { scoped } = await import('@/server/db/scoped');
+    const { scoped } = await import('@steading/api/db/scoped');
     const asB = await scoped(ORG_B);
     expect(await asB.col('mutations').findOne({ _id: mutation.id })).toBeNull();
   });

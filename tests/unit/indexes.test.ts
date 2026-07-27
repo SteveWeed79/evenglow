@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { INDEXES, leadingKey } from '@/server/db/indexes';
-import { COLLECTIONS } from '@/server/db/scoped';
+import { INDEXES, leadingKey } from '@steading/api/db/indexes';
+import { COLLECTIONS } from '@steading/api/db/scoped';
 
 /**
  * C3 — index discipline. Asserted against the definitions rather than a live

@@ -2,8 +2,8 @@ import { ulid } from 'ulid';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import type { MutationResult } from '@steading/contracts';
 import type { SessionClaims } from '@/server/auth/session';
-import { scopedOn } from '@/server/db/scoped';
-import { applyBatch } from '@/server/sync/apply';
+import { scopedOn } from '@steading/api/db/scoped';
+import { applyBatch } from '@steading/api/sync/apply';
 import { makeMutation } from '../support/fixtures';
 import { startTestDb } from '../support/mongo';
 

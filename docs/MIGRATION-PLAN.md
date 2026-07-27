@@ -173,6 +173,35 @@ nothing else.*
 
 ### S3 — Fastify API alongside the Next routes
 
+Split into three, because "stand up a second server" turned out to bundle a
+move, a new auth scheme, and new routes into one reviewable unit — which is the
+shape this plan exists to avoid.
+
+**S3a — the API becomes a package ✅ done.** `src/server/**` moves to
+`apps/api` and the Next routes import it. No new behaviour, no second server
+yet: this is the step that makes a second server *possible*, since two
+implementations must share one applier or they will drift.
+
+What stayed behind, and why it is not an oversight: `auth/config.ts` and
+`auth/session.ts` are Auth.js and Next-session plumbing, and Fastify will not
+use them. `SessionClaims` moved into the package as `auth/claims.ts` — the
+appliers take that shape and do not care how it was established, so a second
+declaration is exactly how the Auth.js path and the token path would drift.
+`http.ts` split on the same line: `HttpError` and `errorBody` are shared, the
+`NextResponse` conversion is an adapter.
+
+*Exit, met: 267 unit tests, 6 e2e, build, and both guard scripts green through
+the new package boundary. The tenancy guard was exercised against a real file
+in `apps/api/src/sync` and fires; `apps/api/src/db` is exempt.*
+
+**S3b — token auth.** `jose`, `POST /auth/login`, `POST /auth/refresh`, rotating
+refresh with family revocation on reuse (`PHASE-1-SPEC.md` T7).
+
+**S3c — the routes, and the two-server proof.** `/sync` and `/snapshot` on
+Fastify, with the isolation and idempotency suites parameterised over both
+implementations. Running the same suite against both is the cheapest available
+evidence that the port did not weaken tenancy.
+
 Stand up `apps/api` with `server.ts` and `routes/{auth,sync,snapshot}.ts`
 wrapping the already-ported appliers. Token auth per `PHASE-1-SPEC.md` T7.
 

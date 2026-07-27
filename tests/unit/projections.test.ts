@@ -5,8 +5,8 @@ import {
   decideProjection,
   ENTITY_COLLECTIONS,
   type ExistingDoc,
-} from '@/server/sync/projections';
-import { COLLECTIONS } from '@/server/db/scoped';
+} from '@steading/api/sync/projections';
+import { COLLECTIONS } from '@steading/api/db/scoped';
 
 const NOTHING = { existing: null };
 const PRESENT: { existing: ExistingDoc } = { existing: { _id: 'id-1' } };

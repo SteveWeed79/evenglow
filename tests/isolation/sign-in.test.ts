@@ -36,8 +36,8 @@ beforeEach(async () => {
 
 /** Creates an org and owner exactly as `pnpm db:seed` does. */
 async function seedOwner(email: string): Promise<{ userId: string; orgId: string }> {
-  const { hashPassword } = await import('@/server/auth/password');
-  const { insertOrg, insertUser } = await import('@/server/db/identity');
+  const { hashPassword } = await import('@steading/api/auth/password');
+  const { insertOrg, insertUser } = await import('@steading/api/db/identity');
 
   const orgId = ulid();
   const userId = ulid();
@@ -59,7 +59,7 @@ async function seedOwner(email: string): Promise<{ userId: string; orgId: string
 describe('password hashing', () => {
   it('verifies a correct password', async () => {
     // argon2 is a native module — this is the first time it runs at all.
-    const { hashPassword, verifyPassword } = await import('@/server/auth/password');
+    const { hashPassword, verifyPassword } = await import('@steading/api/auth/password');
 
     const digest = await hashPassword(PASSWORD);
     expect(digest).not.toContain(PASSWORD);
@@ -67,19 +67,19 @@ describe('password hashing', () => {
   });
 
   it('rejects a wrong password', async () => {
-    const { hashPassword, verifyPassword } = await import('@/server/auth/password');
+    const { hashPassword, verifyPassword } = await import('@steading/api/auth/password');
     const digest = await hashPassword(PASSWORD);
 
     expect(await verifyPassword(digest, 'not the passphrase')).toBe(false);
   });
 
   it('treats a malformed stored digest as a wrong password, not a crash', async () => {
-    const { verifyPassword } = await import('@/server/auth/password');
+    const { verifyPassword } = await import('@steading/api/auth/password');
     expect(await verifyPassword('not-a-hash', PASSWORD)).toBe(false);
   });
 
   it('produces a different digest each time', async () => {
-    const { hashPassword } = await import('@/server/auth/password');
+    const { hashPassword } = await import('@steading/api/auth/password');
     const [a, b] = await Promise.all([hashPassword(PASSWORD), hashPassword(PASSWORD)]);
 
     // Salted, so two users with the same password are not obviously the same.
@@ -89,7 +89,7 @@ describe('password hashing', () => {
 
 describeDb('identity storage', () => {
   it('round-trips a seeded owner', async () => {
-    const { findUserByEmail } = await import('@/server/db/identity');
+    const { findUserByEmail } = await import('@steading/api/db/identity');
     const { userId, orgId } = await seedOwner('owner@example.test');
 
     const found = await findUserByEmail('owner@example.test');
@@ -99,7 +99,7 @@ describeDb('identity storage', () => {
   });
 
   it('finds a user regardless of how the email was typed', async () => {
-    const { findUserByEmail } = await import('@/server/db/identity');
+    const { findUserByEmail } = await import('@steading/api/db/identity');
     await seedOwner('Owner@Example.Test');
 
     // A farmer typing their email with a capital at 6am still signs in.
@@ -108,7 +108,7 @@ describeDb('identity storage', () => {
   });
 
   it('refuses a second account on the same email', async () => {
-    const { applyIndexes } = await import('@/server/db/indexes');
+    const { applyIndexes } = await import('@steading/api/db/indexes');
     await applyIndexes(harness!.db);
 
     await seedOwner('owner@example.test');
@@ -122,7 +122,7 @@ describeDb('identity storage', () => {
 describeDb('the credentials provider', () => {
   /** The real function the provider is configured with. */
   async function authorize(credentials: Record<string, unknown>) {
-    const { authorizeCredentials } = await import('@/server/auth/credentials');
+    const { authorizeCredentials } = await import('@steading/api/auth/credentials');
     return authorizeCredentials(credentials);
   }
 

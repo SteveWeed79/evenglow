@@ -1,4 +1,4 @@
-import type { CollectionName } from '@/server/db/scoped';
+import type { CollectionName } from '../db/scoped';
 import { type Entity, isAppendOnly, type Op } from '@steading/contracts';
 
 /**

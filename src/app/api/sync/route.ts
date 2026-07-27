@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { syncRequestSchema, type SyncResponse } from '@steading/contracts';
 import { requireMutationSession } from '@/server/auth/session';
-import { scoped } from '@/server/db/scoped';
+import { scoped } from '@steading/api/db/scoped';
 import { errorResponse, HttpError } from '@/server/http';
-import { applyBatch } from '@/server/sync/apply';
+import { applyBatch } from '@steading/api/sync/apply';
 
 /**
  * The only write path for offline data.

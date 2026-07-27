@@ -4,7 +4,7 @@ import NextAuth from 'next-auth';
 import type {} from 'next-auth/jwt';
 import Credentials from 'next-auth/providers/credentials';
 import { isRole, type Role } from '@steading/contracts';
-import { authorizeCredentials } from './credentials';
+import { authorizeCredentials } from '@steading/api/auth/credentials';
 
 /**
  * Auth.js with the JWT session strategy.

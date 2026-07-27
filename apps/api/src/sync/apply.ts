@@ -6,8 +6,8 @@ import {
   type Mutation,
   type MutationResult,
 } from '@steading/contracts';
-import type { SessionClaims } from '@/server/auth/session';
-import type { Scoped, Tenanted } from '@/server/db/scoped';
+import type { SessionClaims } from '../auth/claims';
+import type { Scoped, Tenanted } from '../db/scoped';
 import {
   decideProjection,
   ENTITY_COLLECTIONS,
