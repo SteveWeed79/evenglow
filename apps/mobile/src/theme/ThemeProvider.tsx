@@ -1,28 +1,34 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { useColorScheme } from 'react-native';
-import { daylight, lamplight, type Surfaces } from './tokens';
+import { THEMES, type Theme, type ThemeName } from './tokens';
 
 /**
  * Lamplight — UX-SPEC §6, the first of the six places warmth is allowed.
  *
- * The pure helpers live in `theme.ts` and are shared with the web build. This
- * is only the plumbing: what the device asks for, what the header toggle says
- * instead, and the surfaces that fall out.
+ * Three themes, not two. Bright sun is an attribute selector on the web and
+ * simply a third theme here: warmth yields to legibility, never the reverse.
  *
- * The override stays session-scoped, exactly as on web. It is not persisted,
- * so the next cold start follows the system again — which matches what the
- * toggle is *for*, the hour before sunrise when the phone still thinks it is
- * day. Persisting a display preference belongs with the SQLite settings table
- * in R2, not here.
+ * The override is session-scoped, exactly as on web. It is not persisted, so
+ * the next cold start follows the system again — which matches what the toggle
+ * is *for*, the hour before sunrise when the phone still thinks it is day.
+ * Persisting a display preference belongs with the SQLite settings table, not
+ * here.
  */
 
-export type Theme = 'daylight' | 'lamplight';
+export type { ThemeName };
 
-export function systemTheme(prefersDark: boolean): Theme {
+export function systemTheme(prefersDark: boolean): ThemeName {
   return prefersDark ? 'lamplight' : 'daylight';
 }
 
-export function otherTheme(theme: Theme): Theme {
+/**
+ * The lamp toggles between the two ambient themes and never lands on `sun`.
+ *
+ * Bright sun is a legibility override, not a time of day — cycling into it
+ * from a two-state control would put someone in high-contrast mode by accident
+ * at 5am, which is the opposite of what they reached for.
+ */
+export function otherTheme(theme: ThemeName): ThemeName {
   return theme === 'lamplight' ? 'daylight' : 'lamplight';
 }
 
@@ -33,20 +39,23 @@ export function otherTheme(theme: Theme): Theme {
  * someone tap twice to find out what it does, and this one is tapped in the
  * dark with cold hands.
  */
-export function toggleLabel(current: Theme): string {
+export function toggleLabel(current: ThemeName): string {
+  if (current === 'sun') return 'Leave bright sun';
   return current === 'lamplight' ? 'Switch to daylight' : 'Switch to lamplight';
 }
 
 export interface ThemeValue {
-  theme: Theme;
-  colors: Surfaces;
+  theme: ThemeName;
+  colors: Theme;
   toggle: () => void;
+  /** Bright sun is set explicitly, never reached by toggling. */
+  setTheme: (theme: ThemeName | null) => void;
 }
 
 const ThemeContext = createContext<ThemeValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }): React.ReactElement {
-  const [override, setOverride] = useState<Theme | null>(null);
+  const [override, setOverride] = useState<ThemeName | null>(null);
   const scheme = useColorScheme();
 
   // Until someone overrides it, sunrise while the app is open just happens.
@@ -55,7 +64,7 @@ export function ThemeProvider({ children }: { children: ReactNode }): React.Reac
   const toggle = useCallback(() => setOverride(otherTheme(theme)), [theme]);
 
   const value = useMemo<ThemeValue>(
-    () => ({ theme, colors: theme === 'lamplight' ? lamplight : daylight, toggle }),
+    () => ({ theme, colors: THEMES[theme], toggle, setTheme: setOverride }),
     [theme, toggle],
   );
 

@@ -2,7 +2,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import type { SyncState } from '@steading/app/sync/engine';
 import { Icon, type IconName } from './Icon';
 import { useSync } from '../hooks/useSync';
-import { accent, font, radii, space, type as typeScale } from '../theme/tokens';
+import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 
 /**
@@ -15,27 +15,30 @@ import { useTheme } from '../theme/ThemeProvider';
  * the icon set too.
  */
 
-function describe(state: SyncState): { label: string; icon: IconName; tint: string } {
+function describe(
+  state: SyncState,
+  colors: { leaf: string; damson: string; rowan: string },
+): { label: string; icon: IconName; tint: string } {
   switch (state.kind) {
     case 'synced':
-      return { label: 'Saved', icon: 'saved', tint: accent.leaf };
+      return { label: 'Saved', icon: 'saved', tint: colors.leaf };
     case 'queued':
-      return { label: `${state.count} waiting`, icon: 'waiting', tint: accent.damson };
+      return { label: `${state.count} waiting`, icon: 'waiting', tint: colors.damson };
     case 'syncing':
-      return { label: `Sending ${state.count}`, icon: 'sending', tint: accent.damson };
+      return { label: `Sending ${state.count}`, icon: 'sending', tint: colors.damson };
     case 'rejected':
-      return { label: `${state.count} need a look`, icon: 'needs-a-look', tint: accent.rowan };
+      return { label: `${state.count} need a look`, icon: 'needs-a-look', tint: colors.rowan };
   }
 }
 
 export function SyncChip(): React.ReactElement {
   const state = useSync();
   const { colors } = useTheme();
-  const { label, icon, tint } = describe(state);
+  const { label, icon, tint } = describe(state, colors);
 
   return (
     <View
-      style={[styles.chip, { backgroundColor: colors.raised, borderColor: colors.line }]}
+      style={[styles.chip, { backgroundColor: colors.raised, borderColor: colors.border }]}
       accessibilityRole="text"
       accessibilityLabel={`Sync: ${label}`}
     >
@@ -49,11 +52,11 @@ const styles = StyleSheet.create({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.xs + 2,
-    paddingHorizontal: space.sm + 2,
-    paddingVertical: space.xs + 1,
-    borderRadius: radii.pill,
+    gap: SPACE.xs + 2,
+    paddingHorizontal: SPACE.sm + 2,
+    paddingVertical: SPACE.xs + 1,
+    borderRadius: RADII.pill,
     borderWidth: 1,
   },
-  label: { fontFamily: font.data, fontSize: typeScale.label - 1, letterSpacing: 0.6 },
+  label: { fontFamily: FONTS.data, fontSize: TYPE.label - 1, letterSpacing: 0.6 },
 });

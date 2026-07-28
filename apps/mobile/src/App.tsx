@@ -6,7 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Boot } from './Boot';
 import { Root } from './navigation/Root';
 import { ThemeProvider, useTheme } from './theme/ThemeProvider';
-import { accent, font } from './theme/tokens';
+import { FONTS, THEMES } from './theme/tokens';
 
 /**
  * The root.
@@ -41,14 +41,14 @@ function Themed(): React.ReactElement {
         background: colors.ground,
         card: colors.raised,
         text: colors.ink,
-        border: colors.line,
-        notification: accent.rowan,
+        border: colors.border,
+        notification: THEMES.daylight.rowan,
       },
       fonts: {
-        regular: { fontFamily: font.body, fontWeight: '400' },
-        medium: { fontFamily: font.body, fontWeight: '500' },
-        bold: { fontFamily: font.display, fontWeight: '700' },
-        heavy: { fontFamily: font.display, fontWeight: '900' },
+        regular: { fontFamily: FONTS.body, fontWeight: '400' },
+        medium: { fontFamily: FONTS.body, fontWeight: '500' },
+        bold: { fontFamily: FONTS.display, fontWeight: '700' },
+        heavy: { fontFamily: FONTS.display, fontWeight: '900' },
       },
     }),
     [theme, colors],

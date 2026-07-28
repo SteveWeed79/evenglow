@@ -6,7 +6,7 @@ import { IronScreen } from '../screens/IronScreen';
 import { StockScreen } from '../screens/StockScreen';
 import { TodayScreen } from '../screens/TodayScreen';
 import { useTheme } from '../theme/ThemeProvider';
-import { font, tap, type as typeScale } from '../theme/tokens';
+import { FONTS, TAP, TYPE } from '../theme/tokens';
 
 /**
  * The four tabs (UX-SPEC §4). Four, not six — every additional tab is a
@@ -27,7 +27,7 @@ import { font, tap, type as typeScale } from '../theme/tokens';
 const TABS = [
   { name: 'Today', icon: 'today', component: TodayScreen },
   { name: 'Stock', icon: 'stock', component: StockScreen },
-  { name: 'Growing', icon: 'growing', component: GrowingScreen },
+  { name: 'Growing', icon: 'streak-plant', component: GrowingScreen },
   { name: 'Iron', icon: 'iron', component: IronScreen },
 ] as const satisfies readonly { name: string; icon: IconName; component: () => React.ReactElement }[];
 
@@ -52,14 +52,14 @@ export function Tabs(): React.ReactElement {
         tabBarShowLabel: false,
         tabBarStyle: {
           backgroundColor: colors.raised,
-          borderTopColor: colors.line,
+          borderTopColor: colors.border,
           borderTopWidth: StyleSheet.hairlineWidth * 2,
-          height: tap.primary + 24,
+          height: TAP.primary + 24,
           paddingTop: 6,
         },
         // A tab is one of the two things tapped through a glove. It gets the
         // full primary target even though the icon is 26px.
-        tabBarItemStyle: { minHeight: tap.primary },
+        tabBarItemStyle: { minHeight: TAP.primary },
       }}
     >
       {TABS.map(({ name, icon, component }) => (
@@ -89,7 +89,7 @@ function TabMark({
   const { colors } = useTheme();
   // Brass for the tab you are in — the only place the lantern colour appears
   // in the bar, so "where am I" is answered by colour and not by underline.
-  const tint = focused ? colors.lantern : colors.muted;
+  const tint = focused ? colors.lanternInk : colors.muted;
 
   return (
     <View style={styles.mark}>
@@ -102,8 +102,8 @@ function TabMark({
 const styles = StyleSheet.create({
   mark: { alignItems: 'center', justifyContent: 'center', gap: 3 },
   label: {
-    fontFamily: font.data,
-    fontSize: typeScale.label - 2,
+    fontFamily: FONTS.data,
+    fontSize: TYPE.label - 2,
     letterSpacing: 1.2,
     textTransform: 'uppercase',
   },

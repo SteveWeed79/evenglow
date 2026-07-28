@@ -1,8 +1,10 @@
 # CLAUDE.md — Steading
 
-Offline-first farm operations app. **Capacitor 8 (Android first) · Vite + React · TypeScript strict · SQLite on device · Fastify + MongoDB on the server.**
+Offline-first farm operations app. **React Native (Expo SDK 57, Android first) · TypeScript strict · SQLite on device · Fastify + MongoDB on the server.**
 
 There is no PWA and no Next.js. If a suggestion assumes SSR, server components, or Next API routes, it is aimed at the wrong project.
+
+**React Native replaces Capacitor — it is not a second client.** `docs/NATIVE-PIVOT.md` argued the other way and is marked superseded; `docs/REACT-NATIVE-PLAN.md` is the live plan. The client lives in `apps/mobile`. `apps/app` is the retiring Capacitor/Vite client and stays only until R5 replaces its sign-in screen.
 
 > ## ⚠️ Read this before acting on the invariants below
 >

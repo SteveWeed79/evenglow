@@ -1,3 +1,37 @@
+> # ⚠️ SUPERSEDED — the decision in this document was reversed
+>
+> **React Native replaces Capacitor. It is not a second client.** See
+> `docs/REACT-NATIVE-PLAN.md`, which is the live plan; R1–R3 have landed.
+>
+> This file is kept because the reasoning is worth reading and because the
+> reversal was made on evidence this document did not have. Do not act on §5.
+>
+> ## What this document got wrong
+>
+> Its central argument is that React Native has no IndexedDB, so the storage
+> layer — the most carefully built part of the codebase — would be rebuilt and
+> **Phase 2's exit gate re-earned from scratch.** That was true when it was
+> written and is not true now, for a reason it could not have anticipated:
+> the SQLite store was built anyway, under Capacitor, as D9. `LocalStore` is a
+> port with two implementations held to one suite, so when R2 put
+> `expo-sqlite` underneath it the store did not change at all — 592 lines,
+> same migration ladder — and the existing suite ran against the new driver as
+> a third backing. The gate is re-earned **on hardware**, not from scratch.
+>
+> The evidence that actually decided it: one evening on a real device produced
+> seven distinct web-to-native boundary failures — a hot sync loop, an APK
+> shipping with no database driver at all, a PRAGMA Android's `execSQL`
+> refuses, reads going to IndexedDB while writes went to SQLite, a
+> mixed-content block, missing fonts, and a CSS rule that warped every button.
+> None were visible in a browser. That is the cost this document was weighing
+> against, and it under-counted it.
+>
+> **The sync engine did not need a portable core built. It already had one** —
+> that is what the `LocalStore` port was for, and it is why R3 ported the
+> engine unchanged.
+>
+> ---
+
 # Steading — Native Pivot Plan
 
 **Settled:** Steading ships as a real app on the App Store and Play Store. The

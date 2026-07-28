@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { start, type Started } from './boot/start';
 import { useTheme } from './theme/ThemeProvider';
-import { font, space, type as typeScale } from './theme/tokens';
+import { FONTS, SPACE, TYPE } from './theme/tokens';
 
 /**
  * Opening the database and starting the sync loop before the first screen renders.
@@ -76,12 +76,12 @@ export function Boot({ children }: { children: React.ReactNode }): React.ReactEl
 }
 
 const styles = StyleSheet.create({
-  centre: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.xl, gap: space.md },
-  title: { fontFamily: font.display, fontSize: typeScale.title, textAlign: 'center' },
+  centre: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACE.xl, gap: SPACE.md },
+  title: { fontFamily: FONTS.display, fontSize: TYPE.title, textAlign: 'center' },
   body: {
-    fontFamily: font.body,
-    fontSize: typeScale.body,
-    lineHeight: typeScale.body * 1.45,
+    fontFamily: FONTS.body,
+    fontSize: TYPE.body,
+    lineHeight: TYPE.body * 1.45,
     textAlign: 'center',
   },
 });

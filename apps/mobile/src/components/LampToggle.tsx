@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet } from 'react-native';
 import { Icon } from './Icon';
 import { toggleLabel, useTheme } from '../theme/ThemeProvider';
-import { tap } from '../theme/tokens';
+import { TAP } from '../theme/tokens';
 
 /**
  * The lamp in the header (UX-SPEC §4).
@@ -33,7 +33,7 @@ export function LampToggle(): React.ReactElement {
       <Icon
         name={theme === 'lamplight' ? 'lamp-lit' : 'lamp-unlit'}
         size={24}
-        color={theme === 'lamplight' ? colors.lantern : colors.muted}
+        color={theme === 'lamplight' ? colors.lanternInk : colors.muted}
       />
     </Pressable>
   );
@@ -41,8 +41,8 @@ export function LampToggle(): React.ReactElement {
 
 const styles = StyleSheet.create({
   lamp: {
-    minWidth: tap.min / 2,
-    minHeight: tap.min / 2,
+    minWidth: TAP.min / 2,
+    minHeight: TAP.min / 2,
     alignItems: 'center',
     justifyContent: 'center',
   },

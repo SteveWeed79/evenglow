@@ -231,3 +231,58 @@ rather than dishonestly a doorway until then.
 **Growing takes a tab.** Crops are half of a small farm and had no home in the
 bar; More was never a place you go. Today · Stock · Growing · Iron, with
 settings pushed from the header.
+
+---
+
+## 12. The design handoff's flagged items, and what happened to them
+
+`native/PORTING.md` in the third handoff lists what could not survive the port.
+Each item and its resolution:
+
+| Flagged | Resolution |
+|---|---|
+| **§0 — does RN replace Capacitor, or is it a second client?** | **Replaces.** `docs/NATIVE-PIVOT.md` is marked superseded and CLAUDE.md's stack line is corrected. See below — the premise behind the question had already dissolved. |
+| `--arch` elliptical radius | `components/Arch.tsx`, adopted. Geometry split into `theme/arch.ts` so the suite can reach it without loading React Native. |
+| `:root` custom properties | `theme/tokens.ts` + `ThemeProvider`, three themes. |
+| `color-mix()` | Literals, each carrying the expression it came from. |
+| `background-blend-mode` plaster grain | **Solved.** `scripts/make-plaster.mjs` generates a 64dp greyscale tile at 1×/2×/3× from a fixed seed; `components/Plaster.tsx` renders it. |
+| Inset `box-shadow` (the worn edge) | **Solved.** `components/Worn.tsx` — two hairlines. An inset shadow with zero blur and a 1px offset *is* two hairlines. |
+| Icons: no sprite, `color` required, stroke on `<Svg>` | Adopted verbatim from `native/Icon.tsx` (v3, 56 marks, both masters). |
+| R4 / R7 / `check:icons` "port them, do not drop them" | **Ported.** `tests/unit/native-tokens.test.ts` and `scripts/check-icons.mjs`. |
+| Variable font axes | `FONTS.display` names a static cut, and a test asserts it still does. |
+| `clamp()` type | `TYPE.tally` is a viewport fraction, asserted to stay below 1. |
+
+### Why §0 was already answered
+
+The handoff's concern was that a second client would mean *"the sync engine
+needs a portable core, which is a much bigger job than the design layer."*
+
+It already has one. `LocalStore` is a port with two implementations held to a
+single suite — that is what D9 built, under Capacitor, before any of this. So
+R2 put `expo-sqlite` underneath the *same* `openSqliteStore`: 592 lines
+unchanged, same migration ladder, and the existing suite ran against the new
+driver as a third backing. R3 ported the engine with no changes at all.
+
+`NATIVE-PIVOT.md` argued that RN meant rebuilding the storage layer and
+re-earning Phase 2's gate from scratch. True when written; overtaken by the
+SQLite work landing anyway. The gate is re-earned **on hardware** at R6, not
+from zero.
+
+### Two things the handoff did not flag, found on the way
+
+**The tab bar's brass fails contrast in daylight.** `lantern` (`#e9b23c`) on
+the daylight ground measures **1.55:1** — below even the 3:1 floor for a
+graphical object, let alone the text I had tinted with it. The handoff had
+already solved exactly this for bright sun by darkening the token; nobody had
+caught that daylight has the same problem.
+
+Fixed with a `lanternInk` token — the same brass taken down until it clears
+4.5:1 on both surfaces in every theme, used for anything that carries a mark or
+a label, while `lantern` stays the fill and the lit-lamp colour. Held by a test.
+**This is a change to the design system and wants the designer's sign-off.**
+
+**The set has no `growing` mark.** The tab bar is Today · Stock · Growing ·
+Iron; the manifest's four navigation marks are today / stock / iron / **more**,
+and `more` is now unused. `streak-plant` is standing in for Growing, which
+overloads a mark the manifest defines as the chore-streak charm. It reads
+correctly and it is not what it was drawn for.

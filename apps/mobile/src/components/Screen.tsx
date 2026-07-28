@@ -4,10 +4,11 @@ import { Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'r
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from './Icon';
 import { LampToggle } from './LampToggle';
+import { Plaster } from './Plaster';
 import { SyncChip } from './SyncChip';
 import type { RootParamList } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
-import { font, space, tap, type as typeScale } from '../theme/tokens';
+import { FONTS, SPACE, TAP, TYPE } from '../theme/tokens';
 
 /**
  * The wall every screen is drawn on.
@@ -38,6 +39,10 @@ export function Screen({
 
   return (
     <View style={[styles.ground, { backgroundColor: colors.ground, paddingTop: insets.top }]}>
+      {/* Behind everything, never over it. The grain is a shipped tile because
+          feTurbulence blended at soft-light has no RN form — see Plaster.tsx. */}
+      <Plaster />
+
       <View style={styles.status}>
         {back ? (
           <Pressable
@@ -95,21 +100,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: space.lg,
-    minHeight: tap.min / 2,
+    paddingHorizontal: SPACE.lg,
+    minHeight: TAP.min / 2,
   },
-  controls: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  controls: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   control: {
-    minWidth: tap.min / 2,
-    minHeight: tap.min / 2,
+    minWidth: TAP.min / 2,
+    minHeight: TAP.min / 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  content: { padding: space.lg, gap: space.md, paddingBottom: space.xl },
-  hero: { fontFamily: font.display, fontSize: typeScale.hero, marginBottom: space.xs },
+  content: { padding: SPACE.lg, gap: SPACE.md, paddingBottom: SPACE.xl },
+  hero: { fontFamily: FONTS.display, fontSize: TYPE.hero, marginBottom: SPACE.xs },
   label: {
-    fontFamily: font.data,
-    fontSize: typeScale.label,
+    fontFamily: FONTS.data,
+    fontSize: TYPE.label,
     letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
