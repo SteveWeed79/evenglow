@@ -192,12 +192,42 @@ So the design work is additional, not incidental, and R4 is where it lands:
 
 ---
 
-## 9. What I need from you
+## 9. Answered
 
-1. **Expo or bare RN?** (§5 — and really: is there a Mac?)
-2. **Does the repo stay a monorepo** with `apps/api` alongside a new `apps/mobile`,
-   or does the app move out? Recommendation: keep it. The contracts package is
-   shared by both and that is the whole reason it exists.
-3. **Do we keep the Next.js web app at all?** It is currently the only thing with
-   a sign-in screen. Recommendation: keep it running until R5 lands, then decide
-   whether a web client is still wanted on its own merits.
+1. **Expo.** There is no Mac, so EAS Build is the only route to an iOS binary
+   and this is not a preference.
+2. **Monorepo stays.** `apps/mobile` alongside `apps/api`, sharing
+   `packages/contracts`.
+3. **The web app stays until R5.** It is the only client with a sign-in screen,
+   which is also why the IndexedDB store is not deleted at R3 as originally
+   planned — deleting it would break the one thing that can currently log in.
+
+## 10. Status
+
+- **R1 — the shell.** Done. Expo SDK 57, React Navigation, tokens as a
+  TypeScript module, the icon set on `react-native-svg`. Metro resolves the
+  monorepo under pnpm with no `node-linker=hoisted`.
+- **R2 — storage.** Done. `SqlDriver` over `expo-sqlite`, `openSqliteStore`
+  unchanged on top. The existing LocalStore suite runs against it as a third
+  backing; 430 tests → 460.
+- **R3 — the engine.** Done. Ported unchanged; `lock.ts` and the
+  storage-persistence request fall away with the browser. New: AppState and
+  network triggers, `boot/start.ts`, the sync chip.
+- **R4 — screens.** Next. The design pass happens here, not a transliteration
+  of the CSS. Scope is `docs/DOMAIN-SCOPE.md`.
+- **R5 — auth.** Secure token storage, sign-in, refresh. The web app retires
+  here and the IndexedDB store goes with it.
+- **R6 — the exit gate.** On hardware. Not re-earned from zero: the store is
+  proven, the engine is proven, only the driver beneath them is new.
+
+## 11. Two things this migration changed about the design
+
+**The arch does not survive as a token.** `--arch` is an elliptical border
+radius — `50% 50% .5rem .5rem / 2rem 2rem .5rem .5rem` — and React Native has
+only circular per-corner radii. There is no token that reproduces it, so
+anything needing a real arch draws one in SVG. `Panel` is honestly a rectangle
+rather than dishonestly a doorway until then.
+
+**Growing takes a tab.** Crops are half of a small farm and had no home in the
+bar; More was never a place you go. Today · Stock · Growing · Iron, with
+settings pushed from the header.
