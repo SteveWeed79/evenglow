@@ -30,40 +30,59 @@ these look like six features and are one:
 Everything else is data. Get this wrong and the app is three apps sharing a tab
 bar; get it right and each domain is mostly a table of intervals.
 
-The shape, concretely:
+**Built.** `packages/contracts/src/due/`, and it is pure — no store, no clock,
+no network.
 
 ```ts
-export const dueSchema = z.object({
-  id: z.string().length(26),
-  subject: z.object({                      // what it is about
-    entity: entityEnum,
-    id: z.string().length(26),
-  }),
-  kind: z.string(),                        // 'withdrawal' | 'service' | 'sow' | 'kidding' | …
-  /** Exactly one of these two. A service is one or the other, never both. */
-  dueAt: z.number().int().nullable(),      // epoch ms
-  dueAtReading: z.number().nullable(),     // hour meter, for iron
-  /** How early it starts appearing on Today. A frost window wants weeks; a
-      withdrawal wants the day it clears. */
-  noticeDays: z.number().int().nonnegative(),
-  clearedBy: z.string().nullable(),        // mutation id of the event that closed it
-});
+export interface Due {
+  key: string;                          // stable across recomputations
+  kind: DueKind;                        // withdrawal | service | sow | birth | hatch | …
+  subject: { entity: Entity; id: string };
+  title: string;                        // already in the farm's words
+  /** Exactly one. A service is by date or by hours, never both. */
+  at: number | null;
+  atReading: number | null;
+  /** When a meter target is expected to arrive, so it sorts against dates. */
+  projectedAt: number | null;
+  noticeDays: number;
+}
 ```
 
-Three properties it must have, and each is a lesson from something already
-built:
+Three properties it has, and each is a lesson from something already built:
 
 1. **Derived, not authored.** A due row is computed from the records that imply
-   it — a treatment implies a withdrawal, an hour reading implies a service.
-   Nobody types a reminder in. Reminders people have to enter are reminders
-   people stop entering.
+   it — a treatment implies a withdrawal, an hour reading implies a service, a
+   planting implies a sow date. Nobody types a reminder in. Reminders people
+   have to enter are reminders people stop entering, and an app whose alerts
+   are only as good as its data entry quietly stops warning about anything.
 2. **Recomputed locally, never pushed.** No notification server, no cloud
    scheduler. The device knows the last hour reading and the interval; it can
    do arithmetic with the radio off. This is not a limitation, it is the
    feature.
-3. **Cleared by the event, not by a tick.** You do not "mark done" a service.
-   You log the service, and the due row closes because the thing it was waiting
-   for happened.
+3. **Nothing is marked done** — a correction to the first sketch of this
+   design, which had a `clearedBy` field. There is no completion flag. You log
+   the service, and the next recomputation does not produce that row because
+   the record it was waiting for now exists. A stored completion flag is a
+   second source of truth about whether something happened, and the two drift.
+
+Which is why `Due` is a projection and not a syncable entity: it never crosses
+the wire, so it cannot conflict, cannot be rejected, and needs no schema on the
+envelope.
+
+**The two failure modes it is built against.** A row nothing can clear sits on
+Today forever, and a list with a permanent resident is a list people stop
+reading — so every builder returns nothing rather than an unclearable row (an
+hours interval on a machine with no meter, a transplant for seedlings never
+started, a harvest for a planting that failed in May). And a row that should
+have cleared and did not — so each builder is tested with its clearing event
+both present and absent.
+
+**Notice is per-kind and it is the whole tuning surface.** `due/notice.ts`, one
+table. Each number is a claim about how long the *preparation* takes, not about
+importance: a withdrawal gets zero days because knowing on Tuesday that eggs
+clear on Friday changes nothing you do on Tuesday; a sow window gets a
+fortnight because seed has to be to hand; a birth gets six weeks because
+someone has to build a pen and be around.
 
 ---
 
