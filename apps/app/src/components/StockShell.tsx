@@ -6,6 +6,7 @@ import { useGroups } from '../hooks/useGroups';
 import type { Group } from '../read/groups';
 import { AddGroup } from './AddGroup';
 import { EditGroup } from './EditGroup';
+import { NestBoxSpot } from './Marks';
 import { RecordTreatment } from './RecordTreatment';
 
 /**
@@ -42,6 +43,7 @@ export function StockShell(): React.ReactElement {
     return (
       <section className="arch shell__card">
         {/* Empty screens invite, and specific beats clever (UX-SPEC §6). */}
+        <span className="spot"><NestBoxSpot /></span>
         <p className="label">Nothing here yet</p>
         <p>
           Add what you keep &mdash; a few hens, a pair of goats, the house cow &mdash; and the

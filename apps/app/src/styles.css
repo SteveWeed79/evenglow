@@ -1,6 +1,86 @@
 @import 'tailwindcss';
 
 /**
+ * The fonts, bundled.
+ *
+ * They were supplied by next/font, which only exists in the Next app — so the
+ * Vite bundle, and therefore the APK, has been rendering the whole design in
+ * Arial and Georgia. The typography carries most of the character in UX-SPEC
+ * §2, and none of it was reaching a device.
+ *
+ * Self-hosted rather than fetched: an app whose central claim is that it works
+ * with the radio off cannot have its type arrive over the network.
+ */
+/* Every face declared by hand, latin only.
+ *
+ * The packages' own CSS does not survive pnpm's symlink layout — Vite cannot
+ * follow the relative ./files/ paths inside a linked package, so the woff2
+ * never reaches the bundle and the @font-face silently points at nothing.
+ * Declaring them here also keeps the subsets honest: the index entrypoints
+ * drag Cyrillic, Greek and Vietnamese along, roughly a megabyte of glyphs
+ * nobody on this farm will render, paid for once per install inside the APK. */
+@font-face {
+  font-family: 'Alegreya Sans';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url('@fontsource/alegreya-sans/files/alegreya-sans-latin-400-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191,
+    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Alegreya Sans';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url('@fontsource/alegreya-sans/files/alegreya-sans-latin-700-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191,
+    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url('@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191,
+    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url('@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-600-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191,
+    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Fraunces is declared by hand because the variable package ships CSS per
+   AXIS rather than per subset, so every entrypoint drags Cyrillic, Greek and
+   Vietnamese along — a megabyte of glyphs nobody here will render, paid for
+   once per install. This points at the latin file directly and keeps the
+   variable axes, which is what SOFT and WONK need. */
+@font-face {
+  font-family: 'Fraunces Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('@fontsource-variable/fraunces/files/fraunces-latin-full-normal.woff2')
+    format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191,
+    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/**
  * Steading design tokens — UX-SPEC §2.
  *
  * These are decisions, not features: every component inherits them, so they
@@ -27,14 +107,33 @@
   /* Type — Fraunces carries the warmth, Alegreya Sans carries the load.
      The --font-*-src vars are supplied by next/font in layout.tsx; the
      fallbacks keep the page readable before the webfonts land.            */
-  --font-display: var(--font-fraunces), Georgia, serif; /* wonk 1, soft 30  */
-  --font-body: var(--font-alegreya-sans), system-ui, sans-serif;
-  --font-data: var(--font-plex-mono), ui-monospace, monospace;
+  /* No var(--font-fraunces) here any more, and that mattered: those were
+     supplied by next/font, so in the Vite build they resolved to nothing —
+     and an unresolvable var() invalidates the ENTIRE declaration, not just
+     its own slot. The whole font-family fell back to the browser default,
+     which is why the APK rendered the design in Helvetica with 200 kB of
+     correctly-bundled webfonts sitting unused. The faces are declared above
+     now, so both builds get them from the same place. */
+  --font-display: 'Fraunces Variable', Georgia, serif;
+  --font-body: 'Alegreya Sans', system-ui, sans-serif;
+  --font-data: 'IBM Plex Mono', ui-monospace, monospace;
 
   --step-tally: clamp(4rem, 22vw, 7rem);
+  --step-hero: 2rem; /* screen headings, Fraunces                           */
   --step-title: 1.5rem;
+  --step-lede: 1.1875rem; /* the one line under a heading                   */
   --step-body: 1.0625rem; /* 17px floor — never smaller outdoors            */
   --step-label: 0.8125rem; /* small caps, tracked, --font-data              */
+
+  /* Elevation. The spec forbade shadows outright, which is defensible on
+     paper and produced a screen with everything on one plane — the flattest
+     possible reading of "restraint". These are warm rather than grey: a
+     shadow tinted with the ink colour reads as a card lifted off plaster,
+     while black at low opacity reads as a web page from 2008.              */
+  --lift: 0 1px 2px color-mix(in oklab, var(--ink) 8%, transparent),
+    0 4px 12px color-mix(in oklab, var(--ink) 6%, transparent);
+  --lift-high: 0 2px 4px color-mix(in oklab, var(--ink) 10%, transparent),
+    0 10px 24px color-mix(in oklab, var(--ink) 10%, transparent);
 
   /* Touch — coziness never costs a millimetre.                            */
   --tap-min: 56px;
@@ -51,7 +150,7 @@
      (and ate its own padding, which is why card text sat outside the curve),
      while a radius small enough to fix that turned the Tally into a rounded
      rectangle. The slash separates horizontal radii from vertical ones.    */
-  --arch: 50% 50% 0.5rem 0.5rem / 2rem 2rem 0.5rem 0.5rem;
+  --arch: min(50%, 4rem) min(50%, 4rem) 0.5rem 0.5rem / 2rem 2rem 0.5rem 0.5rem;
   --border: 2px solid color-mix(in oklab, var(--ink) 22%, transparent);
 }
 
@@ -123,6 +222,8 @@ body {
   background: var(--ground);
   color: var(--ink);
   font-family: var(--font-body);
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
   font-size: var(--step-body);
   line-height: 1.5;
   margin: 0;
@@ -178,6 +279,7 @@ summary {
   border-radius: var(--arch);
   border: var(--border);
   background: var(--raised);
+  box-shadow: var(--lift);
 }
 
 /* The other half of that signal, which had no class and so was never used.
@@ -185,9 +287,35 @@ summary {
    and the More card were both arched with nothing inside to act on, which
    makes the arch decorative exactly where it is supposed to be load-bearing. */
 .panel {
-  border-radius: 0.5rem;
+  border-radius: 0.75rem;
   border: var(--border);
   background: var(--raised);
+  box-shadow: var(--lift);
+}
+
+/* Empty-state spot marks. Centred, muted, and given room — the drawing is
+   the invitation and the sentence underneath only explains it. */
+.spot {
+  display: block;
+  color: var(--muted);
+  opacity: 0.7;
+  margin: 0.5rem auto 1rem;
+  width: fit-content;
+}
+
+/* An empty state is one composition, not a stack of left-aligned paragraphs. */
+.panel.shell__card,
+.arch.shell__card {
+  text-align: center;
+}
+
+.panel.shell__card .label,
+.arch.shell__card .label {
+  display: block;
+}
+
+.arch.shell__card .sheet__button {
+  margin-top: 1rem;
 }
 
 /* ── Phase 1 screens ────────────────────────────────────────────────────── */
@@ -472,6 +600,7 @@ summary {
   grid-template-columns: repeat(4, 1fr);
   background: var(--raised);
   border-top: var(--border);
+  box-shadow: 0 -2px 16px color-mix(in oklab, var(--ink) 7%, transparent);
   padding-bottom: env(safe-area-inset-bottom);
   /* Same column as the content above it. Left full-bleed, four tabs spread
      across a desktop monitor land nowhere near the thumb the layout is drawn
@@ -488,10 +617,27 @@ summary {
   color: var(--muted);
   font: inherit;
   font-family: var(--font-data);
-  font-size: var(--step-label);
+  /* Smaller than a label, because the icon is now carrying the meaning and
+     the word is only confirming it. */
+  font-size: 0.6875rem;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.5rem 0;
+}
+
+.tabs__tab svg {
+  /* The icon does the work; it is a touch larger than the type it sits over. */
+  opacity: 0.85;
+}
+
+.tabs__tab[aria-current='page'] svg {
+  opacity: 1;
 }
 
 .tabs__tab[aria-current='page'] {

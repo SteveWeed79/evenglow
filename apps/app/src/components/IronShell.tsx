@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { AddMachine } from './AddMachine';
+import { OilCanSpot } from './Marks';
 import { LogHours } from './LogHours';
 import { listMachines, type Machine } from '../read/iron';
 import { subscribe } from '../sync/engine';
@@ -34,6 +35,7 @@ export function IronShell(): React.ReactElement {
   if (machines.length === 0) {
     return (
       <section className="arch shell__card">
+        <span className="spot"><OilCanSpot /></span>
         <p className="label">No equipment yet</p>
         {/* Empty screens invite (UX-SPEC §6). */}
         <p>Add your tractor and its service schedule comes with it.</p>
