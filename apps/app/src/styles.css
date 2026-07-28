@@ -777,6 +777,12 @@ summary {
   border: 2px solid var(--damson);
 }
 
+/* Side by side, and only here, is where sharing the row is wanted. */
+.sheet__actions > .sheet__button {
+  flex: 1;
+  width: auto;
+}
+
 .sheet__actions {
   display: flex;
   gap: var(--tap-gap);
@@ -784,7 +790,14 @@ summary {
 }
 
 .sheet__button {
-  flex: 1;
+  /* Full width by default. `flex: 1` used to live here, which did two wrong
+     things at once: inside a card (a block context) it did nothing, so the
+     primary action shrink-wrapped to its text and read as a clipped blob;
+     and where a bare button is a direct child of .shell — which is a flex
+     column — it grew to fill every remaining pixel, which is why Sign out
+     was a 400px box with three words floating in the middle of it. */
+  display: block;
+  width: 100%;
   min-height: var(--tap-primary);
   border-radius: var(--arch);
   border: var(--border);
