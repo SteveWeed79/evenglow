@@ -98,59 +98,55 @@ whether it lays or milks.
 
 Stock is **mixed, not poultry**. That is settled and must not regress.
 
-### 1.2 What is missing
+### 1.2 Built since this was written
 
-**Birthing and hatching — nothing exists at all.** This is the largest gap in
-the animal half, and it is the part of the year a smallholder plans everything
-else around.
+**Birthing and hatching.** `breeding` and `incubation` in
+`packages/contracts/src/entities/breeding.ts` — two entities, because they are
+genuinely different events. A gestation is one animal carrying one pregnancy to
+a date; an incubation is a batch with a candling step and a hatch rate. Forcing
+them into one shape would leave half the fields meaningless in either case.
 
-Two shapes, because they are genuinely different:
+**The grow-out clock**, which is what "if they are meat birds, why do we not
+display how long until they can be processed?" was asking for. Nothing knew
+because nothing recorded a *purpose*. Now `flock.purposes` says why the group
+is kept, `flock.breedId` says which bird, and the library says how long.
 
-```ts
-// Mammals. Kidding, lambing, calving, farrowing.
-breeding: {
-  damId, sireId (nullable — a borrowed buck often has no record),
-  bredAt, method: 'natural' | 'ai',
-  dueAt,                       // bredAt + gestation days for the species
-  outcome: null | { bornAt, live, stillborn, notes },
-}
+It refuses to guess three things, and each refusal is a test:
 
-// Birds. A set, not a pregnancy.
-incubation: {
-  flockId, setAt, eggsSet,
-  source: 'own' | 'bought',
-  candledAt, fertile,          // day 7-10, the cull that saves incubator space
-  dueAt,                       // setAt + incubation days for the species
-  outcome: null | { hatchedAt, hatched, culls },
-}
-```
+- **A purpose.** A hen can lay and can be eaten; which the keeper intends is a
+  fact about the keeper. A processing countdown on a flock of pet bantams is
+  not a helpful default, it is an offensive one — which is exactly what
+  `companion`, `breeding` and `guarding` exist to prevent.
+- **A start date.** `bornAt`, never `acquiredAt`. Day-old chicks bought on
+  Tuesday hatched on Monday; point-of-lay pullets bought on Tuesday are sixteen
+  weeks old, and counting from acquisition would say they are ready to process
+  in six.
+- **A figure for an unlisted breed.** Null, not an average.
 
-Gestation and incubation periods are per-species constants and belong in
-`SPECIES_TRAITS` beside `laysEggs` — 150 days for a goat, 21 for a chicken, 28
-for a duck. Each of `dueAt` raises a due row with a long notice, because
-"kidding in three weeks" is when someone builds a pen, not the morning it
-happens.
+The window is a window. The library says six to nine weeks because that is what
+is true, and the due row anchors at the *start* — the decision is "book the
+processor", and that has a lead time.
 
-**Feed plans, as distinct from feed logs.** `feedLog` records what was fed.
-What is missing is what *should* be fed: a ration per group, so consumption can
-be checked against it and a bag running out is predictable rather than
-discovered. A feed plan plus a feed log is a due row for "order feed."
+**`weight` and `shearing`**, both append-only. A growth curve is how a keeper
+knows a bird is on track before the processing date arrives; one number says
+almost nothing and the series says everything, which is why they are never
+overwritten. A fleece is an annual event with a weight, not a daily tally,
+which is why it is not a `productionLog`.
 
-**Processing dates for meat stock.** Asked for directly and still absent: if a
-group is meat birds, the app knows the species and the hatch date, so it can
-say how long until they are ready. This is one field on the group (`purpose:
-'eggs' | 'meat' | 'milk' | 'fibre' | 'breeding' | 'pets'`) and one lookup.
+**`feedPlan`** — what a group *should* be fed, as distinct from what it was.
+Without it there is nothing to check consumption against, so a bag running out
+is discovered rather than predicted.
 
-**Needs.** Water, minerals, shelter, worming, hoof trimming, shearing. Most of
-these are recurring intervals, so they are due rows over a per-species default
-that a farm can override — *not* a new subsystem.
+### 1.3 What is still missing
 
-### 1.3 Products
+**Needs.** Water, minerals, shelter, worming, hoof trimming. Most of these are
+recurring intervals, so they are due rows over a per-species default a farm can
+override — *not* a new subsystem. The due engine already takes date intervals;
+what is missing is the table of defaults.
 
-`eggLog` and `productionLog` (milk, fibre, honey) cover what comes off an
-animal daily. Missing: **weights** (a growth curve is how you know a meat bird
-is on track), and **fibre by shearing rather than by day** — a fleece is an
-annual event with a weight, not a daily tally.
+**Screens.** All of the above is headless. None of it is reachable by a person
+yet, and that is deliberate while the design is being reworked for React
+Native.
 
 ---
 
@@ -283,8 +279,8 @@ New entities, in the existing two classes:
 
 | Entity | Class | Notes |
 | --- | --- | --- |
-| `breeding` | mutable | Outcome is filled in later, so it updates |
-| `incubation` | mutable | Same — candling and hatch are updates |
+| `breeding` | mutable | Outcome is filled in months later, so it updates |
+| `incubation` | mutable | Candling and hatch are updates to the same set |
 | `weight` | append-only | A growth curve is a series of facts |
 | `shearing` | append-only | Annual, with a weight |
 | `feedPlan` | mutable | The ration; `feedLog` stays append-only |
@@ -294,7 +290,7 @@ New entities, in the existing two classes:
 | `planting` | mutable | Dates get corrected; a planting can fail |
 | `harvest` | append-only | Exactly like `eggLog` |
 
-Ten entities. The append-only ones cannot conflict, which is most of the point
+Ten entities — all built. The append-only ones cannot conflict, which is most of the point
 of classifying them that way. The mutable ones are archived, never deleted
 (P13).
 

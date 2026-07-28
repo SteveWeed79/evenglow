@@ -88,6 +88,28 @@ export const INDEXES: Record<CollectionName, IndexDescription[]> = {
     { key: { orgId: 1, plantingId: 1, occurredAt: -1 } },
     { key: { orgId: 1, occurredAt: -1 } },
   ],
+
+  // Births and hatches. Both are asked "what is coming up?", which is a scan
+  // over open records ordered by the date they started -- the due date is
+  // derived, so it cannot be indexed.
+  breedings: [
+    { key: { orgId: 1, damId: 1, bredAt: -1 } },
+    { key: { orgId: 1, bornAt: 1, bredAt: 1 } },
+  ],
+  incubations: [{ key: { orgId: 1, hatchedAt: 1, setAt: 1 } }],
+
+  // A growth curve is a series, so both of these are read in time order for
+  // one subject and almost never singly.
+  weights: [
+    { key: { orgId: 1, animalId: 1, occurredAt: -1 } },
+    { key: { orgId: 1, flockId: 1, occurredAt: -1 } },
+  ],
+  shearings: [
+    { key: { orgId: 1, animalId: 1, occurredAt: -1 } },
+    { key: { orgId: 1, flockId: 1, occurredAt: -1 } },
+  ],
+  // The current ration is the one with no end date, which is the common read.
+  feedPlans: [{ key: { orgId: 1, flockId: 1, endedAt: 1 } }],
 };
 
 /** Identity collections are not tenant-scoped; they need their own uniqueness rules. */

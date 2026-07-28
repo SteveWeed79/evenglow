@@ -43,6 +43,13 @@ export const ENTITIES = [
   'variety',
   'planting',
   'harvest',
+
+  // The animal half completed: births, hatches, growth, fleeces, rations.
+  'breeding',
+  'incubation',
+  'weight',
+  'shearing',
+  'feedPlan',
 ] as const;
 
 export const entitySchema = z.enum(ENTITIES);
@@ -65,6 +72,8 @@ export const APPEND_ONLY_ENTITIES = new Set<Entity>([
   'predator',
   'hourReading',
   'harvest',
+  'weight',
+  'shearing',
 ]);
 
 export function isAppendOnly(entity: Entity): boolean {

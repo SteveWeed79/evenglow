@@ -30,6 +30,11 @@ export const ENTITY_COLLECTIONS: Record<Entity, CollectionName> = {
   variety: 'varieties',
   planting: 'plantings',
   harvest: 'harvests',
+  breeding: 'breedings',
+  incubation: 'incubations',
+  weight: 'weights',
+  shearing: 'shearings',
+  feedPlan: 'feedPlans',
 };
 
 /**

@@ -128,14 +128,56 @@ const observation = {
  *
  * `count` is head count for every species — birds, goats, cattle alike.
  */
+/**
+ * Why this group is kept.
+ *
+ * **Capability is not purpose.** A hen can lay and can be eaten; which of
+ * those a keeper intends is a fact about the keeper, not the bird, and the app
+ * has no way to infer it. Multi-select, because a heritage flock genuinely is
+ * both.
+ *
+ * `breeding`, `guarding` and `companion` matter more than they look. They are
+ * how someone says **"do not show me a processing countdown for these"** —
+ * without them, the only way to silence a wrong prediction is to lie about the
+ * species. See docs/BREED-AND-PURPOSE.md §2.
+ */
+export const FLOCK_PURPOSES = [
+  'eggs',
+  'meat',
+  'milk',
+  'fibre',
+  'breeding',
+  'work',
+  'guarding',
+  'companion',
+] as const;
+export const flockPurposeSchema = z.enum(FLOCK_PURPOSES);
+export type FlockPurpose = z.infer<typeof flockPurposeSchema>;
+
 const flockShape = {
   name: z.string().min(1).max(80),
   species: speciesSchema,
   /** Required in spirit when species is 'other'; free text, since the list will never be complete. */
   speciesOther: z.string().max(80).optional(),
   breed: z.string().max(80).optional(),
+  /**
+   * Links to the bundled library, which is where the grow-out and lay figures
+   * come from. Optional: `breed` is free text and always has been, because a
+   * mixed flock or an unlisted breed must still be recordable.
+   */
+  breedId: z.string().max(60).optional(),
+  purposes: z.array(flockPurposeSchema).max(8).optional(),
   count: z.number().int().nonnegative(),
   acquiredAt: z.number().int().optional(),
+  /**
+   * When these birds hatched or these animals were born.
+   *
+   * Distinct from `acquiredAt`, and the distinction is the whole grow-out
+   * clock: day-old chicks bought on Tuesday hatched on Monday, but point-of-lay
+   * pullets bought on Tuesday are sixteen weeks old. Counting from acquisition
+   * would tell someone their pullets are ready to process in six weeks.
+   */
+  bornAt: z.number().int().optional(),
   note: z.string().max(500).optional(),
 };
 
