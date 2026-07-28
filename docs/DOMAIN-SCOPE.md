@@ -326,18 +326,52 @@ Two reasons, and the second is the load-bearing one:
 
 ## 5. Reference data
 
-**A starter library, fully editable.** Roughly 40 common breeds and 60 common
-vegetable varieties ship in the app with the numbers that matter — days to
-maturity, spacing, sow depth, mature weight, laying rate, gestation. A farm's
-own edits always win, and a farm can add anything the library does not have.
+**Built.** `packages/contracts/src/library/` — 65 varieties and 47 breeds.
 
-The reasoning is that both extremes fail: with nothing bundled, every new user
-faces an evening of typing before the app does anything useful; with a large
-scraped catalogue, wrong numbers are presented authoritatively, which is worse
-than no numbers when someone is deciding when to process a bird.
+A farm's own edits always win, and a farm can add anything the library does not
+have. Both extremes fail: with nothing bundled, every new user faces an evening
+of typing before the app does anything useful; with a large scraped catalogue,
+wrong numbers are presented authoritatively, which is worse than no numbers
+when someone is deciding when to process a bird.
 
-Crowdsourced vetting layers on later. The open questions about how that is
-verified are in `docs/BREED-AND-PURPOSE.md` and are not resolved here.
+**Ranges for breeds, points for varieties**, and that is not an inconsistency.
+A breed's grow-out is genuinely a range — "eight to nine weeks" is true, "eight
+weeks" is a claim about a specific bird on specific feed. A named cultivar's
+days-to-maturity is a point because that is what the packet says and what the
+grower compares against; the variation there lives between cultivars, which is
+why they are listed separately.
+
+**The library is data, not rows.** Picking an entry creates a farm's own
+`variety` record with the numbers copied in. That is what makes the override
+rule work: the farm edits its copy, and a later app version can revise the
+library without silently rewriting anyone's records. It also means there is no
+"library variety you have not added yet" cluttering the store, and no migration
+when the library grows.
+
+**Provenance, stated honestly.** These are the commonly published figures —
+what breed associations, seed catalogues and extension guides broadly agree on,
+assembled with our own structure. They are not transcribed from any single
+compilation, and specifically not from commercial breeding companies'
+performance objectives: those are the most precise figures available and the
+most legally fraught, and `BREED-AND-PURPOSE.md` §5 leaves their licensing as an
+open question nobody has answered. The `provenance` field records that rather
+than implying a citation nobody checked.
+
+### 5.1 What the data tests police
+
+No test can check that a number is *correct*. What they check is the class of
+typo that no type catches and that looks fine in review:
+
+- Every entry converts into a valid record. An entry that cannot is decoration
+  — browsable and unplantable.
+- Every variety has at least one way into the ground, and never transplants
+  before it was started indoors.
+- Every range runs low-to-high. `[9, 6]` type-checks, reads fine, and produces
+  a countdown that has already ended.
+- **Every purpose has the figure it needs.** A breed that says `meat` must
+  carry a grow-out, `milk` a yield, `fibre` an interval. This one found seven
+  dual-purpose birds claiming meat with no clock to count — a label the app
+  could not act on.
 
 ---
 
