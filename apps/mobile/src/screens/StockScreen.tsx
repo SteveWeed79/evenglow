@@ -1,29 +1,31 @@
-import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { SPECIES_TRAITS } from '@steading/contracts';
+import { formatRange, libraryBreed, SPECIES_TRAITS } from '@steading/contracts';
 import type { Group } from '@steading/core/read/groups';
-import { formatRange, libraryBreed } from '@steading/contracts';
+import { Primary } from '../components/Form';
 import { Icon } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
-import { AddGroupScreen } from './AddGroupScreen';
 import { growOutWindow, layOnsetWindow } from '../hooks/useDues';
 import { useGroups } from '../hooks/useGroups';
+import { useNav } from '../hooks/useNav';
 import { useTheme } from '../theme/ThemeProvider';
-import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
+import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
 
 /**
  * Stock — the animals you keep.
  *
  * Mixed, not poultry: `flock` is only the wire name, and the UI says herd,
  * drove or gaggle per species. Nothing on this screen assumes a bird.
+ *
+ * A card opens the group rather than being the end of the road. Everything a
+ * keeper does to a group — treatments, husbandry, weights, produce, feed,
+ * losses, matings — lives one tap in, which is what this list was missing.
  */
 export function StockScreen(): React.ReactElement {
   const { groups, loading } = useGroups();
   const { colors } = useTheme();
-  const [adding, setAdding] = useState(false);
+  const nav = useNav();
 
-  if (adding) return <AddGroupScreen onDone={() => setAdding(false)} />;
   if (loading) return <Screen title="Stock">{null}</Screen>;
 
   return (
@@ -40,27 +42,25 @@ export function StockScreen(): React.ReactElement {
           </Body>
         </Panel>
       ) : (
-        groups.map((group) => <GroupCard key={group.id} group={group} />)
+        groups.map((group) => (
+          <GroupCard
+            key={group.id}
+            group={group}
+            onPress={() => nav.navigate('Group', { groupId: group.id })}
+          />
+        ))
       )}
 
-      <Pressable
-        onPress={() => setAdding(true)}
-        accessibilityRole="button"
+      <Primary
+        label={groups.length === 0 ? 'Add your first stock' : 'Add another group'}
+        onPress={() => nav.navigate('AddGroup')}
         testID="add-group"
-        style={({ pressed }) => [
-          styles.add,
-          { backgroundColor: colors.lantern, opacity: pressed ? 0.8 : 1 },
-        ]}
-      >
-        <Text style={styles.addLabel}>
-          {groups.length === 0 ? 'Add your first stock' : 'Add another group'}
-        </Text>
-      </Pressable>
+      />
     </Screen>
   );
 }
 
-function GroupCard({ group }: { group: Group }): React.ReactElement {
+function GroupCard({ group, onPress }: { group: Group; onPress: () => void }): React.ReactElement {
   const { colors } = useTheme();
   const traits = SPECIES_TRAITS[group.species];
 
@@ -77,7 +77,15 @@ function GroupCard({ group }: { group: Group }): React.ReactElement {
   const breed = group.breedId === undefined ? undefined : libraryBreed(group.breedId);
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.raised, borderColor: colors.border }]}>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      testID={`group-${group.id}`}
+      style={({ pressed }) => [
+        styles.card,
+        { backgroundColor: colors.raised, borderColor: colors.border, opacity: pressed ? 0.8 : 1 },
+      ]}
+    >
       <View style={styles.head}>
         <View style={styles.name}>
           <Text style={[styles.groupName, { color: colors.ink }]}>{group.name}</Text>
@@ -105,7 +113,12 @@ function GroupCard({ group }: { group: Group }): React.ReactElement {
           Expect first eggs at {formatRange(lay.weeks, 'weeks')} old.
         </Text>
       ) : null}
-    </View>
+
+      <View style={styles.more}>
+        <Text style={[styles.label, { color: colors.lanternInk }]}>Open</Text>
+        <Icon name="forward" size={20} color={colors.lanternInk} />
+      </View>
+    </Pressable>
   );
 }
 
@@ -129,12 +142,5 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   clock: { fontFamily: FONTS.body, fontSize: TYPE.body, lineHeight: TYPE.body * 1.35 },
-  add: {
-    minHeight: TAP.primary,
-    borderRadius: RADII.softHead,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: SPACE.sm,
-  },
-  addLabel: { fontFamily: FONTS.display, fontSize: TYPE.lede, color: '#241c14' },
+  more: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs, alignSelf: 'flex-end' },
 });

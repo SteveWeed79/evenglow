@@ -1,8 +1,8 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { type Due, type DueKind, dueDate, type Urgency, urgencyOf } from '@steading/contracts';
 import { Icon, type IconName } from './Icon';
 import { useTheme } from '../theme/ThemeProvider';
-import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
+import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
 
 /**
  * One row on Today.
@@ -69,30 +69,66 @@ function tint(urgency: Urgency, colors: { rowan: string; lanternInk: string; mut
   }
 }
 
-export function DueRow({ due, now }: { due: Due; now: number }): React.ReactElement {
+/**
+ * `onPress` is optional, and a row without one is not a bug.
+ *
+ * A due row is read and then acted on somewhere else, and for most kinds this
+ * app knows where that is. For the few it does not — a row about a subject
+ * that has no screen of its own — the row still says the true thing and simply
+ * does not pretend to be a door.
+ */
+export function DueRow({
+  due,
+  now,
+  onPress,
+}: {
+  due: Due;
+  now: number;
+  onPress?: (() => void) | undefined;
+}): React.ReactElement {
   const { colors } = useTheme();
   const urgency = urgencyOf(due, now);
   const colour = tint(urgency, colors);
 
-  return (
-    <View
-      style={[
-        styles.row,
-        {
-          backgroundColor: urgency === 'overdue' ? colors.alertTint : colors.raised,
-          borderColor: colors.border,
-        },
-      ]}
-      accessibilityRole="text"
-      accessibilityLabel={`${due.title}, ${when(due, now)}`}
-    >
+  const body = (
+    <>
       <Icon name={MARKS[due.kind]} size={24} color={colour} />
 
       <View style={styles.words}>
         <Text style={[styles.title, { color: colors.ink }]}>{due.title}</Text>
         <Text style={[styles.when, { color: colour }]}>{when(due, now)}</Text>
       </View>
-    </View>
+
+      {onPress === undefined ? null : <Icon name="forward" size={20} color={colors.muted} />}
+    </>
+  );
+
+  const fill = urgency === 'overdue' ? colors.alertTint : colors.raised;
+
+  if (onPress === undefined) {
+    return (
+      <View
+        style={[styles.row, { backgroundColor: fill, borderColor: colors.border }]}
+        accessibilityRole="text"
+        accessibilityLabel={`${due.title}, ${when(due, now)}`}
+      >
+        {body}
+      </View>
+    );
+  }
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${due.title}, ${when(due, now)}`}
+      style={({ pressed }) => [
+        styles.row,
+        { backgroundColor: fill, borderColor: colors.border, opacity: pressed ? 0.75 : 1 },
+      ]}
+    >
+      {body}
+    </Pressable>
   );
 }
 
@@ -101,6 +137,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACE.md,
+    minHeight: TAP.min,
     padding: SPACE.md,
     borderRadius: RADII.softHead,
     borderWidth: StyleSheet.hairlineWidth,

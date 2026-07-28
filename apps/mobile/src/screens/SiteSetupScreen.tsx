@@ -5,6 +5,7 @@ import { isValidMonthDay, monthDay, newId, normaliseZoneValue } from '@steading/
 import { describeLogFailure } from '@steading/core/sync/failure';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
+import { useNav } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
@@ -33,8 +34,9 @@ const MONTHS = [
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ];
 
-export function SiteSetupScreen({ onDone }: { onDone: () => void }): React.ReactElement {
+export function SiteSetupScreen(): React.ReactElement {
   const log = useLog();
+  const nav = useNav();
   const { colors } = useTheme();
 
   const [name, setName] = useState('');
@@ -77,8 +79,8 @@ export function SiteSetupScreen({ onDone }: { onDone: () => void }): React.React
     }
 
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    onDone();
-  }, [saving, datesValid, log, name, lastSpring, firstAutumn, zone, onDone]);
+    nav.goBack();
+  }, [saving, datesValid, log, name, lastSpring, firstAutumn, zone, nav]);
 
   return (
     <Screen title="Your ground" back>

@@ -9,6 +9,7 @@ import type { SqlDriver, SqlValue } from './driver';
 import { InvalidMutationError, StorageFullError } from './errors';
 import { migrate } from './migrations';
 import { migrateEnvelope } from './migrate';
+import { nextRecordValue } from './project';
 import type {
   EnqueueRequest,
   IntegrityReport,
@@ -156,6 +157,55 @@ export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
     );
   }
 
+  // ── the projection ─────────────────────────────────────────────────────────
+
+  /**
+   * Writes one mutation's effect onto the local record.
+   *
+   * Shared by enqueue and by hydration on purpose. They used to hold two
+   * copies of the same INSERT … ON CONFLICT, which is how they came to share a
+   * bug — both replaced the whole value on an update, while the server merged.
+   * One function means a device's own writes and the same writes arriving back
+   * from the server cannot disagree.
+   *
+   * **Called only from inside a transaction.** The read of the previous value
+   * and the write that depends on it are not atomic on their own, and enqueue
+   * has to be one unit anyway (invariant 5).
+   */
+  async function projectOne(
+    entity: string,
+    targetId: string,
+    op: 'create' | 'update' | 'delete',
+    payload: unknown,
+    updatedAt: number,
+  ): Promise<void> {
+    const key = recordKey(entity, targetId);
+
+    let previous: unknown;
+    if (op !== 'create') {
+      const row = await driver.get<{ value: string }>(
+        'SELECT value FROM records WHERE key = ?',
+        [key],
+      );
+      previous = row === undefined ? undefined : readJson(row.value);
+    }
+
+    await driver.run(
+      `INSERT INTO records (key, entity, targetId, value, updatedAt, deleted)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(key) DO UPDATE SET
+         value = excluded.value, updatedAt = excluded.updatedAt, deleted = excluded.deleted`,
+      [
+        key,
+        entity,
+        targetId,
+        JSON.stringify(nextRecordValue(op, previous, payload) ?? null),
+        updatedAt,
+        op === 'delete' ? 1 : 0,
+      ],
+    );
+  }
+
   return {
     /**
      * ONE transaction: mint the sequence number, write the outbox row, advance
@@ -241,19 +291,12 @@ export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
 
           await writeMeta(META.nextClientSeq, clientSeq + 1);
 
-          await driver.run(
-            `INSERT INTO records (key, entity, targetId, value, updatedAt, deleted)
-             VALUES (?, ?, ?, ?, ?, ?)
-             ON CONFLICT(key) DO UPDATE SET
-               value = excluded.value, updatedAt = excluded.updatedAt, deleted = excluded.deleted`,
-            [
-              recordKey(request.entity, targetId),
-              request.entity,
-              targetId,
-              JSON.stringify(request.payload ?? null),
-              Date.now(),
-              request.op === 'delete' ? 1 : 0,
-            ],
+          await projectOne(
+            request.entity,
+            targetId,
+            request.op,
+            request.payload,
+            Date.now(),
           );
 
           return queued;
@@ -518,19 +561,12 @@ export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
             continue;
           }
 
-          await driver.run(
-            `INSERT INTO records (key, entity, targetId, value, updatedAt, deleted)
-             VALUES (?, ?, ?, ?, ?, ?)
-             ON CONFLICT(key) DO UPDATE SET
-               value = excluded.value, updatedAt = excluded.updatedAt, deleted = excluded.deleted`,
-            [
-              recordKey(mutation.entity, mutation.targetId),
-              mutation.entity,
-              mutation.targetId,
-              JSON.stringify(mutation.payload ?? null),
-              mutation.serverTs,
-              mutation.op === 'delete' ? 1 : 0,
-            ],
+          await projectOne(
+            mutation.entity,
+            mutation.targetId,
+            mutation.op,
+            mutation.payload,
+            mutation.serverTs,
           );
           applied += 1;
         }

@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { equipmentCreateSchema } from '@steading/contracts';
+import {
+  equipmentCreateSchema,
+  inventoryCreateSchema,
+  maintenanceCreateSchema,
+} from '@steading/contracts';
 import { localStore } from '../db/store';
 
 /**
@@ -111,4 +115,113 @@ export async function listMachines(): Promise<Machine[]> {
       ];
     })
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// ── service schedules ────────────────────────────────────────────────────────
+
+/**
+ * A maintenance interval on a machine.
+ *
+ * Dual-trigger by design: hours OR days, whichever comes round first. A
+ * machine with an hour meter is serviced on hours and one without is serviced
+ * on dates, and `serviceDue` refuses to build a row it cannot evaluate — an
+ * hours interval on a meterless pump produces nothing rather than a row that
+ * sits on Today forever.
+ */
+export interface Service {
+  id: string;
+  equipmentId: string;
+  title: string;
+  intervalHours?: number;
+  intervalDays?: number;
+  lastDoneAtHours?: number;
+  lastDoneAtDate?: number;
+  partIds?: string[];
+  note?: string;
+}
+
+const storedMaintenance = z.object(maintenanceCreateSchema.shape).partial();
+
+export async function listServices(): Promise<Service[]> {
+  const records = await localStore().readRecordsByEntity('maintenance');
+
+  return records
+    .filter((record) => !record.deleted)
+    .flatMap((record) => {
+      const parsed = storedMaintenance.safeParse(record.value);
+      if (!parsed.success || parsed.data.equipmentId === undefined || parsed.data.title === undefined) {
+        return [];
+      }
+
+      const { equipmentId, title, partIds, ...rest } = parsed.data;
+      return [
+        {
+          id: record.targetId,
+          equipmentId,
+          title,
+          ...(partIds === undefined ? {} : { partIds: [...partIds] }),
+          ...Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined)),
+        } satisfies Service,
+      ];
+    })
+    .sort((a, b) => a.title.localeCompare(b.title));
+}
+
+// ── the shelf ────────────────────────────────────────────────────────────────
+
+/**
+ * Feed, bedding, medicine and parts.
+ *
+ * `equipmentId` is what turns a list of filters into the answer to "can this
+ * service actually be done" — `partsDue` reads it, and a service due in a
+ * fortnight is only actionable if the filter is in the barn.
+ */
+export interface StockItem {
+  id: string;
+  name: string;
+  kind: string;
+  unit: string;
+  quantity: number;
+  reorderBelow?: number;
+  equipmentId?: string;
+  supplier?: string;
+  note?: string;
+}
+
+const storedInventory = inventoryCreateSchema.partial();
+
+export async function listInventory(): Promise<StockItem[]> {
+  const records = await localStore().readRecordsByEntity('inventory');
+
+  return records
+    .filter((record) => !record.deleted)
+    .flatMap((record) => {
+      const parsed = storedInventory.safeParse(record.value);
+      if (
+        !parsed.success ||
+        parsed.data.name === undefined ||
+        parsed.data.kind === undefined ||
+        parsed.data.unit === undefined
+      ) {
+        return [];
+      }
+
+      const { name, kind, unit, quantity, ...rest } = parsed.data;
+      return [
+        {
+          id: record.targetId,
+          name,
+          kind,
+          unit,
+          quantity: quantity ?? 0,
+          ...Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined)),
+        } satisfies StockItem,
+      ];
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Items at or below the level their owner said to reorder at. */
+export function runningLow(items: readonly StockItem[]): StockItem[] {
+  return items.filter((i) => i.reorderBelow !== undefined && i.quantity <= i.reorderBelow);
 }

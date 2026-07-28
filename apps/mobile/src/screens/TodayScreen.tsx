@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { type ActiveWithdrawal, laysEggs, longestWithdrawal } from '@steading/contracts';
+import { type ActiveWithdrawal, type Due, laysEggs, longestWithdrawal } from '@steading/contracts';
 import type { Group } from '@steading/core/read/groups';
 import { basketConfirmation } from '@steading/core/voice';
 import { DueRow } from '../components/DueRow';
@@ -11,6 +11,7 @@ import { Tally } from '../components/Tally';
 import { WithdrawalBanner } from '../components/WithdrawalBanner';
 import { useDues } from '../hooks/useDues';
 import { useGroups } from '../hooks/useGroups';
+import { useNav } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, SPACE, TYPE } from '../theme/tokens';
@@ -30,6 +31,35 @@ export function TodayScreen(): React.ReactElement {
   const { groups, eggs, withdrawals, loading } = useGroups();
   const { dues } = useDues();
   const { colors } = useTheme();
+  const nav = useNav();
+
+  /**
+   * Where a row is discharged.
+   *
+   * A due row says what is wanted and this says where it happens — a service
+   * on its schedule, a hatch on its set of eggs, a husbandry job on its group.
+   * `subject` is already on every `Due` for exactly this, so nothing here has
+   * to re-derive which entity a row came from.
+   */
+  const openDue = useCallback(
+    (due: Due): (() => void) | undefined => {
+      const { entity, id } = due.subject;
+
+      if (due.kind === 'candle' || due.kind === 'hatch') {
+        return () => nav.navigate('Incubation', { incubationId: id });
+      }
+      if (entity === 'flock') return () => nav.navigate('Group', { groupId: id });
+      if (entity === 'animal') return () => nav.navigate('Animals', { groupId: id });
+      if (entity === 'equipment') return () => nav.navigate('Machine', { machineId: id });
+      if (entity === 'planting') return () => nav.navigate('Planting', { plantingId: id });
+      // A withdrawal names the medication, and there is no medication screen —
+      // the group's banner is where it is actually read, and the row already
+      // says which group. Left as a plain row rather than sent somewhere
+      // approximate.
+      return undefined;
+    },
+    [nav],
+  );
 
   if (loading) return <Screen title="Today">{null}</Screen>;
 
@@ -41,7 +71,7 @@ export function TodayScreen(): React.ReactElement {
       {dues.length > 0 ? (
         <View style={styles.dues}>
           {dues.map((due) => (
-            <DueRow key={due.key} due={due} now={now} />
+            <DueRow key={due.key} due={due} now={now} onPress={openDue(due)} />
           ))}
         </View>
       ) : null}

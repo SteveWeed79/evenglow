@@ -1,6 +1,7 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text } from 'react-native';
 import type { SyncState } from '@steading/core/sync/engine';
 import { Icon, type IconName } from './Icon';
+import { useNav } from '../hooks/useNav';
 import { useSync } from '../hooks/useSync';
 import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
@@ -31,20 +32,42 @@ function describe(
   }
 }
 
+/**
+ * Pressable, and where it goes is the whole point.
+ *
+ * **When something needs a look, the chip goes straight to it.** Making
+ * somebody find the rejected inbox behind a diagnostics screen is how
+ * "user-visible" (invariant 9) becomes technically-true-but-not-really: the
+ * chip is the only thing on screen that says work was refused, so it has to be
+ * the way to the work. Everything else lands on diagnostics, which is the
+ * right answer to "why does it say four waiting".
+ */
 export function SyncChip(): React.ReactElement {
   const state = useSync();
+  const nav = useNav();
   const { colors } = useTheme();
   const { label, icon, tint } = describe(state, colors);
 
   return (
-    <View
-      style={[styles.chip, { backgroundColor: colors.raised, borderColor: colors.border }]}
-      accessibilityRole="text"
+    <Pressable
+      onPress={() => nav.navigate(state.kind === 'rejected' ? 'Inbox' : 'Diagnostics')}
+      accessibilityRole="button"
       accessibilityLabel={`Sync: ${label}`}
+      accessibilityHint={
+        state.kind === 'rejected' ? 'Opens what needs a look' : 'Opens sync details'
+      }
+      // The chip is small by design — it is status, not an action (R3) — so
+      // the target is grown around it rather than the chip being grown.
+      hitSlop={12}
+      testID="sync-chip"
+      style={({ pressed }) => [
+        styles.chip,
+        { backgroundColor: colors.raised, borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
+      ]}
     >
       <Icon name={icon} size={16} color={tint} />
       <Text style={[styles.label, { color: colors.muted }]}>{label}</Text>
-    </View>
+    </Pressable>
   );
 }
 

@@ -13,12 +13,16 @@ import {
   timingOf,
   varietyPayload,
 } from '@steading/contracts';
-import type { Bed, Site } from '@steading/core/read/growing';
+import { listBeds, readSite, type Site } from '@steading/core/read/growing';
 import { describeLogFailure } from '@steading/core/sync/failure';
 import { Icon } from '../components/Icon';
+import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
+import { useLive2 } from '../hooks/useLive';
+import { useNav } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
+import type { ScreenProps } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
 
@@ -35,17 +39,15 @@ import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
  * a cold frame or bought-in transplants beat the map every year, and an app
  * that tells a grower no is an app that is wrong about that grower.
  */
-export function PickVarietyScreen({
-  bed,
-  site,
-  onDone,
-}: {
-  bed: Bed;
-  site: Site;
-  onDone: () => void;
-}): React.ReactElement {
+export function PickVarietyScreen({ route }: ScreenProps<'PickVariety'>): React.ReactElement {
+  const { bedId } = route.params;
   const log = useLog();
+  const nav = useNav();
   const { colors } = useTheme();
+
+  const loaded = useLive2(readSite, listBeds);
+  const site = loaded?.[0] ?? null;
+  const bed = loaded?.[1].find((b) => b.id === bedId) ?? null;
 
   const [query, setQuery] = useState('');
   const [chosen, setChosen] = useState<LibraryVariety | null>(null);
@@ -65,7 +67,9 @@ export function PickVarietyScreen({
   }, [query]);
 
   const plant = useCallback(async () => {
-    if (saving || chosen === null || site.frost === undefined) return;
+    if (saving || chosen === null || bed === null || site === null || site.frost === undefined) {
+      return;
+    }
     setSaving(true);
 
     const schedule = scheduleFor(timingOf(chosen), site.frost, season);
@@ -113,8 +117,14 @@ export function PickVarietyScreen({
     }
 
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    onDone();
-  }, [saving, chosen, site.frost, season, log, bed.id, onDone]);
+    nav.goBack();
+  }, [saving, chosen, bed, site, season, log, nav]);
+
+  if (loaded === null) return <Loading title="Plant" />;
+  if (bed === null) return <Missing title="Plant" what="That bed" />;
+  if (site === null || site.frost === undefined) {
+    return <Missing title="Plant" what="Your frost dates — the site this bed belongs to" />;
+  }
 
   if (chosen !== null) {
     return (

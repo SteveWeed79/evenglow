@@ -1,9 +1,13 @@
 import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { readSite } from '@steading/core/read/growing';
+import { Row } from '../components/Form';
 import { Icon } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { signOut } from '../auth/session';
+import { useLive } from '../hooks/useLive';
+import { useNav } from '../hooks/useNav';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
 
@@ -12,9 +16,17 @@ import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
  *
  * It is not somewhere you go during chores, so it does not get one of the four
  * places a thumb can reach without looking; Growing does.
+ *
+ * It is also where the things that are not a tab live: who else is on the
+ * farm, what is under the broody, sync details, and the frost dates every
+ * growing date is counted from. Each of those is a once-or-twice-a-year visit,
+ * which is exactly what this screen is for.
  */
 export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): React.ReactElement {
   const { colors } = useTheme();
+  const nav = useNav();
+  const site = useLive(readSite);
+
   const [armed, setArmed] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -38,12 +50,46 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
 
   return (
     <Screen title="Settings" back>
-      <Panel label="Not built yet">
-        <Body>
-          Sync diagnostics and the rejected inbox, your frost dates, and export. Everything the
-          app already records is on this device and syncs on its own.
-        </Body>
-      </Panel>
+      <View style={styles.rows}>
+        <Row
+          title="Who is on this farm"
+          detail="Invite someone, or change what they may do"
+          icon="head-count"
+          testID="go-members"
+          onPress={() => nav.navigate('Members')}
+        />
+        <Row
+          title="Eggs under"
+          detail="Sets in the incubator or under a broody"
+          icon="egg"
+          testID="go-incubations"
+          onPress={() => nav.navigate('Incubations')}
+        />
+        <Row
+          title="The shelf"
+          detail="Feed, bedding, medicine and parts"
+          icon="parts"
+          onPress={() => nav.navigate('Inventory')}
+        />
+        <Row
+          title="Your ground"
+          detail={
+            site?.frost === undefined
+              ? 'Frost dates — nothing on Growing works without them'
+              : 'Frost dates and hardiness zone'
+          }
+          icon="season"
+          testID="go-site"
+          onPress={() => nav.navigate('SiteSetup')}
+        />
+        <Row
+          title="Sync"
+          detail="What is waiting, what was refused, and why"
+          icon="diagnostics"
+          testID="go-diagnostics"
+          onPress={() => nav.navigate('Diagnostics')}
+        />
+      </View>
 
       <Panel label="This device">
         <Body>
@@ -78,6 +124,7 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
 }
 
 const styles = StyleSheet.create({
+  rows: { gap: SPACE.sm },
   signOut: {
     minHeight: TAP.primary,
     borderRadius: RADII.softHead,

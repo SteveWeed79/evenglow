@@ -1,22 +1,14 @@
-import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import * as Haptics from 'expo-haptics';
-import {
-  growingSeasonDays,
-  newId,
-  resolveMonthDay,
-  scheduleFor,
-  timingOf,
-} from '@steading/contracts';
-import { type Bed, occupants, type Planting, type Site } from '@steading/core/read/growing';
-import { describeLogFailure } from '@steading/core/sync/failure';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { growingSeasonDays } from '@steading/contracts';
+import { type Bed, occupants, type Planting } from '@steading/core/read/growing';
+import { listVarieties } from '@steading/core/read/growing';
+import { Primary } from '../components/Form';
 import { Icon } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
-import { PickVarietyScreen } from './PickVarietyScreen';
-import { SiteSetupScreen } from './SiteSetupScreen';
 import { useGrowing } from '../hooks/useGrowing';
-import { useLog } from '../hooks/useSync';
+import { useLive } from '../hooks/useLive';
+import { useNav } from '../hooks/useNav';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
 
@@ -33,23 +25,10 @@ import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
  */
 export function GrowingScreen(): React.ReactElement {
   const { site, beds, plantings, loading } = useGrowing();
+  const varieties = useLive(listVarieties);
   const { colors } = useTheme();
-  const [screen, setScreen] = useState<'list' | 'site' | 'bed'>('list');
-  const [planting, setPlanting] = useState<Bed | null>(null);
+  const nav = useNav();
 
-  if (screen === 'site') return <SiteSetupScreen onDone={() => setScreen('list')} />;
-  if (screen === 'bed' && site) {
-    return <AddBedScreen siteId={site.id} onDone={() => setScreen('list')} />;
-  }
-  if (planting && site) {
-    return (
-      <PickVarietyScreen
-        bed={planting}
-        site={site}
-        onDone={() => setPlanting(null)}
-      />
-    );
-  }
   if (loading) return <Screen title="Growing">{null}</Screen>;
 
   // No site: the one thing that must come first, and the reason why.
@@ -65,7 +44,11 @@ export function GrowingScreen(): React.ReactElement {
             counted back from your first. Two dates, once, and the rest of this tab works out
             for itself — offline, for good.
           </Body>
-          <Primary label="Set your frost dates" onPress={() => setScreen('site')} testID="setup-site" />
+          <Primary
+            label="Set your frost dates"
+            onPress={() => nav.navigate('SiteSetup')}
+            testID="setup-site"
+          />
         </Panel>
       </Screen>
     );
@@ -73,6 +56,7 @@ export function GrowingScreen(): React.ReactElement {
 
   const season = new Date().getFullYear();
   const days = growingSeasonDays(site.frost, season);
+  const varietyNames = new Map((varieties ?? []).map((v) => [v.id, v.name]));
 
   return (
     <Screen title="Growing">
@@ -98,14 +82,16 @@ export function GrowingScreen(): React.ReactElement {
             key={bed.id}
             bed={bed}
             plantings={occupants(plantings, bed.id)}
-            onPlant={() => setPlanting(bed)}
+            names={varietyNames}
+            onPlant={() => nav.navigate('PickVariety', { bedId: bed.id })}
+            onOpen={(plantingId) => nav.navigate('Planting', { plantingId })}
           />
         ))
       )}
 
       <Primary
         label={beds.length === 0 ? 'Add your first bed' : 'Add another bed'}
-        onPress={() => setScreen('bed')}
+        onPress={() => nav.navigate('AddBed', { siteId: site.id })}
         testID="add-bed"
       />
     </Screen>
@@ -115,11 +101,15 @@ export function GrowingScreen(): React.ReactElement {
 function BedCard({
   bed,
   plantings,
+  names,
   onPlant,
+  onOpen,
 }: {
   bed: Bed;
   plantings: Planting[];
+  names: Map<string, string>;
   onPlant: () => void;
+  onOpen: (plantingId: string) => void;
 }): React.ReactElement {
   const { colors } = useTheme();
 
@@ -139,15 +129,28 @@ function BedCard({
         <Text style={[styles.empty, { color: colors.muted }]}>Empty</Text>
       ) : (
         plantings.map((p) => (
-          <Text key={p.id} style={[styles.empty, { color: colors.ink }]}>
-            {p.status === 'planned' ? 'Planned' : 'Growing'} · season {p.season}
-          </Text>
+          <Pressable
+            key={p.id}
+            onPress={() => onOpen(p.id)}
+            accessibilityRole="button"
+            testID={`planting-${p.id}`}
+            style={({ pressed }) => [
+              styles.planting,
+              { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
+            ]}
+          >
+            <Text style={[styles.empty, { color: colors.ink }]}>
+              {names.get(p.varietyId) ?? 'A planting'} · {p.status}
+            </Text>
+            <Icon name="forward" size={20} color={colors.muted} />
+          </Pressable>
         ))
       )}
 
       <Pressable
         onPress={onPlant}
         accessibilityRole="button"
+        testID={`plant-in-${bed.id}`}
         style={({ pressed }) => [
           styles.plant,
           { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
@@ -158,118 +161,6 @@ function BedCard({
       </Pressable>
     </View>
   );
-}
-
-function AddBedScreen({ siteId, onDone }: { siteId: string; onDone: () => void }) {
-  const log = useLog();
-  const { colors } = useTheme();
-  const [name, setName] = useState('');
-  const [covered, setCovered] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [failure, setFailure] = useState<string | null>(null);
-
-  const save = useCallback(async () => {
-    if (saving || name.trim() === '') return;
-    setSaving(true);
-    try {
-      await log({
-        entity: 'bed',
-        op: 'create',
-        targetId: newId(),
-        payload: { siteId, name: name.trim(), covered },
-      });
-    } catch (error) {
-      setSaving(false);
-      setFailure(describeLogFailure(error));
-      return;
-    }
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    onDone();
-  }, [saving, name, log, siteId, covered, onDone]);
-
-  return (
-    <Screen title="Add a bed" back>
-      <Text style={[styles.label, { color: colors.muted }]}>What do you call it?</Text>
-      <TextInput
-        value={name}
-        onChangeText={setName}
-        placeholder="Bed 3, the top row, the tunnel"
-        placeholderTextColor={colors.muted}
-        maxLength={80}
-        style={[
-          styles.field,
-          { backgroundColor: colors.raised, borderColor: colors.border, color: colors.ink },
-        ]}
-      />
-
-      <Pressable
-        onPress={() => {
-          void Haptics.selectionAsync();
-          setCovered((c) => !c);
-        }}
-        accessibilityRole="checkbox"
-        accessibilityState={{ checked: covered }}
-        style={({ pressed }) => [
-          styles.toggle,
-          {
-            backgroundColor: covered ? colors.lantern : colors.raised,
-            borderColor: covered ? colors.lanternInk : colors.border,
-            opacity: pressed ? 0.75 : 1,
-          },
-        ]}
-      >
-        <Text style={[styles.toggleLabel, { color: covered ? '#241c14' : colors.ink }]}>
-          {/* A tunnel beats the site's frost dates, which is why it is worth
-              knowing rather than being a note nobody reads. */}
-          Under cover (tunnel, frame, cloche)
-        </Text>
-      </Pressable>
-
-      {failure ? (
-        <Panel>
-          <Body>{failure}</Body>
-        </Panel>
-      ) : null}
-
-      <Primary label="Add bed" onPress={() => void save()} disabled={saving || name.trim() === ''} />
-    </Screen>
-  );
-}
-
-export function Primary({
-  label,
-  onPress,
-  disabled = false,
-  testID,
-}: {
-  label: string;
-  onPress: () => void;
-  disabled?: boolean;
-  testID?: string;
-}): React.ReactElement {
-  const { colors } = useTheme();
-
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      accessibilityRole="button"
-      {...(testID === undefined ? {} : { testID })}
-      style={({ pressed }) => [
-        styles.primary,
-        { backgroundColor: colors.lantern, opacity: disabled ? 0.4 : pressed ? 0.8 : 1 },
-      ]}
-    >
-      <Text style={styles.primaryLabel}>{label}</Text>
-    </Pressable>
-  );
-}
-
-/** Exported so PickVariety can show the same dates this screen computes. */
-export function plannedDates(site: Site, timing: ReturnType<typeof timingOf>, season: number) {
-  if (site.frost === undefined) return null;
-  const schedule = scheduleFor(timing, site.frost, season);
-  return { schedule, lastFrost: resolveMonthDay(site.frost.lastSpring, season) };
 }
 
 const styles = StyleSheet.create({
@@ -291,12 +182,21 @@ const styles = StyleSheet.create({
   },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   bedName: { fontFamily: FONTS.display, fontSize: TYPE.title },
-  empty: { fontFamily: FONTS.body, fontSize: TYPE.body },
+  empty: { flex: 1, fontFamily: FONTS.body, fontSize: TYPE.body },
   label: {
     fontFamily: FONTS.data,
     fontSize: TYPE.label,
     letterSpacing: 1.2,
     textTransform: 'uppercase',
+  },
+  planting: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACE.sm,
+    minHeight: TAP.min,
+    paddingHorizontal: SPACE.md,
+    borderRadius: RADII.softHead,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   plant: {
     flexDirection: 'row',
@@ -309,29 +209,4 @@ const styles = StyleSheet.create({
     marginTop: SPACE.xs,
   },
   plantLabel: { fontFamily: FONTS.body, fontSize: TYPE.body },
-  field: {
-    minHeight: TAP.min,
-    borderRadius: RADII.softHead,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: SPACE.lg,
-    fontFamily: FONTS.body,
-    fontSize: TYPE.body,
-  },
-  toggle: {
-    minHeight: TAP.min,
-    borderRadius: RADII.softHead,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: SPACE.lg,
-  },
-  toggleLabel: { fontFamily: FONTS.body, fontSize: TYPE.body },
-  primary: {
-    minHeight: TAP.primary,
-    borderRadius: RADII.softHead,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: SPACE.sm,
-  },
-  primaryLabel: { fontFamily: FONTS.display, fontSize: TYPE.lede, color: '#241c14' },
 });

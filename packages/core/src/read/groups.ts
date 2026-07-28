@@ -101,3 +101,115 @@ export async function eggsToday(now = new Date()): Promise<Map<string, number>> 
 
   return totals;
 }
+
+// ── the other observations a group produces ──────────────────────────────────
+
+const storedProductionLog = z.object({
+  occurredAt: z.number().int(),
+  flockId: z.string().optional(),
+  animalId: z.string().optional(),
+  kind: z.string(),
+  amount: z.number().int(),
+  unit: z.string(),
+  label: z.string().optional(),
+});
+
+export interface Produce {
+  /** Millilitres for milk, grams for fibre and honey. */
+  amount: number;
+  unit: string;
+  kind: string;
+}
+
+/**
+ * Non-egg produce taken today, per group.
+ *
+ * Milk, fibre and honey rather than head count and mortality — without this,
+ * ruminant support is a list of animals that die. Keyed `${subject}:${kind}`
+ * because a farm milking goats and shearing them takes both off the same
+ * group and summing them would be nonsense in two units at once.
+ */
+export async function produceToday(now = new Date()): Promise<Map<string, Produce>> {
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  const from = start.getTime();
+
+  const records = await localStore().readRecordsByEntity('productionLog');
+  const totals = new Map<string, Produce>();
+
+  for (const record of records) {
+    if (record.deleted) continue;
+
+    const parsed = storedProductionLog.safeParse(record.value);
+    if (!parsed.success || parsed.data.occurredAt < from) continue;
+
+    const subject = parsed.data.flockId ?? parsed.data.animalId;
+    if (subject === undefined) continue;
+
+    const key = `${subject}:${parsed.data.kind}`;
+    const existing = totals.get(key);
+    totals.set(key, {
+      kind: parsed.data.kind,
+      unit: parsed.data.unit,
+      amount: (existing?.amount ?? 0) + parsed.data.amount,
+    });
+  }
+
+  return totals;
+}
+
+const storedMortality = z.object({
+  occurredAt: z.number().int(),
+  flockId: z.string(),
+  count: z.number().int(),
+  cause: z.string(),
+});
+
+/**
+ * Losses per group, ever.
+ *
+ * Deliberately not netted off the head count. A group's `count` is what the
+ * keeper says is there, and quietly decrementing it from mortality rows would
+ * mean two sources of truth for the same number disagreeing the first time
+ * somebody also edited the group by hand.
+ */
+export async function lossesByGroup(): Promise<Map<string, number>> {
+  const records = await localStore().readRecordsByEntity('mortality');
+  const totals = new Map<string, number>();
+
+  for (const record of records) {
+    if (record.deleted) continue;
+    const parsed = storedMortality.safeParse(record.value);
+    if (!parsed.success) continue;
+
+    totals.set(parsed.data.flockId, (totals.get(parsed.data.flockId) ?? 0) + parsed.data.count);
+  }
+
+  return totals;
+}
+
+const storedFeedLog = z.object({
+  occurredAt: z.number().int(),
+  flockId: z.string(),
+  amountGrams: z.number().int(),
+  feedType: z.string().optional(),
+});
+
+/** When each group was last fed, so a screen can say "fed this morning". */
+export async function lastFedByGroup(): Promise<Map<string, number>> {
+  const records = await localStore().readRecordsByEntity('feedLog');
+  const latest = new Map<string, number>();
+
+  for (const record of records) {
+    if (record.deleted) continue;
+    const parsed = storedFeedLog.safeParse(record.value);
+    if (!parsed.success) continue;
+
+    const seen = latest.get(parsed.data.flockId);
+    if (seen === undefined || parsed.data.occurredAt > seen) {
+      latest.set(parsed.data.flockId, parsed.data.occurredAt);
+    }
+  }
+
+  return latest;
+}

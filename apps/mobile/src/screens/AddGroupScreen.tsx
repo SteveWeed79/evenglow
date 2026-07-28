@@ -1,21 +1,33 @@
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import * as Haptics from 'expo-haptics';
+import { StyleSheet, Text, View } from 'react-native';
 import {
+  breedsForSpecies,
   FLOCK_PURPOSES,
   type FlockPurpose,
+  formatRange,
   newId,
   SPECIES_TRAITS,
   type Species,
 } from '@steading/contracts';
-import { describeLogFailure } from '@steading/core/sync/failure';
 import { defaultGroupName } from '@steading/core/naming';
+import {
+  Chip,
+  DayPick,
+  Failure,
+  Field,
+  Primary,
+  Stepper,
+  TextField,
+  Toggle,
+  useSaver,
+} from '../components/Form';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useGroups } from '../hooks/useGroups';
+import { useNav } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import { useTheme } from '../theme/ThemeProvider';
-import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
+import { FONTS, SPACE, TYPE } from '../theme/tokens';
 
 /**
  * Adds a group of animals.
@@ -28,6 +40,13 @@ import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
  * one a keeper intends is a fact about the keeper, and it is what decides
  * whether this group ever gets a processing countdown. Asking here is the only
  * honest place to ask it.
+ *
+ * **Breed and hatch date are asked for the same reason, and it is a concrete
+ * one.** `growOutWindow` and `layOnsetWindow` refuse to guess any of the
+ * three: no meat purpose, no birth date or no known breed and they return
+ * null. Without these two fields every group in the app was missing two of the
+ * three, so the grow-out clock — one of the features that distinguishes this
+ * from a spreadsheet — was silent on every farm.
  */
 
 const GROUPINGS = [
@@ -48,8 +67,9 @@ const PURPOSE_LABELS: Record<FlockPurpose, string> = {
   companion: 'Pets',
 };
 
-export function AddGroupScreen({ onDone }: { onDone: () => void }): React.ReactElement {
+export function AddGroupScreen(): React.ReactElement {
   const log = useLog();
+  const nav = useNav();
   const { groups } = useGroups();
   const { colors } = useTheme();
 
@@ -57,10 +77,15 @@ export function AddGroupScreen({ onDone }: { onDone: () => void }): React.ReactE
   const [name, setName] = useState('');
   const [count, setCount] = useState(0);
   const [purposes, setPurposes] = useState<FlockPurpose[]>(['eggs']);
-  const [saving, setSaving] = useState(false);
-  const [failure, setFailure] = useState<string | null>(null);
+  const [breedId, setBreedId] = useState<string | null>(null);
+  const [knowsBirth, setKnowsBirth] = useState(false);
+  const [bornAt, setBornAt] = useState(() => startOfDay(Date.now()));
+
+  const { saving, failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
 
   const traits = SPECIES_TRAITS[species];
+  const breeds = breedsForSpecies(species);
+  const chosenBreed = breeds.find((b) => b.id === breedId);
 
   /**
    * What this group will be called if nothing is typed — shown as the
@@ -73,17 +98,13 @@ export function AddGroupScreen({ onDone }: { onDone: () => void }): React.ReactE
   );
 
   const togglePurpose = useCallback((purpose: FlockPurpose) => {
-    void Haptics.selectionAsync();
     setPurposes((current) =>
       current.includes(purpose) ? current.filter((p) => p !== purpose) : [...current, purpose],
     );
   }, []);
 
-  const save = useCallback(async () => {
-    if (saving) return;
-    setSaving(true);
-
-    try {
+  const commit = useCallback(() => {
+    void save(async () => {
       await log({
         entity: 'flock',
         op: 'create',
@@ -93,23 +114,15 @@ export function AddGroupScreen({ onDone }: { onDone: () => void }): React.ReactE
           species,
           count,
           ...(purposes.length > 0 ? { purposes } : {}),
+          ...(breedId === null ? {} : { breedId }),
+          // Hatched or born — NOT when they arrived. The clock counts from the
+          // first, and a point-of-lay pullet bought in April would otherwise
+          // read as three weeks old.
+          ...(knowsBirth ? { bornAt } : {}),
         },
       });
-    } catch (error) {
-      /**
-       * `saving` must come back down. The guard at the top reads it, so
-       * leaving it true on a throw makes the button permanently dead until the
-       * screen is closed and reopened — with the typed-in work still on screen
-       * and nothing said about why.
-       */
-      setSaving(false);
-      setFailure(describeLogFailure(error));
-      return;
-    }
-
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    onDone();
-  }, [saving, log, name, suggested, species, count, purposes, onDone]);
+    });
+  }, [save, log, name, suggested, species, count, purposes, breedId, knowsBirth, bornAt]);
 
   return (
     <Screen title="Add stock" back>
@@ -129,8 +142,10 @@ export function AddGroupScreen({ onDone }: { onDone: () => void }): React.ReactE
                   label={SPECIES_TRAITS[option].label}
                   selected={species === option}
                   onPress={() => {
-                    void Haptics.selectionAsync();
                     setSpecies(option);
+                    // A Rhode Island Red is not a breed of goat. Clearing is
+                    // the only honest thing to do with the old choice.
+                    setBreedId(null);
                   }}
                 />
               ))}
@@ -139,9 +154,10 @@ export function AddGroupScreen({ onDone }: { onDone: () => void }): React.ReactE
         );
       })}
 
-      <View style={styles.section}>
-        <Text style={[styles.label, { color: colors.muted }]}>Why do you keep them?</Text>
-        <Body>This is what decides whether the app ever counts them down to a date.</Body>
+      <Field
+        label="Why do you keep them?"
+        hint="This is what decides whether the app ever counts them down to a date."
+      >
         <View style={styles.chips}>
           {FLOCK_PURPOSES.map((purpose) => (
             <Chip
@@ -152,103 +168,87 @@ export function AddGroupScreen({ onDone }: { onDone: () => void }): React.ReactE
             />
           ))}
         </View>
-      </View>
+      </Field>
 
-      <View style={styles.section}>
-        <Text style={[styles.label, { color: colors.muted }]}>
-          What are they called? ({traits.collective})
-        </Text>
-        <TextInput
+      <Field label={`What are they called? (${traits.collective})`}>
+        <TextField
           value={name}
           onChangeText={setName}
           placeholder={suggested}
-          placeholderTextColor={colors.muted}
           maxLength={80}
-          style={[
-            styles.field,
-            { backgroundColor: colors.raised, borderColor: colors.border, color: colors.ink },
-          ]}
+          testID="group-name"
         />
-      </View>
+      </Field>
 
-      <View style={styles.section}>
-        <Text style={[styles.label, { color: colors.muted }]}>How many?</Text>
-        <View style={styles.counter}>
-          {[1, 5, 10].map((step) => (
-            <Chip
-              key={step}
-              label={`+${step}`}
-              selected={false}
-              onPress={() => {
-                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setCount((c) => c + step);
-              }}
-            />
-          ))}
-          <Chip
-            label="−"
-            selected={false}
-            disabled={count === 0}
-            onPress={() => setCount((c) => Math.max(0, c - 1))}
-          />
-          <Text style={[styles.count, { color: colors.ink }]}>{count}</Text>
-        </View>
-      </View>
+      <Field label="How many?">
+        <Stepper value={count} onChange={setCount} steps={[1, 5, 10]} suffix="head" />
+      </Field>
 
-      {failure ? (
-        <Panel>
-          <Body>{failure}</Body>
+      {breeds.length > 0 ? (
+        <Field
+          label="Which breed? (optional)"
+          hint="The library knows how fast each one grows and when it starts to lay."
+        >
+          <View style={styles.chips}>
+            {breeds.map((breed) => (
+              <Chip
+                key={breed.id}
+                label={breed.name}
+                selected={breedId === breed.id}
+                onPress={() => setBreedId(breedId === breed.id ? null : breed.id)}
+              />
+            ))}
+          </View>
+        </Field>
+      ) : null}
+
+      <Toggle
+        label="I know when they hatched or were born"
+        value={knowsBirth}
+        onChange={setKnowsBirth}
+      />
+
+      {knowsBirth ? (
+        <Field label="Hatched or born">
+          <DayPick value={bornAt} onChange={setBornAt} withYear />
+        </Field>
+      ) : null}
+
+      {/* Says what the two optional answers buy, at the moment they are being
+          answered — rather than leaving someone to wonder why a countdown
+          never appeared. */}
+      {chosenBreed !== undefined && knowsBirth ? (
+        <Panel label="What this gives you">
+          {chosenBreed.growOutWeeks !== undefined && purposes.includes('meat') ? (
+            <Body>
+              Ready to process at {formatRange(chosenBreed.growOutWeeks, 'weeks')} old — that
+              lands on Today two weeks before.
+            </Body>
+          ) : null}
+          {chosenBreed.layOnsetWeeks !== undefined && purposes.includes('eggs') ? (
+            <Body>
+              First eggs expected at {formatRange(chosenBreed.layOnsetWeeks, 'weeks')} old.
+            </Body>
+          ) : null}
         </Panel>
       ) : null}
 
-      <Pressable
-        onPress={() => void save()}
+      <Failure message={failure} />
+
+      <Primary
+        label={`Add ${name.trim() || suggested}`}
         disabled={saving}
-        accessibilityRole="button"
-        style={({ pressed }) => [
-          styles.save,
-          { backgroundColor: colors.lantern, opacity: saving || pressed ? 0.75 : 1 },
-        ]}
-      >
-        <Text style={styles.saveLabel}>Add {name.trim() || suggested}</Text>
-      </Pressable>
+        onPress={commit}
+        testID="save-group"
+      />
     </Screen>
   );
 }
 
-function Chip({
-  label,
-  selected,
-  onPress,
-  disabled = false,
-}: {
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-  disabled?: boolean;
-}): React.ReactElement {
-  const { colors } = useTheme();
-
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      accessibilityRole="button"
-      accessibilityState={{ selected, disabled }}
-      style={({ pressed }) => [
-        styles.chip,
-        {
-          backgroundColor: selected ? colors.lantern : colors.raised,
-          borderColor: selected ? colors.lanternInk : colors.border,
-          opacity: disabled ? 0.35 : pressed ? 0.75 : 1,
-        },
-      ]}
-    >
-      {/* Ink on brass when selected: the lantern is a fill, and a label on top
-          of it reads where a brass label on plaster would not. */}
-      <Text style={[styles.chipLabel, { color: selected ? '#241c14' : colors.ink }]}>{label}</Text>
-    </Pressable>
-  );
+function startOfDay(at: number): number {
+  const date = new Date(at);
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
 }
 
 const styles = StyleSheet.create({
@@ -265,32 +265,5 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: TAP.gap },
-  chip: {
-    minHeight: TAP.min,
-    borderRadius: RADII.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: SPACE.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chipLabel: { fontFamily: FONTS.body, fontSize: TYPE.body },
-  field: {
-    minHeight: TAP.min,
-    borderRadius: RADII.softHead,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: SPACE.lg,
-    fontFamily: FONTS.body,
-    fontSize: TYPE.body,
-  },
-  counter: { flexDirection: 'row', alignItems: 'center', gap: TAP.gap, flexWrap: 'wrap' },
-  count: { fontFamily: FONTS.display, fontSize: TYPE.hero, fontVariant: ['tabular-nums'] },
-  save: {
-    minHeight: TAP.primary,
-    borderRadius: RADII.softHead,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: SPACE.lg,
-  },
-  saveLabel: { fontFamily: FONTS.display, fontSize: TYPE.lede, color: '#241c14' },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.md },
 });

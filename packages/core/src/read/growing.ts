@@ -1,7 +1,9 @@
+import { z } from 'zod';
 import {
   bedCreateSchema,
   type FrostDates,
   frostDatesSchema,
+  harvestCreateSchema,
   plantingCreateSchema,
   siteCreateSchema,
   varietyCreateSchema,
@@ -180,4 +182,75 @@ export async function listVarieties(): Promise<{ id: string; name: string; crop:
       return [{ id: record.targetId, name: parsed.data.name, crop: parsed.data.crop }];
     })
     .sort((a, b) => a.crop.localeCompare(b.crop) || a.name.localeCompare(b.name));
+}
+
+// ── harvests ─────────────────────────────────────────────────────────────────
+
+export interface Harvest {
+  id: string;
+  plantingId: string;
+  occurredAt: number;
+  unit: string;
+  massUg?: number;
+  count?: number;
+  note?: string;
+}
+
+const storedHarvest = z.object(harvestCreateSchema.shape).partial();
+
+/**
+ * What came off, append-only.
+ *
+ * Two people picking the same bed on the same morning produce two rows and
+ * both are true — which is the whole reason an observation cannot conflict.
+ * Nothing here sums into a stored total for the same reason nothing stores a
+ * bed's current crop: the sum is a question, not a fact to keep in step.
+ */
+export async function listHarvests(): Promise<Harvest[]> {
+  const records = await localStore().readRecordsByEntity('harvest');
+
+  return records
+    .filter((record) => !record.deleted)
+    .flatMap((record) => {
+      const parsed = storedHarvest.safeParse(record.value);
+      if (
+        !parsed.success ||
+        parsed.data.plantingId === undefined ||
+        parsed.data.occurredAt === undefined ||
+        parsed.data.unit === undefined
+      ) {
+        return [];
+      }
+
+      const { plantingId, occurredAt, unit, ...rest } = parsed.data;
+      return [
+        {
+          id: record.targetId,
+          plantingId,
+          occurredAt,
+          unit,
+          ...Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined)),
+        } satisfies Harvest,
+      ];
+    })
+    .sort((a, b) => b.occurredAt - a.occurredAt);
+}
+
+/** Everything picked off one planting, and what it came to. */
+export function harvestTotals(
+  harvests: readonly Harvest[],
+  plantingId: string,
+): { massUg: number; count: number; picks: number } {
+  let massUg = 0;
+  let count = 0;
+  let picks = 0;
+
+  for (const harvest of harvests) {
+    if (harvest.plantingId !== plantingId) continue;
+    picks += 1;
+    massUg += harvest.massUg ?? 0;
+    count += harvest.count ?? 0;
+  }
+
+  return { massUg, count, picks };
 }
