@@ -4,6 +4,15 @@
 **Status:** Phases 1–3 implemented on the pre-D8 stack; the D8–D10 migration is in flight. See §0.1.
 **Name:** Steading — the farmhouse and its working buildings taken together. Stock, iron, and chores under one roofline.
 
+**What it is.** One app for everything a small mixed farm does: the animals, the
+growing, and the machinery that serves both. Offline first, because the yard has
+no signal. Cozy and whimsical, because it is opened at 6am in the cold and ought
+to feel like somewhere you do not mind being. And legible above all — a farm
+hand should be able to log a full day's work without being taught, and a keeper
+should be able to read the screen at arm's length in direct sun with gloves on.
+
+Scope is set by what a smallholding *does*, not by what other products cover.
+
 **Stack**
 - **Client:** Capacitor 8 · Vite · React · TypeScript (strict) · SQLite (`@capacitor-community/sqlite`)
 - **Server:** Fastify · MongoDB · JWT access + refresh tokens
@@ -131,8 +140,62 @@ Redis rate limiting, refresh-token rotation and revocation, envelope schema migr
 - **Reporting** — production graphs at week / month / quarter / year.
 - **Import & export** — CSV in (migrating off a spreadsheet or Flockstar) and CSV/JSON out (Schedule F, no lock-in).
 
+### Growing
+
+A smallholding is not livestock with a garden attached. The same person walks
+out at 6am to let the hens out, check the polytunnel, and see whether the
+carrots want thinning — and they should not need two apps to write any of it
+down. Growing is a first-class half of this product, not a module bolted to the
+side of the animal half.
+
+- **Beds and growing areas** — named places with an area and a kind: bed, row,
+  polytunnel, greenhouse, orchard, pasture, container. Free-text kind, because
+  the list will never be complete. *(mutable, archived never deleted)*
+- **Plantings** — what is in a bed right now, from which variety, sown or
+  transplanted on a date, with an expected first-harvest window. A bed can hold
+  more than one planting; a planting can span more than one bed. *(mutable)*
+- **Variety presets** — days to maturity, sow window, spacing, and whether it is
+  direct-sown or raised. The same preset library shape as breeds and equipment
+  (W4), and the same rule: **a range, never a point.**
+- **Sowing and transplanting events** — *(append-only)*
+- **Harvest log** — weight or count by planting, so a bed's yield is a real
+  number by the end of the season. *(append-only)*
+- **Succession sowing** — "sow again in three weeks" as a recurring task tied to
+  a planting, because the difference between a good year and a hungry August is
+  remembering to sow the second lot.
+- **Zone and frost dates** — a property of the farm, not of any one crop. Last
+  spring frost and first autumn frost drive sow windows, and also drive chick
+  brooding, lambing timing, and when the grass actually comes. **Shared by both
+  halves of the app.**
+- **Treatments and withdrawal** — the same medication and withdrawal machinery
+  the animals use, applied to sprays and soil treatments. Harvest interval is
+  the same idea as egg withdrawal and should not be a second implementation.
+- **Rotation history** — what grew in this bed in previous seasons. Cheap once
+  plantings are dated and archived rather than deleted, and the thing every
+  grower keeps on paper and loses.
+
 ### Explicitly Out of Scope
-Crop planning and field mapping, satellite/weather imagery, e-commerce and CSA orders, double-entry accounting, GPS telematics hardware, dairy workflows.
+
+Kept deliberately short, and each one is here because **it is a different
+product**, not because someone else does it well:
+
+- **Field mapping and GPS boundaries** — acreage-scale geospatial work. A bed
+  has a name and an area; it does not need a polygon.
+- **Satellite and weather imagery** — an integration surface, not a record.
+- **E-commerce, CSA orders, and invoicing** — selling is a business, and this is
+  a logbook.
+- **Double-entry accounting** — cost tracking goes as far as cost-per-egg,
+  cost-per-bird, cost-per-bed and a Schedule F export. Not a ledger.
+- **GPS telematics hardware** — a hardware integration programme.
+- **Dairy processing workflows** — the production log records a volume of milk.
+  Creamery, testing, and supply chain are out.
+
+**A note on how this list was arrived at, because it changed.** An earlier
+version of this document excluded crop planning outright on the grounds that a
+competitor covers it and "we will not beat it there." That was a competitive
+opinion, and it was never the ask. This product covers what a small mixed farm
+actually does. Where a boundary remains, the reason given is what the thing *is*
+— not who else sells one.
 
 ### Deferred to v2 (designed for, not built)
 Incubation and hatch runs, fertility rates per pairing, three-generation pedigrees. iOS build target.
