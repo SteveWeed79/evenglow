@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { db, readAllRecords, readOutboxBySeq } from '@steading/app/db/open';
-import { STORES } from '@steading/app/db/idb-schema';
-import { checkIntegrity, enqueue, InvalidMutationError, queueDepth } from '@steading/app/sync/queue';
+
+import { checkIntegrity, enqueue, InvalidMutationError, queueDepth } from '@steading/core/sync/queue';
 import { newId } from '@steading/contracts';
-import { freshDb, simulateRestart } from '../support/idb';
+import { deleteMetaKey, deleteOutboxRow, freshStore, readAllRecords, readOutboxBySeq, simulateRestart } from '../support/store';
 
 function eggLog(count = 18) {
   return {
@@ -14,7 +13,7 @@ function eggLog(count = 18) {
 }
 
 describe('enqueue', () => {
-  beforeEach(freshDb);
+  beforeEach(freshStore);
 
   it('assigns clientSeq from zero, monotonically', async () => {
     for (let i = 0; i < 5; i++) await enqueue(eggLog());
@@ -41,7 +40,7 @@ describe('enqueue', () => {
 
     // Simulate a corrupted counter — the failure mode that would silently
     // reuse sequence numbers and break ordering.
-    await (await db()).delete(STORES.meta, 'nextClientSeq');
+    await deleteMetaKey('nextClientSeq');
     await simulateRestart();
 
     await enqueue(eggLog());
@@ -96,7 +95,7 @@ describe('enqueue', () => {
 });
 
 describe('integrity check', () => {
-  beforeEach(freshDb);
+  beforeEach(freshStore);
 
   it('reports clean when nothing has been lost', async () => {
     for (let i = 0; i < 4; i++) await enqueue(eggLog());
@@ -113,8 +112,8 @@ describe('integrity check', () => {
     // Eviction, a failed migration, a devtools wipe — something removed work
     // the server never confirmed.
     const queue = await readOutboxBySeq();
-    await (await db()).delete(STORES.outbox, queue[1]!.id);
-    await (await db()).delete(STORES.outbox, queue[2]!.id);
+    await deleteOutboxRow(queue[1]!.id);
+    await deleteOutboxRow(queue[2]!.id);
 
     const report = await checkIntegrity();
     expect(report.expectedInOutbox).toBe(4);

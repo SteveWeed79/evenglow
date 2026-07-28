@@ -52,11 +52,10 @@ async function rulesFiredIn(filePath: string, code: string): Promise<string[]> {
 
 /** Source roots the tenancy guard must cover — current, and post-migration. */
 const GUARDED = [
-  ['server code today', 'src/server/sync/probe.ts'],
-  ['client code today', 'src/client/sync/probe.ts'],
   ['the contracts package', 'packages/contracts/src/probe.ts'],
-  ['the Fastify API (S3)', 'apps/api/src/routes/probe.ts'],
-  ['the Capacitor client (S5)', 'apps/app/src/screens/probe.ts'],
+  ['the shared core', 'packages/core/src/sync/probe.ts'],
+  ['the Fastify API', 'apps/api/src/routes/probe.ts'],
+  ['the React Native client', 'apps/mobile/src/screens/probe.ts'],
 ] as const;
 
 describe('tenancy guard (D2, rubric C1)', () => {
@@ -76,7 +75,7 @@ describe('tenancy guard (D2, rubric C1)', () => {
    * exemption is part of the mechanism, not a hole in it.
    */
   it.each([
-    ['today', 'src/server/db/scoped.ts'],
+    ['today', 'apps/api/src/db/scoped.ts'],
     ['after the migration (S3)', 'apps/api/src/db/scoped.ts'],
   ])('exempts the scoped data layer %s', async (_label, path) => {
     expect(await rulesFiredIn(path, TENANCY_VIOLATION)).not.toContain('no-restricted-syntax');
@@ -87,8 +86,8 @@ describe('client storage guard (D9, invariant 6)', () => {
   it.each([
     ['localStorage', STORAGE_VIOLATION],
     ['indexedDB', INDEXEDDB_VIOLATION],
-  ])('bans %s in the Capacitor client', async (_label, code) => {
-    expect(await rulesFiredIn('apps/app/src/screens/probe.ts', code)).toContain(
+  ])('bans %s in the React Native client', async (_label, code) => {
+    expect(await rulesFiredIn('apps/mobile/src/screens/probe.ts', code)).toContain(
       'no-restricted-globals',
     );
   });
@@ -99,8 +98,17 @@ describe('client storage guard (D9, invariant 6)', () => {
    * read as an instruction to delete the only engine that has passed the
    * Phase 2 exit gate.
    */
-  it('does not fire on the pre-migration client', async () => {
-    expect(await rulesFiredIn('src/client/db/open.ts', INDEXEDDB_VIOLATION)).not.toContain(
+  /**
+   * The exemption is gone, and that is the assertion.
+   *
+   * `apps/app/src/db/**` used to be exempt because the IndexedDB engine lived
+   * there knowingly through the migration. The web client is retired, so there
+   * is no longer any directory in this repo where browser storage is allowed —
+   * which is what S7 was for. Asserted here rather than assumed, because an
+   * exemption that outlives its reason is invisible until something uses it.
+   */
+  it('leaves no exemption behind in the storage layer itself', async () => {
+    expect(await rulesFiredIn('packages/core/src/db/probe.ts', INDEXEDDB_VIOLATION)).toContain(
       'no-restricted-globals',
     );
   });
@@ -109,7 +117,7 @@ describe('client storage guard (D9, invariant 6)', () => {
 describe('shared code guard', () => {
   it.each([
     ['the contracts package', 'packages/contracts/src/probe.ts'],
-    ['the Capacitor client (S5)', 'apps/app/src/screens/probe.ts'],
+    ['the React Native client (S5)', 'apps/mobile/src/screens/probe.ts'],
   ])('keeps the Mongo driver out of %s', async (_label, path) => {
     // Not just MongoClient here: shared code may not import the driver at all,
     // because this bundle ships inside an APK and is trivially unpacked.
@@ -133,11 +141,20 @@ describe('shared code guard', () => {
  * the browser store and left the previous farm's records on a shared tablet
  * (C5).
  */
-const PORT_BYPASS = "import { readRecordsByEntity } from '../db/open';\nexport const x = readRecordsByEntity;\n";
+/**
+ * Reaching past `localStore()` to an implementation by name.
+ *
+ * This is the shape of the migration's worst bug: every read module imported
+ * the store implementation directly, so a group added on device was written to
+ * one database and looked for in another. It survived every test because in a
+ * browser both paths resolved to the same place.
+ */
+const PORT_BYPASS =
+  "import { openSqliteStore } from '../db/sqlite-store';\nexport const x = openSqliteStore;\n";
 
 describe('local store port guard', () => {
-  it('blocks reaching past the port in the Capacitor client', async () => {
-    expect(await rulesFiredIn('apps/app/src/read/probe.ts', PORT_BYPASS)).toContain(
+  it('blocks reaching past the port in the React Native client', async () => {
+    expect(await rulesFiredIn('apps/mobile/src/read/probe.ts', PORT_BYPASS)).toContain(
       'no-restricted-imports',
     );
   });
@@ -147,7 +164,7 @@ describe('local store port guard', () => {
    * between the two implementations, so it imports one by name.
    */
   it('exempts the storage layer, which is what does the choosing', async () => {
-    expect(await rulesFiredIn('apps/app/src/db/probe.ts', PORT_BYPASS)).not.toContain(
+    expect(await rulesFiredIn('apps/mobile/src/db/probe.ts', PORT_BYPASS)).not.toContain(
       'no-restricted-imports',
     );
   });

@@ -1,57 +1,85 @@
 import { defineConfig, globalIgnores } from 'eslint/config';
-import nextVitals from 'eslint-config-next/core-web-vitals';
-import nextTs from 'eslint-config-next/typescript';
+import js from '@eslint/js';
+import tseslint from 'typescript-eslint';
 
+/**
+ * Rebuilt off `eslint-config-next`, which went with the Next app.
+ *
+ * That config was doing two jobs: supplying the TypeScript rules, and
+ * supplying Next-specific ones this repo no longer has a Next app for. Only
+ * the first was ever load-bearing here, and it came at the cost of a config
+ * that could not load without `next` installed.
+ *
+ * **Every guard below is carried over unchanged in force.** They are the ones
+ * `tests/unit/guards.test.ts` asserts actually fire — which is what makes them
+ * guarantees rather than intentions, and what makes a rewrite like this safe
+ * to do at all.
+ */
 const eslintConfig = defineConfig([
-  ...nextVitals,
-  ...nextTs,
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+
+  /**
+   * `no-undef` off for TypeScript, on typescript-eslint's own advice.
+   *
+   * The compiler already answers "does this name exist", and it answers it
+   * correctly against the real lib and type declarations. The lint rule
+   * answers it from a hardcoded globals list, so on TS it reports thousands of
+   * false positives for things like `URL` and `console` while catching
+   * nothing the compiler would miss.
+   */
+  {
+    files: ['**/*.ts', '**/*.tsx', '**/*.mts'],
+    rules: { 'no-undef': 'off' },
+  },
 
   globalIgnores([
-    // Default ignores of eslint-config-next:
-    '.next/**',
-    'out/**',
-    'build/**',
-    'next-env.d.ts',
     'coverage/**',
-    // Vite's output. Linting a bundle produces a thousand warnings about
-    // machine-written code and buries the ones that matter.
-    'apps/*/dist/**',
-    // The native project. `cap sync` copies that same bundle into
-    // android/app/src/main/assets/public, so without this the bundle comes
-    // back through a second door — and the Gradle wrapper and plugin sources
-    // underneath it are nobody's code to lint either.
+    '.next/**',
+    // Expo's bundle output, and the native project it generates. Linting a
+    // bundle produces a thousand warnings about machine-written code and
+    // buries the ones that matter.
+    'apps/*/.expo/**',
+    'apps/*/.expo-export/**',
     'apps/*/android/**',
+    'apps/*/ios/**',
+    'apps/*/dist/**',
   ]),
 
   /**
    * D2 — tenancy scoping is a mechanism, not a policy.
    *
-   * src/server/db/ is the only place allowed to hold a collection handle or
-   * import MongoClient. Everything else goes through scoped(orgId).
+   * `apps/api/src/db/` is the only place allowed to hold a collection handle
+   * or import MongoClient. Everything else goes through scoped(orgId).
    * Do not add an eslint-disable to get past these (CLAUDE.md invariant 1);
    * CI greps for disable comments naming these rules.
    */
   {
     files: [
-      'src/**/*.ts',
-      'src/**/*.tsx',
-      'src/**/*.mts',
-      // First-party source lives in more than one place now, and will live in
-      // more still. A guard listing only src/ stops covering anything that
+      // First-party source lives in more than one place and will live in more
+      // still. A guard listing only one directory stops covering anything that
       // moves out of it — precisely how the first attempt at the D8
       // restructure disarmed every check in this repo.
       'packages/*/src/**/*.ts',
-      // Pre-armed for the migration. These directories do not exist yet; the
-      // globs are here so the guard is in force the moment the first file
-      // lands in them, rather than being remembered afterwards. That they
-      // actually fire is asserted in tests/unit/guards.test.ts, which is what
-      // makes this a guarantee rather than an intention.
       'apps/*/src/**/*.ts',
       'apps/*/src/**/*.tsx',
       'apps/*/src/**/*.mts',
     ],
-    ignores: ['src/server/db/**', 'apps/api/src/db/**'],
+    ignores: ['apps/api/src/db/**'],
     rules: {
+      /**
+       * `MongoClient` by name, not the whole module.
+       *
+       * The rule is about who may hold a CONNECTION, not who may know Mongo
+       * exists — `apply.ts` needs `MongoServerError` to tell a duplicate key
+       * from a real failure, and banning that would push it toward matching on
+       * an error string instead. Connections and collection handles stay in
+       * db/; everything else goes through scoped(orgId).
+       *
+       * Shared and client code get the whole-module ban further down, because
+       * for them any Mongo import at all pulls the driver toward a bundle that
+       * ships inside an APK.
+       */
       'no-restricted-imports': [
         'error',
         {
@@ -59,11 +87,21 @@ const eslintConfig = defineConfig([
             {
               name: 'mongodb',
               importNames: ['MongoClient'],
-              message: 'Use server/db/client.ts — it is the only permitted MongoClient importer.',
+              message:
+                'Only apps/api/src/db/ may open a Mongo connection. Everything else uses scoped(orgId).',
             },
           ],
         },
       ],
+      /**
+       * A selector, not `no-restricted-properties`, and the difference is the
+       * whole guard.
+       *
+       * `no-restricted-properties` matches an object by NAME, so it catches
+       * `db.collection(...)` and misses `client.db().collection(...)` — a call
+       * on a call result, which is exactly how the driver is actually used.
+       * The selector matches the call however it was reached.
+       */
       'no-restricted-syntax': [
         'error',
         {
@@ -78,20 +116,13 @@ const eslintConfig = defineConfig([
     },
   },
 
-  /**
-   * Destructuring to omit a field is the idiomatic way to drop it from an
-   * object, and `_`-prefixed bindings are an explicit "unused on purpose".
-   */
   {
     files: [
-      'src/**/*.ts',
-      'src/**/*.tsx',
       'tests/**/*.ts',
       'packages/*/src/**/*.ts',
-      // apps/ too — the convention is repo-wide, and a rule scoped to the
-      // directories code used to live in is the recurring failure here.
       'apps/*/src/**/*.ts',
       'apps/*/src/**/*.tsx',
+      'scripts/**/*.mjs',
     ],
     rules: {
       '@typescript-eslint/no-unused-vars': [
@@ -107,19 +138,12 @@ const eslintConfig = defineConfig([
   },
 
   /**
-   * Contracts are shared client/server, so they must stay free of server-only
-   * imports — a Mongo type leaking into the contracts package pulls the driver
-   * toward the client bundle, and that bundle ships inside an APK.
+   * Contracts and core are shared, so they must stay free of server-only
+   * imports — a Mongo type leaking into either pulls the driver toward the
+   * client bundle, and that bundle ships inside an APK.
    */
   {
-    files: [
-      'packages/contracts/src/**/*.ts',
-      'src/client/**/*.ts',
-      'src/client/**/*.tsx',
-      // Pre-armed for the migration, as above.
-      'apps/app/src/**/*.ts',
-      'apps/app/src/**/*.tsx',
-    ],
+    files: ['packages/contracts/src/**/*.ts', 'packages/core/src/**/*.ts'],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -127,13 +151,13 @@ const eslintConfig = defineConfig([
           paths: [
             {
               name: 'mongodb',
-              message: 'Shared and client code must not import the Mongo driver.',
+              message: 'Shared code must not import the Mongo driver.',
             },
           ],
           patterns: [
             {
-              group: ['@/server/*', '@/server'],
-              message: 'Client and shared code must not import server modules.',
+              group: ['@steading/api', '@steading/api/*'],
+              message: 'Shared code must not import server modules.',
             },
           ],
         },
@@ -145,18 +169,17 @@ const eslintConfig = defineConfig([
    * Invariant 6 — SQLite is the only client store, and tokens live in secure
    * storage.
    *
-   * `apps/app/src/db/**` is exempt, and that exemption is doing real work
-   * right now rather than being a formality: the IndexedDB engine lives there
-   * during the migration, knowingly, until S7 deletes it (masterplan §0.1).
-   * Everything ABOVE the storage layer — sync, reads, screens — is already
-   * held to the ban, so a port cannot reintroduce browser storage by reaching
-   * for a familiar API on the way past.
-   *
-   * PHASE-1-SPEC T6 puts this rule on apps/app/src/**; that is what this is.
+   * The exemption this used to carry — `apps/app/src/db/**`, where the
+   * IndexedDB engine lived knowingly during the migration — is gone with the
+   * web client. There is no longer any directory in this repo where browser
+   * storage is allowed, which is what S7 was for.
    */
   {
-    files: ['apps/app/src/**/*.ts', 'apps/app/src/**/*.tsx'],
-    ignores: ['apps/app/src/db/**'],
+    files: [
+      'packages/core/src/**/*.ts',
+      'apps/mobile/src/**/*.ts',
+      'apps/mobile/src/**/*.tsx',
+    ],
     rules: {
       'no-restricted-globals': [
         'error',
@@ -164,50 +187,54 @@ const eslintConfig = defineConfig([
         { name: 'sessionStorage', message: 'Use SQLite, or secure storage for tokens.' },
         { name: 'indexedDB', message: 'SQLite is the only client store (D9, invariant 6).' },
       ],
+    },
+  },
 
-      /**
-       * Reads go through the port, not around it.
-       *
-       * `db/open.ts` is the IndexedDB implementation. Importing it directly
-       * pins a caller to one backing, and in a browser that is invisible
-       * because the port resolves to the same database — so the mistake
-       * survives every test and every dev-server session, and only appears on
-       * a handset.
-       *
-       * It appeared on the first one. Every read module imported
-       * `readRecordsByEntity` from here, so a group added on device was
-       * written to SQLite and looked for in an IndexedDB that had never been
-       * touched. Adding stock did nothing at all, silently. Sign-out was
-       * worse: it wiped the browser store and left the previous farm's
-       * records on a shared tablet (C5).
-       */
-      /**
-       * Repeated from the shared-code block above, and that repetition is
-       * deliberate. Flat config REPLACES a rule's options for matching files
-       * rather than merging them, so listing only the new patterns here
-       * silently switched the Mongo-driver ban off for the whole Capacitor
-       * client. tests/unit/guards.test.ts caught it, which is the entire
-       * reason that suite exists.
-       */
+  /**
+   * The local store is reached through the port, never around it.
+   *
+   * The rule that caught the migration's worst bug: every read module imported
+   * the IndexedDB implementation directly, so a group added on device was
+   * written to SQLite and looked for in a database that had never been
+   * touched. Adding stock did nothing at all, silently, and it survived every
+   * test because in a browser both paths resolved to the same store.
+   *
+   * `db/store.ts` is the one file allowed to name an implementation, because
+   * choosing one is its whole job.
+   */
+  {
+    files: ['packages/core/src/**/*.ts', 'apps/mobile/src/**/*.ts', 'apps/mobile/src/**/*.tsx'],
+    ignores: [
+      'packages/core/src/db/**',
+      'apps/mobile/src/db/**',
+      // The one file allowed to name secure storage, for the same reason
+      // db/open.ts is the one allowed to name SQLite.
+      'apps/mobile/src/auth/store.ts',
+    ],
+    rules: {
       'no-restricted-imports': [
         'error',
         {
           paths: [
             {
               name: 'mongodb',
-              message: 'Shared and client code must not import the Mongo driver.',
+              message: 'Client code must not import the Mongo driver.',
+            },
+            {
+              name: 'expo-sqlite',
+              message: 'Only apps/mobile/src/db/open.ts may name the SQLite native module.',
+            },
+            {
+              name: 'expo-secure-store',
+              message: 'Only apps/mobile/src/auth/store.ts may name secure storage.',
             },
           ],
           patterns: [
             {
-              group: ['@/server/*', '@/server'],
-              message: 'Client and shared code must not import server modules.',
-            },
-            {
-              group: ['**/db/open', '**/db/idb-store'],
+              group: ['**/db/sqlite-store', '**/db/expo-driver'],
               message:
-                'Use localStore() from db/store — importing the IndexedDB implementation ' +
-                'directly works in a browser and silently reads the wrong database on device.',
+                'Use localStore() from db/store — importing an implementation directly ' +
+                'pins a caller to one backing and reads the wrong database on device.',
             },
           ],
         },
@@ -219,13 +246,26 @@ const eslintConfig = defineConfig([
    * Metro and Babel read their config with `require`, before any transform has
    * run. These two files are CommonJS because the tools that load them are,
    * not because anyone chose it — so the ban on `require()` does not apply.
-   *
-   * Scoped to the two filenames rather than the package: application code
-   * under apps/mobile/src stays under the ban.
    */
   {
     files: ['apps/mobile/metro.config.js', 'apps/mobile/babel.config.js'],
     rules: { '@typescript-eslint/no-require-imports': 'off' },
+  },
+
+  /** Scripts are Node, and say so. */
+  {
+    files: ['**/*.mjs', '**/*.js'],
+    languageOptions: {
+      globals: {
+        console: 'readonly',
+        process: 'readonly',
+        Buffer: 'readonly',
+        URL: 'readonly',
+        module: 'writable',
+        require: 'readonly',
+        __dirname: 'readonly',
+      },
+    },
   },
 ]);
 

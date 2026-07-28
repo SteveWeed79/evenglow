@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { flushOnce, MAX_ATTEMPTS, type SyncTransport } from '@steading/app/sync/flush';
-import { listRejected } from '@steading/app/sync/inbox';
-import { enqueue, queueDepth, rejectedCount } from '@steading/app/sync/queue';
-import { readOutboxBySeq } from '@steading/app/db/open';
+import { flushOnce, MAX_ATTEMPTS, type SyncTransport } from '@steading/core/sync/flush';
+import { listRejected } from '@steading/core/sync/inbox';
+import { enqueue, queueDepth, rejectedCount } from '@steading/core/sync/queue';
+
 import { newId } from '@steading/contracts';
-import { freshDb } from '../support/idb';
+import { freshStore, readOutboxBySeq } from '../support/store';
 
 /**
  * A 200 that does not mention the mutation.
@@ -28,7 +28,7 @@ const eggLog = () => ({
 });
 
 describe('a server that answers without answering', () => {
-  beforeEach(freshDb);
+  beforeEach(freshStore);
 
   it('keeps the work rather than assuming it landed', async () => {
     await enqueue(eggLog());

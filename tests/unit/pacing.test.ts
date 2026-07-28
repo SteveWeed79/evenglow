@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nextDelay } from '@steading/app/sync/engine';
+import { nextDelay } from '@steading/core/sync/engine';
 
 /**
  * The scheduling rule, which is where a live hot loop lived.

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { apiBase, apiUrl, resetApiBase, setApiBase } from '@steading/app/api';
+import { apiBase, apiUrl, resetApiBase, setApiBase } from '@steading/core/api';
 
 /**
  * Which server the transports talk to.

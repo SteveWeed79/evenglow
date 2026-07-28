@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
-import type { SyncState } from '@steading/app/sync/engine';
+import type { SyncState } from '@steading/core/sync/engine';
 import { Icon, type IconName } from './Icon';
 import { useSync } from '../hooks/useSync';
 import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';

@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { readAllRecords } from '@steading/app/db/open';
-import { pulledThrough, pullOnce, type PullTransport } from '@steading/app/sync/pull';
-import { enqueue, queueDepth } from '@steading/app/sync/queue';
-import { flushOnce } from '@steading/app/sync/flush';
+
+import { pulledThrough, pullOnce, type PullTransport } from '@steading/core/sync/pull';
+import { enqueue, queueDepth } from '@steading/core/sync/queue';
+import { flushOnce } from '@steading/core/sync/flush';
 import { MUTATION_SCHEMA_VERSION, newId, type PulledMutation } from '@steading/contracts';
-import { freshDb } from '../support/idb';
+import { freshStore, readAllRecords } from '../support/store';
 
 const DEVICE = '00000000-0000-4000-8000-0000000000ff';
 
@@ -56,7 +56,7 @@ function serve(pages: Page[]) {
 }
 
 describe('pull', () => {
-  beforeEach(freshDb);
+  beforeEach(freshStore);
 
   it('hydrates a device that has recorded nothing itself', async () => {
     const mutation = pulled();

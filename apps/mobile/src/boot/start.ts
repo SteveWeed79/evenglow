@@ -1,6 +1,6 @@
-import { setApiBase } from '@steading/app/api';
-import { startSync, stopSync } from '@steading/app/sync/engine';
-import { setStorageBacking } from '@steading/app/sync/storage';
+import { setApiBase } from '@steading/core/api';
+import { startSync, stopSync } from '@steading/core/sync/engine';
+import { setStorageBacking } from '@steading/core/sync/storage';
 import { type CachedClaims, refreshSession } from '../auth/session';
 import { openLocalStore } from '../db/store';
 import { startTriggers } from '../sync/triggers';

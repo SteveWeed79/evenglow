@@ -1,5 +1,5 @@
 import * as SQLite from 'expo-sqlite';
-import type { SqlDriver } from '@steading/app/db/driver';
+import type { SqlDriver } from '@steading/core/db/driver';
 import { applyPragmas, createExpoDriver, type SqliteConnection } from './expo-driver';
 
 /**

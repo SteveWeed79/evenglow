@@ -1,4 +1,4 @@
-import { apiBase, setAccessToken } from '@steading/app/api';
+import { apiBase, setAccessToken } from '@steading/core/api';
 import { z } from 'zod';
 import { roleSchema } from '@steading/contracts';
 import {

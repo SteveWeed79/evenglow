@@ -1,6 +1,6 @@
-import type { LocalStore } from '@steading/app/db/port';
-import { openSqliteStore } from '@steading/app/db/sqlite-store';
-import { setLocalStore } from '@steading/app/db/store';
+import type { LocalStore } from '@steading/core/db/port';
+import { openSqliteStore } from '@steading/core/db/sqlite-store';
+import { setLocalStore } from '@steading/core/db/store';
 import { databaseNameFor, openExpoSqlDriver } from './open';
 
 /**

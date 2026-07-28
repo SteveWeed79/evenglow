@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { basketConfirmation, loggedConfirmation, spellCount } from '@steading/app/voice';
+import { basketConfirmation, loggedConfirmation, spellCount } from '@steading/core/voice';
 
 /**
  * UX-SPEC §6 — the whimsy budget.

@@ -1,24 +1,25 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  db,
+  type EnvelopeMigration,
+  migrateEnvelope,
+  UnmigratableEnvelopeError,
+} from '@steading/core/db/migrate';
+import { enqueue, queueDepth, unsentCount } from '@steading/core/sync/queue';
+import { flushOnce } from '@steading/core/sync/flush';
+import { listRejected } from '@steading/core/sync/inbox';
+import { MUTATION_SCHEMA_VERSION, newId } from '@steading/contracts';
+import {
+  corruptRecordRow,
+  metaCount,
+  corruptRow,
+  freshStore,
   listQuarantined,
   quarantineCount,
   readAllRecords,
   readOutboxBySeq,
   readRecordsByEntity,
   wipeLocalData,
-} from '@steading/app/db/open';
-import {
-  type EnvelopeMigration,
-  migrateEnvelope,
-  UnmigratableEnvelopeError,
-} from '@steading/app/db/migrate';
-import { STORES } from '@steading/app/db/idb-schema';
-import { enqueue, queueDepth, unsentCount } from '@steading/app/sync/queue';
-import { flushOnce } from '@steading/app/sync/flush';
-import { listRejected } from '@steading/app/sync/inbox';
-import { MUTATION_SCHEMA_VERSION, newId } from '@steading/contracts';
-import { freshDb } from '../support/idb';
+} from '../support/store';
 
 function eggLog() {
   return {
@@ -28,13 +29,10 @@ function eggLog() {
   };
 }
 
-/** Writes a row straight into the outbox, bypassing every guard. */
-async function corruptRow(value: unknown): Promise<void> {
-  await (await db()).put(STORES.outbox, value as never);
-}
+
 
 describe('corruption does not wedge the queue', () => {
-  beforeEach(freshDb);
+  beforeEach(freshStore);
 
   it('quarantines an unreadable row and still returns the good ones', async () => {
     await enqueue(eggLog());
@@ -52,12 +50,12 @@ describe('corruption does not wedge the queue', () => {
 
   it('keeps the raw value rather than deleting it', async () => {
     const id = newId();
-    await corruptRow({ id, clientSeq: 'bad', marker: 'keep me' });
+    await corruptRow({ id, clientSeq: 'bad', targetId: 'keep me' });
 
     await readOutboxBySeq();
 
     const [held] = await listQuarantined();
-    expect(held?.raw).toMatchObject({ marker: 'keep me' });
+    expect(held?.raw).toMatchObject({ targetId: 'keep me' });
     expect(held?.reason).toBeTruthy();
   });
 
@@ -91,7 +89,7 @@ describe('corruption does not wedge the queue', () => {
 
   it('quarantines an unreadable projection without failing the read', async () => {
     await enqueue(eggLog());
-    await (await db()).put(STORES.records, { key: 'flock:bad', entity: 'flock' } as never);
+    await corruptRecordRow('flock:bad');
 
     const records = await readAllRecords();
 
@@ -143,7 +141,7 @@ describe('envelope migration (A7)', () => {
 });
 
 describe('session hygiene (C5)', () => {
-  beforeEach(freshDb);
+  beforeEach(freshStore);
 
   it('clears every store, so the next sign-in sees nothing', async () => {
     await enqueue(eggLog());
@@ -166,8 +164,7 @@ describe('session hygiene (C5)', () => {
     expect(await quarantineCount()).toBe(0);
     expect(await readRecordsByEntity('flock')).toEqual([]);
 
-    const database = await db();
-    expect(await database.count(STORES.meta)).toBe(0);
+    expect(await metaCount()).toBe(0);
   });
 
   it('counts unsent work so the user can be warned before losing it', async () => {
@@ -207,7 +204,7 @@ describe('session hygiene (C5)', () => {
 });
 
 describe('indexed reads', () => {
-  beforeEach(freshDb);
+  beforeEach(freshStore);
 
   it('returns only the requested entity', async () => {
     await enqueue(eggLog());

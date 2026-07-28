@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import { startSync } from '@steading/app/sync/engine';
-import { setStorageBacking } from '@steading/app/sync/storage';
+import { startSync } from '@steading/core/sync/engine';
+import { setStorageBacking } from '@steading/core/sync/storage';
 import { start, type Started } from './boot/start';
 import { openLocalStore } from './db/store';
 import { SignInScreen } from './screens/SignInScreen';

@@ -1,4 +1,4 @@
-import type { SqlDriver, SqlValue } from '@steading/app/db/driver';
+import type { SqlDriver, SqlValue } from '@steading/core/db/driver';
 
 /**
  * A `SqlDriver` over `expo-sqlite`. The device backing for `LocalStore`.

@@ -1,6 +1,6 @@
 import { useCallback, useSyncExternalStore } from 'react';
-import { nudge, subscribe, type SyncState } from '@steading/app/sync/engine';
-import { type EnqueueInput, enqueue } from '@steading/app/sync/queue';
+import { nudge, subscribe, type SyncState } from '@steading/core/sync/engine';
+import { type EnqueueInput, enqueue } from '@steading/core/sync/queue';
 
 /**
  * The engine's state, and the write path.

@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import type { SqlDriver, SqlValue } from '@steading/app/db/driver';
+import type { SqlDriver, SqlValue } from '@steading/core/db/driver';
 
 /**
  * A `SqlDriver` over `node:sqlite`, for tests.

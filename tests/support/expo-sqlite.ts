@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import type { SqlValue } from '@steading/app/db/driver';
+import type { SqlValue } from '@steading/core/db/driver';
 import type { SqliteConnection } from '@steading/mobile/db/expo-driver';
 
 /**

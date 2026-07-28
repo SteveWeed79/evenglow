@@ -1,6 +1,6 @@
 import { AppState, type AppStateStatus } from 'react-native';
 import { addNetworkStateListener, type NetworkStateEvent } from 'expo-network';
-import { nudge } from '@steading/app/sync/engine';
+import { nudge } from '@steading/core/sync/engine';
 import { refreshSession } from '../auth/session';
 
 /**

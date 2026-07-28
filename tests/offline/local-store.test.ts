@@ -1,24 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { newId } from '@steading/contracts';
-import type { SqlDriver } from '@steading/app/db/driver';
-import type { LocalStore } from '@steading/app/db/port';
-import { openSqliteStore } from '@steading/app/db/sqlite-store';
-import { idbLocalStore } from '@steading/app/db/idb-store';
+import type { SqlDriver } from '@steading/core/db/driver';
+import type { LocalStore } from '@steading/core/db/port';
+import { openSqliteStore } from '@steading/core/db/sqlite-store';
 import { createExpoDriver } from '@steading/mobile/db/expo-driver';
 import { nodeSqlDriver } from '../support/sqlite';
 import { fakeExpoConnection } from '../support/expo-sqlite';
-import { freshDb } from '../support/idb';
-import { db as idb } from '@steading/app/db/open';
 
 /**
- * One suite, both stores.
+ * One suite, every driver.
  *
- * This is the migration's correctness oracle made executable rather than
- * asserted. `port.ts` describes what the storage layer must do; the IndexedDB
- * engine is the reference implementation that has passed the Phase 2 exit
- * gate; the SQLite one has to behave identically or the port is wrong, or it
- * is. Reading the two side by side would not settle that. Running them
- * against the same expectations does.
+ * This was the migration's correctness oracle: `port.ts` describes what the
+ * storage layer must do, and IndexedDB was the reference implementation the
+ * SQLite one had to match. That job is finished — IndexedDB is gone with the
+ * web client — and the suite keeps earning its place for a different reason.
+ * Every driver underneath `openSqliteStore` is held to the same MUSTs, so a
+ * new one is proven by the assertions that proved the last, rather than by a
+ * handful of driver-shaped tests written beside it.
  *
  * Every assertion is a MUST from `port.ts`, not an invention for the occasion.
  *
@@ -95,46 +93,6 @@ function sqlBacking(name: string, make: () => SqlDriver): Backing {
 const BACKINGS: Backing[] = [
   sqlBacking('sqlite', () => nodeSqlDriver()),
   sqlBacking('expo-sqlite', () => createExpoDriver(fakeExpoConnection())),
-  {
-    name: 'indexeddb',
-    async open() {
-      await freshDb();
-      return idbLocalStore();
-    },
-    async loseSequenceCounter() {
-      await (await idb()).delete('meta', 'nextClientSeq');
-    },
-    async emptyOutbox() {
-      await (await idb()).clear('outbox');
-    },
-    async writeUnreadableOutboxRow(key) {
-      /**
-       * Carries a clientSeq deliberately. IndexedDB omits a record from an
-       * index when its key path is missing, so a corrupt row WITHOUT one is
-       * invisible to the byClientSeq read entirely — never sent, never
-       * quarantined, but still counted by checkIntegrity. That divergence is
-       * real and is noted in the suite below; it is not what this test is
-       * about, which is a row that IS found and cannot be parsed.
-       */
-      await (await idb()).put('outbox', { id: key, clientSeq: 99, nonsense: true } as never);
-    },
-    failNextWriteTo(table) {
-      const original = IDBObjectStore.prototype.put;
-      IDBObjectStore.prototype.put = function (
-        this: IDBObjectStore,
-        value: unknown,
-        key?: IDBValidKey,
-      ): IDBRequest<IDBValidKey> {
-        if (this.name === table) {
-          throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
-        }
-        return original.call(this, value, key);
-      };
-      return () => {
-        IDBObjectStore.prototype.put = original;
-      };
-    },
-  },
 ];
 
 describe.each(BACKINGS)('LocalStore — $name', (backing) => {
