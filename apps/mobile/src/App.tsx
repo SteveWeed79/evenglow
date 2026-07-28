@@ -3,7 +3,8 @@ import { StatusBar } from 'expo-status-bar';
 import { useMemo } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Tabs } from './navigation/Tabs';
+import { Boot } from './Boot';
+import { Root } from './navigation/Root';
 import { ThemeProvider, useTheme } from './theme/ThemeProvider';
 import { accent, font } from './theme/tokens';
 
@@ -58,7 +59,9 @@ function Themed(): React.ReactElement {
       {/* Inverted, not matched: the bar sits on the ground colour, so its
           glyphs need the opposite of the wall behind them. */}
       <StatusBar style={theme === 'lamplight' ? 'light' : 'dark'} />
-      <Tabs />
+      <Boot>
+        <Root />
+      </Boot>
     </NavigationContainer>
   );
 }

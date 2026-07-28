@@ -1,8 +1,8 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StyleSheet, Text, View } from 'react-native';
 import { Icon, type IconName } from '../components/Icon';
+import { GrowingScreen } from '../screens/GrowingScreen';
 import { IronScreen } from '../screens/IronScreen';
-import { MoreScreen } from '../screens/MoreScreen';
 import { StockScreen } from '../screens/StockScreen';
 import { TodayScreen } from '../screens/TodayScreen';
 import { useTheme } from '../theme/ThemeProvider';
@@ -16,16 +16,27 @@ import { font, tap, type as typeScale } from '../theme/tokens';
  * choice was right for a precached web shell and wrong for an app: a back
  * stack, a back gesture, and screen transitions are three of the things that
  * separate a page from an app, and none of them can be faked.
+ *
+ * **Growing took More's place, and More was the right one to lose.** Crops are
+ * half of a small farm and had no home in the bar at all; More was never a
+ * place you go, it was a drawer. What was in it — diagnostics, the rejected
+ * inbox, export, sign-out — is reached from the header instead, which is where
+ * settings belong and where R3 will hang the sync chip beside them.
  */
 
 const TABS = [
   { name: 'Today', icon: 'today', component: TodayScreen },
   { name: 'Stock', icon: 'stock', component: StockScreen },
+  { name: 'Growing', icon: 'growing', component: GrowingScreen },
   { name: 'Iron', icon: 'iron', component: IronScreen },
-  { name: 'More', icon: 'more', component: MoreScreen },
 ] as const satisfies readonly { name: string; icon: IconName; component: () => React.ReactElement }[];
 
-export type TabParamList = { Today: undefined; Stock: undefined; Iron: undefined; More: undefined };
+export type TabParamList = {
+  Today: undefined;
+  Stock: undefined;
+  Growing: undefined;
+  Iron: undefined;
+};
 
 const Tab = createBottomTabNavigator<TabParamList>();
 

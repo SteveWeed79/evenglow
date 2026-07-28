@@ -4,7 +4,9 @@ import type { SqlDriver } from '@steading/app/db/driver';
 import type { LocalStore } from '@steading/app/db/port';
 import { openSqliteStore } from '@steading/app/db/sqlite-store';
 import { idbLocalStore } from '@steading/app/db/idb-store';
+import { createExpoDriver } from '@steading/mobile/db/expo-driver';
 import { nodeSqlDriver } from '../support/sqlite';
+import { fakeExpoConnection } from '../support/expo-sqlite';
 import { freshDb } from '../support/idb';
 import { db as idb } from '@steading/app/db/open';
 
@@ -44,23 +46,32 @@ interface Backing {
   failNextWriteTo(table: 'outbox' | 'records'): () => void;
 }
 
-let sqlite: SqlDriver | null = null;
+/**
+ * Both SQL drivers get the same faults, so the shape is written once.
+ *
+ * The Expo driver joining here is the point of R2. It is not a second
+ * implementation of the store — it is the same store over a different
+ * connection — so the thing worth proving is that the connection is faithful,
+ * and the way to prove that is the suite that already holds the store to
+ * `port.ts`, not a handful of driver-shaped assertions beside it.
+ */
+function sqlBacking(name: string, make: () => SqlDriver): Backing {
+  let driver: SqlDriver | null = null;
 
-const BACKINGS: Backing[] = [
-  {
-    name: 'sqlite',
+  return {
+    name,
     async open() {
-      sqlite = nodeSqlDriver();
-      return openSqliteStore(sqlite);
+      driver = make();
+      return openSqliteStore(driver);
     },
     async loseSequenceCounter() {
-      await sqlite!.run("DELETE FROM meta WHERE key = 'nextClientSeq'");
+      await driver!.run("DELETE FROM meta WHERE key = 'nextClientSeq'");
     },
     async emptyOutbox() {
-      await sqlite!.run('DELETE FROM outbox');
+      await driver!.run('DELETE FROM outbox');
     },
     async writeUnreadableOutboxRow(key) {
-      await sqlite!.run(
+      await driver!.run(
         `INSERT INTO outbox (id, schemaVersion, targetId, entity, op, payload, deviceId,
            clientSeq, clientTs, status, attempts, enqueuedAt)
          VALUES (?, 1, 'x', 'eggLog', 'create', '{}', 'nope', 99, 1, 'queued', 0, 1)`,
@@ -68,17 +79,22 @@ const BACKINGS: Backing[] = [
       );
     },
     failNextWriteTo(table) {
-      const original = sqlite!.run.bind(sqlite!);
+      const original = driver!.run.bind(driver!);
       const full = Object.assign(new Error('database or disk is full'), { code: 'SQLITE_FULL' });
-      sqlite!.run = async (sql, params) => {
+      driver!.run = async (sql, params) => {
         if (sql.includes(`INSERT INTO ${table}`)) throw full;
         return original(sql, params);
       };
       return () => {
-        sqlite!.run = original;
+        driver!.run = original;
       };
     },
-  },
+  };
+}
+
+const BACKINGS: Backing[] = [
+  sqlBacking('sqlite', () => nodeSqlDriver()),
+  sqlBacking('expo-sqlite', () => createExpoDriver(fakeExpoConnection())),
   {
     name: 'indexeddb',
     async open() {

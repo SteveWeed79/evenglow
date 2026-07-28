@@ -39,6 +39,7 @@ export type IconName =
   | 'export'
   | 'feed'
   | 'forward'
+  | 'growing'
   | 'fuel'
   | 'head-count'
   | 'hour-meter'
@@ -127,6 +128,9 @@ const PATHS: Record<IconName, React.ReactElement> = {
   ),
   'fuel': (
     <><rect x="5" y="8" width="11" height="12" rx="1" /><path d="M10 8V5h4v3" /><path d="M16 11h4v7" /></>
+  ),
+  'growing': (
+    <><path d="M3 21h18" /><path d="M12 21V9" /><path d="M12 15Q6 15 6 11.5Q11 11.5 12 15" /><path d="M12 11.5Q18 11.5 18 8Q13 8 12 11.5" /></>
   ),
   'head-count': (
     <><circle cx="7" cy="10" r="2.6" /><circle cx="17" cy="10" r="2.6" /><circle cx="12" cy="16.5" r="2.6" /></>

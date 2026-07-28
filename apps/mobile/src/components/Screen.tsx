@@ -1,41 +1,77 @@
-import { ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Icon } from './Icon';
 import { LampToggle } from './LampToggle';
+import type { RootParamList } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
 import { font, space, tap, type as typeScale } from '../theme/tokens';
 
 /**
  * The wall every screen is drawn on.
  *
- * Header is status only, never actions (R3) — the date on the left, the lamp
- * and eventually the sync chip on the right. The scroll view exists here
- * rather than per screen so scroll physics and the bounce are identical
- * everywhere; that consistency is one of the things RN gives for free and it
- * is worth not squandering.
+ * Header is status only, never actions (R3) — with two exceptions that are not
+ * really actions: the lamp, and the way out of the screen you are in. The sync
+ * chip joins them in R3.
+ *
+ * The scroll view lives here rather than per screen so physics and overscroll
+ * are identical everywhere. That consistency is one of the things React Native
+ * gives free and it is worth not squandering by hand-rolling it four times.
  */
 export function Screen({
   title,
   children,
   contentStyle,
+  back = false,
 }: {
   title: string;
   children: React.ReactNode;
   contentStyle?: ViewStyle;
+  /** Shows a back chevron instead of the date. Pushed screens only. */
+  back?: boolean;
 }): React.ReactElement {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<NativeStackNavigationProp<RootParamList>>();
 
   return (
     <View style={[styles.ground, { backgroundColor: colors.ground, paddingTop: insets.top }]}>
       <View style={styles.status}>
-        <Text style={[styles.label, { color: colors.muted }]}>
-          {new Date().toLocaleDateString(undefined, {
-            weekday: 'short',
-            day: 'numeric',
-            month: 'short',
-          })}
-        </Text>
-        <LampToggle />
+        {back ? (
+          <Pressable
+            onPress={() => navigation.goBack()}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            hitSlop={12}
+            style={styles.control}
+          >
+            <Icon name="back" size={24} color={colors.muted} />
+          </Pressable>
+        ) : (
+          <Text style={[styles.label, { color: colors.muted }]}>
+            {new Date().toLocaleDateString(undefined, {
+              weekday: 'short',
+              day: 'numeric',
+              month: 'short',
+            })}
+          </Text>
+        )}
+
+        <View style={styles.controls}>
+          <LampToggle />
+          {back ? null : (
+            <Pressable
+              onPress={() => navigation.navigate('Settings')}
+              accessibilityRole="button"
+              accessibilityLabel="Settings"
+              hitSlop={12}
+              style={styles.control}
+            >
+              <Icon name="settings" size={24} color={colors.muted} />
+            </Pressable>
+          )}
+        </View>
       </View>
 
       <ScrollView
@@ -59,6 +95,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: space.lg,
     minHeight: tap.min / 2,
+  },
+  controls: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  control: {
+    minWidth: tap.min / 2,
+    minHeight: tap.min / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   content: { padding: space.lg, gap: space.md, paddingBottom: space.xl },
   hero: { fontFamily: font.display, fontSize: typeScale.hero, marginBottom: space.xs },

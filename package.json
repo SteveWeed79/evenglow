@@ -49,6 +49,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.62.0",
+    "@steading/mobile": "workspace:*",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^22",
     "@types/react": "^19",
