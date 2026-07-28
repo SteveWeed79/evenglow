@@ -4,6 +4,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { type Env, readEnv } from './env';
 import { errorBody } from './http';
 import { authRoutes } from './routes/auth';
+import { memberRoutes } from './routes/members';
 import { syncRoutes } from './routes/sync';
 
 /**
@@ -44,6 +45,7 @@ export async function buildServer(env: Env = readEnv()): Promise<FastifyInstance
   app.get('/health', async () => ({ ok: true }));
 
   await authRoutes(app, env);
+  await memberRoutes(app, env);
   await syncRoutes(app, env);
 
   return app;

@@ -432,9 +432,27 @@ Within the domains, the order that gets a farm the most soonest:
 
 ## 8. Open questions
 
-1. **Multiple people on one farm.** D7 built roles and never built invites. Two
-   people logging the same morning is a real small-farm case and it is
-   unaddressed. Does this land before or after the domains above?
+1. ~~**Multiple people on one farm.**~~ **Built.** `POST /invites` and
+   `/invites/accept`, plus member listing, role changes and removal.
+
+   The invite is **bound to an email**, not a bearer link. A link travels by
+   text message and sits in a phone forever; binding means a leaked one is
+   useless to anyone but the person it was for. The token is 256 bits, hashed
+   at rest, single-use, and returned exactly once.
+
+   Two lockouts are closed structurally: **the last owner cannot be demoted or
+   removed**, and **nobody changes their own role** — which stops an admin
+   promoting themselves and stops an owner demoting themselves out of the only
+   role that could undo it. An admin cannot mint an owner, cannot act on an
+   owner at all, and removal is a *disable* rather than a delete so a
+   morning's egg logs stay attributable to the person who typed them.
+
+   One thing deliberately refused: **an existing account cannot accept an
+   invite.** A user belongs to exactly one org, so accepting would move them
+   and strand every record they wrote behind a tenancy boundary their account
+   no longer sits inside. Joining a second farm needs a membership model this
+   schema does not have, and inventing one to make an error message go away
+   would be the wrong place to decide it.
 2. **Push notifications.** A due row on Today is useful when the app is opened.
    Is "the app tells you" wanted badly enough to take a server dependency, or is
    opening the app in the morning the expected behaviour?

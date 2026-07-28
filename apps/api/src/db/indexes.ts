@@ -136,6 +136,21 @@ const IDENTITY_INDEXES: Record<string, IndexDescription[]> = {
      */
     { key: { expiresAt: 1 }, expireAfterSeconds: 0 },
   ],
+  invites: [
+    // The farm's pending list. orgId leads, as everywhere else.
+    { key: { orgId: 1, createdAt: -1 } },
+    // Revoking names the invite by its public id, within the farm.
+    { key: { orgId: 1, publicId: 1 }, unique: true },
+    /**
+     * Expired invites delete themselves.
+     *
+     * An invite that has outlived its own expiry protects nothing and grants
+     * nothing — it is a row of dead secrets to lose in a disclosure. Accepted
+     * and revoked ones go the same way, since expiresAt is set at creation and
+     * neither state extends it.
+     */
+    { key: { expiresAt: 1 }, expireAfterSeconds: 0 },
+  ],
 };
 
 /** The first key of an index description, or undefined if it has none. */

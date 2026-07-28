@@ -10,6 +10,7 @@
 
 export * from './mutation';
 export * from './roles';
+export * from './membership';
 export * from './entities';
 export * from './ulid';
 export * from './withdrawal';

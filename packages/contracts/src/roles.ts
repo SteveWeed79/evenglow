@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { type Entity, isAppendOnly, type Op } from './mutation';
 
 /**
@@ -8,6 +9,9 @@ import { type Entity, isAppendOnly, type Op } from './mutation';
 
 export const ROLES = ['owner', 'admin', 'hand'] as const;
 export type Role = (typeof ROLES)[number];
+
+/** For request bodies. `isRole` stays, for narrowing values already in hand. */
+export const roleSchema = z.enum(ROLES);
 
 export function isRole(value: unknown): value is Role {
   return typeof value === 'string' && (ROLES as readonly string[]).includes(value);
