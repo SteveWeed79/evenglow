@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { IronShell } from './IronShell';
 import { LampToggle } from './LampToggle';
-import { IronMark, MoreMark, StockMark, TodayMark } from './Marks';
 import { ServiceWorker } from './ServiceWorker';
 import { SignOut } from './SignOut';
 import { StockShell } from './StockShell';
@@ -20,11 +19,19 @@ import { TodayShell } from './TodayShell';
  * it works with the radio off.
  */
 
+/**
+ * No icons in the bar, deliberately.
+ *
+ * They were added on a guess and the design direction does not have them: the
+ * bar is mono uppercase labels standing on a floor, and the arch is what makes
+ * the app recognisable across a room. The drawn marks still exist for the
+ * empty states, which is where §6 always specified them.
+ */
 const TABS = [
-  { id: 'today', label: 'Today', Mark: TodayMark },
-  { id: 'stock', label: 'Stock', Mark: StockMark },
-  { id: 'iron', label: 'Iron', Mark: IronMark },
-  { id: 'more', label: 'More', Mark: MoreMark },
+  { id: 'today', label: 'Today' },
+  { id: 'stock', label: 'Stock' },
+  { id: 'iron', label: 'Iron' },
+  { id: 'more', label: 'More' },
 ] as const;
 
 type TabId = (typeof TABS)[number]['id'];
@@ -58,8 +65,12 @@ export function AppShell({ signOutAction }: { signOutAction: () => Promise<void>
         {tab === 'more' ? <More signOutAction={signOutAction} /> : null}
       </main>
 
+      {/* Boards under the bar, so it stands on something rather than floating
+          at the bottom of a page — direction 1b. */}
+      <div className="tabs__floor" aria-hidden="true" />
+
       <nav className="tabs" aria-label="Sections">
-        {TABS.map(({ id, label, Mark }) => (
+        {TABS.map(({ id, label }) => (
           <button
             key={id}
             type="button"
@@ -68,8 +79,7 @@ export function AppShell({ signOutAction }: { signOutAction: () => Promise<void>
             onClick={() => setTab(id)}
             data-testid={`tab-${id}`}
           >
-            <Mark />
-            <span>{label}</span>
+            {label}
           </button>
         ))}
       </nav>

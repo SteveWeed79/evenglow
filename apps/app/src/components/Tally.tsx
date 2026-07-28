@@ -99,59 +99,68 @@ export function Tally({
   }, [count, unit, confirm, onCommit, requireConfirm, armed]);
 
   return (
-    <section className="tally arch" aria-labelledby="tally-label">
-      <p id="tally-label" className="label">
-        {label}
-      </p>
+    <div className="reveal">
+      <section className="tally arch" aria-labelledby="tally-label">
+        <p id="tally-label" className="label">
+          {label}
+        </p>
 
-      <output className="tally__count" data-numeric aria-live="polite">
-        {count}
-      </output>
-      <p className="tally__unit">{unit}</p>
+        <output className="tally__count" data-numeric aria-live="polite">
+          {count}
+        </output>
+        <p className="tally__unit">{unit}</p>
 
-      <div className="tally__steps">
-        {steps.map((step) => (
+        <div className="tally__steps">
+          {steps.map((step) => (
+            <button
+              key={step}
+              type="button"
+              className="tally__step"
+              onClick={() => bump(step)}
+              data-testid={`tally-plus-${step}`}
+            >
+              +{step}
+            </button>
+          ))}
           <button
-            key={step}
             type="button"
             className="tally__step"
-            onClick={() => bump(step)}
-            data-testid={`tally-plus-${step}`}
+            onClick={() => bump(-1)}
+            aria-label="Subtract one"
+            disabled={count === 0}
           >
-            +{step}
+            −
           </button>
-        ))}
+        </div>
+
         <button
           type="button"
-          className="tally__step"
-          onClick={() => bump(-1)}
-          aria-label="Subtract one"
+          className="tally__commit"
+          data-armed={armed ? '' : undefined}
+          onClick={() => void commit()}
           disabled={count === 0}
+          data-testid="tally-commit"
         >
-          −
+          {armed ? `Log ${count} ${unit} anyway` : `Log ${count} ${unit}`}
         </button>
-      </div>
 
-      <button
-        type="button"
-        className="tally__commit"
-        data-armed={armed ? '' : undefined}
-        onClick={() => void commit()}
-        disabled={count === 0}
-        data-testid="tally-commit"
-      >
-        {armed ? `Log ${count} ${unit} anyway` : `Log ${count} ${unit}`}
-      </button>
+        {failure ? (
+          <p className="log-error" role="alert" data-testid="tally-error">
+            {failure}
+          </p>
+        ) : null}
 
-      {failure ? (
-        <p className="log-error" role="alert" data-testid="tally-error">
-          {failure}
+        <p className="tally__confirmation" aria-live="polite">
+          {confirmation ?? ' '}
         </p>
-      ) : null}
+        {/* Hardware, on the jamb where hinges live. The one piece of
+            ironmongery in the interface — direction 1b. */}
+        <span className="reveal__hinge reveal__hinge--upper" aria-hidden="true" />
+        <span className="reveal__hinge reveal__hinge--lower" aria-hidden="true" />
+      </section>
 
-      <p className="tally__confirmation" aria-live="polite">
-        {confirmation ?? ' '}
-      </p>
-    </section>
+      {/* The step out of the door. Outside it, and wider than it. */}
+      <div className="reveal__threshold" aria-hidden="true" />
+    </div>
   );
 }

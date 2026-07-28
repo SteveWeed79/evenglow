@@ -150,7 +150,25 @@
      (and ate its own padding, which is why card text sat outside the curve),
      while a radius small enough to fix that turned the Tally into a rounded
      rectangle. The slash separates horizontal radii from vertical ones.    */
-  --arch: min(50%, 4rem) min(50%, 4rem) 0.5rem 0.5rem / 2rem 2rem 0.5rem 0.5rem;
+  --arch: 50% 50% 0.5rem 0.5rem / 2rem 2rem 0.5rem 0.5rem;
+
+  /* The reveal the door sits in — a shade wider and taller than the door
+     itself, which is what makes it read as an opening in a wall rather than
+     a card on a page (direction 1b). */
+  --arch-reveal: 50% 50% 0.625rem 0.625rem / 2.75rem 2.75rem 0.625rem 0.625rem;
+
+  --brass: #c99a34;
+
+  /* Plaster tooth. An SVG turbulence filter blended into the ground at
+     soft-light — the whole difference between a colour and a surface, and it
+     costs one data URI rather than an image request. */
+  --plaster: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80'%3E%3Cfilter id='g'%3E%3CfeTurbulence baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='80' height='80' filter='url(%23g)' opacity='.4'/%3E%3C/svg%3E");
+
+  /* A worn top edge and a shaded bottom one. Every raised surface gets these;
+     it is what stops a card looking printed on. */
+  --worn: inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 -1px 0 rgba(36, 28, 20, 0.06);
+  --pressed: inset 0 1px 0 rgba(255, 255, 255, 0.45), inset 0 -2px 0 rgba(36, 28, 20, 0.14);
+  --tin: 0 2px 0 rgba(255, 255, 255, 0.75), 0 -1px 0 rgba(36, 28, 20, 0.14);
   --border: 2px solid color-mix(in oklab, var(--ink) 22%, transparent);
 }
 
@@ -162,6 +180,9 @@
     --raised: #2c2319; /* one step toward the fire                          */
     --ink: #f0e7d5; /* candle-warm off-white                                */
     --muted: #9c8e7a;
+    --worn: inset 0 1px 0 rgba(240, 231, 213, 0.12);
+    --pressed: inset 0 1px 0 rgba(240, 231, 213, 0.14), inset 0 -2px 0 rgba(0, 0, 0, 0.25);
+    --tin: 0 0 26px rgba(233, 178, 60, 0.4);
   }
 }
 
@@ -172,6 +193,9 @@
   --raised: #2c2319;
   --ink: #f0e7d5;
   --muted: #9c8e7a;
+  --worn: inset 0 1px 0 rgba(240, 231, 213, 0.12);
+  --pressed: inset 0 1px 0 rgba(240, 231, 213, 0.14), inset 0 -2px 0 rgba(0, 0, 0, 0.25);
+  --tin: 0 0 26px rgba(233, 178, 60, 0.4);
 }
 
 :root[data-theme='daylight'] {
@@ -179,6 +203,9 @@
   --raised: #f5f0e1;
   --ink: #241c14;
   --muted: #6e6152;
+  --worn: inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 -1px 0 rgba(36, 28, 20, 0.06);
+  --pressed: inset 0 1px 0 rgba(255, 255, 255, 0.45), inset 0 -2px 0 rgba(36, 28, 20, 0.14);
+  --tin: 0 2px 0 rgba(255, 255, 255, 0.75), 0 -1px 0 rgba(36, 28, 20, 0.14);
 }
 
 /* Bright-sun override — one tap from the header. Warmth yields to
@@ -214,12 +241,19 @@
 
 html {
   background: var(--ground);
+  background-image: var(--plaster);
+  background-blend-mode: soft-light;
   /* Never zoom-lock: a gloved mis-tap must stay recoverable. */
   -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background: var(--ground);
+  /* Plaster, and after dark a lantern above the door with the corners falling
+     away — direction 1c. The inset shadows are the falloff; without them a
+     dark theme is a grey rectangle rather than a lit room. */
+  background-color: var(--ground);
+  background-image: var(--plaster);
+  background-blend-mode: soft-light;
   color: var(--ink);
   font-family: var(--font-body);
   font-optical-sizing: auto;
@@ -278,8 +312,27 @@ summary {
 .arch {
   border-radius: var(--arch);
   border: var(--border);
-  background: var(--raised);
-  box-shadow: var(--lift);
+  background-color: var(--raised);
+  /* Light falls from above, so the top of a surface is worn pale and the
+     bottom sits in its own shade. */
+  background-image: linear-gradient(rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0) 90px);
+  box-shadow: var(--worn), var(--lift);
+}
+
+/* The pale wash is daylight falling on plaster. After dark there is no such
+   light, and painting it anyway turns every card milky. */
+@media (prefers-color-scheme: dark) {
+  .arch {
+    background-image: none;
+  }
+}
+
+:root[data-theme='lamplight'] .arch {
+  background-image: none;
+}
+
+:root[data-theme='daylight'] .arch {
+  background-image: linear-gradient(rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0) 90px);
 }
 
 /* The other half of that signal, which had no class and so was never used.
@@ -503,17 +556,102 @@ summary {
 
 /* ── The Tally ──────────────────────────────────────────────────────────── */
 
+/**
+ * The reveal — direction 1b, the card that stops being a card.
+ *
+ * A recess cut into the wall, with the door set inside it. The inset shadow at
+ * the top is the wall's own thickness catching light; the door then sits
+ * proud of it with a shadow cast UPWARD (0 -2px), which is what tells the eye
+ * the opening is deeper than the surface around it.
+ *
+ * The Tally is wrapped in this rather than being it, because the threshold at
+ * the bottom has to be outside the door to read as a step.
+ */
+.reveal {
+  border-radius: var(--arch-reveal);
+  background: linear-gradient(rgba(36, 28, 20, 0.13), rgba(36, 28, 20, 0.07));
+  box-shadow: inset 0 2px 5px rgba(36, 28, 20, 0.18);
+  padding: 9px 9px 0;
+}
+
+/* A dark wash on a dark wall is nothing at all. After sunset the recess is
+   read from the lamplight catching its upper edge instead. */
+@media (prefers-color-scheme: dark) {
+  .reveal {
+    background: linear-gradient(rgba(240, 231, 213, 0.07), rgba(240, 231, 213, 0.02));
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.5);
+  }
+}
+
+:root[data-theme='lamplight'] .reveal {
+  background: linear-gradient(rgba(240, 231, 213, 0.07), rgba(240, 231, 213, 0.02));
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+:root[data-theme='daylight'] .reveal {
+  background: linear-gradient(rgba(36, 28, 20, 0.13), rgba(36, 28, 20, 0.07));
+  box-shadow: inset 0 2px 5px rgba(36, 28, 20, 0.18);
+}
+
+/* The step out of the door. Sits under it, wider than it, and is the only
+   thing in the layout allowed to be a plain slab. */
+.reveal__threshold {
+  height: 14px;
+  margin: 0 -9px;
+  border-top: var(--border);
+  background: linear-gradient(#ddd3ba, #cfc3a6);
+}
+
+@media (prefers-color-scheme: dark) {
+  .reveal__threshold {
+    background: linear-gradient(#2a2118, #221a12);
+  }
+}
+
+:root[data-theme='lamplight'] .reveal__threshold {
+  background: linear-gradient(#2a2118, #221a12);
+}
+
+:root[data-theme='daylight'] .reveal__threshold {
+  background: linear-gradient(#ddd3ba, #cfc3a6);
+}
+
+/* Brass hinges on the jamb. Two of them, at door-hinge heights, and they are
+   the one piece of hardware in the interface. */
+.reveal__hinge {
+  position: absolute;
+  left: -2px;
+  width: 5px;
+  height: 26px;
+  border-radius: 2px;
+  background: var(--brass);
+}
+
+.reveal__hinge--upper {
+  top: 120px;
+}
+
+.reveal__hinge--lower {
+  top: 210px;
+}
+
 .tally {
+  position: relative;
   /* The lamp above the doorway. One glow per screen, over whichever doorway
      that screen is about — never two competing for the same eye. */
+  border-radius: 50% 50% 0.375rem 0.375rem / 2.25rem 2.25rem 0.375rem 0.375rem;
+  border: 2px solid color-mix(in oklab, var(--ink) 30%, transparent);
   background:
     radial-gradient(
-      120% 80% at 50% 12%,
-      color-mix(in oklab, var(--lantern) 14%, transparent),
-      transparent 70%
+      110% 70% at 50% 8%,
+      color-mix(in oklab, var(--lantern) 26%, transparent),
+      transparent 68%
     ),
     var(--raised);
-  padding: 2.5rem 1rem 1rem;
+  /* Cast upward. A door set into a recess is lit from the opening, not from
+     the page — this single negative offset is most of why it reads as depth. */
+  box-shadow: 0 -2px 6px rgba(36, 28, 20, 0.14), var(--worn);
+  padding: 2.25rem 1rem 1rem;
   text-align: center;
   display: flex;
   flex-direction: column;
@@ -593,6 +731,28 @@ summary {
 
 /* ── The four tabs ──────────────────────────────────────────────────────── */
 
+/* The floor. A band of boards under the whole bar, so the tabs stand on
+   something rather than floating at the bottom of a page. */
+.tabs__floor {
+  height: 16px;
+  border-top: 2px solid color-mix(in oklab, var(--ink) 26%, transparent);
+  background: linear-gradient(#d6c9ac, #c8b998);
+}
+
+@media (prefers-color-scheme: dark) {
+  .tabs__floor {
+    background: linear-gradient(#241c14, #1a1410);
+  }
+}
+
+:root[data-theme='lamplight'] .tabs__floor {
+  background: linear-gradient(#241c14, #1a1410);
+}
+
+:root[data-theme='daylight'] .tabs__floor {
+  background: linear-gradient(#d6c9ac, #c8b998);
+}
+
 .tabs {
   position: sticky;
   bottom: 0;
@@ -600,7 +760,6 @@ summary {
   grid-template-columns: repeat(4, 1fr);
   background: var(--raised);
   border-top: var(--border);
-  box-shadow: 0 -2px 16px color-mix(in oklab, var(--ink) 7%, transparent);
   padding-bottom: env(safe-area-inset-bottom);
   /* Same column as the content above it. Left full-bleed, four tabs spread
      across a desktop monitor land nowhere near the thumb the layout is drawn
@@ -617,27 +776,12 @@ summary {
   color: var(--muted);
   font: inherit;
   font-family: var(--font-data);
-  /* Smaller than a label, because the icon is now carrying the meaning and
-     the word is only confirming it. */
-  font-size: 0.6875rem;
+  font-size: var(--step-label);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.25rem;
-  padding: 0.5rem 0;
-}
-
-.tabs__tab svg {
-  /* The icon does the work; it is a touch larger than the type it sits over. */
-  opacity: 0.85;
-}
-
-.tabs__tab[aria-current='page'] svg {
-  opacity: 1;
+  display: grid;
+  place-items: center;
 }
 
 .tabs__tab[aria-current='page'] {
@@ -958,6 +1102,7 @@ summary {
   color: #201913;
   border: none;
   font-weight: 700;
+  box-shadow: var(--pressed);
 }
 
 @media (prefers-reduced-motion: reduce) {
