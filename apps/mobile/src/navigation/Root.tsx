@@ -16,11 +16,13 @@ export type RootParamList = { Tabs: undefined; Settings: undefined };
 
 const Stack = createNativeStackNavigator<RootParamList>();
 
-export function Root(): React.ReactElement {
+export function Root({ onSignedOut }: { onSignedOut: () => void }): React.ReactElement {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Tabs" component={Tabs} />
-      <Stack.Screen name="Settings" component={SettingsScreen} />
+      <Stack.Screen name="Settings">
+        {() => <SettingsScreen onSignedOut={onSignedOut} />}
+      </Stack.Screen>
     </Stack.Navigator>
   );
 }

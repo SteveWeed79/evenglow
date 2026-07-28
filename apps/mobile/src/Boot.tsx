@@ -32,7 +32,12 @@ type State =
   | { kind: 'ready' }
   | { kind: 'failed'; message: string };
 
-export function Boot({ children }: { children: React.ReactNode }): React.ReactElement {
+export function Boot({
+  render,
+}: {
+  /** Given a callback the app calls when the session ends. */
+  render: (onSignedOut: () => void) => React.ReactNode;
+}): React.ReactElement {
   const [state, setState] = useState<State>({ kind: 'opening' });
   const { colors } = useTheme();
 
@@ -86,7 +91,17 @@ export function Boot({ children }: { children: React.ReactNode }): React.ReactEl
     );
   }, []);
 
-  if (state.kind === 'ready') return <>{children}</>;
+  /**
+   * Signing out drops back to the door rather than unmounting the app.
+   *
+   * The engine is left running deliberately: the queue is per farm and still
+   * on disk, so stopping it would only delay the next flush without protecting
+   * anything. It has no token, so it will defer as unauthenticated until
+   * somebody signs in — which is exactly the state the engine already handles.
+   */
+  const onSignedOut = useCallback(() => setState({ kind: 'signed-out' }), []);
+
+  if (state.kind === 'ready') return <>{render(onSignedOut)}</>;
   if (state.kind === 'signed-out') return <SignInScreen onSignedIn={onSignedIn} />;
 
   return (

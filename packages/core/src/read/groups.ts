@@ -20,6 +20,15 @@ export interface Group {
   speciesOther?: string;
   breed?: string;
   count: number;
+  /**
+   * What the grow-out clock needs, and why it is read here rather than
+   * fetched separately: the clock refuses to guess any of them, so a screen
+   * that has the group already has everything the answer depends on.
+   */
+  breedId?: string;
+  purposes?: string[];
+  /** Hatched or born. NOT when they were acquired — see due/growout.ts. */
+  bornAt?: number;
 }
 
 /** The projection stores whatever the payload held, so it is parsed on the way out. */
@@ -45,6 +54,9 @@ export async function listGroups(): Promise<Group[]> {
             ? {}
             : { speciesOther: parsed.data.speciesOther }),
           ...(parsed.data.breed === undefined ? {} : { breed: parsed.data.breed }),
+          ...(parsed.data.breedId === undefined ? {} : { breedId: parsed.data.breedId }),
+          ...(parsed.data.purposes === undefined ? {} : { purposes: [...parsed.data.purposes] }),
+          ...(parsed.data.bornAt === undefined ? {} : { bornAt: parsed.data.bornAt }),
           count: parsed.data.count ?? 0,
         } satisfies Group,
       ];
