@@ -1,0 +1,183 @@
+import {
+  bedCreateSchema,
+  type FrostDates,
+  frostDatesSchema,
+  plantingCreateSchema,
+  siteCreateSchema,
+  varietyCreateSchema,
+  type Zone,
+  zoneSchema,
+} from '@steading/contracts';
+import { localStore } from '../db/store';
+
+/**
+ * Local-first reads for growing.
+ *
+ * The same shape as `groups.ts` and `iron.ts`, from the same projection. A
+ * farm's beds are not a different kind of thing from its animals as far as
+ * this layer is concerned — both are records the device already holds, and
+ * both render with the radio off.
+ */
+
+export interface Site {
+  id: string;
+  name: string;
+  zone?: Zone;
+  frost?: FrostDates;
+  rotationYears: number;
+  postalCode?: string;
+}
+
+export interface Bed {
+  id: string;
+  siteId: string;
+  name: string;
+  covered: boolean;
+  note?: string;
+}
+
+export interface Planting {
+  id: string;
+  bedId: string;
+  varietyId: string;
+  season: number;
+  status: string;
+  plannedSowAt?: number;
+  plannedStartIndoorsAt?: number;
+  plannedTransplantAt?: number;
+  plannedFirstHarvestAt?: number;
+  sownAt?: number;
+  transplantedAt?: number;
+  startedIndoorsAt?: number;
+  removedAt?: number;
+}
+
+const storedSite = siteCreateSchema.partial();
+const storedBed = bedCreateSchema.partial();
+const storedPlanting = plantingCreateSchema.partial();
+
+/**
+ * The farm's site, or null before setup.
+ *
+ * One site is the overwhelming case, so this returns the first rather than a
+ * list. A farm with a home plot and a rented field two valleys over has two
+ * genuinely different frost dates and the schema supports it; the screens do
+ * not yet, and pretending otherwise here would be a list nothing reads.
+ */
+export async function readSite(): Promise<Site | null> {
+  const records = await localStore().readRecordsByEntity('site');
+
+  for (const record of records) {
+    if (record.deleted) continue;
+    const parsed = storedSite.safeParse(record.value);
+    if (!parsed.success || parsed.data.name === undefined) continue;
+
+    const zone = zoneSchema.safeParse(parsed.data.zone);
+    const frost = frostDatesSchema.safeParse(parsed.data.frost);
+
+    return {
+      id: record.targetId,
+      name: parsed.data.name,
+      ...(zone.success ? { zone: zone.data } : {}),
+      ...(frost.success ? { frost: frost.data } : {}),
+      ...(parsed.data.postalCode === undefined ? {} : { postalCode: parsed.data.postalCode }),
+      // Three is the common smallholding figure. A farm with four beds
+      // physically cannot manage four, which is why it is a setting.
+      rotationYears: parsed.data.rotationYears ?? 3,
+    };
+  }
+
+  return null;
+}
+
+export async function listBeds(): Promise<Bed[]> {
+  const records = await localStore().readRecordsByEntity('bed');
+
+  return records
+    .filter((record) => !record.deleted)
+    .flatMap((record) => {
+      const parsed = storedBed.safeParse(record.value);
+      // A record that no longer matches the contract is skipped rather than
+      // rendered half-formed; the diagnostics sheet reports the discrepancy.
+      if (!parsed.success || parsed.data.name === undefined || parsed.data.siteId === undefined) {
+        return [];
+      }
+
+      return [
+        {
+          id: record.targetId,
+          siteId: parsed.data.siteId,
+          name: parsed.data.name,
+          covered: parsed.data.covered ?? false,
+          ...(parsed.data.note === undefined ? {} : { note: parsed.data.note }),
+        } satisfies Bed,
+      ];
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function listPlantings(): Promise<Planting[]> {
+  const records = await localStore().readRecordsByEntity('planting');
+
+  return records
+    .filter((record) => !record.deleted)
+    .flatMap((record) => {
+      const parsed = storedPlanting.safeParse(record.value);
+      if (
+        !parsed.success ||
+        parsed.data.bedId === undefined ||
+        parsed.data.varietyId === undefined ||
+        parsed.data.season === undefined ||
+        parsed.data.status === undefined
+      ) {
+        return [];
+      }
+
+      const { bedId, varietyId, season, status, ...rest } = parsed.data;
+      return [
+        {
+          id: record.targetId,
+          bedId,
+          varietyId,
+          season,
+          status,
+          ...Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined)),
+        } satisfies Planting,
+      ];
+    });
+}
+
+/**
+ * What is currently in a bed.
+ *
+ * Derived, never stored. A bed's occupancy changes several times a year and a
+ * stored "current crop" would be wrong the moment anything was pulled — so
+ * occupancy is "a planting that went in and has not been removed", which for a
+ * perennial is the normal state for years.
+ */
+export function occupants(plantings: readonly Planting[], bedId: string): Planting[] {
+  return plantings.filter(
+    (p) =>
+      p.bedId === bedId &&
+      p.removedAt === undefined &&
+      p.status !== 'finished' &&
+      p.status !== 'failed',
+  );
+}
+
+/** Varieties the farm has taken from the library or added itself. */
+export async function listVarieties(): Promise<{ id: string; name: string; crop: string }[]> {
+  const records = await localStore().readRecordsByEntity('variety');
+  const stored = varietyCreateSchema.partial();
+
+  return records
+    .filter((record) => !record.deleted)
+    .flatMap((record) => {
+      const parsed = stored.safeParse(record.value);
+      if (!parsed.success || parsed.data.name === undefined || parsed.data.crop === undefined) {
+        return [];
+      }
+      return [{ id: record.targetId, name: parsed.data.name, crop: parsed.data.crop }];
+    })
+    .sort((a, b) => a.crop.localeCompare(b.crop) || a.name.localeCompare(b.name));
+}
