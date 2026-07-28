@@ -137,12 +137,30 @@ which is why it is not a `productionLog`.
 Without it there is nothing to check consumption against, so a bag running out
 is discovered rather than predicted.
 
-### 1.3 What is still missing
+### 1.4 Needs — built
 
-**Needs.** Water, minerals, shelter, worming, hoof trimming. Most of these are
-recurring intervals, so they are due rows over a per-species default a farm can
-override — *not* a new subsystem. The due engine already takes date intervals;
-what is missing is the table of defaults.
+Worming, hoof trimming, minerals, vaccination, a parasite check. Not a
+subsystem, exactly as this section said: one table of intervals
+(`due/care.ts`), one append-only `careLog` that clears them, and twenty lines
+of builder.
+
+Keyed by **species group**, not species — hooves grow at the same rate on a
+goat and a sheep, and neither is a hen. Keying per species would be fifty rows
+repeating five answers. A handful of species override where they genuinely
+differ: cattle feet at 182 days against a goat's 56, a horse at 42 with teeth
+nothing else on the list has.
+
+Two judgement calls worth arguing with:
+
+- **A job never recorded is due now**, not one interval from today. A farm that
+  has never logged trimming either is not trimming or is not recording it, and
+  both are worth a row; starting the clock at install would tell someone their
+  overdue herd is fine for another eight weeks.
+- **The worming interval is a reminder to assess, not a schedule to dose on.**
+  Blanket worming on a calendar is how resistance is built, and the honest
+  thing an app can do is prompt a look rather than prescribe a drench.
+
+### 1.5 What is still missing
 
 **Screens.** All of the above is headless. None of it is reachable by a person
 yet, and that is deliberate while the design is being reworked for React
@@ -267,9 +285,21 @@ they need a server, which is exactly the dependency this app is built to avoid,
 so they are a convenience layered on top of a system that already works without
 them.
 
-**Parts and consumables.** `inventory` exists. What is missing is the link: this
-filter fits that machine, so a service due in two weeks can say whether the part
-is on the shelf.
+**Parts and consumables — built.** The schemas already carried the link:
+`maintenance.partIds` names what a service consumes and `inventory.equipmentId`
+ties a part to its machine. What was missing was the question, and the question
+was the whole feature.
+
+`due/parts.ts` raises a **separate row** for ordering rather than a flag on the
+service, because they resolve differently: "order the filter" is done by
+ordering and "change the filter" is done by changing it. Folded together, a
+service would sit amber with no way to tell — at a glance, in a barn — whether
+the job was waiting on a person or on the post.
+
+The order is dated *ahead* of the service by its lead time. A part ordered the
+day a service falls due is a part that arrives after it. And a service with no
+parts linked is `unknown`, never `short`: a farm that has not linked its filters
+is not a farm that is short of filters.
 
 ---
 

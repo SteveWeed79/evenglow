@@ -50,6 +50,7 @@ export const ENTITIES = [
   'weight',
   'shearing',
   'feedPlan',
+  'careLog',
 ] as const;
 
 export const entitySchema = z.enum(ENTITIES);
@@ -74,6 +75,7 @@ export const APPEND_ONLY_ENTITIES = new Set<Entity>([
   'harvest',
   'weight',
   'shearing',
+  'careLog',
 ]);
 
 export function isAppendOnly(entity: Entity): boolean {

@@ -110,6 +110,14 @@ export const INDEXES: Record<CollectionName, IndexDescription[]> = {
   ],
   // The current ration is the one with no end date, which is the common read.
   feedPlans: [{ key: { orgId: 1, flockId: 1, endedAt: 1 } }],
+  /**
+   * "When was this last done?" is the only question asked of these, and it is
+   * asked per group per kind — so the kind is in the key, not filtered after.
+   */
+  careLogs: [
+    { key: { orgId: 1, flockId: 1, kind: 1, occurredAt: -1 } },
+    { key: { orgId: 1, animalId: 1, kind: 1, occurredAt: -1 } },
+  ],
 };
 
 /** Identity collections are not tenant-scoped; they need their own uniqueness rules. */

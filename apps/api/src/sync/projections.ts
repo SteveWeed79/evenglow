@@ -35,6 +35,7 @@ export const ENTITY_COLLECTIONS: Record<Entity, CollectionName> = {
   weight: 'weights',
   shearing: 'shearings',
   feedPlan: 'feedPlans',
+  careLog: 'careLogs',
 };
 
 /**
