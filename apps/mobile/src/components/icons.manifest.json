@@ -1,6 +1,6 @@
 {
   "name": "steading-icons",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "generatedFrom": "Steading Icons v3.dc.html",
   "masters": {
     "24": {
@@ -53,12 +53,21 @@
       }
     },
     {
-      "name": "more",
+      "name": "growing",
       "group": "navigation",
       "elements": {
         "24": 3,
         "32": 3
       }
+    },
+    {
+      "name": "more",
+      "group": "header",
+      "elements": {
+        "24": 3,
+        "32": 3
+      },
+      "note": "was a tab; now the header control. Kept because it still renders."
     },
     {
       "name": "saved",

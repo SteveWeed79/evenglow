@@ -52,14 +52,15 @@ export interface Theme {
   /**
    * Brass, darkened until it can be read.
    *
-   * Not a second accent — the same brass, taken down to where it clears 4.5:1
-   * on this theme's surfaces so it can tint an icon or a label. The design
-   * system already did exactly this for bright sun and called it `lantern`;
-   * this generalises it, because daylight has the same problem and had not
-   * been caught.
+   * `lantern` is a fill, not an ink: #e9b23c on the daylight ground is 1.55:1,
+   * under even the 3:1 floor for a graphical object. So anything
+   * brass-coloured that carries meaning as a line, a label or an indicator bar
+   * uses this instead.
    *
-   * Under lamplight the two are identical: brass on a dark wall is 8:1 and
-   * needs no help.
+   * Theme-scoped, because on loam the plain lantern already clears 8:1 and
+   * darkening it there would only dim the one warm thing in the interface.
+   *
+   * Values are the design system's (handoff 3.1), not derived here.
    */
   lanternInk: string;
   /** Complete, synced, healthy. */
@@ -89,8 +90,8 @@ export const THEMES: Record<ThemeName, Theme> = {
   daylight: {
     ground: '#ede6d2', raised: '#f5f0e1', ink: '#241c14', muted: '#6e6152',
     lantern: '#e9b23c',
-    /** 5.34:1 on raised, 4.88:1 on ground. */
-    lanternInk: '#845a10',
+    /** 5.15:1 on raised, 4.71:1 on ground. */
+    lanternInk: '#8a5b00',
     ...ACCENTS,
     border: 'rgba(36,28,20,0.22)', borderWidth: 2,
     alertTint: '#f3e2d8', scrim: 'rgba(36,28,20,0.55)', glow: 'rgba(233,178,60,0.22)',
@@ -110,8 +111,8 @@ export const THEMES: Record<ThemeName, Theme> = {
     ground: '#fffdf6', raised: '#ffffff', ink: '#14100a', muted: '#4a4238',
     /** Darkened deliberately: brass on white does not hold 7:1. */
     lantern: '#a66f00',
-    /** Darker again: 4.78:1 on white, where the handoff's #a66f00 was 4.29. */
-    lanternInk: '#9c6800',
+    /** 5.87:1 on white. The plain lantern is 4.29 and cannot carry a label. */
+    lanternInk: '#8a5b00',
     ...ACCENTS,
     border: '#14100a', borderWidth: 2,
     alertTint: '#fdeeea', scrim: 'rgba(20,16,10,0.55)', glow: 'rgba(166,111,0,0.16)',

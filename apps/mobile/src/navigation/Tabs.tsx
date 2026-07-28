@@ -27,7 +27,7 @@ import { FONTS, TAP, TYPE } from '../theme/tokens';
 const TABS = [
   { name: 'Today', icon: 'today', component: TodayScreen },
   { name: 'Stock', icon: 'stock', component: StockScreen },
-  { name: 'Growing', icon: 'streak-plant', component: GrowingScreen },
+  { name: 'Growing', icon: 'growing', component: GrowingScreen },
   { name: 'Iron', icon: 'iron', component: IronScreen },
 ] as const satisfies readonly { name: string; icon: IconName; component: () => React.ReactElement }[];
 

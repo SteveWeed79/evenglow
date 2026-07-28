@@ -268,21 +268,25 @@ re-earning Phase 2's gate from scratch. True when written; overtaken by the
 SQLite work landing anyway. The gate is re-earned **on hardware** at R6, not
 from zero.
 
-### Two things the handoff did not flag, found on the way
+### Two things sent back to design, and both came back fixed
 
-**The tab bar's brass fails contrast in daylight.** `lantern` (`#e9b23c`) on
+Handoff **3.1** answers both. Adopted wholesale — the design system owns these
+decisions, so where its values differ from the ones derived here, its values win.
+
+**The tab bar's brass failed contrast in daylight.** `lantern` (`#e9b23c`) on
 the daylight ground measures **1.55:1** — below even the 3:1 floor for a
-graphical object, let alone the text I had tinted with it. The handoff had
-already solved exactly this for bright sun by darkening the token; nobody had
-caught that daylight has the same problem.
+graphical object, let alone the text it was tinting. The handoff had already
+solved exactly this for bright sun by darkening the token; nobody had caught
+that daylight has the same problem.
 
-Fixed with a `lanternInk` token — the same brass taken down until it clears
-4.5:1 on both surfaces in every theme, used for anything that carries a mark or
-a label, while `lantern` stays the fill and the lit-lamp colour. Held by a test.
-**This is a change to the design system and wants the designer's sign-off.**
+`lanternInk` is now in the design system proper, with the reasoning stated
+better than the version derived here: *"`lantern` is a fill, not an ink …
+theme-scoped, because on loam the plain lantern already clears 8:1 and
+darkening it there would only dim the one warm thing in the interface."*
+Its values (`#8a5b00` in daylight and sun, unchanged brass in lamplight) clear
+4.71:1 at worst, and `tests/unit/native-tokens.test.ts` holds them there.
 
-**The set has no `growing` mark.** The tab bar is Today · Stock · Growing ·
-Iron; the manifest's four navigation marks are today / stock / iron / **more**,
-and `more` is now unused. `streak-plant` is standing in for Growing, which
-overloads a mark the manifest defines as the chore-streak charm. It reads
-correctly and it is not what it was drawn for.
+**The set had no `growing` mark**, so `streak-plant` was standing in — a mark
+the manifest defines as the chore-streak charm. The set is now 57 marks with a
+real `growing`, and the tab uses it. `more` stays in the set although no tab
+uses it; an overflow control may yet want it.
