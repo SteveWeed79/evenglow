@@ -21,6 +21,7 @@
     "@steading/app": "workspace:*",
     "@steading/contracts": "workspace:*",
     "expo": "~57.0.8",
+    "expo-network": "~57.0.1",
     "expo-secure-store": "~57.0.1",
     "expo-sqlite": "~57.0.1",
     "expo-status-bar": "~57.0.1",

@@ -95,7 +95,34 @@ owner are created by `db:seed`.
 | `pnpm cap:open:android` | Open the native project in Android Studio |
 | `pnpm dev:api` | Fastify with watch — what the native build talks to |
 
-## Android
+## React Native (`apps/mobile`)
+
+Where the app is going. Expo SDK 57, React Navigation, `expo-sqlite` under the
+same `LocalStore` the web client uses — see `docs/REACT-NATIVE-PLAN.md` for the
+staging and what it costs.
+
+```bash
+cp apps/mobile/.env.example apps/mobile/.env   # then edit EXPO_PUBLIC_API_URL
+pnpm dev:api                                   # Fastify, port 3001
+pnpm mobile                                    # Expo dev server
+pnpm mobile:android                            # build and deploy to a device
+```
+
+| Command | What it does |
+| --- | --- |
+| `pnpm mobile` | Expo dev server |
+| `pnpm mobile:android` | Prebuild, compile, and deploy to a device or emulator |
+| `pnpm mobile:export` | Bundle with Metro — the quickest check that resolution is sound |
+| `pnpm typecheck:mobile` | Typecheck against `expo/tsconfig.base`, which has no DOM in it |
+
+`apps/mobile/android` is **not** committed: it is generated from `app.json` by
+`expo prebuild`, and nothing in it is hand-edited. That is the opposite of the
+Capacitor project below, where the native files are reviewed.
+
+Emulator hosts are `10.0.2.2`, never `localhost`. Set `EXPO_PUBLIC_API_URL`
+wrong and the app refuses to start rather than starting and never syncing.
+
+## Android (Capacitor — the previous client)
 
 The APK is the target (D8); the browser is the fast development loop. Everything
 above the storage layer is identical between them — the one branch is in

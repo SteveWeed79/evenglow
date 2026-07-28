@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'r
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from './Icon';
 import { LampToggle } from './LampToggle';
+import { SyncChip } from './SyncChip';
 import type { RootParamList } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
 import { font, space, tap, type as typeScale } from '../theme/tokens';
@@ -11,9 +12,9 @@ import { font, space, tap, type as typeScale } from '../theme/tokens';
 /**
  * The wall every screen is drawn on.
  *
- * Header is status only, never actions (R3) — with two exceptions that are not
- * really actions: the lamp, and the way out of the screen you are in. The sync
- * chip joins them in R3.
+ * Header is status only, never actions (R3) — the sync chip and the date —
+ * with two exceptions that are not really actions: the lamp, and the way out
+ * of the screen you are in.
  *
  * The scroll view lives here rather than per screen so physics and overscroll
  * are identical everywhere. That consistency is one of the things React Native
@@ -59,6 +60,7 @@ export function Screen({
         )}
 
         <View style={styles.controls}>
+          <SyncChip />
           <LampToggle />
           {back ? null : (
             <Pressable

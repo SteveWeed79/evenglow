@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import { openLocalStore } from './db/store';
+import { start, type Started } from './boot/start';
 import { useTheme } from './theme/ThemeProvider';
 import { font, space, type as typeScale } from './theme/tokens';
 
 /**
- * Opening the database before the first screen renders.
+ * Opening the database and starting the sync loop before the first screen renders.
  *
  * Blocking, deliberately. The web build rendered immediately and installed the
  * store afterwards, and the window between those two facts is where the worst
@@ -29,13 +29,29 @@ export function Boot({ children }: { children: React.ReactNode }): React.ReactEl
 
   useEffect(() => {
     let live = true;
-    openLocalStore().then(
-      () => live && setState({ kind: 'ready' }),
-      (error: unknown) =>
-        live && setState({ kind: 'failed', message: error instanceof Error ? error.message : String(error) }),
+    let started: Started | null = null;
+
+    start().then(
+      (handles) => {
+        started = handles;
+        // Torn down already: stop what we just started rather than leaving a
+        // flush loop running against a screen that is gone.
+        if (!live) handles.stop();
+        else setState({ kind: 'ready' });
+      },
+      (error: unknown) => {
+        if (live) {
+          setState({
+            kind: 'failed',
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
+      },
     );
+
     return () => {
       live = false;
+      started?.stop();
     };
   }, []);
 
@@ -51,8 +67,7 @@ export function Boot({ children }: { children: React.ReactNode }): React.ReactEl
           {/* Named plainly: this is the one screen where a farmer needs to be
               able to read something back to whoever can help. */}
           <Text style={[styles.body, { color: colors.muted }]}>
-            The local database did not open. Nothing you have logged is lost — it is on this
-            device. {state.message}
+            Nothing you have logged is lost — it is on this device. {state.message}
           </Text>
         </>
       )}
