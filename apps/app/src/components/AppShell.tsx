@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { IronShell } from './IronShell';
 import { LampToggle } from './LampToggle';
+import { IronMark, MoreMark, StockMark, TodayMark } from './Marks';
 import { ServiceWorker } from './ServiceWorker';
 import { SignOut } from './SignOut';
 import { StockShell } from './StockShell';
@@ -20,10 +21,10 @@ import { TodayShell } from './TodayShell';
  */
 
 const TABS = [
-  { id: 'today', label: 'Today' },
-  { id: 'stock', label: 'Stock' },
-  { id: 'iron', label: 'Iron' },
-  { id: 'more', label: 'More' },
+  { id: 'today', label: 'Today', Mark: TodayMark },
+  { id: 'stock', label: 'Stock', Mark: StockMark },
+  { id: 'iron', label: 'Iron', Mark: IronMark },
+  { id: 'more', label: 'More', Mark: MoreMark },
 ] as const;
 
 type TabId = (typeof TABS)[number]['id'];
@@ -58,7 +59,7 @@ export function AppShell({ signOutAction }: { signOutAction: () => Promise<void>
       </main>
 
       <nav className="tabs" aria-label="Sections">
-        {TABS.map(({ id, label }) => (
+        {TABS.map(({ id, label, Mark }) => (
           <button
             key={id}
             type="button"
@@ -67,7 +68,8 @@ export function AppShell({ signOutAction }: { signOutAction: () => Promise<void>
             onClick={() => setTab(id)}
             data-testid={`tab-${id}`}
           >
-            {label}
+            <Mark />
+            <span>{label}</span>
           </button>
         ))}
       </nav>

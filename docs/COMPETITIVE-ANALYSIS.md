@@ -95,7 +95,22 @@ Flockstar's laying leaderboard drives daily engagement and costs almost nothing 
 
 ## 4. Explicitly Out of Scope
 
-Say no now so it stays no: crop planning and field mapping, satellite/weather imagery, e-commerce and CSA order management, full double-entry accounting, GPS telematics hardware, and dairy-specific workflows. Farmbrite covers these and we will not beat it there. Cost tracking stays at the level needed for cost-per-egg and Schedule F export.
+**This section previously excluded crop planning, and that was wrong.** The
+reason given was that a competitor covers it and "we will not beat it there" —
+a competitive opinion, standing in for a product decision nobody had asked for.
+Steading covers what a small mixed farm actually does, animals and growing
+alike. The scope now lives in the masterplan's Feature Outline, and growing is
+half of it.
+
+What remains out is out because it is a **different product**, not because
+someone else sells one: field mapping and GPS boundaries, satellite and weather
+imagery, e-commerce and CSA order management, full double-entry accounting, GPS
+telematics hardware, and dairy processing workflows. Cost tracking stays at the
+level needed for cost-per-egg, cost-per-bed, and a Schedule F export.
+
+**What this document is for.** It records what competitors do and why features
+earn their place. It does not get to decide what the product is. Where the two
+conflict, the masterplan wins.
 
 ---
 

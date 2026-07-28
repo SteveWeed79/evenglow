@@ -6,6 +6,7 @@ import { useGroups } from '../hooks/useGroups';
 import { useLog } from '../hooks/useSync';
 import type { Group } from '../read/groups';
 import { basketConfirmation } from '../voice';
+import { BasketSpot } from './Marks';
 import { Tally } from './Tally';
 import { WithdrawalBanner } from './WithdrawalBanner';
 
@@ -27,6 +28,7 @@ export function TodayShell(): React.ReactElement {
     return (
       <section className="panel shell__card">
         {/* Empty screens invite (UX-SPEC §6). */}
+        <span className="spot"><BasketSpot /></span>
         <p className="label">Nothing to log yet</p>
         <p>Add what you keep under Stock, and the morning&rsquo;s tally lands here.</p>
       </section>
