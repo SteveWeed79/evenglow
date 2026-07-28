@@ -60,6 +60,34 @@ export const INDEXES: Record<CollectionName, IndexDescription[]> = {
   tasks: [{ key: { orgId: 1, dueAtDate: 1, completedAt: 1 } }],
   inventory: [{ key: { orgId: 1, _id: 1 } }, { key: { orgId: 1, reorderBelow: 1 } }],
   photos: [{ key: { orgId: 1, subjectId: 1 } }, { key: { orgId: 1, uploadedAt: -1 } }],
+
+  // Growing. A farm has one or two sites and a handful of beds, so these are
+  // sized for the queries rather than for volume — except plantings and
+  // harvests, which accumulate for as long as the farm exists.
+  sites: [{ key: { orgId: 1, _id: 1 } }],
+  beds: [{ key: { orgId: 1, siteId: 1, archivedAt: 1 } }],
+  varieties: [
+    { key: { orgId: 1, _id: 1 } },
+    // "What can I plant?" filters by crop; "what is due to sow?" needs family
+    // only after a bed is chosen, so crop leads.
+    { key: { orgId: 1, crop: 1, archivedAt: 1 } },
+  ],
+  plantings: [
+    // The season view: one bed, one year, in date order.
+    { key: { orgId: 1, bedId: 1, season: 1 } },
+    /**
+     * Rotation asks a question no other index answers: what has been in this
+     * bed, ever, and from which family. It walks back `rotationYears` seasons,
+     * so it must be ordered by season descending within a bed.
+     */
+    { key: { orgId: 1, bedId: 1, season: -1, varietyId: 1 } },
+    // The Today list: what is due next, across every bed.
+    { key: { orgId: 1, status: 1, plannedSowAt: 1 } },
+  ],
+  harvests: [
+    { key: { orgId: 1, plantingId: 1, occurredAt: -1 } },
+    { key: { orgId: 1, occurredAt: -1 } },
+  ],
 };
 
 /** Identity collections are not tenant-scoped; they need their own uniqueness rules. */

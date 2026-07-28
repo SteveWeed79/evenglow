@@ -21,6 +21,17 @@ import {
   maintenanceUpdateSchema,
 } from './iron';
 import {
+  bedCreateSchema,
+  bedUpdateSchema,
+  harvestCreateSchema,
+  plantingCreateSchema,
+  plantingUpdateSchema,
+  siteCreateSchema,
+  siteUpdateSchema,
+  varietyCreateSchema,
+  varietyUpdateSchema,
+} from './growing';
+import {
   deleteSchema,
   inventoryCreateSchema,
   inventoryUpdateSchema,
@@ -33,6 +44,7 @@ import {
 export * from './livestock';
 export * from './iron';
 export * from './ops';
+export * from './growing';
 
 type PayloadKey = `${Entity}:${Op}`;
 
@@ -78,6 +90,22 @@ export const PAYLOAD_SCHEMAS: Partial<Record<PayloadKey, z.ZodType>> = {
   'photo:update': photoUpdateSchema,
   'photo:delete': deleteSchema,
 
+  'site:create': siteCreateSchema,
+  'site:update': siteUpdateSchema,
+  'site:delete': deleteSchema,
+
+  'bed:create': bedCreateSchema,
+  'bed:update': bedUpdateSchema,
+  'bed:delete': deleteSchema,
+
+  'variety:create': varietyCreateSchema,
+  'variety:update': varietyUpdateSchema,
+  'variety:delete': deleteSchema,
+
+  'planting:create': plantingCreateSchema,
+  'planting:update': plantingUpdateSchema,
+  'planting:delete': deleteSchema,
+
   // Append-only entities — create only, by construction
   'eggLog:create': eggLogCreateSchema,
   'productionLog:create': productionLogCreateSchema,
@@ -85,6 +113,7 @@ export const PAYLOAD_SCHEMAS: Partial<Record<PayloadKey, z.ZodType>> = {
   'mortality:create': mortalityCreateSchema,
   'predator:create': predatorCreateSchema,
   'hourReading:create': hourReadingCreateSchema,
+  'harvest:create': harvestCreateSchema,
 };
 
 /** Returns the schema for an entity+op pair, or undefined if the op is forbidden. */

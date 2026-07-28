@@ -25,6 +25,11 @@ export const ENTITY_COLLECTIONS: Record<Entity, CollectionName> = {
   task: 'tasks',
   inventory: 'inventory',
   photo: 'photos',
+  site: 'sites',
+  bed: 'beds',
+  variety: 'varieties',
+  planting: 'plantings',
+  harvest: 'harvests',
 };
 
 /**

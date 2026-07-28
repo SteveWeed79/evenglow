@@ -35,6 +35,14 @@ export const ENTITIES = [
   'task',
   'inventory',
   'photo',
+
+  // Growing (docs/DOMAIN-SCOPE.md). Additive, so the envelope version is
+  // unchanged and an old client simply never sends one.
+  'site',
+  'bed',
+  'variety',
+  'planting',
+  'harvest',
 ] as const;
 
 export const entitySchema = z.enum(ENTITIES);
@@ -56,6 +64,7 @@ export const APPEND_ONLY_ENTITIES = new Set<Entity>([
   'mortality',
   'predator',
   'hourReading',
+  'harvest',
 ]);
 
 export function isAppendOnly(entity: Entity): boolean {

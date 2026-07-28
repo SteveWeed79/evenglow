@@ -144,40 +144,88 @@ annual event with a weight, not a daily tally.
 Four entities, and the discipline is to stop there:
 
 ```ts
-bed        // a place: name, area, sun, notes. A raised bed, a row, a plot.
-variety    // a thing you can plant: 'Sungold', species, days to maturity,
-           // sow depth, spacing, indoor/direct, frost tolerance
-planting   // variety × bed × date. The actual event.
-harvest    // append-only, like eggLog: planting, date, quantity, unit
+site       // where the farm is: zone, frost dates, units, rotation years
+bed        // a place: name, size, sun, covered. Belongs to a site.
+variety    // a thing you can plant: crop, cultivar, family, lifecycle,
+           // days to maturity, sow depth, spacing, timing anchors
+planting   // variety × bed × season. Planned and actual dates side by side.
+harvest    // append-only, like eggLog: planting, date, mass or count
 ```
 
-A planting carries the dates that fall out of the variety and the farm's frost
-dates: `sowAt`, `transplantAt`, `firstHarvestAt`, `lastHarvestAt`. Each becomes
-a due row. **Succession** is not a fifth entity — it is a planting with a repeat
-interval, which generates the next planting when the previous one is sown.
+**Succession** is not a sixth entity — it is a planting with a repeat interval,
+which generates the next one. **Rotation** is not a seventh — it is a query over
+plantings by family.
 
-### 2.2 Zone and frost dates
+### 2.2 Zone AND frost dates — both, because they answer different questions
 
-This is the decision the whole growing schedule rests on, and it is settled:
+**A hardiness zone is not a planting date.** It is the average annual minimum
+winter temperature, and it decides *what survives here*: fruit trees,
+asparagus, rhubarb, berry canes, perennial herbs — everything that stays in the
+ground over winter. It says nothing about timing.
+
+**Frost dates are the growing window**, and they decide *when the annuals go
+in*: start indoors six weeks before last frost, direct-sow after it, count back
+from first frost for autumn crops.
+
+Neither can be computed from the other, so a site stores both.
+
+The zone is stored as `{ system, value }`, never a bare string. "7a" means
+nothing on its own — USDA 7a is a temperature band, RHS H4 is a different band
+measured differently, and AHS heat zones count days *above* 30 °C and run the
+other way entirely. A bare `zone: "7a"` column is a US-only column wearing a
+general name. Stored this way, adding the UK or Australia is a table, not a
+migration.
+
+Where the values come from:
 
 - **A bundled US hardiness-zone table** by postcode, so the app works offline
   from first launch for most users.
 - **An online lookup at setup**, which refines the bundled answer and is the
   only route for anywhere outside the US. One call, cached to SQLite forever.
-- **Manual override, always available.** Last spring frost and first autumn
-  frost as two dates a farmer can simply type. This is the ground truth the
-  schedule actually uses; the other two are conveniences that fill it in.
+- **Manual override on both, always available.** A farmer knows their own frost
+  dates better than a map does — a valley, a south wall, or three hundred
+  metres of elevation all beat a postcode. The lookups exist so nobody has to
+  type anything on day one, not because they are more authoritative.
 
-Storing the *frost dates* rather than the *zone* is what makes this work
-everywhere. A zone is a proxy for those two dates and a lossy one — it does not
-survive a valley, a south wall, or a farm three hundred metres above the town
-the postcode names. Every farmer knows their own frost dates better than a map
-does, and the map is only there so they do not have to type them on day one.
+Everything downstream is arithmetic on those two dates, and it is pure — no
+server, ever. `packages/contracts/src/growing/schedule.ts`.
 
-Everything else is arithmetic from those two dates: "sow indoors 6 weeks before
-last frost" becomes a real date, which becomes a due row.
+### 2.3 What multi-year planning changes
 
-### 2.3 Where growing lives
+Planning several seasons ahead, including perennials that hold a bed for years,
+changes three things:
+
+1. **Beds have history, and occupancy is derived.** A planting occupies its bed
+   from sowing until `removedAt`; a perennial simply never has one. Nothing
+   stores "what is in this bed" — it would be wrong the moment anything was
+   pulled.
+2. **Plantings carry planned *and* actual dates.** A 2028 row exists with
+   nothing sown in it. Keeping both is what lets the app say "you sowed this
+   three weeks late last year" rather than overwriting the plan with reality
+   and losing that they diverged.
+3. **Varieties carry a plant family**, because that is what a rotation warning
+   compares. Brassicas following brassicas build club root; solanaceae
+   following solanaceae build blight. `rotationYears` is a site setting, not a
+   constant — a farm with four beds physically cannot manage a four-year
+   rotation.
+
+### 2.4 Zone warns, it never blocks
+
+A variety outside the site's zone shows a sentence — "figs usually will not
+survive winter in your zone; grown here they want a pot brought in, a tunnel,
+or treating as an annual" — and can still be planted. A south wall, a cold
+frame or a pot wheeled into a shed all beat the map, and an app that tells a
+grower no is an app that is wrong about that grower.
+
+The same rule applies to season length: a 120-day melon in a 100-day season is
+flagged, not hidden. People beat short seasons with tunnels and bought-in
+transplants every year.
+
+`unknown` is a real third answer and is returned whenever either side is
+missing. A false "hardy" costs someone a tree; a false "tender" costs a
+sentence they can ignore.
+
+### 2.5 Where growing lives
 
 Its own tab. It replaced More, which was never a place you go — it was a
 drawer. Today · Stock · Growing · Iron, with settings pushed from the header.
@@ -221,12 +269,13 @@ New entities, in the existing two classes:
 | `weight` | append-only | A growth curve is a series of facts |
 | `shearing` | append-only | Annual, with a weight |
 | `feedPlan` | mutable | The ration; `feedLog` stays append-only |
+| `site` | mutable | Zone, frost dates, units, rotation years |
 | `bed` | mutable | A place, renamed and retired like a flock |
 | `variety` | mutable | Editable, because the bundled numbers are a starting point |
 | `planting` | mutable | Dates get corrected; a planting can fail |
 | `harvest` | append-only | Exactly like `eggLog` |
 
-Nine entities. The append-only ones cannot conflict, which is most of the point
+Ten entities. The append-only ones cannot conflict, which is most of the point
 of classifying them that way. The mutable ones are archived, never deleted
 (P13).
 
@@ -235,6 +284,26 @@ recomputed locally, so it is a projection, not a syncable entity — which means
 it cannot conflict, cannot be rejected, and does not need a schema on the wire.
 
 ---
+
+### 4.1 Units
+
+**Imperial by default, metric one switch away, and neither is what is stored.**
+
+Every measurement crosses the wire and hits SQLite as an integer in a canonical
+base unit — micrometres, micrograms, microlitres, tenths of a degree Celsius —
+and is converted only where a human reads or types it.
+
+Two reasons, and the second is the load-bearing one:
+
+1. A farm that switches display units must not rewrite its history. Storing
+   what was typed means "4 lb" and "1.81 kg" are different rows describing the
+   same basket, and any sum over both is wrong.
+2. **Integers, so nothing drifts.** The bases are chosen so imperial is
+   *exact*: one inch is 25,400 µm, one pound is 453,592,370 µg. At millimetre
+   and milligram resolution — the obvious first choice — a quarter-inch sow
+   depth read back as 0.236", and a one-pound harvest read back as 0.99999918
+   lb and therefore displayed as "16 oz". Both of those were caught by tests
+   before anything rendered them.
 
 ## 5. Reference data
 

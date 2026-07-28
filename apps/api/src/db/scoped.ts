@@ -41,6 +41,11 @@ export const COLLECTIONS = [
   'tasks',
   'inventory',
   'photos',
+  'sites',
+  'beds',
+  'varieties',
+  'plantings',
+  'harvests',
 ] as const;
 
 export type CollectionName = (typeof COLLECTIONS)[number];
