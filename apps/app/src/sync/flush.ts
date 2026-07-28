@@ -4,7 +4,7 @@ import {
   type MutationResult,
   type SyncResponse,
 } from '@steading/contracts';
-import { apiUrl } from '../api';
+import { apiUrl, syncHeaders } from '../api';
 import { localStore } from '../db/store';
 import type { QueuedMutation } from '../db/idb-schema';
 
@@ -67,12 +67,7 @@ export type SyncTransport = (mutations: Mutation[]) => Promise<{
 const defaultTransport: SyncTransport = async (mutations) => {
   const res = await fetch(apiUrl('sync'), {
     method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      // Custom header, so the request cannot be forged by a simple cross-origin
-      // form post. Origin verification proper lands in Phase 4.
-      'x-steading-sync': '1',
-    },
+    headers: syncHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify({ mutations }),
   });
 

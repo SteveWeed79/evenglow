@@ -1,6 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { startSync } from '@steading/app/sync/engine';
+import { setStorageBacking } from '@steading/app/sync/storage';
 import { start, type Started } from './boot/start';
+import { openLocalStore } from './db/store';
+import { SignInScreen } from './screens/SignInScreen';
+import type { CachedClaims } from './auth/session';
 import { useTheme } from './theme/ThemeProvider';
 import { FONTS, SPACE, TYPE } from './theme/tokens';
 
@@ -21,7 +26,11 @@ import { FONTS, SPACE, TYPE } from './theme/tokens';
  * dangerous thing this app could tell someone.
  */
 
-type State = { kind: 'opening' } | { kind: 'ready' } | { kind: 'failed'; message: string };
+type State =
+  | { kind: 'opening' }
+  | { kind: 'signed-out' }
+  | { kind: 'ready' }
+  | { kind: 'failed'; message: string };
 
 export function Boot({ children }: { children: React.ReactNode }): React.ReactElement {
   const [state, setState] = useState<State>({ kind: 'opening' });
@@ -37,7 +46,7 @@ export function Boot({ children }: { children: React.ReactNode }): React.ReactEl
         // Torn down already: stop what we just started rather than leaving a
         // flush loop running against a screen that is gone.
         if (!live) handles.stop();
-        else setState({ kind: 'ready' });
+        else setState({ kind: handles.claims === null ? 'signed-out' : 'ready' });
       },
       (error: unknown) => {
         if (live) {
@@ -55,7 +64,30 @@ export function Boot({ children }: { children: React.ReactNode }): React.ReactEl
     };
   }, []);
 
+  /**
+   * Signing in finishes the boot the session could not.
+   *
+   * `start()` stops early when nobody is signed in, because the database is
+   * per farm and there was no orgId to open one with. Now there is.
+   */
+  const onSignedIn = useCallback((claims: CachedClaims) => {
+    setState({ kind: 'opening' });
+    openLocalStore(claims.orgId).then(
+      () => {
+        setStorageBacking('device');
+        startSync();
+        setState({ kind: 'ready' });
+      },
+      (error: unknown) =>
+        setState({
+          kind: 'failed',
+          message: error instanceof Error ? error.message : String(error),
+        }),
+    );
+  }, []);
+
   if (state.kind === 'ready') return <>{children}</>;
+  if (state.kind === 'signed-out') return <SignInScreen onSignedIn={onSignedIn} />;
 
   return (
     <View style={[styles.centre, { backgroundColor: colors.ground }]}>

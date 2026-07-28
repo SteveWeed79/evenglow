@@ -71,3 +71,49 @@ export function apiUrl(endpoint: Endpoint, query = ''): string {
   const path = base === null ? paths.sameOrigin : `${base}${paths.api}`;
   return query === '' ? path : `${path}?${query}`;
 }
+
+// ── credentials ──────────────────────────────────────────────────────────────
+
+/**
+ * The access token the transports send.
+ *
+ * Configured rather than read from storage, matching `setApiBase` above and
+ * for the same two reasons: the sync modules must not know which platform
+ * they are on, and secure storage is a native module that cannot be imported
+ * into a build that has no native side.
+ *
+ * **This was the gap that made the ported engine unable to talk to the
+ * server at all.** The Capacitor build reached the Next routes at its own
+ * origin and was authenticated by an Auth.js cookie, so no transport here
+ * ever needed a header. The Fastify API (D10) is token-based, and moving to
+ * it silently turned every flush into a 401 that the queue treated as a
+ * server fault and backed off from — politely, forever, while the sync chip
+ * said the reassuring thing.
+ *
+ * Held in memory only. The token is short-lived and the refresh token is the
+ * thing worth storing; keeping this one out of any store means a database or
+ * a file disclosure yields nothing that is still valid.
+ */
+let accessToken: string | null = null;
+
+export function setAccessToken(token: string | null): void {
+  accessToken = token;
+}
+
+export function currentAccessToken(): string | null {
+  return accessToken;
+}
+
+/**
+ * Headers every sync request carries.
+ *
+ * `x-steading-sync` is a custom header, so the request cannot be forged by a
+ * simple cross-origin form post. The bearer is added only when there is one —
+ * an `Authorization: Bearer null` would be a 401 that looks like an expiry
+ * rather than like a client that was never signed in.
+ */
+export function syncHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  const headers: Record<string, string> = { 'x-steading-sync': '1', ...extra };
+  if (accessToken !== null) headers['authorization'] = `Bearer ${accessToken}`;
+  return headers;
+}

@@ -3,7 +3,7 @@ import {
   pullResponseSchema,
   type PulledMutation,
 } from '@steading/contracts';
-import { apiUrl } from '../api';
+import { apiUrl, syncHeaders } from '../api';
 import { localStore } from '../db/store';
 
 /**
@@ -33,7 +33,7 @@ export type PullTransport = (
 const defaultTransport: PullTransport = async (since, sinceId) => {
   const query = sinceId === null ? `since=${since}` : `since=${since}&sinceId=${sinceId}`;
   const res = await fetch(apiUrl('snapshot', query), {
-    headers: { 'x-steading-sync': '1' },
+    headers: syncHeaders(),
   });
   const body: unknown = await res.json().catch(() => null);
   return { status: res.status, body };
