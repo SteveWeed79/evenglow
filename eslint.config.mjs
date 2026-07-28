@@ -214,6 +214,19 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+
+  /**
+   * Metro and Babel read their config with `require`, before any transform has
+   * run. These two files are CommonJS because the tools that load them are,
+   * not because anyone chose it — so the ban on `require()` does not apply.
+   *
+   * Scoped to the two filenames rather than the package: application code
+   * under apps/mobile/src stays under the ban.
+   */
+  {
+    files: ['apps/mobile/metro.config.js', 'apps/mobile/babel.config.js'],
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
+  },
 ]);
 
 export default eslintConfig;

@@ -35,5 +35,13 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", ".next"]
+  /**
+   * apps/mobile is checked by its own tsconfig, not this one.
+   *
+   * This program has `lib: ["dom", ...]`, so a React Native file compiled here
+   * would be told `document` and `window` exist. They do not, and a build that
+   * accepts them is a white screen on a handset. The mobile project extends
+   * expo/tsconfig.base instead, which has no DOM in it — see `pnpm typecheck:mobile`.
+   */
+  "exclude": ["node_modules", ".next", "apps/mobile"]
 }

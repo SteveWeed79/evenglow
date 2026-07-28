@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "Steading",
+    "slug": "steading",
+    "scheme": "steading",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "android": {
+      "package": "com.steading.app",
+      "edgeToEdgeEnabled": true,
+      "adaptiveIcon": {
+        "backgroundColor": "#EDE6D2"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.steading.app",
+      "supportsTablet": false
+    },
+    "plugins": ["expo-system-ui"],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}
