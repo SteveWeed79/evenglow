@@ -1,0 +1,121 @@
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Icon } from './Icon';
+import { LampToggle } from './LampToggle';
+import { Plaster } from './Plaster';
+import { SyncChip } from './SyncChip';
+import type { RootParamList } from '../navigation/Root';
+import { useTheme } from '../theme/ThemeProvider';
+import { FONTS, SPACE, TAP, TYPE } from '../theme/tokens';
+
+/**
+ * The wall every screen is drawn on.
+ *
+ * Header is status only, never actions (R3) — the sync chip and the date —
+ * with two exceptions that are not really actions: the lamp, and the way out
+ * of the screen you are in.
+ *
+ * The scroll view lives here rather than per screen so physics and overscroll
+ * are identical everywhere. That consistency is one of the things React Native
+ * gives free and it is worth not squandering by hand-rolling it four times.
+ */
+export function Screen({
+  title,
+  children,
+  contentStyle,
+  back = false,
+}: {
+  title: string;
+  children: React.ReactNode;
+  contentStyle?: ViewStyle;
+  /** Shows a back chevron instead of the date. Pushed screens only. */
+  back?: boolean;
+}): React.ReactElement {
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const navigation = useNavigation<NativeStackNavigationProp<RootParamList>>();
+
+  return (
+    <View style={[styles.ground, { backgroundColor: colors.ground, paddingTop: insets.top }]}>
+      {/* Behind everything, never over it. The grain is a shipped tile because
+          feTurbulence blended at soft-light has no RN form — see Plaster.tsx. */}
+      <Plaster />
+
+      <View style={styles.status}>
+        {back ? (
+          <Pressable
+            onPress={() => navigation.goBack()}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            hitSlop={12}
+            style={styles.control}
+          >
+            <Icon name="back" size={24} color={colors.muted} />
+          </Pressable>
+        ) : (
+          <Text style={[styles.label, { color: colors.muted }]}>
+            {new Date().toLocaleDateString(undefined, {
+              weekday: 'short',
+              day: 'numeric',
+              month: 'short',
+            })}
+          </Text>
+        )}
+
+        <View style={styles.controls}>
+          <SyncChip />
+          <LampToggle />
+          {back ? null : (
+            <Pressable
+              onPress={() => navigation.navigate('Settings')}
+              accessibilityRole="button"
+              accessibilityLabel="Settings"
+              hitSlop={12}
+              style={styles.control}
+            >
+              <Icon name="settings" size={24} color={colors.muted} />
+            </Pressable>
+          )}
+        </View>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={[styles.content, contentStyle]}
+        // Tapping a field then reaching for a stepper should not need the
+        // keyboard dismissed first.
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text style={[styles.hero, { color: colors.ink }]}>{title}</Text>
+        {children}
+      </ScrollView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  ground: { flex: 1 },
+  status: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACE.lg,
+    minHeight: TAP.min / 2,
+  },
+  controls: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  control: {
+    minWidth: TAP.min / 2,
+    minHeight: TAP.min / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  content: { padding: SPACE.lg, gap: SPACE.md, paddingBottom: SPACE.xl },
+  hero: { fontFamily: FONTS.display, fontSize: TYPE.hero, marginBottom: SPACE.xs },
+  label: {
+    fontFamily: FONTS.data,
+    fontSize: TYPE.label,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+});

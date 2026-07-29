@@ -1,0 +1,87 @@
+import { createElement, forwardRef, type ReactNode } from 'react';
+
+/**
+ * React Native, as far as a screen test needs it to exist.
+ *
+ * Aliased in for `tests/screens/**` only. This is a deliberate seam and it is
+ * worth being precise about what it does and does not buy, because a harness
+ * that oversells itself is worse than no harness:
+ *
+ * **It proves** every screen mounts without throwing, its hooks run in a legal
+ * order, its effects subscribe and read the real SQLite store, its style
+ * callbacks execute against the real theme tokens, and pressing its controls
+ * enqueues the mutations the contracts actually accept.
+ *
+ * **It does not prove** layout, scrolling, gestures, native module behaviour,
+ * or that anything looks right. Those need a handset, and the project has said
+ * from the start that the bundler is not one.
+ *
+ * The alternative — transforming React Native's real Flow-typed source under
+ * vitest — buys a component tree built from the same primitives and still
+ * proves nothing about layout, because there is no layout engine either way.
+ * It costs a jest preset and a babel pipeline for that.
+ *
+ * Types are NOT stubbed: `tsc` still resolves `react-native` to the real
+ * package, so a screen using a prop that does not exist is a typecheck error
+ * exactly as before. Only the runtime is swapped.
+ */
+
+type Props = Record<string, unknown> & { children?: ReactNode };
+
+/**
+ * A host element carrying its props through.
+ *
+ * `style` is resolved when it is a function so a `({ pressed }) => …` callback
+ * actually executes — that is where a missing theme token would throw, and it
+ * is one of the few real failures this layer can catch.
+ */
+function host(name: string) {
+  const Component = forwardRef<unknown, Props>(function Host(props, ref) {
+    const { style, children, ...rest } = props;
+    const resolved = typeof style === 'function' ? (style as (s: unknown) => unknown)({ pressed: false }) : style;
+    return createElement(name, { ...rest, style: resolved, ref }, children as ReactNode);
+  });
+  Component.displayName = name;
+  return Component;
+}
+
+export const View = host('View');
+export const Text = host('Text');
+export const TextInput = host('TextInput');
+export const Pressable = host('Pressable');
+export const ScrollView = host('ScrollView');
+export const Image = host('Image');
+export const ActivityIndicator = host('ActivityIndicator');
+
+export const StyleSheet = {
+  create: <T extends Record<string, unknown>>(styles: T): T => styles,
+  flatten: (style: unknown): unknown => (Array.isArray(style) ? Object.assign({}, ...style.flat()) : style),
+  hairlineWidth: 1,
+  absoluteFillObject: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+};
+
+/** A phone-shaped viewport, so the Tally's fraction-of-short-edge maths runs. */
+export function useWindowDimensions(): { width: number; height: number } {
+  return { width: 390, height: 844 };
+}
+
+export function useColorScheme(): 'light' | 'dark' {
+  return 'light';
+}
+
+export const AppState = {
+  currentState: 'active' as const,
+  addEventListener: (): { remove: () => void } => ({ remove: () => undefined }),
+};
+
+/** Records what was shared, so the invite screen can be asserted on. */
+export const shared: string[] = [];
+
+export const Share = {
+  share: async (content: { message?: string }): Promise<{ action: string }> => {
+    if (content.message !== undefined) shared.push(content.message);
+    return { action: 'sharedAction' };
+  },
+};
+
+export const Platform = { OS: 'android' as const, select: <T,>(o: { android?: T; default?: T }) => o.android ?? o.default };

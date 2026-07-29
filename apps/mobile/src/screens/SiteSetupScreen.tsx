@@ -1,0 +1,298 @@
+import { useCallback, useState } from 'react';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import { isValidMonthDay, monthDay, newId, normaliseZoneValue } from '@steading/contracts';
+import { describeLogFailure } from '@steading/core/sync/failure';
+import { Body, Panel } from '../components/Panel';
+import { Screen } from '../components/Screen';
+import { useNav } from '../hooks/useNav';
+import { useLog } from '../hooks/useSync';
+import { useTheme } from '../theme/ThemeProvider';
+import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
+
+/**
+ * Where the farm is, in the two senses that matter.
+ *
+ * **Zone and frost dates are both asked for, because they answer different
+ * questions.** The zone is the average annual minimum winter temperature and
+ * decides what SURVIVES — fruit trees, asparagus, rhubarb, canes, perennial
+ * herbs. The frost dates are the growing window and decide WHEN every annual
+ * goes in. Neither can be computed from the other.
+ *
+ * The zone is optional and the frost dates are not, and that ordering is
+ * deliberate: nothing on the Growing tab works without a growing window, and
+ * plenty works without knowing whether a fig will survive.
+ *
+ * Typed rather than looked up, for now. The bundled US table and the online
+ * lookup both exist to save someone typing on day one — they are conveniences
+ * over this screen, not replacements for it, because a farmer knows their own
+ * land better than a postcode does.
+ */
+
+const MONTHS = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+export function SiteSetupScreen(): React.ReactElement {
+  const log = useLog();
+  const nav = useNav();
+  const { colors } = useTheme();
+
+  const [name, setName] = useState('');
+  const [zone, setZone] = useState('');
+  const [lastMonth, setLastMonth] = useState(4); // May, zero-indexed
+  const [lastDay, setLastDay] = useState('15');
+  const [firstMonth, setFirstMonth] = useState(9); // October
+  const [firstDay, setFirstDay] = useState('5');
+  const [saving, setSaving] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+
+  const lastSpring = monthDay(lastMonth + 1, Number(lastDay) || 0);
+  const firstAutumn = monthDay(firstMonth + 1, Number(firstDay) || 0);
+  const datesValid = isValidMonthDay(lastSpring) && isValidMonthDay(firstAutumn);
+
+  const save = useCallback(async () => {
+    if (saving || !datesValid) return;
+    setSaving(true);
+
+    try {
+      await log({
+        entity: 'site',
+        op: 'create',
+        targetId: newId(),
+        payload: {
+          name: name.trim() || 'The farm',
+          frost: { lastSpring, firstAutumn, source: 'entered' as const },
+          // USDA because that is what the bundled data speaks. Stored WITH its
+          // system, never as a bare string — "7a" means nothing on its own,
+          // and a bare column is a US-only column wearing a general name.
+          ...(zone.trim() === ''
+            ? {}
+            : { zone: { system: 'usda' as const, value: normaliseZoneValue(zone) } }),
+        },
+      });
+    } catch (error) {
+      setSaving(false);
+      setFailure(describeLogFailure(error));
+      return;
+    }
+
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    nav.goBack();
+  }, [saving, datesValid, log, name, lastSpring, firstAutumn, zone, nav]);
+
+  return (
+    <Screen title="Your ground" back>
+      <Panel label="Why this matters">
+        <Body>
+          Frost dates decide when everything goes in — sow six weeks before the last one, count
+          back from the first for autumn crops. Your zone is a different question: it decides
+          what survives the winter.
+        </Body>
+      </Panel>
+
+      <Field label="What do you call this place?">
+        <TextInput
+          value={name}
+          onChangeText={setName}
+          placeholder="The farm"
+          placeholderTextColor={colors.muted}
+          maxLength={80}
+          style={[
+            styles.field,
+            { backgroundColor: colors.raised, borderColor: colors.border, color: colors.ink },
+          ]}
+        />
+      </Field>
+
+      <Field label="Last spring frost">
+        <DatePick
+          month={lastMonth}
+          day={lastDay}
+          onMonth={setLastMonth}
+          onDay={setLastDay}
+        />
+      </Field>
+
+      <Field label="First autumn frost">
+        <DatePick
+          month={firstMonth}
+          day={firstDay}
+          onMonth={setFirstMonth}
+          onDay={setFirstDay}
+        />
+      </Field>
+
+      <Field label="Hardiness zone (optional)">
+        <TextInput
+          value={zone}
+          onChangeText={setZone}
+          placeholder="7a"
+          placeholderTextColor={colors.muted}
+          autoCapitalize="none"
+          maxLength={8}
+          style={[
+            styles.field,
+            { backgroundColor: colors.raised, borderColor: colors.border, color: colors.ink },
+          ]}
+        />
+        <Body>
+          USDA. Leave it blank if you do not know — it only affects what the app says about
+          perennials surviving winter, and it warns rather than stops you.
+        </Body>
+      </Field>
+
+      {!datesValid ? (
+        <Panel>
+          <Body>Those dates are not both real days. Check the numbers.</Body>
+        </Panel>
+      ) : null}
+
+      {failure ? (
+        <Panel>
+          <Body>{failure}</Body>
+        </Panel>
+      ) : null}
+
+      <Pressable
+        onPress={() => void save()}
+        disabled={saving || !datesValid}
+        accessibilityRole="button"
+        testID="save-site"
+        style={({ pressed }) => [
+          styles.save,
+          {
+            backgroundColor: colors.lantern,
+            opacity: saving || !datesValid ? 0.4 : pressed ? 0.8 : 1,
+          },
+        ]}
+      >
+        <Text style={styles.saveLabel}>Save</Text>
+      </Pressable>
+    </Screen>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  const { colors } = useTheme();
+  return (
+    <View style={styles.section}>
+      <Text style={[styles.label, { color: colors.muted }]}>{label}</Text>
+      {children}
+    </View>
+  );
+}
+
+/**
+ * Month chips and a day field.
+ *
+ * Not a date picker: a native one opens a wheel showing a YEAR, and a frost
+ * date is a fact about a place rather than about 2026. Asking for the year
+ * would be asking a question with no right answer.
+ */
+function DatePick({
+  month,
+  day,
+  onMonth,
+  onDay,
+}: {
+  month: number;
+  day: string;
+  onMonth: (m: number) => void;
+  onDay: (d: string) => void;
+}) {
+  const { colors } = useTheme();
+
+  return (
+    <View style={styles.date}>
+      <View style={styles.months}>
+        {MONTHS.map((label, index) => (
+          <Pressable
+            key={label}
+            onPress={() => {
+              void Haptics.selectionAsync();
+              onMonth(index);
+            }}
+            accessibilityRole="button"
+            accessibilityState={{ selected: month === index }}
+            style={({ pressed }) => [
+              styles.month,
+              {
+                backgroundColor: month === index ? colors.lantern : colors.raised,
+                borderColor: month === index ? colors.lanternInk : colors.border,
+                opacity: pressed ? 0.75 : 1,
+              },
+            ]}
+          >
+            <Text
+              style={[styles.monthLabel, { color: month === index ? '#241c14' : colors.ink }]}
+            >
+              {label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      <TextInput
+        value={day}
+        onChangeText={(text) => onDay(text.replace(/[^0-9]/g, '').slice(0, 2))}
+        keyboardType="number-pad"
+        inputMode="numeric"
+        maxLength={2}
+        accessibilityLabel="Day of the month"
+        style={[
+          styles.day,
+          { backgroundColor: colors.raised, borderColor: colors.border, color: colors.ink },
+        ]}
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  section: { gap: SPACE.sm },
+  label: {
+    fontFamily: FONTS.data,
+    fontSize: TYPE.label,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  field: {
+    minHeight: TAP.min,
+    borderRadius: RADII.softHead,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: SPACE.lg,
+    fontFamily: FONTS.body,
+    fontSize: TYPE.body,
+  },
+  date: { gap: SPACE.sm },
+  months: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
+  month: {
+    minWidth: 64,
+    minHeight: TAP.min,
+    borderRadius: RADII.softHead,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  monthLabel: { fontFamily: FONTS.body, fontSize: TYPE.body },
+  day: {
+    minHeight: TAP.min,
+    width: 96,
+    borderRadius: RADII.softHead,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: SPACE.lg,
+    fontFamily: FONTS.data,
+    fontSize: TYPE.lede,
+    textAlign: 'center',
+  },
+  save: {
+    minHeight: TAP.primary,
+    borderRadius: RADII.softHead,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: SPACE.lg,
+  },
+  saveLabel: { fontFamily: FONTS.display, fontSize: TYPE.lede, color: '#241c14' },
+});

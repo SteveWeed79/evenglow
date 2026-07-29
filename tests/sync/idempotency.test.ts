@@ -1,7 +1,7 @@
 import { ulid } from 'ulid';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import type { MutationResult } from '@steading/contracts';
-import type { SessionClaims } from '@/server/auth/session';
+import type { SessionClaims } from '@steading/api/auth/claims';
 import { scopedOn } from '@steading/api/db/scoped';
 import { applyBatch } from '@steading/api/sync/apply';
 import { makeMutation } from '../support/fixtures';

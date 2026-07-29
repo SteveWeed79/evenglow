@@ -192,12 +192,101 @@ So the design work is additional, not incidental, and R4 is where it lands:
 
 ---
 
-## 9. What I need from you
+## 9. Answered
 
-1. **Expo or bare RN?** (§5 — and really: is there a Mac?)
-2. **Does the repo stay a monorepo** with `apps/api` alongside a new `apps/mobile`,
-   or does the app move out? Recommendation: keep it. The contracts package is
-   shared by both and that is the whole reason it exists.
-3. **Do we keep the Next.js web app at all?** It is currently the only thing with
-   a sign-in screen. Recommendation: keep it running until R5 lands, then decide
-   whether a web client is still wanted on its own merits.
+1. **Expo.** There is no Mac, so EAS Build is the only route to an iOS binary
+   and this is not a preference.
+2. **Monorepo stays.** `apps/mobile` alongside `apps/api`, sharing
+   `packages/contracts`.
+3. **The web app stays until R5.** It is the only client with a sign-in screen,
+   which is also why the IndexedDB store is not deleted at R3 as originally
+   planned — deleting it would break the one thing that can currently log in.
+
+## 10. Status
+
+- **R1 — the shell.** Done. Expo SDK 57, React Navigation, tokens as a
+  TypeScript module, the icon set on `react-native-svg`. Metro resolves the
+  monorepo under pnpm with no `node-linker=hoisted`.
+- **R2 — storage.** Done. `SqlDriver` over `expo-sqlite`, `openSqliteStore`
+  unchanged on top. The existing LocalStore suite runs against it as a third
+  backing; 430 tests → 460.
+- **R3 — the engine.** Done. Ported unchanged; `lock.ts` and the
+  storage-persistence request fall away with the browser. New: AppState and
+  network triggers, `boot/start.ts`, the sync chip.
+- **R4 — screens.** Next. The design pass happens here, not a transliteration
+  of the CSS. Scope is `docs/DOMAIN-SCOPE.md`.
+- **R5 — auth.** Secure token storage, sign-in, refresh. The web app retires
+  here and the IndexedDB store goes with it.
+- **R6 — the exit gate.** On hardware. Not re-earned from zero: the store is
+  proven, the engine is proven, only the driver beneath them is new.
+
+## 11. Two things this migration changed about the design
+
+**The arch does not survive as a token.** `--arch` is an elliptical border
+radius — `50% 50% .5rem .5rem / 2rem 2rem .5rem .5rem` — and React Native has
+only circular per-corner radii. There is no token that reproduces it, so
+anything needing a real arch draws one in SVG. `Panel` is honestly a rectangle
+rather than dishonestly a doorway until then.
+
+**Growing takes a tab.** Crops are half of a small farm and had no home in the
+bar; More was never a place you go. Today · Stock · Growing · Iron, with
+settings pushed from the header.
+
+---
+
+## 12. The design handoff's flagged items, and what happened to them
+
+`native/PORTING.md` in the third handoff lists what could not survive the port.
+Each item and its resolution:
+
+| Flagged | Resolution |
+|---|---|
+| **§0 — does RN replace Capacitor, or is it a second client?** | **Replaces.** `docs/NATIVE-PIVOT.md` is marked superseded and CLAUDE.md's stack line is corrected. See below — the premise behind the question had already dissolved. |
+| `--arch` elliptical radius | `components/Arch.tsx`, adopted. Geometry split into `theme/arch.ts` so the suite can reach it without loading React Native. |
+| `:root` custom properties | `theme/tokens.ts` + `ThemeProvider`, three themes. |
+| `color-mix()` | Literals, each carrying the expression it came from. |
+| `background-blend-mode` plaster grain | **Solved.** `scripts/make-plaster.mjs` generates a 64dp greyscale tile at 1×/2×/3× from a fixed seed; `components/Plaster.tsx` renders it. |
+| Inset `box-shadow` (the worn edge) | **Solved.** `components/Worn.tsx` — two hairlines. An inset shadow with zero blur and a 1px offset *is* two hairlines. |
+| Icons: no sprite, `color` required, stroke on `<Svg>` | Adopted verbatim from `native/Icon.tsx` (v3, 56 marks, both masters). |
+| R4 / R7 / `check:icons` "port them, do not drop them" | **Ported.** `tests/unit/native-tokens.test.ts` and `scripts/check-icons.mjs`. |
+| Variable font axes | `FONTS.display` names a static cut, and a test asserts it still does. |
+| `clamp()` type | `TYPE.tally` is a viewport fraction, asserted to stay below 1. |
+
+### Why §0 was already answered
+
+The handoff's concern was that a second client would mean *"the sync engine
+needs a portable core, which is a much bigger job than the design layer."*
+
+It already has one. `LocalStore` is a port with two implementations held to a
+single suite — that is what D9 built, under Capacitor, before any of this. So
+R2 put `expo-sqlite` underneath the *same* `openSqliteStore`: 592 lines
+unchanged, same migration ladder, and the existing suite ran against the new
+driver as a third backing. R3 ported the engine with no changes at all.
+
+`NATIVE-PIVOT.md` argued that RN meant rebuilding the storage layer and
+re-earning Phase 2's gate from scratch. True when written; overtaken by the
+SQLite work landing anyway. The gate is re-earned **on hardware** at R6, not
+from zero.
+
+### Two things sent back to design, and both came back fixed
+
+Handoff **3.1** answers both. Adopted wholesale — the design system owns these
+decisions, so where its values differ from the ones derived here, its values win.
+
+**The tab bar's brass failed contrast in daylight.** `lantern` (`#e9b23c`) on
+the daylight ground measures **1.55:1** — below even the 3:1 floor for a
+graphical object, let alone the text it was tinting. The handoff had already
+solved exactly this for bright sun by darkening the token; nobody had caught
+that daylight has the same problem.
+
+`lanternInk` is now in the design system proper, with the reasoning stated
+better than the version derived here: *"`lantern` is a fill, not an ink …
+theme-scoped, because on loam the plain lantern already clears 8:1 and
+darkening it there would only dim the one warm thing in the interface."*
+Its values (`#8a5b00` in daylight and sun, unchanged brass in lamplight) clear
+4.71:1 at worst, and `tests/unit/native-tokens.test.ts` holds them there.
+
+**The set had no `growing` mark**, so `streak-plant` was standing in — a mark
+the manifest defines as the chore-streak charm. The set is now 57 marks with a
+real `growing`, and the tab uses it. `more` stays in the set although no tab
+uses it; an overflow control may yet want it.

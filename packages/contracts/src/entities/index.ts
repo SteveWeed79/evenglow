@@ -20,6 +20,29 @@ import {
   maintenanceCreateSchema,
   maintenanceUpdateSchema,
 } from './iron';
+import { careLogCreateSchema } from './care';
+import { noteCreateSchema, noteUpdateSchema } from './notes';
+import {
+  breedingCreateSchema,
+  breedingUpdateSchema,
+  feedPlanCreateSchema,
+  feedPlanUpdateSchema,
+  incubationCreateSchema,
+  incubationUpdateSchema,
+  shearingCreateSchema,
+  weightCreateSchema,
+} from './breeding';
+import {
+  bedCreateSchema,
+  bedUpdateSchema,
+  harvestCreateSchema,
+  plantingCreateSchema,
+  plantingUpdateSchema,
+  siteCreateSchema,
+  siteUpdateSchema,
+  varietyCreateSchema,
+  varietyUpdateSchema,
+} from './growing';
 import {
   deleteSchema,
   inventoryCreateSchema,
@@ -31,8 +54,13 @@ import {
 } from './ops';
 
 export * from './livestock';
+export * from './produces';
 export * from './iron';
 export * from './ops';
+export * from './growing';
+export * from './breeding';
+export * from './care';
+export * from './notes';
 
 type PayloadKey = `${Entity}:${Op}`;
 
@@ -78,6 +106,42 @@ export const PAYLOAD_SCHEMAS: Partial<Record<PayloadKey, z.ZodType>> = {
   'photo:update': photoUpdateSchema,
   'photo:delete': deleteSchema,
 
+  'site:create': siteCreateSchema,
+  'site:update': siteUpdateSchema,
+  'site:delete': deleteSchema,
+
+  'bed:create': bedCreateSchema,
+  'bed:update': bedUpdateSchema,
+  'bed:delete': deleteSchema,
+
+  'variety:create': varietyCreateSchema,
+  'variety:update': varietyUpdateSchema,
+  'variety:delete': deleteSchema,
+
+  'planting:create': plantingCreateSchema,
+  'planting:update': plantingUpdateSchema,
+  'planting:delete': deleteSchema,
+
+  'breeding:create': breedingCreateSchema,
+  'breeding:update': breedingUpdateSchema,
+  'breeding:delete': deleteSchema,
+
+  'incubation:create': incubationCreateSchema,
+  'incubation:update': incubationUpdateSchema,
+  'incubation:delete': deleteSchema,
+
+  'feedPlan:create': feedPlanCreateSchema,
+  'feedPlan:update': feedPlanUpdateSchema,
+  'feedPlan:delete': deleteSchema,
+
+  /**
+   * A note is a message rather than a measurement, so it can be taken back.
+   * Only the body is editable — see `notes.ts`.
+   */
+  'note:create': noteCreateSchema,
+  'note:update': noteUpdateSchema,
+  'note:delete': deleteSchema,
+
   // Append-only entities — create only, by construction
   'eggLog:create': eggLogCreateSchema,
   'productionLog:create': productionLogCreateSchema,
@@ -85,6 +149,10 @@ export const PAYLOAD_SCHEMAS: Partial<Record<PayloadKey, z.ZodType>> = {
   'mortality:create': mortalityCreateSchema,
   'predator:create': predatorCreateSchema,
   'hourReading:create': hourReadingCreateSchema,
+  'harvest:create': harvestCreateSchema,
+  'weight:create': weightCreateSchema,
+  'shearing:create': shearingCreateSchema,
+  'careLog:create': careLogCreateSchema,
 };
 
 /** Returns the schema for an entity+op pair, or undefined if the op is forbidden. */

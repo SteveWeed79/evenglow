@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import type { SqlDriver } from '@steading/app/db/driver';
-import { currentVersion, migrate, MIGRATIONS, SCHEMA_VERSION } from '@steading/app/db/migrations';
+import type { SqlDriver } from '@steading/core/db/driver';
+import { currentVersion, migrate, MIGRATIONS, SCHEMA_VERSION } from '@steading/core/db/migrations';
 import { nodeSqlDriver } from '../support/sqlite';
 
 /**

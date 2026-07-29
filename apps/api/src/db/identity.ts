@@ -53,6 +53,64 @@ export async function insertUser(user: UserDoc): Promise<void> {
   await (await users()).insertOne({ ...user, email: normalizeEmail(user.email) });
 }
 
+export async function findOrgById(id: string): Promise<OrgDoc | null> {
+  return (await orgs()).findOne({ _id: id });
+}
+
 export async function insertOrg(org: OrgDoc): Promise<void> {
   await (await orgs()).insertOne(org);
+}
+
+// ── membership ───────────────────────────────────────────────────────────────
+
+/**
+ * The org-scoped user reads.
+ *
+ * Every one takes orgId and puts it in the filter, and none of them takes a
+ * filter from a caller. That is weaker than `scoped()`, which makes forgetting
+ * structurally impossible — but this collection cannot be scoped, because
+ * sign-in has to find a user before an orgId exists. `tests/isolation` covers
+ * what the mechanism cannot.
+ */
+
+/** Members of one farm, newest first. Password hashes never leave this module. */
+export async function listMembers(orgId: string): Promise<Omit<UserDoc, 'passwordHash'>[]> {
+  return (await users())
+    .find({ orgId }, { projection: { passwordHash: 0 } })
+    .sort({ createdAt: 1 })
+    .limit(200)
+    .toArray() as Promise<Omit<UserDoc, 'passwordHash'>[]>;
+}
+
+/**
+ * How many active owners a farm has.
+ *
+ * Disabled owners are not counted, deliberately: a farm whose only owner has
+ * been disabled has no one who can act, so treating that account as the last
+ * owner would let the state persist rather than surfacing it.
+ */
+export async function countOwners(orgId: string): Promise<number> {
+  return (await users()).countDocuments({ orgId, role: 'owner', disabledAt: { $exists: false } });
+}
+
+/** Scoped by orgId, so a token from one farm cannot move a role on another. */
+export async function setUserRole(orgId: string, userId: string, role: Role): Promise<boolean> {
+  const result = await (await users()).updateOne({ _id: userId, orgId }, { $set: { role } });
+  return result.matchedCount === 1;
+}
+
+/**
+ * Removal is a disable, never a delete.
+ *
+ * Their records stay — a morning's egg logs do not stop being true because the
+ * person who typed them left, and a delete would either orphan them or take
+ * them with it. `requireMutationClaims` already refuses a disabled account on
+ * every write, so access ends immediately.
+ */
+export async function disableUser(orgId: string, userId: string, at: Date): Promise<boolean> {
+  const result = await (await users()).updateOne(
+    { _id: userId, orgId, disabledAt: { $exists: false } },
+    { $set: { disabledAt: at } },
+  );
+  return result.matchedCount === 1;
 }

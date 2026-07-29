@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { readOutboxBySeq } from '@steading/app/db/open';
-import { discardRejected, listRejected, retryRejected } from '@steading/app/sync/inbox';
-import { flushOnce, MAX_ATTEMPTS, type SyncTransport } from '@steading/app/sync/flush';
-import { checkIntegrity, enqueue, queueDepth } from '@steading/app/sync/queue';
+
+import { discardRejected, listRejected, retryRejected } from '@steading/core/sync/inbox';
+import { flushOnce, MAX_ATTEMPTS, type SyncTransport } from '@steading/core/sync/flush';
+import { checkIntegrity, enqueue, queueDepth } from '@steading/core/sync/queue';
 import { MAX_BATCH_SIZE, newId, type Mutation, type MutationStatus } from '@steading/contracts';
-import { freshDb } from '../support/idb';
+import { freshStore, readOutboxBySeq } from '../support/store';
 
 function eggLog() {
   return {
@@ -27,7 +27,7 @@ function respondAll(status: MutationStatus, reason?: string): SyncTransport {
 }
 
 describe('flush', () => {
-  beforeEach(freshDb);
+  beforeEach(freshStore);
 
   it('clears applied mutations and records them as cleared', async () => {
     for (let i = 0; i < 3; i++) await enqueue(eggLog());
@@ -177,7 +177,7 @@ describe('flush', () => {
 });
 
 describe('rejected inbox', () => {
-  beforeEach(freshDb);
+  beforeEach(freshStore);
 
   it('puts a retried mutation back in the queue with a clean slate', async () => {
     await enqueue(eggLog());

@@ -60,6 +60,72 @@ export const INDEXES: Record<CollectionName, IndexDescription[]> = {
   tasks: [{ key: { orgId: 1, dueAtDate: 1, completedAt: 1 } }],
   inventory: [{ key: { orgId: 1, _id: 1 } }, { key: { orgId: 1, reorderBelow: 1 } }],
   photos: [{ key: { orgId: 1, subjectId: 1 } }, { key: { orgId: 1, uploadedAt: -1 } }],
+
+  // Growing. A farm has one or two sites and a handful of beds, so these are
+  // sized for the queries rather than for volume — except plantings and
+  // harvests, which accumulate for as long as the farm exists.
+  sites: [{ key: { orgId: 1, _id: 1 } }],
+  beds: [{ key: { orgId: 1, siteId: 1, archivedAt: 1 } }],
+  varieties: [
+    { key: { orgId: 1, _id: 1 } },
+    // "What can I plant?" filters by crop; "what is due to sow?" needs family
+    // only after a bed is chosen, so crop leads.
+    { key: { orgId: 1, crop: 1, archivedAt: 1 } },
+  ],
+  plantings: [
+    // The season view: one bed, one year, in date order.
+    { key: { orgId: 1, bedId: 1, season: 1 } },
+    /**
+     * Rotation asks a question no other index answers: what has been in this
+     * bed, ever, and from which family. It walks back `rotationYears` seasons,
+     * so it must be ordered by season descending within a bed.
+     */
+    { key: { orgId: 1, bedId: 1, season: -1, varietyId: 1 } },
+    // The Today list: what is due next, across every bed.
+    { key: { orgId: 1, status: 1, plannedSowAt: 1 } },
+  ],
+  harvests: [
+    { key: { orgId: 1, plantingId: 1, occurredAt: -1 } },
+    { key: { orgId: 1, occurredAt: -1 } },
+  ],
+
+  // Births and hatches. Both are asked "what is coming up?", which is a scan
+  // over open records ordered by the date they started -- the due date is
+  // derived, so it cannot be indexed.
+  breedings: [
+    { key: { orgId: 1, damId: 1, bredAt: -1 } },
+    { key: { orgId: 1, bornAt: 1, bredAt: 1 } },
+  ],
+  incubations: [{ key: { orgId: 1, hatchedAt: 1, setAt: 1 } }],
+
+  // A growth curve is a series, so both of these are read in time order for
+  // one subject and almost never singly.
+  weights: [
+    { key: { orgId: 1, animalId: 1, occurredAt: -1 } },
+    { key: { orgId: 1, flockId: 1, occurredAt: -1 } },
+  ],
+  shearings: [
+    { key: { orgId: 1, animalId: 1, occurredAt: -1 } },
+    { key: { orgId: 1, flockId: 1, occurredAt: -1 } },
+  ],
+  // The current ration is the one with no end date, which is the common read.
+  feedPlans: [{ key: { orgId: 1, flockId: 1, endedAt: 1 } }],
+  /**
+   * "When was this last done?" is the only question asked of these, and it is
+   * asked per group per kind — so the kind is in the key, not filtered after.
+   */
+  careLogs: [
+    { key: { orgId: 1, flockId: 1, kind: 1, occurredAt: -1 } },
+    { key: { orgId: 1, animalId: 1, kind: 1, occurredAt: -1 } },
+  ],
+  /**
+   * The only query anything makes of a note: the thread on one thing, newest
+   * first. Compound on both halves of the subject because a `flock` id and an
+   * `equipment` id are drawn from the same ULID space — matching on the id
+   * alone would work today and be a cross-subject leak the day two entities
+   * ever shared one.
+   */
+  notes: [{ key: { orgId: 1, subjectEntity: 1, subjectId: 1, occurredAt: -1 } }],
 };
 
 /** Identity collections are not tenant-scoped; they need their own uniqueness rules. */
@@ -75,6 +141,21 @@ const IDENTITY_INDEXES: Record<string, IndexDescription[]> = {
      * control and it lives in the row, so a row that has outlived its own
      * expiry protects nothing — it is just a growing table of dead secrets to
      * lose in a disclosure.
+     */
+    { key: { expiresAt: 1 }, expireAfterSeconds: 0 },
+  ],
+  invites: [
+    // The farm's pending list. orgId leads, as everywhere else.
+    { key: { orgId: 1, createdAt: -1 } },
+    // Revoking names the invite by its public id, within the farm.
+    { key: { orgId: 1, publicId: 1 }, unique: true },
+    /**
+     * Expired invites delete themselves.
+     *
+     * An invite that has outlived its own expiry protects nothing and grants
+     * nothing — it is a row of dead secrets to lose in a disclosure. Accepted
+     * and revoked ones go the same way, since expiresAt is set at creation and
+     * neither state extends it.
      */
     { key: { expiresAt: 1 }, expireAfterSeconds: 0 },
   ],

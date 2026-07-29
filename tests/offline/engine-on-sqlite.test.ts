@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { newId } from '@steading/contracts';
-import { openSqliteStore } from '@steading/app/db/sqlite-store';
-import { setLocalStore, resetLocalStore } from '@steading/app/db/store';
-import { enqueue, queueDepth, rejectedCount } from '@steading/app/sync/queue';
-import { flushOnce } from '@steading/app/sync/flush';
-import { discardRejected, listRejected, retryRejected } from '@steading/app/sync/inbox';
-import { pullOnce, pulledThrough } from '@steading/app/sync/pull';
+import { openSqliteStore } from '@steading/core/db/sqlite-store';
+import { setLocalStore, resetLocalStore } from '@steading/core/db/store';
+import { enqueue, queueDepth, rejectedCount } from '@steading/core/sync/queue';
+import { flushOnce } from '@steading/core/sync/flush';
+import { discardRejected, listRejected, retryRejected } from '@steading/core/sync/inbox';
+import { pullOnce, pulledThrough } from '@steading/core/sync/pull';
 import { nodeSqlDriver } from '../support/sqlite';
 
 /**
