@@ -21,6 +21,7 @@ import { listBeds, listPlantings, listVarieties } from '@steading/core/read/grow
 import { listInventory, listMachines, listServices } from '@steading/core/read/iron';
 import { withdrawalsBySubject } from '@steading/core/read/withdrawals';
 import { subscribe } from '@steading/core/sync/engine';
+import { clearTrouble, reportTrouble } from './useTrouble';
 
 /**
  * Today's list, composed from the local projection.
@@ -210,11 +211,15 @@ export function useDues(): DuesView {
     }
 
     setView({ dues: todayList(rows, now), loading: false });
+    clearTrouble();
   }, []);
 
   // subscribe() publishes immediately, so the subscription performs the first
   // read — no separate initial fetch to keep in step with it.
-  useEffect(() => subscribe(() => void refresh()), [refresh]);
+  useEffect(
+    () => subscribe(() => void refresh().catch((error: unknown) => reportTrouble("today's list", error))),
+    [refresh],
+  );
 
   return view;
 }

@@ -6,6 +6,7 @@ import { Icon } from './Icon';
 import { LampToggle } from './LampToggle';
 import { Plaster } from './Plaster';
 import { SyncChip } from './SyncChip';
+import { useTrouble } from '../hooks/useTrouble';
 import type { RootParamList } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, SPACE, TAP, TYPE } from '../theme/tokens';
@@ -36,6 +37,7 @@ export function Screen({
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootParamList>>();
+  const trouble = useTrouble();
 
   return (
     <View style={[styles.ground, { backgroundColor: colors.ground, paddingTop: insets.top }]}>
@@ -88,6 +90,25 @@ export function Screen({
         keyboardShouldPersistTaps="handled"
       >
         <Text style={[styles.hero, { color: colors.ink }]}>{title}</Text>
+
+        {/* A read that failed, said out loud.
+            Above the content because the content is the thing that is missing:
+            a screen that renders nothing and explains nothing is the failure
+            this exists to end. It never replaces the screen — everything that
+            did load stays on it. */}
+        {trouble === null ? null : (
+          <View style={[styles.trouble, { borderColor: colors.rowan }]}>
+            <Text style={[styles.troubleTitle, { color: colors.rowan }]}>
+              Could not read {trouble.where}
+            </Text>
+            <Text style={[styles.troubleBody, { color: colors.ink }]}>
+              Nothing you have logged is lost — it is on this device. {trouble.message}
+            </Text>
+            {trouble.at === null ? null : (
+              <Text style={[styles.troubleAt, { color: colors.muted }]}>{trouble.at}</Text>
+            )}
+          </View>
+        )}
         {children}
       </ScrollView>
     </View>
@@ -95,6 +116,10 @@ export function Screen({
 }
 
 const styles = StyleSheet.create({
+  trouble: { gap: SPACE.xs, padding: SPACE.md, borderRadius: 8, borderWidth: 1 },
+  troubleTitle: { fontFamily: FONTS.bodyBold, fontSize: TYPE.body },
+  troubleBody: { fontFamily: FONTS.body, fontSize: TYPE.body, lineHeight: TYPE.body * 1.4 },
+  troubleAt: { fontFamily: FONTS.data, fontSize: TYPE.label - 1 },
   ground: { flex: 1 },
   status: {
     flexDirection: 'row',

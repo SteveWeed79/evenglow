@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { subscribe } from '@steading/core/sync/engine';
+import { clearTrouble, reportTrouble } from './useTrouble';
 
 /**
  * A local read that keeps itself current.
@@ -19,12 +20,19 @@ import { subscribe } from '@steading/core/sync/engine';
  * `read` must be stable — a module-level function, or wrapped in `useCallback`
  * by the caller. An inline arrow resubscribes on every render.
  */
-export function useLive<T>(read: () => Promise<T>): T | null {
+export function useLive<T>(read: () => Promise<T>, where = 'this screen'): T | null {
   const [value, setValue] = useState<T | null>(null);
 
   const refresh = useCallback(async () => {
-    setValue(await read());
-  }, [read]);
+    try {
+      setValue(await read());
+      clearTrouble();
+    } catch (error) {
+      // Stays null, so the caller keeps showing "not read yet" rather than an
+      // empty list. `Screen` puts the reason on the wall.
+      reportTrouble(where, error);
+    }
+  }, [read, where]);
 
   // subscribe() publishes immediately, so the subscription itself performs the
   // first read — no separate initial fetch to keep in step with it.
@@ -40,10 +48,14 @@ export function useLive<T>(read: () => Promise<T>): T | null {
  * showing a machine and its services would paint the machine first and the
  * services a frame later, which reads as the list appearing out of nowhere.
  */
-export function useLive2<A, B>(readA: () => Promise<A>, readB: () => Promise<B>): [A, B] | null {
+export function useLive2<A, B>(
+  readA: () => Promise<A>,
+  readB: () => Promise<B>,
+  where = 'this screen',
+): [A, B] | null {
   const both = useCallback(
     async (): Promise<[A, B]> => Promise.all([readA(), readB()]),
     [readA, readB],
   );
-  return useLive(both);
+  return useLive(both, where);
 }
