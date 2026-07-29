@@ -115,12 +115,19 @@ runs Fastify on port 3001. If a MongoDB is already listening it uses that
 instead. On Windows, `scripts/windows/Start the farm server.bat` does the same
 by double-click.
 
+`pnpm farm --new-password` (`Reset my password.bat`) sets a new password on an
+existing account. There is no reset flow in the product yet, so without it a
+development account whose password was stored wrong is unopenable. Values reach
+both it and the seed through the **environment**, never argv — a shell must not
+get a chance to rewrite a password, and argv shows up in a process list.
+
 The longhand, when you want the pieces separately:
 
 ```bash
 cp apps/mobile/.env.example apps/mobile/.env   # then edit EXPO_PUBLIC_API_URL
 pnpm dev:api                                   # Fastify, port 3001
-pnpm db:seed "Farm" you@example.com 'a good password'
+SEED_ORG=Farm SEED_EMAIL=you@example.com SEED_PASSWORD='a good password' pnpm db:seed
+SEED_EMAIL=you@example.com SEED_PASSWORD='a new one' pnpm db:password
 pnpm mobile:android                            # build and deploy to a device
 ```
 

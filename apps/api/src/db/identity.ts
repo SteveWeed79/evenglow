@@ -53,6 +53,23 @@ export async function insertUser(user: UserDoc): Promise<void> {
   await (await users()).insertOne({ ...user, email: normalizeEmail(user.email) });
 }
 
+/**
+ * Replaces a password hash, by email.
+ *
+ * There is no reset flow in the product yet — D7 is single-farm-first and the
+ * first account is made by `pnpm db:seed` — so this exists for the one case
+ * that is otherwise unrecoverable: a development account whose password was
+ * stored as something other than what its owner typed. It takes a hash, never
+ * a plaintext, so hashing parameters stay in one place.
+ */
+export async function setPasswordHash(email: string, passwordHash: string): Promise<boolean> {
+  const result = await (await users()).updateOne(
+    { email: normalizeEmail(email) },
+    { $set: { passwordHash } },
+  );
+  return result.matchedCount === 1;
+}
+
 export async function findOrgById(id: string): Promise<OrgDoc | null> {
   return (await orgs()).findOne({ _id: id });
 }
