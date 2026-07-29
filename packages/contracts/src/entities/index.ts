@@ -21,7 +21,7 @@ import {
   maintenanceUpdateSchema,
 } from './iron';
 import { careLogCreateSchema } from './care';
-import { noteCreateSchema } from './notes';
+import { noteCreateSchema, noteUpdateSchema } from './notes';
 import {
   breedingCreateSchema,
   breedingUpdateSchema,
@@ -133,6 +133,14 @@ export const PAYLOAD_SCHEMAS: Partial<Record<PayloadKey, z.ZodType>> = {
   'feedPlan:update': feedPlanUpdateSchema,
   'feedPlan:delete': deleteSchema,
 
+  /**
+   * A note is a message rather than a measurement, so it can be taken back.
+   * Only the body is editable — see `notes.ts`.
+   */
+  'note:create': noteCreateSchema,
+  'note:update': noteUpdateSchema,
+  'note:delete': deleteSchema,
+
   // Append-only entities — create only, by construction
   'eggLog:create': eggLogCreateSchema,
   'productionLog:create': productionLogCreateSchema,
@@ -144,7 +152,6 @@ export const PAYLOAD_SCHEMAS: Partial<Record<PayloadKey, z.ZodType>> = {
   'weight:create': weightCreateSchema,
   'shearing:create': shearingCreateSchema,
   'careLog:create': careLogCreateSchema,
-  'note:create': noteCreateSchema,
 };
 
 /** Returns the schema for an entity+op pair, or undefined if the op is forbidden. */

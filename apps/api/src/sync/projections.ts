@@ -1,5 +1,5 @@
 import type { CollectionName } from '../db/scoped';
-import { type Entity, isAppendOnly, type Op } from '@steading/contracts';
+import { type Entity, isAppendOnly, mayChangeNote, type Op, type Role } from '@steading/contracts';
 
 /**
  * Projection decisions, as pure functions.
@@ -46,11 +46,20 @@ export const ENTITY_COLLECTIONS: Record<Entity, CollectionName> = {
 export interface ExistingDoc {
   _id: string;
   archivedAt?: Date | null;
+  /**
+   * Who created it, stamped from the verified token at insert.
+   *
+   * Only consulted for notes, and never taken from a payload — a client that
+   * could name its own author could edit anyone's note by claiming to be them.
+   */
+  createdBy?: string;
 }
 
 export interface ProjectionContext {
   /** The current document at targetId, if any. */
   existing: ExistingDoc | null;
+  /** Who is asking, re-derived from the token. Consulted for notes. */
+  actor?: { userId: string; role: Role };
   /**
    * Highest hours already recorded for the machine this reading belongs to.
    * Only consulted for hourReading.
@@ -80,6 +89,37 @@ export function decideProjection(
   if (isAppendOnly(entity)) {
     return decideAppendOnly(entity, op, payload, context);
   }
+  if (entity === 'note') {
+    return decideNote(op, context);
+  }
+  return decideMutable(op, context);
+}
+
+/**
+ * A note, with the half of its rule that `canMutate` could not express.
+ *
+ * `canMutate` sees a role and an entity, so it can only answer "may a hand
+ * change notes at all". Whether they may change *this* note depends on who
+ * wrote it, and that is a fact about the document — so it is decided here,
+ * against the server's own `createdBy` stamp rather than anything the client
+ * sent.
+ *
+ * Refused rather than conflicted: a hand editing somebody else's note is not
+ * two people racing, it is one person doing something they are not allowed to
+ * do, and it must land in their rejected inbox saying so.
+ */
+function decideNote(op: Op, context: ProjectionContext): ProjectionDecision {
+  const { existing, actor } = context;
+
+  if (op !== 'create' && existing && actor) {
+    if (!mayChangeNote(actor.role, actor.userId, existing.createdBy)) {
+      return {
+        kind: 'rejected',
+        reason: 'That note was left by someone else. Only they, or the farm owner, can change it.',
+      };
+    }
+  }
+
   return decideMutable(op, context);
 }
 

@@ -18,6 +18,8 @@ export interface Note {
   subjectId: string;
   body: string;
   authorName?: string;
+  /** Claimed by the writing device, for drawing an edit button. Never authority. */
+  authorId?: string;
 }
 
 const storedNote = noteCreateSchema.partial();
@@ -39,7 +41,7 @@ export async function listNotes(): Promise<Note[]> {
         return [];
       }
 
-      const { occurredAt, subjectEntity, subjectId, body, authorName } = parsed.data;
+      const { occurredAt, subjectEntity, subjectId, body, authorName, authorId } = parsed.data;
       return [
         {
           id: record.targetId,
@@ -48,6 +50,7 @@ export async function listNotes(): Promise<Note[]> {
           subjectId,
           body,
           ...(authorName === undefined ? {} : { authorName }),
+          ...(authorId === undefined ? {} : { authorId }),
         } satisfies Note,
       ];
     })

@@ -47,6 +47,8 @@ interface MutationDoc extends Tenanted {
 interface ProjectedDoc extends Tenanted {
   archivedAt?: Date | null;
   createdAt?: Date;
+  /** Stable across edits, unlike `updatedBy`. See the insert branch. */
+  createdBy?: string;
   updatedAt?: Date;
   updatedBy?: string;
   updatedByDevice?: string;
@@ -159,6 +161,7 @@ async function project(
 
   const decision = decideProjection(mutation.entity, mutation.op, payload, {
     existing,
+    actor: { userId: claims.userId, role: claims.role },
     ...(mutation.entity === 'hourReading'
       ? { lastHours: await highestHours(scope, payload) }
       : {}),
@@ -174,7 +177,22 @@ async function project(
     case 'insert':
       await col.upsertOne(
         { _id: mutation.targetId },
-        { $setOnInsert: { ...payload, ...stamp, createdAt: new Date() } },
+        {
+          $setOnInsert: {
+            ...payload,
+            ...stamp,
+            createdAt: new Date(),
+            /**
+             * Who made it, and it does not move.
+             *
+             * `updatedBy` is overwritten by whoever edited last, so it cannot
+             * answer "is this yours" after a single edit. Notes need a stable
+             * answer to that, and every other entity is better off having one
+             * too.
+             */
+            createdBy: claims.userId,
+          },
+        },
       );
       break;
 

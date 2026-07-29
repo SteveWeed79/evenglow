@@ -83,7 +83,6 @@ export const APPEND_ONLY_ENTITIES = new Set<Entity>([
   'weight',
   'shearing',
   'careLog',
-  'note',
 ]);
 
 export function isAppendOnly(entity: Entity): boolean {

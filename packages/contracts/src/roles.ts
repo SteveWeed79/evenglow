@@ -25,10 +25,19 @@ export function isRole(value: unknown): value is Role {
  * second user exists. Flocks, equipment, and maintenance schedules are
  * read-only to them.
  *
- * Two deliberate exceptions, both required for a hand to work a morning:
+ * Three deliberate exceptions, all required for a hand to work a morning:
  *  - completing a chore (`task:update`), since the Today list is the job
  *  - attaching a photo (`photo:create`), since observations carry evidence
- * Neither lets them define new work, only discharge and document assigned work.
+ *  - leaving, fixing and removing a note (`note:*`)
+ *
+ * None lets them define new work, only discharge and document assigned work.
+ *
+ * **The note exception needs the second half of its rule elsewhere.** A hand
+ * may change *a* note as far as this function is concerned, because role and
+ * entity are all it is given — whether they may change *this* note depends on
+ * who wrote it, which needs the document. `mayChangeNote` decides that, and
+ * the applier checks it against the server's own `createdBy` stamp. Leaving
+ * that out would let one hand delete another's notes.
  */
 export function canMutate(role: Role, entity: Entity, op: Op): boolean {
   if (role === 'owner' || role === 'admin') return true;
@@ -36,6 +45,8 @@ export function canMutate(role: Role, entity: Entity, op: Op): boolean {
   if (isAppendOnly(entity)) return op === 'create';
   if (entity === 'task' && op === 'update') return true;
   if (entity === 'photo' && op === 'create') return true;
+  // Ownership is enforced by mayChangeNote at apply time — see above.
+  if (entity === 'note') return true;
 
   return false;
 }

@@ -1,5 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId, NOTE_SUBJECTS, noteCreateSchema, payloadSchemaFor } from '@steading/contracts';
+import {
+  isAppendOnly,
+  mayChangeNote,
+  newId,
+  NOTE_SUBJECTS,
+  noteCreateSchema,
+  noteUpdateSchema,
+  payloadSchemaFor,
+} from '@steading/contracts';
+import { decideProjection } from '@steading/api/sync/projections';
 import { listNotes, noteCounts, notesOn } from '@steading/core/read/notes';
 import { localStore } from '@steading/core/db/store';
 import { enqueue } from '@steading/core/sync/queue';
@@ -51,10 +60,52 @@ beforeEach(async () => {
 });
 
 describe('the contract', () => {
-  it('is create-only, like every other observation', () => {
+  it('can be taken back, unlike every other observation', () => {
+    // A note is a message rather than a measurement — see notes.ts.
     expect(payloadSchemaFor('note', 'create')).toBeDefined();
-    expect(payloadSchemaFor('note', 'update')).toBeUndefined();
-    expect(payloadSchemaFor('note', 'delete')).toBeUndefined();
+    expect(payloadSchemaFor('note', 'update')).toBeDefined();
+    expect(payloadSchemaFor('note', 'delete')).toBeDefined();
+    expect(isAppendOnly('note')).toBe(false);
+  });
+
+  it('lets an edit change the words and nothing else', () => {
+    expect(noteUpdateSchema.safeParse({ body: 'fixed' }).success).toBe(true);
+    // Moving a note to another animal is not an edit; nor is back-dating it.
+    expect(noteUpdateSchema.safeParse({ body: 'x', subjectId: newId() }).success).toBe(false);
+    expect(noteUpdateSchema.safeParse({ body: 'x', occurredAt: 1 }).success).toBe(false);
+    expect(noteUpdateSchema.safeParse({ body: '' }).success).toBe(false);
+  });
+
+  it('lets you change your own, and lets the farm owner change any', () => {
+    expect(mayChangeNote('hand', 'u1', 'u1')).toBe(true);
+    expect(mayChangeNote('hand', 'u1', 'u2')).toBe(false);
+    expect(mayChangeNote('admin', 'u1', 'u2')).toBe(true);
+    expect(mayChangeNote('owner', 'u1', 'u2')).toBe(true);
+    // Fails closed on an unknown author (invariant 10).
+    expect(mayChangeNote('hand', 'u1', undefined)).toBe(false);
+    expect(mayChangeNote('owner', 'u1', undefined)).toBe(true);
+  });
+
+  it('refuses an edit on someone else’s note at apply time', () => {
+    // The client hides the button; this is the half that enforces it, and it
+    // reads the server's own stamp rather than anything the client sent.
+    const asHand = decideProjection('note', 'update', { body: 'x' }, {
+      existing: { _id: 'n1', createdBy: 'u2' },
+      actor: { userId: 'u1', role: 'hand' },
+    });
+    expect(asHand.kind).toBe('rejected');
+
+    const asOwner = decideProjection('note', 'update', { body: 'x' }, {
+      existing: { _id: 'n1', createdBy: 'u2' },
+      actor: { userId: 'u1', role: 'owner' },
+    });
+    expect(asOwner.kind).toBe('update');
+
+    const own = decideProjection('note', 'delete', {}, {
+      existing: { _id: 'n1', createdBy: 'u1' },
+      actor: { userId: 'u1', role: 'hand' },
+    });
+    expect(own.kind).toBe('archive');
   });
 
   it('refuses a subject that is not a thing anyone stands in front of', () => {
@@ -93,6 +144,7 @@ describe('leaving one', () => {
     await aFarm();
     const screen = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
 
+    await screen.press(`notes-open-${GROUP}`);
     await screen.type(`note-body-${GROUP}`, 'Left teat looks hard, watch her');
     await screen.press(`note-save-${GROUP}`);
 
@@ -109,19 +161,19 @@ describe('leaving one', () => {
     await aFarm();
     const screen = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
 
+    await screen.press(`notes-open-${GROUP}`);
     await screen.type(`note-body-${GROUP}`, 'Gate latch is loose');
     await screen.press(`note-save-${GROUP}`);
 
     expect(screen.text()).toContain('Gate latch is loose');
     expect(screen.text()).toContain('Sam');
-    // Said once, where it matters.
-    expect(screen.text()).toContain('cannot be taken back');
   });
 
   it('clears the box so the next note starts empty', async () => {
     await aFarm();
     const screen = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
 
+    await screen.press(`notes-open-${GROUP}`);
     await screen.type(`note-body-${GROUP}`, 'Gate latch is loose');
     await screen.press(`note-save-${GROUP}`);
 
@@ -131,6 +183,7 @@ describe('leaving one', () => {
   it('will not send an empty one', async () => {
     await aFarm();
     const screen = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
+    await screen.press(`notes-open-${GROUP}`);
 
     expect(screen.get(`note-save-${GROUP}`).props.accessibilityState.disabled).toBe(true);
     await screen.type(`note-body-${GROUP}`, '   ');
@@ -142,6 +195,7 @@ describe('leaving one', () => {
     await aFarm();
     const screen = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
 
+    await screen.press(`notes-open-${GROUP}`);
     await screen.type(`note-body-${GROUP}`, 'Gate latch is loose');
     await screen.press(`note-save-${GROUP}`);
 
@@ -155,6 +209,7 @@ describe('staying on its own thing', () => {
     await aFarm();
 
     const group = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
+    await group.press(`notes-open-${GROUP}`);
     await group.type(`note-body-${GROUP}`, 'Worming is overdue');
     await group.press(`note-save-${GROUP}`);
 
@@ -182,6 +237,7 @@ describe('reaching the other person', () => {
     await aFarm();
     const screen = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
 
+    await screen.press(`notes-open-${GROUP}`);
     await screen.type(`note-body-${GROUP}`, 'Fixed the fence by the lane');
     await screen.press(`note-save-${GROUP}`);
 
@@ -225,5 +281,132 @@ describe('reaching the other person', () => {
     const screen = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
     expect(screen.text()).toContain('Moved them to the top field');
     expect(screen.text()).toContain('Alex');
+  });
+});
+
+describe('how it is displayed', () => {
+  it('stays out of the way until it is opened', async () => {
+    await aFarm();
+    const screen = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
+
+    // Collapsed: the composer is not on screen competing with the nine action
+    // rows underneath it.
+    expect(screen.has(`notes-open-${GROUP}`)).toBe(true);
+    expect(screen.has(`note-body-${GROUP}`)).toBe(false);
+
+    await screen.press(`notes-open-${GROUP}`);
+    expect(screen.has(`note-body-${GROUP}`)).toBe(true);
+
+    await screen.press(`notes-close-${GROUP}`);
+    expect(screen.has(`note-body-${GROUP}`)).toBe(false);
+  });
+
+  it('shows the count and the newest note without opening', async () => {
+    await aFarm();
+    for (const body of ['Gate latch is loose', 'Moved them to the top field']) {
+      await enqueue({
+        entity: 'note',
+        op: 'create',
+        targetId: newId(),
+        payload: {
+          occurredAt: body.startsWith('Moved') ? 2 : 1,
+          subjectEntity: 'flock',
+          subjectId: GROUP,
+          body,
+          authorName: 'Alex',
+        },
+      });
+    }
+
+    const screen = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
+    const collapsed = screen.get(`notes-open-${GROUP}`);
+
+    expect(collapsed.props.accessibilityLabel).toContain('2 notes');
+    // The newest, because it is almost always the one that matters.
+    expect(screen.text()).toContain('Moved them to the top field');
+  });
+});
+
+describe('taking one back', () => {
+  async function aNoteFrom(authorId: string): Promise<string> {
+    const id = newId();
+    await enqueue({
+      entity: 'note',
+      op: 'create',
+      targetId: id,
+      payload: {
+        occurredAt: Date.now(),
+        subjectEntity: 'flock',
+        subjectId: GROUP,
+        body: 'Gate latch is loos',
+        authorName: 'Sam',
+        authorId,
+      },
+    });
+    return id;
+  }
+
+  it('fixes a typo without losing who wrote it or when', async () => {
+    await aFarm();
+    const id = await aNoteFrom('u1');
+
+    const screen = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
+    await screen.press(`notes-open-${GROUP}`);
+    await screen.press(`note-edit-open-${id}`);
+    await screen.type(`note-edit-${id}`, 'Gate latch is loose');
+    await screen.press(`note-edit-save-${id}`);
+
+    const [note] = await listNotes();
+    expect(note).toMatchObject({
+      body: 'Gate latch is loose',
+      authorName: 'Sam',
+      subjectId: GROUP,
+    });
+  });
+
+  it('takes two taps to delete, and then it is out of the thread', async () => {
+    await aFarm();
+    const id = await aNoteFrom('u1');
+
+    const screen = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
+    await screen.press(`notes-open-${GROUP}`);
+
+    await screen.press(`note-delete-${id}`);
+    expect(await listNotes()).toHaveLength(1);
+
+    await screen.press(`note-delete-${id}`);
+    expect(await listNotes()).toHaveLength(0);
+  });
+
+  it('offers nothing on somebody else’s note', async () => {
+    await aFarm();
+    const mine = await aNoteFrom('u1');
+    const theirs = await aNoteFrom('u2');
+
+    // Signed in as the hand u1.
+    const screen = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
+    await screen.press(`notes-open-${GROUP}`);
+
+    expect(screen.has(`note-edit-open-${mine}`)).toBe(true);
+    expect(screen.has(`note-edit-open-${theirs}`)).toBe(false);
+    expect(screen.has(`note-delete-${theirs}`)).toBe(false);
+  });
+
+  it('lets an owner change anyone’s', async () => {
+    seedSecureStore({
+      'steading.claims': JSON.stringify({
+        userId: 'u1',
+        orgId: '01J000000000000000000ORG1',
+        role: 'owner',
+        name: 'Sam',
+      }),
+    });
+    await aFarm();
+    const theirs = await aNoteFrom('u2');
+
+    const screen = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
+    await screen.press(`notes-open-${GROUP}`);
+
+    expect(screen.has(`note-edit-open-${theirs}`)).toBe(true);
   });
 });
