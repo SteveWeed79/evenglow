@@ -89,6 +89,13 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
           testID="go-diagnostics"
           onPress={() => nav.navigate('Diagnostics')}
         />
+        <Row
+          title="Licences"
+          detail="The open-source typefaces this app is set in"
+          icon="basic-full"
+          testID="go-licences"
+          onPress={() => nav.navigate('Licences')}
+        />
       </View>
 
       <Panel label="This device">

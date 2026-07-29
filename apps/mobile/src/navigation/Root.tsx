@@ -18,6 +18,7 @@ import { InboxScreen } from '../screens/InboxScreen';
 import { IncubationScreen } from '../screens/IncubationScreen';
 import { IncubationsScreen } from '../screens/IncubationsScreen';
 import { InventoryScreen } from '../screens/InventoryScreen';
+import { LicencesScreen } from '../screens/LicencesScreen';
 import { LogHoursScreen } from '../screens/LogHoursScreen';
 import { LossScreen } from '../screens/LossScreen';
 import { MachineScreen } from '../screens/MachineScreen';
@@ -62,6 +63,7 @@ export type RootParamList = {
   Inbox: undefined;
   Diagnostics: undefined;
   Members: undefined;
+  Licences: undefined;
 
   // Stock
   AddGroup: undefined;
@@ -113,6 +115,7 @@ export function Root({ onSignedOut }: { onSignedOut: () => void }): React.ReactE
       <Stack.Screen name="Inbox" component={InboxScreen} />
       <Stack.Screen name="Diagnostics" component={DiagnosticsScreen} />
       <Stack.Screen name="Members" component={MembersScreen} />
+      <Stack.Screen name="Licences" component={LicencesScreen} />
 
       <Stack.Screen name="AddGroup" component={AddGroupScreen} />
       <Stack.Screen name="Group" component={GroupScreen} />

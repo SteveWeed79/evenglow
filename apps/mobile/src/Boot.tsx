@@ -4,6 +4,7 @@ import { startSync } from '@steading/core/sync/engine';
 import { setStorageBacking } from '@steading/core/sync/storage';
 import { start, type Started } from './boot/start';
 import { openLocalStore } from './db/store';
+import { useAppFonts } from './theme/fonts';
 import { SignInScreen } from './screens/SignInScreen';
 import type { CachedClaims } from './auth/session';
 import { useTheme } from './theme/ThemeProvider';
@@ -40,6 +41,20 @@ export function Boot({
 }): React.ReactElement {
   const [state, setState] = useState<State>({ kind: 'opening' });
   const { colors } = useTheme();
+
+  /**
+   * The faces, in parallel with the database.
+   *
+   * Held before the first screen for one reason: without it the app paints a
+   * frame in Roboto and then reflows into Fraunces and Alegreya, which is a
+   * visible jolt on every cold start. The wait is reading four files out of
+   * the APK, so it is shorter than the store's migration ladder and usually
+   * costs nothing at all.
+   *
+   * It cannot fail the boot — see `useAppFonts`. A typeface is cosmetic and
+   * the records are not.
+   */
+  const fonts = useAppFonts();
 
   useEffect(() => {
     let live = true;
@@ -100,6 +115,15 @@ export function Boot({
    * somebody signs in — which is exactly the state the engine already handles.
    */
   const onSignedOut = useCallback(() => setState({ kind: 'signed-out' }), []);
+
+  // Both gates, and the font one never turns into a failure branch.
+  if (!fonts.ready) {
+    return (
+      <View style={[styles.centre, { backgroundColor: colors.ground }]}>
+        <ActivityIndicator color={colors.muted} />
+      </View>
+    );
+  }
 
   if (state.kind === 'ready') return <>{render(onSignedOut)}</>;
   if (state.kind === 'signed-out') return <SignInScreen onSignedIn={onSignedIn} />;

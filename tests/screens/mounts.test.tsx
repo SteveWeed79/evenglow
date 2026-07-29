@@ -23,6 +23,7 @@ import { InboxScreen } from '../../apps/mobile/src/screens/InboxScreen';
 import { IncubationScreen } from '../../apps/mobile/src/screens/IncubationScreen';
 import { IncubationsScreen } from '../../apps/mobile/src/screens/IncubationsScreen';
 import { InventoryScreen } from '../../apps/mobile/src/screens/InventoryScreen';
+import { LicencesScreen } from '../../apps/mobile/src/screens/LicencesScreen';
 import { IronScreen } from '../../apps/mobile/src/screens/IronScreen';
 import { LogHoursScreen } from '../../apps/mobile/src/screens/LogHoursScreen';
 import { LossScreen } from '../../apps/mobile/src/screens/LossScreen';
@@ -168,6 +169,7 @@ const SCREENS: [string, () => React.ReactElement][] = [
   ['Inbox', () => <InboxScreen />],
   ['Diagnostics', () => <DiagnosticsScreen />],
   ['Members', () => <MembersScreen />],
+  ['Licences', () => <LicencesScreen />],
   ['AddGroup', () => <AddGroupScreen />],
   ['Group', () => <GroupScreen {...routeProps({ groupId: GROUP })} />],
   ['EditGroup', () => <EditGroupScreen {...routeProps({ groupId: GROUP })} />],

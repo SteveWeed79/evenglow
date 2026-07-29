@@ -124,6 +124,9 @@ importers:
       expo:
         specifier: ~57.0.8
         version: 57.0.8(@babel/core@7.29.7)(@expo/dom-webview@57.0.1)(react-dom@19.2.4(react@19.2.4))(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
+      expo-font:
+        specifier: ~57.0.1
+        version: 57.0.1(expo@57.0.8)(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.4))(react@19.2.4)
       expo-haptics:
         specifier: ~57.0.1
         version: 57.0.1(expo@57.0.8)
