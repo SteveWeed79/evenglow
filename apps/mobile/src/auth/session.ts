@@ -35,12 +35,68 @@ const pairSchema = z
   })
   .passthrough();
 
-/** Parsed, never trusted — an API response is external data (invariant 11). */
-const claimsSchema = z.object({
-  userId: z.string().min(1),
-  orgId: z.string().min(1),
-  role: roleSchema,
-});
+/**
+ * Parsed, never trusted — an API response is external data (invariant 11).
+ *
+ * **`sub`, not `userId`.** `mintAccessToken` puts the user id in the standard
+ * subject claim with `.setSubject()`, and the server's own `verifyAccessToken`
+ * maps it back the same way. This schema asked for a `userId` field that no
+ * token has ever carried, so every sign-in reached a valid session and then
+ * discarded it — "The server sent a session we could not read", on a correct
+ * email and password.
+ *
+ * Nothing caught it because both halves were tested against themselves: the
+ * server round-trips its own tokens, and the client's tests built claim
+ * objects by hand. `tests/unit/token-shape.test.ts` now mints with the
+ * server's signer and reads with this, which is the only arrangement that
+ * could have failed.
+ */
+const claimsSchema = z
+  .object({
+    sub: z.string().min(1),
+    orgId: z.string().min(1),
+    role: roleSchema,
+  })
+  .transform(({ sub, orgId, role }): CachedClaims => ({ userId: sub, orgId, role }));
+
+const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+/**
+ * Base64url → string, without `atob`.
+ *
+ * `atob` is a global React Native happens to provide, and a global whose
+ * presence cannot be checked from here is a poor thing to put under the one
+ * path that gates every screen in the app. Twelve lines that run on any engine
+ * are worth more than a comment asserting the global is there — especially
+ * since a missing `atob` and a wrong claim name fail identically, which is
+ * exactly the ambiguity that made the bug above hard to place.
+ *
+ * Padding is not required: JWT strips it, and this stops at the end of the
+ * input rather than demanding a multiple of four.
+ */
+export function decodeBase64Url(input: string): string {
+  let accumulator = 0;
+  let bits = 0;
+  let out = '';
+
+  for (const character of input) {
+    if (character === '=') break;
+    const value = BASE64.indexOf(
+      character === '-' ? '+' : character === '_' ? '/' : character,
+    );
+    if (value === -1) throw new Error('Not base64url.');
+
+    accumulator = (accumulator << 6) | value;
+    bits += 6;
+
+    if (bits >= 8) {
+      bits -= 8;
+      out += String.fromCharCode((accumulator >> bits) & 0xff);
+    }
+  }
+
+  return out;
+}
 
 function url(path: string): string {
   const base = apiBase();
@@ -57,15 +113,12 @@ function url(path: string): string {
  * what it was told so the UI can draw the right controls before the first
  * response arrives (invariant 8).
  */
-function readClaims(accessToken: string): CachedClaims | null {
+export function readClaims(accessToken: string): CachedClaims | null {
   const payload = accessToken.split('.')[1];
   if (payload === undefined) return null;
 
   try {
-    const json: unknown = JSON.parse(
-      // Base64url, and RN has no Buffer by default. atob is present.
-      atob(payload.replace(/-/g, '+').replace(/_/g, '/')),
-    );
+    const json: unknown = JSON.parse(decodeBase64Url(payload));
     const parsed = claimsSchema.safeParse(json);
     return parsed.success ? parsed.data : null;
   } catch {
