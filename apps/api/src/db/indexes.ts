@@ -118,6 +118,14 @@ export const INDEXES: Record<CollectionName, IndexDescription[]> = {
     { key: { orgId: 1, flockId: 1, kind: 1, occurredAt: -1 } },
     { key: { orgId: 1, animalId: 1, kind: 1, occurredAt: -1 } },
   ],
+  /**
+   * The only query anything makes of a note: the thread on one thing, newest
+   * first. Compound on both halves of the subject because a `flock` id and an
+   * `equipment` id are drawn from the same ULID space — matching on the id
+   * alone would work today and be a cross-subject leak the day two entities
+   * ever shared one.
+   */
+  notes: [{ key: { orgId: 1, subjectEntity: 1, subjectId: 1, occurredAt: -1 } }],
 };
 
 /** Identity collections are not tenant-scoped; they need their own uniqueness rules. */

@@ -10,6 +10,7 @@ import {
 } from '@steading/core/read/growing';
 import { Confirm, Failure, Primary, Secondary, useSaver } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
+import { Notes } from '../components/Notes';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
@@ -139,6 +140,12 @@ export function PlantingScreen({ route }: ScreenProps<'Planting'>): React.ReactE
         disabled={saving}
         onPress={() => nav.navigate('Harvest', { plantingId })}
         testID="go-harvest"
+      />
+
+      <Notes
+        subjectEntity="planting"
+        subjectId={plantingId}
+        subject={variety?.name ?? 'this planting'}
       />
 
       <Panel label="When it is over">

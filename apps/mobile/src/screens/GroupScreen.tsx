@@ -13,6 +13,7 @@ import { lastFedByGroup, listGroups, lossesByGroup, produceToday } from '@steadi
 import { withdrawalsBySubject } from '@steading/core/read/withdrawals';
 import { Row } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
+import { Notes } from '../components/Notes';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { WithdrawalBanner } from '../components/WithdrawalBanner';
@@ -99,6 +100,8 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
           {shorn ? <Body>Took {shorn.amount} g of fibre today.</Body> : null}
         </Panel>
       ) : null}
+
+      <Notes subjectEntity="flock" subjectId={groupId} subject={group.name} />
 
       <View style={styles.rows}>
         <Row

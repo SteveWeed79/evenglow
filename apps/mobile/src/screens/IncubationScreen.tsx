@@ -9,6 +9,7 @@ import {
 } from '@steading/core/read/breeding';
 import { Failure, Field, Primary, Stepper, useSaver } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
+import { Notes } from '../components/Notes';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
@@ -141,6 +142,12 @@ function Detail({ incubation }: { incubation: IncubationEntry }): React.ReactEle
           </Body>
         </Panel>
       )}
+
+      <Notes
+        subjectEntity="incubation"
+        subjectId={incubation.id}
+        subject={incubation.label}
+      />
 
       {incubation.hatchedAt === undefined ? (
         <Panel label="The hatch">

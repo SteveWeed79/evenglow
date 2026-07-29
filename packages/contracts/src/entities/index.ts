@@ -21,6 +21,7 @@ import {
   maintenanceUpdateSchema,
 } from './iron';
 import { careLogCreateSchema } from './care';
+import { noteCreateSchema } from './notes';
 import {
   breedingCreateSchema,
   breedingUpdateSchema,
@@ -58,6 +59,7 @@ export * from './ops';
 export * from './growing';
 export * from './breeding';
 export * from './care';
+export * from './notes';
 
 type PayloadKey = `${Entity}:${Op}`;
 
@@ -142,6 +144,7 @@ export const PAYLOAD_SCHEMAS: Partial<Record<PayloadKey, z.ZodType>> = {
   'weight:create': weightCreateSchema,
   'shearing:create': shearingCreateSchema,
   'careLog:create': careLogCreateSchema,
+  'note:create': noteCreateSchema,
 };
 
 /** Returns the schema for an entity+op pair, or undefined if the op is forbidden. */

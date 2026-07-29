@@ -51,6 +51,13 @@ export const ENTITIES = [
   'shearing',
   'feedPlan',
   'careLog',
+
+  /**
+   * A note left on any of them — the answer to "can two people on a farm talk
+   * to each other in here". See `entities/notes.ts` for why it is a note on a
+   * thing rather than a chat.
+   */
+  'note',
 ] as const;
 
 export const entitySchema = z.enum(ENTITIES);
@@ -76,6 +83,7 @@ export const APPEND_ONLY_ENTITIES = new Set<Entity>([
   'weight',
   'shearing',
   'careLog',
+  'note',
 ]);
 
 export function isAppendOnly(entity: Entity): boolean {

@@ -48,7 +48,17 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
         { userId: user.id, orgId: user.orgId, role: user.role },
         env.AUTH_SECRET,
       );
-      return reply.status(200).send(pair);
+      /**
+       * The name comes back with the tokens, and the reason is notes.
+       *
+       * The access token carries `sub`, `orgId` and `role` and deliberately no
+       * display name — a name is not an authorization claim and does not
+       * belong in something re-verified on every request. But a note written
+       * in a barn has to be able to say who wrote it on the other person's
+       * phone, and a device with no signal cannot look one up. So it is
+       * handed over once, here, and cached.
+       */
+      return reply.status(200).send({ ...pair, user: { id: user.id, name: user.name, role: user.role } });
     });
 
     scope.post('/auth/refresh', async (request, reply) => {

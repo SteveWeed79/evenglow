@@ -24,6 +24,14 @@ const pairSchema = z
   .object({
     accessToken: z.string().min(1),
     refreshToken: z.string().min(1),
+    /**
+     * Sign-in hands over the display name once.
+     *
+     * Optional because refresh does not repeat it and an older server does not
+     * send it at all — in both cases the previously cached name is carried
+     * forward rather than being lost.
+     */
+    user: z.object({ name: z.string().max(80) }).partial().optional(),
   })
   .passthrough();
 
@@ -89,11 +97,16 @@ export async function signIn(email: string, password: string): Promise<CachedCla
   const claims = readClaims(pair.accessToken);
   if (claims === null) throw new SignInError('The server sent a session we could not read.');
 
+  // The name is not in the token and is not authorization — it is the label a
+  // note carries so the other person's phone can say who wrote it offline.
+  const named: CachedClaims =
+    pair.user?.name === undefined ? claims : { ...claims, name: pair.user.name };
+
   await writeRefreshToken(pair.refreshToken);
-  await writeCachedClaims(claims);
+  await writeCachedClaims(named);
   setAccessToken(pair.accessToken);
 
-  return claims;
+  return named;
 }
 
 /**
@@ -137,13 +150,19 @@ export async function refreshSession(): Promise<CachedClaims | null> {
   const claims = readClaims(pair.accessToken);
   if (claims === null) return null;
 
+  // Refresh does not repeat the display name, so it is carried forward rather
+  // than being quietly dropped on the first resume after a sign-in.
+  const previous = await readCachedClaims();
+  const name = pair.user?.name ?? previous?.name;
+  const named: CachedClaims = name === undefined ? claims : { ...claims, name };
+
   // Rotation: the server issues a new refresh token and retires the old one,
   // so failing to store this would sign the device out on the next launch.
   await writeRefreshToken(pair.refreshToken);
-  await writeCachedClaims(claims);
+  await writeCachedClaims(named);
   setAccessToken(pair.accessToken);
 
-  return claims;
+  return named;
 }
 
 /**

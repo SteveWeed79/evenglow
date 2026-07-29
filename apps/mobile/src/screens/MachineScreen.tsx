@@ -3,6 +3,7 @@ import { listInventory, listMachines, listServices } from '@steading/core/read/i
 import { partsNote } from '@steading/contracts';
 import { Primary, Row } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
+import { Notes } from '../components/Notes';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
@@ -109,6 +110,8 @@ export function MachineScreen({ route }: ScreenProps<'Machine'>): React.ReactEle
           );
         })
       )}
+
+      <Notes subjectEntity="equipment" subjectId={machineId} subject={machine.name} />
 
       <Primary
         label={mine.length === 0 ? 'Add a service schedule' : 'Add another schedule'}
