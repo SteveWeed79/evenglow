@@ -119,8 +119,16 @@ pnpm mobile:android                            # build and deploy to a device
 `expo prebuild`, and nothing in it is hand-edited. That is the opposite of the
 Capacitor project below, where the native files are reviewed.
 
-Emulator hosts are `10.0.2.2`, never `localhost`. Set `EXPO_PUBLIC_API_URL`
-wrong and the app refuses to start rather than starting and never syncing.
+Emulator hosts are `10.0.2.2`, never `localhost` — a physical handset needs
+this machine's LAN address instead. The Windows scripts in `scripts/windows/`
+create the `.env` for you and the phone one fills in the LAN address itself.
+
+`.env` is gitignored, so a fresh clone has none. **That does not stop the app.**
+Without `EXPO_PUBLIC_API_URL` it opens, reads and records normally — the screen
+renders a local SQLite file — but the sync loop is never started and the chip
+reads *Not set up* rather than reporting the ordinary offline story. The one
+case that is fatal is a device with nobody signed in, because signing in is a
+server round trip. See `apps/mobile/src/boot/config.ts`.
 
 ## Android (Capacitor — the previous client)
 

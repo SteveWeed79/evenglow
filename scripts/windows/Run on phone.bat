@@ -19,6 +19,11 @@ if errorlevel 1 goto :failed
 call "%~dp0_shared.bat" :check_pnpm
 if errorlevel 1 goto :failed
 
+call "%~dp0_shared.bat" :ensure_env
+if errorlevel 1 goto :failed
+
+call "%~dp0_shared.bat" :set_lan_address
+
 echo   [1 of 2] Getting everything the app needs ready.
 echo            The first time this takes a few minutes. Later runs are quick.
 echo.
