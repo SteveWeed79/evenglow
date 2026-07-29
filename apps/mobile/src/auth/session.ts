@@ -113,17 +113,45 @@ function url(path: string): string {
  * what it was told so the UI can draw the right controls before the first
  * response arrives (invariant 8).
  */
-export function readClaims(accessToken: string): CachedClaims | null {
-  const payload = accessToken.split('.')[1];
-  if (payload === undefined) return null;
+export type ClaimsRead =
+  | { ok: true; claims: CachedClaims }
+  | { ok: false; problem: string };
 
+/**
+ * The same read, but it says what went wrong.
+ *
+ * "The server sent a session we could not read" was true and unactionable: a
+ * missing claim, an unreadable payload and a token that is not a token all
+ * produced one sentence, so the same screenshot fitted a wrong field name, a
+ * missing `atob`, and simply running yesterday's bundle. Naming the field
+ * turns three indistinguishable failures into three different sentences.
+ *
+ * Nothing sensitive is named. These are field names in a token this device was
+ * just handed, not its values.
+ */
+export function parseClaims(accessToken: string): ClaimsRead {
+  const payload = accessToken.split('.')[1];
+  if (payload === undefined) return { ok: false, problem: 'it is not shaped like a token' };
+
+  let json: unknown;
   try {
-    const json: unknown = JSON.parse(decodeBase64Url(payload));
-    const parsed = claimsSchema.safeParse(json);
-    return parsed.success ? parsed.data : null;
+    json = JSON.parse(decodeBase64Url(payload));
   } catch {
-    return null;
+    return { ok: false, problem: 'its middle section is not readable' };
   }
+
+  const parsed = claimsSchema.safeParse(json);
+  if (!parsed.success) {
+    const fields = [...new Set(parsed.error.issues.map((issue) => issue.path.join('.') || 'it'))];
+    return { ok: false, problem: `it has no usable ${fields.join(' or ')}` };
+  }
+
+  return { ok: true, claims: parsed.data };
+}
+
+export function readClaims(accessToken: string): CachedClaims | null {
+  const read = parseClaims(accessToken);
+  return read.ok ? read.claims : null;
 }
 
 export class SignInError extends Error {}
@@ -147,8 +175,11 @@ export async function signIn(email: string, password: string): Promise<CachedCla
   }
 
   const pair = pairSchema.parse(await res.json());
-  const claims = readClaims(pair.accessToken);
-  if (claims === null) throw new SignInError('The server sent a session we could not read.');
+  const read = parseClaims(pair.accessToken);
+  if (!read.ok) {
+    throw new SignInError(`The server sent a session we could not read — ${read.problem}.`);
+  }
+  const claims = read.claims;
 
   // The name is not in the token and is not authorization — it is the label a
   // note carries so the other person's phone can say who wrote it offline.
