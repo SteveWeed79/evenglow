@@ -113,8 +113,13 @@ echo   --- Do the app's packages match Expo? ---
 :: pinned to a different version is JavaScript talking to a native side that
 :: does not match it. That fails as "undefined is not a function" on a device
 :: and passes every test on a computer.
+:: Answered "no" for us. `expo install --check` PROMPTS, and a stray Enter
+:: rewrites package.json and the lockfile — which this window's own header
+:: promises it will never do, and which then makes `git pull --ff-only`
+:: refuse to update the machine. It reports; fixing is a decision, made
+:: somewhere it can be reviewed.
 cd apps\mobile
-call npx expo install --check
+echo n| call npx expo install --check
 cd ..\..
 
 echo.
