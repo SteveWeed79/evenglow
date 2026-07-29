@@ -1,0 +1,6 @@
+
+# Windows batch files must keep CRLF or `goto` and labels misbehave when the
+# script is double-clicked. These are the scripts that exist so nobody has to
+# type a command, so a line-ending conversion breaking them would be quiet and
+# would land on the person least able to diagnose it.
+*.bat text eol=crlf
