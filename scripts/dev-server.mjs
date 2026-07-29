@@ -223,8 +223,59 @@ if (await alreadyServing(env.MONGODB_URI)) {
 const dbName = env.MONGODB_DB ?? 'steading';
 const knownEmail = existsSync(SEEDED) ? readFileSync(SEEDED, 'utf8').trim() : '';
 
-if (knownEmail !== '' && (await accountExists(env.MONGODB_URI, dbName, knownEmail))) {
+/**
+ * `--new-password` is the way out of an account nobody can open.
+ *
+ * Asked for explicitly rather than offered every run: re-prompting because
+ * somebody might have forgotten their password would train them to retype it
+ * at a prompt that could equally well be a bug.
+ */
+const resetting = process.argv.includes('--new-password');
+
+if (!resetting && knownEmail !== '' && (await accountExists(env.MONGODB_URI, dbName, knownEmail))) {
   say('[3/4]', `Farm account already made — sign in as ${knownEmail}`);
+  console.log('        If that password is not being accepted, close this and run');
+  console.log('        "Reset my password" instead.');
+} else if (resetting) {
+  say('[3/4]', 'Setting a new password.');
+
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const email =
+    (await rl.question(`        Email${knownEmail ? ` [${knownEmail}]` : ''}:  `)).trim() ||
+    knownEmail;
+  const password = await rl.question('        New password (12+):  ');
+  rl.close();
+
+  if (email === '' || password.length < 12) {
+    await stopMongo();
+    fail('need an email and a password of at least 12 characters.');
+  }
+
+  const code = await run('pnpm', ['db:password'], {
+    MONGODB_URI: env.MONGODB_URI,
+    SEED_EMAIL: email,
+    SEED_PASSWORD: password,
+  });
+
+  if (code !== 0) {
+    await stopMongo();
+    fail('could not set the password.', 'The message above says why.');
+  }
+
+  writeFileSync(SEEDED, `${email}\n`);
+  console.log(`\n        Done. Sign in on the phone as ${email}`);
+
+  /**
+   * Stops here rather than falling through to the server.
+   *
+   * Resetting is something you do while the farm server is running, and
+   * starting a second one would fail on port 3001 — after the password had
+   * already changed, which is the worst order for those two events. One job,
+   * then out.
+   */
+  await stopMongo();
+  console.log('\n  Now start the farm server again.\n');
+  process.exit(0);
 } else {
   if (knownEmail !== '') {
     console.log(
