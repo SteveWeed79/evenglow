@@ -53,6 +53,53 @@ if errorlevel 1 (
 echo   pnpm - installed.
 exit /b 0
 
+:ensure_env
+:: The settings file is deliberately not in git (it differs per machine), so a
+:: fresh clone has none and the app opens with nowhere to sync to. Making it
+:: here means nobody has to be handed a command to copy.
+if exist "apps\mobile\.env" (
+  echo   Settings file - found.
+  exit /b 0
+)
+echo   No settings file yet. Making one from the example...
+copy /y "apps\mobile\.env.example" "apps\mobile\.env" >nul
+if errorlevel 1 (
+  echo.
+  echo   PROBLEM: could not create apps\mobile\.env
+  echo   Copy everything in this window and send it to Claude.
+  echo.
+  exit /b 1
+)
+echo   Settings file - created.
+exit /b 0
+
+:set_lan_address
+:: The example points at 10.0.2.2, which is how the EMULATOR reaches this
+:: computer. A real phone on wifi cannot use that address at all, so the phone
+:: script swaps in this computer's own address.
+findstr /c:"10.0.2.2" "apps\mobile\.env" >nul 2>&1
+if errorlevel 1 (
+  echo   Server address - already set.
+  exit /b 0
+)
+
+echo   Finding this computer's address on your wifi...
+set "LANIP="
+for /f "usebackq tokens=*" %%i in (`powershell -NoProfile -Command "Get-NetIPAddress -AddressFamily IPv4 ^| Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' } ^| Sort-Object -Property InterfaceMetric ^| Select-Object -First 1 -ExpandProperty IPAddress"`) do set "LANIP=%%i"
+
+if "%LANIP%"=="" (
+  echo.
+  echo   Could not work out this computer's address by itself.
+  echo   The app will still open and still save everything you log,
+  echo   it just will not sync until the address is set.
+  echo.
+  exit /b 0
+)
+
+powershell -NoProfile -Command "(Get-Content 'apps\mobile\.env') -replace 'EXPO_PUBLIC_API_URL=.*', 'EXPO_PUBLIC_API_URL=http://%LANIP%:3001' | Set-Content 'apps\mobile\.env'"
+echo   Server address - set to %LANIP%.
+exit /b 0
+
 :check_adb
 where adb >nul 2>&1
 if not errorlevel 1 exit /b 0

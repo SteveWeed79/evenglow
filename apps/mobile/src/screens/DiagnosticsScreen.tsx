@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { diagnostics, type Diagnostics, nudge, subscribe } from '@steading/core/sync/engine';
 import { pullOnce } from '@steading/core/sync/pull';
 import { type StorageReport, storageReport } from '@steading/core/sync/storage';
+import { apiFault, explainFault } from '../boot/config';
 import { Row, Secondary } from '../components/Form';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
@@ -30,6 +31,10 @@ export function DiagnosticsScreen(): React.ReactElement {
   const [report, setReport] = useState<Diagnostics | null>(null);
   const [storage, setStorage] = useState<StorageReport | null>(null);
   const [pulling, setPulling] = useState(false);
+
+  // Fixed for the life of the process — applied once in `start()`, before any
+  // screen rendered.
+  const fault = apiFault();
 
   const refresh = useCallback(async () => {
     const [next, backing] = await Promise.all([diagnostics(), storageReport()]);
@@ -59,6 +64,16 @@ export function DiagnosticsScreen(): React.ReactElement {
           it reaches your other devices and your farm, not where it lives.
         </Body>
       </Panel>
+
+      {/* Above the queue, because every number in it is explained by this one
+          fact: nothing is being sent, and nothing will be, until somebody sets
+          an address. Reading "0 last sent, network connected" without this
+          would send a person looking for a fault that is not there. */}
+      {fault === null ? null : (
+        <Panel label="This app has no farm server">
+          <Body>{explainFault(fault)}</Body>
+        </Panel>
+      )}
 
       <Panel label="The queue">
         <Stat label="Waiting to send" value={String(report.queued)} />

@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text } from 'react-native';
 import type { SyncState } from '@steading/core/sync/engine';
+import { apiFault } from '../boot/config';
 import { Icon, type IconName } from './Icon';
 import { useNav } from '../hooks/useNav';
 import { useSync } from '../hooks/useSync';
@@ -14,6 +15,12 @@ import { useTheme } from '../theme/ThemeProvider';
  * "needs a look" — a mutation the server refused, which no amount of waiting
  * will fix — gets the alarming colour, and it is the only alarming shape in
  * the icon set too.
+ *
+ * **A build with no server address gets that same colour**, for the same
+ * reason: waiting will not fix it either. Without this the chip would report
+ * the ordinary offline story forever, which is the failure the old boot-time
+ * throw existed to prevent — the throw was the wrong remedy, but the worry
+ * behind it was right, and this is where it is answered instead.
  */
 
 function describe(
@@ -46,15 +53,28 @@ export function SyncChip(): React.ReactElement {
   const state = useSync();
   const nav = useNav();
   const { colors } = useTheme();
-  const { label, icon, tint } = describe(state, colors);
+
+  /**
+   * Read rather than subscribed: the configuration is applied once in
+   * `start()`, before the first screen renders, and cannot change while the
+   * app is running. There is no state to keep in step.
+   */
+  const fault = apiFault();
+
+  const { label, icon, tint } =
+    fault === null
+      ? describe(state, colors)
+      : { label: 'Not set up', icon: 'needs-a-look' as IconName, tint: colors.rowan };
 
   return (
     <Pressable
-      onPress={() => nav.navigate(state.kind === 'rejected' ? 'Inbox' : 'Diagnostics')}
+      onPress={() => nav.navigate(state.kind === 'rejected' && fault === null ? 'Inbox' : 'Diagnostics')}
       accessibilityRole="button"
       accessibilityLabel={`Sync: ${label}`}
       accessibilityHint={
-        state.kind === 'rejected' ? 'Opens what needs a look' : 'Opens sync details'
+        state.kind === 'rejected' && fault === null
+          ? 'Opens what needs a look'
+          : 'Opens sync details'
       }
       // The chip is small by design — it is status, not an action (R3) — so
       // the target is grown around it rather than the chip being grown.

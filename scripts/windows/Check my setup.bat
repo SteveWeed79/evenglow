@@ -40,6 +40,18 @@ if errorlevel 1 (
 )
 
 echo.
+echo   --- The app's own settings ---
+
+if exist "apps\mobile\.env" (
+  echo   [ OK ]      settings file
+  for /f "tokens=*" %%v in ('findstr /b "EXPO_PUBLIC_API_URL" "apps\mobile\.env" 2^>^&1') do echo               %%v
+) else (
+  echo   [ MISSING ] settings file  - either run script makes this for you
+  echo               Without it the app still opens and still saves
+  echo               everything you log. It just cannot sync.
+)
+
+echo.
 echo   --- Android Studio ^(only needed for the emulator^) ---
 
 if exist "%LOCALAPPDATA%\Android\Sdk" (
