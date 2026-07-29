@@ -1,6 +1,7 @@
 import { AppState, type AppStateStatus } from 'react-native';
 import { addNetworkStateListener, type NetworkStateEvent } from 'expo-network';
 import { nudge } from '@steading/core/sync/engine';
+import { reportEngineError } from '@steading/core/sync/report';
 import { refreshSession } from '../auth/session';
 
 /**
@@ -49,32 +50,67 @@ async function wake(): Promise<void> {
   nudge();
 }
 
+/**
+ * Each listener is attached on its own, and neither can stop the app.
+ *
+ * These are an **optimisation**. Without them the engine still flushes on its
+ * idle tick and on every enqueue; what is lost is promptness, not work. So a
+ * platform that cannot provide one of them must cost a farm a few seconds of
+ * latency, never the app.
+ *
+ * That was not true before, and it cost a whole boot: `addNetworkStateListener`
+ * threw on a device, `startTriggers` had no guard, `start()` had no guard
+ * around `startTriggers`, and the failure arrived as a full-screen "Steading
+ * could not start" on a farm whose records were sitting on the device,
+ * perfectly readable, behind a screen that would not open.
+ */
 export function startTriggers(): TriggerHandles {
-  let previous = AppState.currentState;
+  const stops: Array<() => void> = [];
 
-  const app = AppState.addEventListener('change', (next) => {
-    // Only on the transition INTO active. Android reports 'inactive' on the
-    // way past in some transitions, and nudging on every state change would
-    // fire two or three times for one glance at the screen.
-    if (next === ACTIVE && previous !== ACTIVE) void wake();
-    previous = next;
-  });
+  try {
+    let previous = AppState.currentState;
 
-  const network = addNetworkStateListener((event: NetworkStateEvent) => {
-    // Only on regain. A disconnect needs no nudge: the flush defers and the
-    // queue is already the plan.
-    //
-    // `isInternetReachable` is deliberately not required. It is undefined on
-    // some Android configurations and false on a captive portal, and a farm
-    // wifi that has not been signed into is exactly where a keeper still wants
-    // the attempt made — the flush finding out is cheaper than not trying.
-    if (event.isConnected === true) void wake();
-  });
+    const app = AppState.addEventListener('change', (next) => {
+      // Only on the transition INTO active. Android reports 'inactive' on the
+      // way past in some transitions, and nudging on every state change would
+      // fire two or three times for one glance at the screen.
+      if (next === ACTIVE && previous !== ACTIVE) void wake();
+      previous = next;
+    });
+
+    stops.push(() => app.remove());
+  } catch (error) {
+    reportEngineError('watching for the app waking up', error);
+  }
+
+  try {
+    const network = addNetworkStateListener((event: NetworkStateEvent) => {
+      // Only on regain. A disconnect needs no nudge: the flush defers and the
+      // queue is already the plan.
+      //
+      // `isInternetReachable` is deliberately not required. It is undefined on
+      // some Android configurations and false on a captive portal, and a farm
+      // wifi that has not been signed into is exactly where a keeper still
+      // wants the attempt made — the flush finding out is cheaper than not
+      // trying.
+      if (event.isConnected === true) void wake();
+    });
+
+    stops.push(() => network.remove());
+  } catch (error) {
+    reportEngineError('watching for the network coming back', error);
+  }
 
   return {
     stop() {
-      app.remove();
-      network.remove();
+      for (const stop of stops) {
+        // One listener that will not detach must not strand the others.
+        try {
+          stop();
+        } catch (error) {
+          reportEngineError('letting go of a sync trigger', error);
+        }
+      }
     },
   };
 }

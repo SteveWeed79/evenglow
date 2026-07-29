@@ -2,7 +2,8 @@ import { startSync, stopSync } from '@steading/core/sync/engine';
 import { setStorageBacking } from '@steading/core/sync/storage';
 import { type CachedClaims, refreshSession } from '../auth/session';
 import { openLocalStore } from '../db/store';
-import { startTriggers } from '../sync/triggers';
+import { startTriggers, type TriggerHandles } from '../sync/triggers';
+import { reportEngineError } from '@steading/core/sync/report';
 import { type ApiFault, configureApi, explainFault } from './config';
 
 /**
@@ -91,15 +92,33 @@ export async function start(raw?: string): Promise<Started> {
    */
   if (config.kind !== 'configured') return { claims, fault: config, stop() {} };
 
-  const triggers = startTriggers();
-  startSync();
+  /**
+   * Past this line nothing may stop the app.
+   *
+   * The store is open, which means every record this farm has is readable and
+   * every screen works. Sync is how that reaches the server — it is not how it
+   * is kept. So a trigger that will not attach, or a loop that will not start,
+   * is reported and stepped over.
+   *
+   * It used to be fatal, and the shape of that failure is the argument: one
+   * throw inside `startTriggers` produced a full-screen "Steading could not
+   * start" over a database sitting right there, under a sentence promising
+   * nothing had been lost. Both halves were true and the app was still shut.
+   */
+  let triggers: TriggerHandles | null = null;
+  try {
+    triggers = startTriggers();
+    startSync();
+  } catch (error) {
+    reportEngineError('starting the sync loop', error);
+  }
 
   return {
     claims,
     fault: null,
     stop() {
       stopSync();
-      triggers.stop();
+      triggers?.stop();
     },
   };
 }
