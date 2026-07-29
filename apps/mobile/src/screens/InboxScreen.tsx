@@ -138,23 +138,36 @@ export function InboxScreen(): React.ReactElement {
             </View>
           </View>
 
-          {/* The server's own words. Not translated, because a message a
-              farmer can read back to whoever can help is worth more than a
-              tidier one that loses the detail. */}
-          {mutation.lastError !== undefined ? (
-            <Text style={[styles.reason, { color: colors.ink }]}>{mutation.lastError}</Text>
+          {/**
+           * The server's own words. Not translated, because a message a farmer
+           * can read back to whoever can help is worth more than a tidier one
+           * that loses the detail.
+           *
+           * `rejectedReason` first, and that ordering is the fix to a real
+           * defect: this read `lastError` alone, which is where a *transport*
+           * failure is recorded — the thing that gets retried. A refusal
+           * writes `rejectedReason`, so every row in this inbox showed its
+           * heading, its date, two buttons, and no reason at all. The one
+           * screen whose entire job is explaining why explained nothing.
+           */}
+          {mutation.rejectedReason ?? mutation.lastError ? (
+            <Text style={[styles.reason, { color: colors.ink }]}>
+              {mutation.rejectedReason ?? mutation.lastError}
+            </Text>
           ) : null}
 
           <View style={styles.actions}>
             <Action
               icon="try-again"
               label="Send it again"
+              testID={`retry-${mutation.id}`}
               onPress={() => void retry(mutation.id)}
             />
             <Action
               icon="discard"
               label={armed === mutation.id ? 'Tap again to throw away' : 'Throw away'}
               danger={armed === mutation.id}
+              testID={`discard-${mutation.id}`}
               onPress={() => void discard(mutation.id)}
             />
           </View>
@@ -169,11 +182,13 @@ function Action({
   label,
   onPress,
   danger = false,
+  testID,
 }: {
   icon: 'try-again' | 'discard';
   label: string;
   onPress: () => void;
   danger?: boolean;
+  testID?: string;
 }) {
   const { colors } = useTheme();
 
@@ -181,6 +196,7 @@ function Action({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
+      {...(testID === undefined ? {} : { testID })}
       style={({ pressed }) => [
         styles.action,
         {

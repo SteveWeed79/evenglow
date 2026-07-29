@@ -66,7 +66,20 @@ export function AddServiceScreen({ route }: ScreenProps<'AddService'>): React.Re
 
   const { saving, failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
 
-  const intervalHours = byHours && Number(hours) > 0 ? Number(hours) : undefined;
+  /**
+   * A meterless machine cannot carry an hours interval, and the check has to
+   * be here rather than only on the control.
+   *
+   * The hours toggle is not rendered when there is no meter — but its state
+   * still defaults to on, and a hidden control with live state is exactly how
+   * a pump ended up with a 100-hour oil change. `serviceDue` then returns null
+   * for that combination, so the schedule would have been saved, listed, and
+   * silently produce no row for the rest of its life. Worse than a wrong row:
+   * a promise the app never keeps and never mentions.
+   */
+  const hasMeter = machine?.hasHourMeter ?? false;
+
+  const intervalHours = hasMeter && byHours && Number(hours) > 0 ? Number(hours) : undefined;
   const intervalDays = byDays && Number(days) > 0 ? Math.round(Number(days)) : undefined;
 
   const commit = useCallback(() => {

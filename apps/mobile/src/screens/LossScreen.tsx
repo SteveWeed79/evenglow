@@ -125,7 +125,13 @@ export function LossScreen({ route }: ScreenProps<'Loss'>): React.ReactElement {
           label="What took them? (optional)"
           hint="Recorded as a sighting too, so a pattern across the year is visible."
         >
-          <TextField value={predator} onChangeText={setPredator} placeholder="Fox, hawk, dog" maxLength={80} />
+          <TextField
+            value={predator}
+            onChangeText={setPredator}
+            placeholder="Fox, hawk, dog"
+            maxLength={80}
+            testID="loss-predator"
+          />
         </Field>
       ) : null}
 
