@@ -20,6 +20,8 @@ if errorlevel 1 goto :failed
 call "%~dp0_shared.bat" :check_pnpm
 if errorlevel 1 goto :failed
 
+call "%~dp0_shared.bat" :update_code
+
 echo   Getting everything ready. The first time this
 echo   takes a few minutes.
 echo.

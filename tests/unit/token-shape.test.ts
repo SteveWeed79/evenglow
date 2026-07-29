@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { mintAccessToken, verifyAccessToken } from '@steading/api/auth/tokens';
-import { decodeBase64Url, readClaims } from '@steading/mobile/auth/session';
+import { decodeBase64Url, parseClaims, readClaims } from '@steading/mobile/auth/session';
 
 /**
  * The server mints it. The client reads it. Nothing checked they agreed.
@@ -117,5 +117,54 @@ describe('the decoder, which no longer depends on a global', () => {
 
   it('throws on something that is not base64 at all', () => {
     expect(() => decodeBase64Url('!!!!')).toThrow();
+  });
+});
+
+describe('the message a farmer is shown when it fails', () => {
+  const encode = (value: object) =>
+    `x.${Buffer.from(JSON.stringify(value)).toString('base64url')}.y`;
+
+  /**
+   * One sentence for every cause is how three rounds of testing the same
+   * bundle looked identical to a genuine parse failure. The field name is the
+   * difference between "you are running yesterday's code" and "the contract
+   * changed".
+   */
+  it('names the claim that is missing', () => {
+    const read = parseClaims(encode({ orgId: 'o', role: 'owner' }));
+
+    expect(read.ok).toBe(false);
+    if (!read.ok) expect(read.problem).toContain('sub');
+  });
+
+  it('names several when several are wrong', () => {
+    const read = parseClaims(encode({ sub: 'u' }));
+
+    expect(read.ok).toBe(false);
+    if (!read.ok) {
+      expect(read.problem).toContain('orgId');
+      expect(read.problem).toContain('role');
+    }
+  });
+
+  it('distinguishes an unreadable payload from a missing claim', () => {
+    const read = parseClaims('x.!!!!.y');
+
+    expect(read.ok).toBe(false);
+    if (!read.ok) expect(read.problem).toContain('not readable');
+  });
+
+  it('distinguishes something that is not a token at all', () => {
+    const read = parseClaims('nope');
+
+    expect(read.ok).toBe(false);
+    if (!read.ok) expect(read.problem).toContain('not shaped like a token');
+  });
+
+  it('says nothing about it when the token is good', async () => {
+    const read = parseClaims(await mintAccessToken(CLAIMS, SECRET));
+
+    expect(read.ok).toBe(true);
+    if (read.ok) expect(read.claims).toEqual(CLAIMS);
   });
 });

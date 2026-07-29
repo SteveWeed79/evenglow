@@ -53,6 +53,33 @@ if errorlevel 1 (
 echo   pnpm - installed.
 exit /b 0
 
+:update_code
+:: Every fix has to reach this machine somehow, and until now the only route
+:: was a git command typed by hand — which meant three rounds of testing the
+:: same bundle and reporting the same failure. The scripts fetch their own
+:: updates now, and print what they are running so a screenshot always says
+:: which code produced it.
+where git >nul 2>&1
+if errorlevel 1 (
+  echo   Git not found - skipping update.
+  exit /b 0
+)
+
+echo   Checking for updates...
+:: --ff-only refuses to invent a merge. If this machine has local changes or
+:: has diverged, the pull stops and says so rather than resolving it silently
+:: and handing back a tree nobody can reason about.
+git pull --ff-only
+if errorlevel 1 (
+  echo.
+  echo   Could not update automatically - carrying on with what is here.
+  echo   Send this window to Claude if the problem you are chasing persists.
+  echo.
+)
+
+for /f "tokens=*" %%v in ('git log -1 --pretty^=format:"%%h  %%s" 2^>nul') do echo   Running: %%v
+exit /b 0
+
 :ensure_env
 :: The settings file is deliberately not in git (it differs per machine), so a
 :: fresh clone has none and the app opens with nowhere to sync to. Making it
