@@ -81,7 +81,16 @@ function writeEnvFile(values) {
   writeFileSync(ENV_FILE, body, { mode: 0o600 });
 }
 
-/** Runs a command, inheriting stdio, and resolves with its exit code. */
+/**
+ * Runs a command, inheriting stdio, and resolves with its exit code.
+ *
+ * **Nothing variable is ever passed in `args` on Windows.** `shell: true` is
+ * required there to run `pnpm.cmd` at all, and Node does not quote arguments
+ * when it hands them to a shell — it concatenates them. A farm name with a
+ * space in it therefore shifted every later argument along, and the seed
+ * created an account whose email was the second word of the farm name and
+ * whose password was the real email address. Values go through `env`.
+ */
 function run(command, args, env) {
   return new Promise((resolve) => {
     const child = spawn(command, args, {
@@ -94,18 +103,44 @@ function run(command, args, env) {
   });
 }
 
+async function withClient(uri, fn) {
+  const { MongoClient } = await import('mongodb').catch(() => ({ MongoClient: null }));
+  if (MongoClient === null) return null;
+
+  const client = new MongoClient(uri, { serverSelectionTimeoutMS: 1500 });
+  try {
+    await client.connect();
+    return await fn(client);
+  } catch {
+    return null;
+  } finally {
+    await client.close().catch(() => undefined);
+  }
+}
+
 /** True when something is already listening — a real MongoDB, most likely. */
 async function alreadyServing(uri) {
-  const { MongoClient } = await import('mongodb').catch(() => ({ MongoClient: null }));
-  if (MongoClient === null) return false;
-  try {
-    const client = new MongoClient(uri, { serverSelectionTimeoutMS: 800 });
-    await client.connect();
-    await client.close();
-    return true;
-  } catch {
-    return false;
-  }
+  return (await withClient(uri, async () => true)) === true;
+}
+
+/**
+ * Whether the account this script believes it made is actually there.
+ *
+ * Asked on every run rather than trusting the marker file alone. The marker
+ * was written unconditionally once, including after seeds that had failed, so
+ * a farm could be left permanently unable to sign in with a launcher that
+ * cheerfully reported the account was already made. Asking the database is the
+ * only answer that cannot drift, and it repairs that state without anyone
+ * having to know it happened.
+ */
+async function accountExists(uri, dbName, email) {
+  const found = await withClient(uri, (client) =>
+    client
+      .db(dbName)
+      .collection('users')
+      .findOne({ email: email.trim().toLowerCase() }, { projection: { _id: 1 } }),
+  );
+  return found !== null;
 }
 
 // ── 1. configuration ─────────────────────────────────────────────────────────
@@ -185,9 +220,19 @@ if (await alreadyServing(env.MONGODB_URI)) {
 
 // ── 3. the first farm ────────────────────────────────────────────────────────
 
-if (existsSync(SEEDED)) {
-  say('[3/4]', 'Farm account already made.');
+const dbName = env.MONGODB_DB ?? 'steading';
+const knownEmail = existsSync(SEEDED) ? readFileSync(SEEDED, 'utf8').trim() : '';
+
+if (knownEmail !== '' && (await accountExists(env.MONGODB_URI, dbName, knownEmail))) {
+  say('[3/4]', `Farm account already made — sign in as ${knownEmail}`);
 } else {
+  if (knownEmail !== '') {
+    console.log(
+      `\n        The account for ${knownEmail} is not in the database.\n` +
+        '        Making it again.\n',
+    );
+  }
+
   say('[3/4]', 'No farm on this database yet. Making one.');
   console.log(
     '\n        This is the email and password you will sign in with on the phone.\n' +
@@ -205,18 +250,40 @@ if (existsSync(SEEDED)) {
     fail('need an email and a password of at least 12 characters.');
   }
 
-  const code = await run('pnpm', ['db:seed', farm, email, password], {
+  /**
+   * Through the environment, never as arguments — see `run`. This also keeps
+   * the password out of the process list, which argv is not.
+   */
+  const code = await run('pnpm', ['db:seed'], {
     MONGODB_URI: env.MONGODB_URI,
     AUTH_SECRET: env.AUTH_SECRET,
+    SEED_ORG: farm,
+    SEED_EMAIL: email,
+    SEED_PASSWORD: password,
   });
 
-  // The seed script exits 1 when the account already exists, which is not a
-  // failure here — it means a previous run got further than the marker did.
-  if (code === 0) writeFileSync(SEEDED, `${email}\n`);
-  else {
-    writeFileSync(SEEDED, `${email}\n`);
-    console.log('\n        (That account was already there — carrying on.)');
+  // 2 means the account was already there, which is a success for our purpose.
+  // Anything else is a real failure and must not be recorded as done.
+  if (code !== 0 && code !== 2) {
+    await stopMongo();
+    fail(
+      'could not create the farm account.',
+      'The message above says why. Nothing has been saved, so it is safe to run this again.',
+    );
   }
+
+  // Asked, not assumed. The whole class of bug this replaces was a marker
+  // written for a seed that had not actually produced an account.
+  if (!(await accountExists(env.MONGODB_URI, dbName, email))) {
+    await stopMongo();
+    fail(
+      'the account was reported as created but is not in the database.',
+      'Send this window to Claude — this should not be possible.',
+    );
+  }
+
+  writeFileSync(SEEDED, `${email}\n`);
+  console.log(`\n        Made. Sign in on the phone as ${email}`);
 }
 
 // ── 4. the server ────────────────────────────────────────────────────────────
