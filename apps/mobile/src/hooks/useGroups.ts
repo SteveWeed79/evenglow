@@ -10,6 +10,7 @@ import {
 } from '@steading/core/read/groups';
 import { withdrawalsBySubject } from '@steading/core/read/withdrawals';
 import { subscribe } from '@steading/core/sync/engine';
+import { clearTrouble, reportTrouble } from './useTrouble';
 
 export interface GroupsView {
   groups: Group[];
@@ -47,11 +48,15 @@ export function useGroups(): GroupsView {
       groups.map((g) => g.id),
     );
     setView({ groups, eggs, produce, withdrawals, loading: false });
+    clearTrouble();
   }, []);
 
   // subscribe() publishes immediately, so the subscription itself performs
   // the first read — no separate initial fetch to keep in step with it.
-  useEffect(() => subscribe(() => void refresh()), [refresh]);
+  useEffect(
+    () => subscribe(() => void refresh().catch((error: unknown) => reportTrouble('the stock list', error))),
+    [refresh],
+  );
 
   return view;
 }
