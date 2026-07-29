@@ -1,5 +1,11 @@
 import { useCallback, useState } from 'react';
-import { breedsForSpecies, FLOCK_PURPOSES, type FlockPurpose } from '@steading/contracts';
+import {
+  breedsForSpecies,
+  type FlockPurpose,
+  formatRange,
+  PURPOSE_GROUPS,
+  suggestedGrowOutWeeks,
+} from '@steading/contracts';
 import { listGroups } from '@steading/core/read/groups';
 import {
   Chip,
@@ -64,6 +70,7 @@ export function EditGroupScreen({ route }: ScreenProps<'EditGroup'>): React.Reac
     purposes: FlockPurpose[];
     breedId: string | null;
     bornAt: number | null;
+    processAtWeeks: number | null;
   } | null>(null);
 
   const { saving, failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
@@ -88,9 +95,11 @@ export function EditGroupScreen({ route }: ScreenProps<'EditGroup'>): React.Reac
     purposes: (group.purposes ?? []) as FlockPurpose[],
     breedId: group.breedId ?? null,
     bornAt: group.bornAt ?? null,
+    processAtWeeks: group.processAtWeeks ?? null,
   };
 
   const breeds = breedsForSpecies(group.species);
+  const suggested = suggestedGrowOutWeeks(current.breedId ?? undefined);
 
   const change = (next: Partial<typeof current>) => setEdits({ ...current, ...next });
 
@@ -106,6 +115,9 @@ export function EditGroupScreen({ route }: ScreenProps<'EditGroup'>): React.Reac
           ...(current.purposes.length > 0 ? { purposes: current.purposes } : {}),
           ...(current.breedId === null ? {} : { breedId: current.breedId }),
           ...(current.bornAt === null ? {} : { bornAt: current.bornAt }),
+          ...(current.purposes.includes('meat') && current.processAtWeeks !== null
+            ? { processAtWeeks: current.processAtWeeks }
+            : {}),
         },
       });
     });
@@ -142,27 +154,25 @@ export function EditGroupScreen({ route }: ScreenProps<'EditGroup'>): React.Reac
         />
       </Field>
 
-      <Field
-        label="Why do you keep them?"
-        hint="This is what decides whether the app ever counts them down to a date."
-      >
-        <View style={styles.chips}>
-          {FLOCK_PURPOSES.map((purpose) => (
-            <Chip
-              key={purpose}
-              label={PURPOSE_LABELS[purpose]}
-              selected={current.purposes.includes(purpose)}
-              onPress={() =>
-                change({
-                  purposes: current.purposes.includes(purpose)
-                    ? current.purposes.filter((p) => p !== purpose)
-                    : [...current.purposes, purpose],
-                })
-              }
-            />
-          ))}
-        </View>
-      </Field>
+      {PURPOSE_GROUPS.map((section) => (
+        <Field key={section.key} label={section.title} hint={section.hint}>
+          <View style={styles.chips}>
+            {section.purposes.map((purpose) => (
+              <Chip
+                key={purpose}
+                label={PURPOSE_LABELS[purpose]}
+                selected={current.purposes.includes(purpose)}
+                testID={`purpose-${purpose}`}
+                onPress={() => change({
+                    purposes: current.purposes.includes(purpose)
+                      ? current.purposes.filter((p) => p !== purpose)
+                      : [...current.purposes, purpose],
+                  })}
+              />
+            ))}
+          </View>
+        </Field>
+      ))}
 
       {breeds.length > 0 ? (
         <Field
@@ -182,6 +192,46 @@ export function EditGroupScreen({ route }: ScreenProps<'EditGroup'>): React.Reac
             ))}
           </View>
         </Field>
+      ) : null}
+
+      {/* Asked only of stock going to the table.
+          **The library's figure stands unless somebody changes it.** Storing a
+          number here by default would quietly replace "6 to 9 weeks" with a
+          single 8 — narrower than the truth, and the farm never asked for it.
+          Nothing is written until the override is deliberately turned on. */}
+      {current.purposes.includes('meat') ? (
+        suggested !== null && current.processAtWeeks === null ? (
+          <Field label="Ready to process at">
+            <Body>
+              {formatRange(suggested, 'weeks')} old, from the library. The countdown on
+              Today is built from that.
+            </Body>
+            <Toggle
+              label="Mine are ready at a different age"
+              value={false}
+              onChange={() =>
+                change({ processAtWeeks: Math.round((suggested[0] + suggested[1]) / 2) })
+              }
+            />
+          </Field>
+        ) : (
+          <Field
+            label="Ready to process at"
+            hint={
+              suggested === null
+                ? 'Your own figure — the library has no number for this one.'
+                : `The library says ${formatRange(suggested, 'weeks')}. Yours wins.`
+            }
+          >
+            <Stepper
+              value={current.processAtWeeks ?? 8}
+              onChange={(processAtWeeks: number) => change({ processAtWeeks })}
+              steps={[1, 4]}
+              min={1}
+              suffix="weeks old"
+            />
+          </Field>
+        )
       ) : null}
 
       <Toggle

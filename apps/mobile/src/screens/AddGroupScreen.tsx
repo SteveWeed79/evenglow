@@ -2,11 +2,12 @@ import { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import {
   breedsForSpecies,
-  FLOCK_PURPOSES,
   type FlockPurpose,
   formatRange,
   newId,
+  PURPOSE_GROUPS,
   SPECIES_TRAITS,
+  suggestedGrowOutWeeks,
   type Species,
 } from '@steading/contracts';
 import { defaultGroupName } from '@steading/core/naming';
@@ -78,6 +79,7 @@ export function AddGroupScreen(): React.ReactElement {
   const [count, setCount] = useState(0);
   const [purposes, setPurposes] = useState<FlockPurpose[]>(['eggs']);
   const [breedId, setBreedId] = useState<string | null>(null);
+  const [processAt, setProcessAt] = useState<number | null>(null);
   const [knowsBirth, setKnowsBirth] = useState(false);
   const [bornAt, setBornAt] = useState(() => startOfDay(Date.now()));
 
@@ -86,13 +88,15 @@ export function AddGroupScreen(): React.ReactElement {
   const traits = SPECIES_TRAITS[species];
   const breeds = breedsForSpecies(species);
   const chosenBreed = breeds.find((b) => b.id === breedId);
+  const suggested = suggestedGrowOutWeeks(breedId ?? undefined);
+
 
   /**
    * What this group will be called if nothing is typed — shown as the
    * placeholder, so the field states its own default rather than sitting there
    * looking already answered.
    */
-  const suggested = defaultGroupName(
+  const suggestedName = defaultGroupName(
     traits.label,
     groups.map((g) => g.name),
   );
@@ -110,11 +114,14 @@ export function AddGroupScreen(): React.ReactElement {
         op: 'create',
         targetId: newId(),
         payload: {
-          name: name.trim() || suggested,
+          name: name.trim() || suggestedName,
           species,
           count,
           ...(purposes.length > 0 ? { purposes } : {}),
           ...(breedId === null ? {} : { breedId }),
+          ...(purposes.includes('meat') && processAt !== null
+            ? { processAtWeeks: processAt }
+            : {}),
           // Hatched or born — NOT when they arrived. The clock counts from the
           // first, and a point-of-lay pullet bought in April would otherwise
           // read as three weeks old.
@@ -122,7 +129,7 @@ export function AddGroupScreen(): React.ReactElement {
         },
       });
     });
-  }, [save, log, name, suggested, species, count, purposes, breedId, knowsBirth, bornAt]);
+  }, [save, log, name, suggestedName, species, count, purposes, breedId, processAt, knowsBirth, bornAt]);
 
   return (
     <Screen title="Add stock" back>
@@ -154,27 +161,27 @@ export function AddGroupScreen(): React.ReactElement {
         );
       })}
 
-      <Field
-        label="Why do you keep them?"
-        hint="This is what decides whether the app ever counts them down to a date."
-      >
-        <View style={styles.chips}>
-          {FLOCK_PURPOSES.map((purpose) => (
-            <Chip
-              key={purpose}
-              label={PURPOSE_LABELS[purpose]}
-              selected={purposes.includes(purpose)}
-              onPress={() => togglePurpose(purpose)}
-            />
-          ))}
-        </View>
-      </Field>
+      {PURPOSE_GROUPS.map((section) => (
+        <Field key={section.key} label={section.title} hint={section.hint}>
+          <View style={styles.chips}>
+            {section.purposes.map((purpose) => (
+              <Chip
+                key={purpose}
+                label={PURPOSE_LABELS[purpose]}
+                selected={purposes.includes(purpose)}
+                testID={`purpose-${purpose}`}
+                onPress={() => togglePurpose(purpose)}
+              />
+            ))}
+          </View>
+        </Field>
+      ))}
 
       <Field label={`What are they called? (${traits.collective})`}>
         <TextField
           value={name}
           onChangeText={setName}
-          placeholder={suggested}
+          placeholder={suggestedName}
           maxLength={80}
           testID="group-name"
         />
@@ -200,6 +207,45 @@ export function AddGroupScreen(): React.ReactElement {
             ))}
           </View>
         </Field>
+      ) : null}
+
+
+      {/* Asked only of stock going to the table.
+          **The library's figure stands unless somebody changes it.** Storing a
+          number here by default would quietly replace "6 to 9 weeks" with a
+          single 8 — narrower than the truth, and the farm never asked for it.
+          Nothing is written until the override is deliberately turned on. */}
+      {purposes.includes('meat') ? (
+        suggested !== null && processAt === null ? (
+          <Field label="Ready to process at">
+            <Body>
+              {formatRange(suggested, 'weeks')} old, from the library. The countdown on
+              Today is built from that.
+            </Body>
+            <Toggle
+              label="Mine are ready at a different age"
+              value={false}
+              onChange={() => setProcessAt(Math.round((suggested![0] + suggested![1]) / 2))}
+            />
+          </Field>
+        ) : (
+          <Field
+            label="Ready to process at"
+            hint={
+              suggested === null
+                ? 'Your own figure — the library has no number for this one.'
+                : `The library says ${formatRange(suggested, 'weeks')}. Yours wins.`
+            }
+          >
+            <Stepper
+              value={processAt ?? 8}
+              onChange={setProcessAt}
+              steps={[1, 4]}
+              min={1}
+              suffix="weeks old"
+            />
+          </Field>
+        )
       ) : null}
 
       <Toggle
@@ -236,7 +282,7 @@ export function AddGroupScreen(): React.ReactElement {
       <Failure message={failure} />
 
       <Primary
-        label={`Add ${name.trim() || suggested}`}
+        label={`Add ${name.trim() || suggestedName}`}
         disabled={saving}
         onPress={commit}
         testID="save-group"

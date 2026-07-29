@@ -29,6 +29,8 @@ export interface Group {
   purposes?: string[];
   /** Hatched or born. NOT when they were acquired — see due/growout.ts. */
   bornAt?: number;
+  /** The farm's own processing figure, in weeks. Beats the library. */
+  processAtWeeks?: number;
 }
 
 /** The projection stores whatever the payload held, so it is parsed on the way out. */
@@ -57,6 +59,9 @@ export async function listGroups(): Promise<Group[]> {
           ...(parsed.data.breedId === undefined ? {} : { breedId: parsed.data.breedId }),
           ...(parsed.data.purposes === undefined ? {} : { purposes: [...parsed.data.purposes] }),
           ...(parsed.data.bornAt === undefined ? {} : { bornAt: parsed.data.bornAt }),
+          ...(parsed.data.processAtWeeks === undefined
+            ? {}
+            : { processAtWeeks: parsed.data.processAtWeeks }),
           count: parsed.data.count ?? 0,
         } satisfies Group,
       ];

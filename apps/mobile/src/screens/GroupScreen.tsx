@@ -81,7 +81,12 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
 
       {grow || lay || weight || lost > 0 || fed !== undefined ? (
         <Panel label="Where they are">
-          {grow ? <Body>Ready to process at {formatRange(grow.weeks, 'weeks')} old.</Body> : null}
+          {grow ? (
+            <Body>
+              Ready to process at {formatRange(grow.weeks, 'weeks')} old —{' '}
+              {describeWhen(grow.opensAt)}.
+            </Body>
+          ) : null}
           {lay ? <Body>Expect first eggs at {formatRange(lay.weeks, 'weeks')} old.</Body> : null}
           {weight ? (
             <Body>
@@ -175,6 +180,22 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
 }
 
 const DAY_MS = 86_400_000;
+
+/**
+ * The processing date, said as a date.
+ *
+ * "Ready at eleven weeks old" is arithmetic somebody has to do while standing
+ * in a barn holding a bird. The date is the answer they were after.
+ */
+function describeWhen(at: number): string {
+  const days = Math.round((at - Date.now()) / DAY_MS);
+  const date = new Date(at).toLocaleDateString(undefined, { day: 'numeric', month: 'long' });
+
+  if (days < 0) return `that was ${date}`;
+  if (days === 0) return 'that is today';
+  if (days < 21) return `${date}, ${days} days away`;
+  return `${date}, about ${Math.round(days / 7)} weeks away`;
+}
 
 /** Days, never a timestamp. Nobody in a yard needs to know it was 06:14. */
 function relative(at: number): string {

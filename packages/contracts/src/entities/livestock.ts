@@ -58,34 +58,40 @@ export interface SpeciesTraits {
    * physically be milked" — alpacas can be, and nobody does.
    */
   givesMilk: boolean;
+  /**
+   * Whether a fleece comes off them. Separate from `givesMilk` because the
+   * overlap is partial and the exceptions are the interesting ones: an alpaca
+   * gives fibre and no milk, a cow the reverse, a sheep both.
+   */
+  givesFibre: boolean;
   group: SpeciesGroup;
 }
 
 export const SPECIES_TRAITS: Record<Species, SpeciesTraits> = {
-  chicken: { label: 'Chickens', collective: 'flock', givesMilk: false, laysEggs: true, group: 'poultry' },
-  duck: { label: 'Ducks', collective: 'flock', givesMilk: false, laysEggs: true, group: 'poultry' },
-  goose: { label: 'Geese', collective: 'gaggle', givesMilk: false, laysEggs: true, group: 'poultry' },
-  turkey: { label: 'Turkeys', collective: 'flock', givesMilk: false, laysEggs: true, group: 'poultry' },
-  quail: { label: 'Quail', collective: 'covey', givesMilk: false, laysEggs: true, group: 'poultry' },
-  guineafowl: { label: 'Guinea fowl', collective: 'flock', givesMilk: false, laysEggs: true, group: 'poultry' },
-  pigeon: { label: 'Pigeons', collective: 'loft', givesMilk: false, laysEggs: true, group: 'poultry' },
+  chicken: { label: 'Chickens', collective: 'flock', givesMilk: false, givesFibre: false, laysEggs: true, group: 'poultry' },
+  duck: { label: 'Ducks', collective: 'flock', givesMilk: false, givesFibre: false, laysEggs: true, group: 'poultry' },
+  goose: { label: 'Geese', collective: 'gaggle', givesMilk: false, givesFibre: false, laysEggs: true, group: 'poultry' },
+  turkey: { label: 'Turkeys', collective: 'flock', givesMilk: false, givesFibre: false, laysEggs: true, group: 'poultry' },
+  quail: { label: 'Quail', collective: 'covey', givesMilk: false, givesFibre: false, laysEggs: true, group: 'poultry' },
+  guineafowl: { label: 'Guinea fowl', collective: 'flock', givesMilk: false, givesFibre: false, laysEggs: true, group: 'poultry' },
+  pigeon: { label: 'Pigeons', collective: 'loft', givesMilk: false, givesFibre: false, laysEggs: true, group: 'poultry' },
 
-  emu: { label: 'Emu', collective: 'mob', givesMilk: false, laysEggs: true, group: 'ratite' },
-  ostrich: { label: 'Ostrich', collective: 'flock', givesMilk: false, laysEggs: true, group: 'ratite' },
-  rhea: { label: 'Rhea', collective: 'flock', givesMilk: false, laysEggs: true, group: 'ratite' },
+  emu: { label: 'Emu', collective: 'mob', givesMilk: false, givesFibre: false, laysEggs: true, group: 'ratite' },
+  ostrich: { label: 'Ostrich', collective: 'flock', givesMilk: false, givesFibre: false, laysEggs: true, group: 'ratite' },
+  rhea: { label: 'Rhea', collective: 'flock', givesMilk: false, givesFibre: false, laysEggs: true, group: 'ratite' },
 
-  goat: { label: 'Goats', collective: 'herd', givesMilk: true, laysEggs: false, group: 'ruminant' },
-  sheep: { label: 'Sheep', collective: 'flock', givesMilk: true, laysEggs: false, group: 'ruminant' },
-  cattle: { label: 'Cattle', collective: 'herd', givesMilk: true, laysEggs: false, group: 'ruminant' },
-  alpaca: { label: 'Alpacas', collective: 'herd', givesMilk: false, laysEggs: false, group: 'ruminant' },
-  llama: { label: 'Llamas', collective: 'herd', givesMilk: false, laysEggs: false, group: 'ruminant' },
+  goat: { label: 'Goats', collective: 'herd', givesMilk: true, givesFibre: true, laysEggs: false, group: 'ruminant' },
+  sheep: { label: 'Sheep', collective: 'flock', givesMilk: true, givesFibre: true, laysEggs: false, group: 'ruminant' },
+  cattle: { label: 'Cattle', collective: 'herd', givesMilk: true, givesFibre: false, laysEggs: false, group: 'ruminant' },
+  alpaca: { label: 'Alpacas', collective: 'herd', givesMilk: false, givesFibre: true, laysEggs: false, group: 'ruminant' },
+  llama: { label: 'Llamas', collective: 'herd', givesMilk: false, givesFibre: true, laysEggs: false, group: 'ruminant' },
 
-  pig: { label: 'Pigs', collective: 'drove', givesMilk: false, laysEggs: false, group: 'other' },
-  rabbit: { label: 'Rabbits', collective: 'colony', givesMilk: false, laysEggs: false, group: 'other' },
-  donkey: { label: 'Donkeys', collective: 'herd', givesMilk: false, laysEggs: false, group: 'other' },
-  horse: { label: 'Horses', collective: 'herd', givesMilk: false, laysEggs: false, group: 'other' },
+  pig: { label: 'Pigs', collective: 'drove', givesMilk: false, givesFibre: false, laysEggs: false, group: 'other' },
+  rabbit: { label: 'Rabbits', collective: 'colony', givesMilk: false, givesFibre: true, laysEggs: false, group: 'other' },
+  donkey: { label: 'Donkeys', collective: 'herd', givesMilk: false, givesFibre: false, laysEggs: false, group: 'other' },
+  horse: { label: 'Horses', collective: 'herd', givesMilk: false, givesFibre: false, laysEggs: false, group: 'other' },
 
-  other: { label: 'Other', collective: 'group', givesMilk: false, laysEggs: true, group: 'other' },
+  other: { label: 'Other', collective: 'group', givesMilk: true, givesFibre: true, laysEggs: true, group: 'other' },
 };
 
 /** Whether a milk withdrawal is worth asking about for this species. */
@@ -178,6 +184,20 @@ const flockShape = {
    * would tell someone their pullets are ready to process in six weeks.
    */
   bornAt: z.number().int().optional(),
+  /**
+   * The farm's own answer to "when are these ready", in weeks from hatching.
+   *
+   * Overrides the library, and exists because the library is a starting point
+   * rather than an authority. It says an Australorp is a 16-to-20-week bird,
+   * which is the figure for a proper roaster; plenty of keepers take the same
+   * bird at eleven and are not wrong. Without this the only way to correct it
+   * would be to lie about the breed.
+   *
+   * It also makes the clock work with no breed at all — a farm with an
+   * unlisted cross that knows its own number gets a countdown, where before it
+   * got silence.
+   */
+  processAtWeeks: z.number().min(1).max(520).optional(),
   note: z.string().max(500).optional(),
 };
 

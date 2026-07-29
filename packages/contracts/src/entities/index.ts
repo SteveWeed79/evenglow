@@ -54,6 +54,7 @@ import {
 } from './ops';
 
 export * from './livestock';
+export * from './produces';
 export * from './iron';
 export * from './ops';
 export * from './growing';

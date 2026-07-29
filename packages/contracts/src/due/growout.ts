@@ -28,6 +28,18 @@ import type { Due } from './types';
  * away exactly the honesty the range was carrying, and a farm that misses it
  * by four days would conclude the app is wrong rather than that the number was
  * always approximate.
+ *
+ * ## The farm's own number wins
+ *
+ * `processAtWeeks` overrides the library entirely, and that is the point of
+ * having it. The library says an Australorp is a 16-to-20-week bird — the
+ * figure for a proper roaster — and a keeper who takes the same bird at eleven
+ * is describing their own practice, not making a mistake. The library is a
+ * starting point; the farm is the authority about the farm.
+ *
+ * An override is a single number rather than a range, because that is how the
+ * answer arrives: "mine are ready at eleven weeks." Inventing a spread around
+ * it would be the app adding uncertainty nobody expressed.
  */
 
 const DAY_MS = 86_400_000;
@@ -40,6 +52,8 @@ export interface GrowOutGroup {
   bornAt?: number | undefined;
   breedId?: string | undefined;
   purposes?: readonly string[] | undefined;
+  /** The farm's own figure, in weeks. Beats the library when set. */
+  processAtWeeks?: number | undefined;
 }
 
 export interface GrowOutWindow {
@@ -60,17 +74,37 @@ export interface GrowOutWindow {
  */
 export function growOutWindow(group: GrowOutGroup): GrowOutWindow | null {
   if (!group.purposes?.includes('meat')) return null;
-  if (group.bornAt === undefined || group.breedId === undefined) return null;
+  if (group.bornAt === undefined) return null;
 
-  const breed = libraryBreed(group.breedId);
-  const weeks = breed?.growOutWeeks;
-  if (weeks === undefined) return null;
+  const weeks = growOutWeeksFor(group);
+  if (weeks === null) return null;
 
   return {
     opensAt: group.bornAt + weeks[0] * WEEK_MS,
     closesAt: group.bornAt + weeks[1] * WEEK_MS,
     weeks,
   };
+}
+
+/**
+ * The figure to count with: the farm's, then the library's, then nothing.
+ *
+ * Note the order — an override needs no breed, so a farm running an unlisted
+ * cross is no longer stuck with silence just because the library has never
+ * heard of their bird.
+ */
+export function growOutWeeksFor(group: GrowOutGroup): Range | null {
+  if (group.processAtWeeks !== undefined) {
+    return [group.processAtWeeks, group.processAtWeeks];
+  }
+  if (group.breedId === undefined) return null;
+  return libraryBreed(group.breedId)?.growOutWeeks ?? null;
+}
+
+/** What the library would say, so a screen can offer it as a starting point. */
+export function suggestedGrowOutWeeks(breedId: string | undefined): Range | null {
+  if (breedId === undefined) return null;
+  return libraryBreed(breedId)?.growOutWeeks ?? null;
 }
 
 /**

@@ -130,6 +130,9 @@ export function useDues(): DuesView {
         ...(group.bornAt === undefined ? {} : { bornAt: group.bornAt }),
         ...(group.breedId === undefined ? {} : { breedId: group.breedId }),
         ...(group.purposes === undefined ? {} : { purposes: group.purposes }),
+        ...(group.processAtWeeks === undefined
+          ? {}
+          : { processAtWeeks: group.processAtWeeks }),
       });
       if (processing) rows.push(processing);
     }
