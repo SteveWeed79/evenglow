@@ -156,6 +156,7 @@ if (!res.upsertedCount) return { id: m.id, status: 'duplicate' };
 ## Commands
 
 ```
+pnpm farm             # dev back end from nothing: database, first account, API
 pnpm dev:api          # Fastify with watch
 pnpm mobile           # Expo dev server
 pnpm mobile:android   # prebuild, compile, deploy to a device or emulator
