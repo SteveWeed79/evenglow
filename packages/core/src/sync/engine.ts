@@ -229,7 +229,21 @@ export function startSync(transport?: SyncTransport): void {
   running = true;
   consecutiveFailures = 0;
 
-  if (typeof window !== 'undefined') {
+  /**
+   * Browser connectivity events, where there are any.
+   *
+   * **Guarded on the method, not the object.** React Native defines `window`
+   * — it is an alias for the global — but gives it no `addEventListener`. So
+   * `typeof window !== 'undefined'` passed on a handset and the next line
+   * called undefined, which is the `TypeError: undefined is not a function`
+   * that stopped the app booting.
+   *
+   * The device has better signals anyway: `sync/triggers.ts` listens to
+   * AppState and expo-network, which know about a frozen process and a barn
+   * with no bars. This block is for the browser build and nothing else, and
+   * it is the same shape `storage.ts` and `lock.ts` already use.
+   */
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', () => void publish());
   }

@@ -40,6 +40,16 @@ if errorlevel 1 (
 )
 
 echo.
+echo   --- The code you are running ---
+where git >nul 2>&1
+if errorlevel 1 (
+  echo   Cannot check without Git.
+) else (
+  for /f "tokens=*" %%v in ('git log -1 --pretty^=format:"%%h  %%s" 2^>nul') do echo   %%v
+  for /f "tokens=*" %%v in ('git status --porcelain 2^>nul') do echo   CHANGED: %%v
+)
+
+echo.
 echo   --- The app's own settings ---
 
 if exist "apps\mobile\.env" (
@@ -95,6 +105,17 @@ if errorlevel 1 (
 ) else (
   adb devices
 )
+
+echo.
+echo   --- Do the app's packages match Expo? ---
+:: The one question this window could not answer, and the one that has cost
+:: the most time: Expo Go ships fixed native module versions, so a package
+:: pinned to a different version is JavaScript talking to a native side that
+:: does not match it. That fails as "undefined is not a function" on a device
+:: and passes every test on a computer.
+cd apps\mobile
+call npx expo install --check
+cd ..\..
 
 echo.
 echo   ============================================
