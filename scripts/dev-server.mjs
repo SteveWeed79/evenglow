@@ -264,6 +264,18 @@ if (!resetting && knownEmail !== '' && (await accountExists(env.MONGODB_URI, dbN
 
   writeFileSync(SEEDED, `${email}\n`);
   console.log(`\n        Done. Sign in on the phone as ${email}`);
+
+  /**
+   * Stops here rather than falling through to the server.
+   *
+   * Resetting is something you do while the farm server is running, and
+   * starting a second one would fail on port 3001 — after the password had
+   * already changed, which is the worst order for those two events. One job,
+   * then out.
+   */
+  await stopMongo();
+  console.log('\n  Now start the farm server again.\n');
+  process.exit(0);
 } else {
   if (knownEmail !== '') {
     console.log(

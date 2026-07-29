@@ -12,9 +12,8 @@ echo   Use this when the app says your email or
 echo   password is wrong and you know it is right.
 echo.
 echo   CLOSE the farm server window first, then run
-echo   this. It starts the server again when it is
-echo   finished, so you can leave THIS window open
-echo   and carry on.
+echo   this. When it is done, start the farm server
+echo   again and sign in with the new password.
 echo.
 pause
 
