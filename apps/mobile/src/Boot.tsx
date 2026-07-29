@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { startSync } from '@steading/core/sync/engine';
 import { setStorageBacking } from '@steading/core/sync/storage';
+import { setEngineReporter } from '@steading/core/sync/report';
+import { reportTrouble } from './hooks/useTrouble';
 import { start, type Started } from './boot/start';
 import { openLocalStore } from './db/store';
 import { useAppFonts } from './theme/fonts';
@@ -55,6 +57,16 @@ export function Boot({
    * the records are not.
    */
   const fonts = useAppFonts();
+
+  /**
+   * The engine's failures reach the screen, not just Metro.
+   *
+   * Installed before `start()` so nothing the loop does on its first tick can
+   * fail somewhere nobody can see.
+   */
+  useEffect(() => {
+    setEngineReporter((where, error) => reportTrouble(where, error));
+  }, []);
 
   useEffect(() => {
     let live = true;

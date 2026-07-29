@@ -1,4 +1,5 @@
 import { localStore } from '../db/store';
+import { reportEngineError } from './report';
 import { backoffDelay, flushOnce, type SyncTransport } from './flush';
 import { SYNC_LOCK, withSyncLock } from './lock';
 import { pullOnce, pulledThrough } from './pull';
@@ -108,7 +109,7 @@ async function tick(transport?: SyncTransport): Promise<void> {
     }
   } catch (error) {
     // A failure here must never wedge the loop; the work is still queued.
-    console.warn('Steading: flush failed', error);
+    reportEngineError('sending your work', error);
     consecutiveFailures += 1;
   } finally {
     syncing = false;
@@ -187,13 +188,33 @@ async function pull(): Promise<void> {
   try {
     await withSyncLock(SYNC_LOCK, () => pullOnce());
   } catch (error) {
-    console.warn('Steading: pull failed', error);
+    reportEngineError('fetching changes', error);
   }
 }
 
 function schedule(delay: number, transport?: SyncTransport): void {
   if (timer !== null) clearTimeout(timer);
-  timer = setTimeout(() => void tick(transport), delay);
+  timer = setTimeout(() => {
+    /**
+     * The loop's last line of defence, and it earns its place.
+     *
+     * `tick` guards the flush, but `publish()` and `queueDepth()` sit outside
+     * that try — so anything they throw rejected this promise, and because
+     * `schedule()` is the final statement of `tick`, the loop never scheduled
+     * itself again. One throw and sync stopped for the life of the process,
+     * reported only as an anonymous unhandled rejection.
+     *
+     * Nothing is lost when it fires: the mutations are still in the outbox,
+     * which is the whole point of the outbox. The next tick tries again.
+     */
+    tick(transport).catch((error: unknown) => {
+      reportEngineError('the sync loop', error);
+      // Deliberately IDLE_MS rather than an immediate retry. Whatever this is
+      // will almost certainly throw again, and a tight loop against it would
+      // be worse than the failure.
+      schedule(IDLE_MS, transport);
+    });
+  }, delay);
 }
 
 /** Call after enqueueing, so a log reaches the server without waiting for a timer. */
