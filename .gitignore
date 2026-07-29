@@ -61,3 +61,6 @@ apps/mobile/.expo-export/
 # unlike the Capacitor project, nothing is hand-edited in here.
 apps/mobile/android/
 apps/mobile/ios/
+
+# Local development database made by `pnpm farm`
+.steading-data/

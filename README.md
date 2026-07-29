@@ -102,11 +102,31 @@ same `LocalStore` the web client uses — see `docs/REACT-NATIVE-PLAN.md` for th
 staging and what it costs.
 
 ```bash
+pnpm farm                                      # server + database + first account
+pnpm mobile                                    # Expo dev server, second window
+```
+
+`pnpm farm` is the development back end for a machine with nothing installed on
+it. It generates `.env.local` with a random `AUTH_SECRET`, starts a MongoDB
+against `.steading-data/` (downloading one on first run — it does **not** need
+MongoDB installed, and it does **not** use the throwaway in-memory engine, so
+your farm survives closing the window), seeds the first owner account, and then
+runs Fastify on port 3001. If a MongoDB is already listening it uses that
+instead. On Windows, `scripts/windows/Start the farm server.bat` does the same
+by double-click.
+
+The longhand, when you want the pieces separately:
+
+```bash
 cp apps/mobile/.env.example apps/mobile/.env   # then edit EXPO_PUBLIC_API_URL
 pnpm dev:api                                   # Fastify, port 3001
-pnpm mobile                                    # Expo dev server
+pnpm db:seed "Farm" you@example.com 'a good password'
 pnpm mobile:android                            # build and deploy to a device
 ```
+
+**You need the server running to sign in**, and only to sign in. Once a device
+has a session it works entirely offline — that is the point of the thing. A
+device that has never signed in has no orgId, so it has no database to open.
 
 | Command | What it does |
 | --- | --- |

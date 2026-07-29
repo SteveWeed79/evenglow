@@ -24,7 +24,8 @@
     "db:verify": "pnpm --filter @steading/api db:verify",
     "dev:api": "pnpm --filter @steading/api dev",
     "check:icons": "node scripts/check-icons.mjs",
-    "gen:plaster": "node scripts/make-plaster.mjs"
+    "gen:plaster": "node scripts/make-plaster.mjs",
+    "farm": "node scripts/dev-server.mjs"
   },
   "dependencies": {
     "@steading/api": "workspace:*",
