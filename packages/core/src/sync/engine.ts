@@ -61,8 +61,42 @@ async function publish(): Promise<void> {
   for (const listener of listeners) listener(state);
 }
 
+/**
+ * Whether the device believes it has a network, as last reported.
+ *
+ * `navigator.onLine` used to answer this, and on a handset it does not exist —
+ * so `undefined !== false` was `true`, the check passed unconditionally, and
+ * the offline branch of `tick()` below has never once been taken. A feature
+ * that cannot fire is worse than no feature: it reads like a decision somebody
+ * made and tested.
+ *
+ * Told rather than detected, matching `setEngineReporter` and `setApiBase`.
+ * Core cannot ask a native module — `packages/core` compiles for a server too —
+ * so the platform pushes the answer in. `apps/mobile/src/sync/triggers.ts`
+ * already listens to expo-network for its regain trigger and now reports it
+ * here as well.
+ *
+ * **Defaults to online, and stays online if nothing ever tells it otherwise.**
+ * The cost of a wrong `true` is one flush that fails and backs off, which the
+ * engine already handles correctly. The cost of a wrong `false` is a queue that
+ * never sends. Only one of those is recoverable without a person noticing.
+ */
+let online = true;
+
+export function setOnline(next: boolean): void {
+  const changed = online !== next;
+  online = next;
+
+  // Regaining the network is worth acting on immediately: somebody who has
+  // walked back into signal is usually looking at the sync chip.
+  if (changed && next && running) {
+    consecutiveFailures = 0;
+    schedule(0);
+  }
+}
+
 function isOnline(): boolean {
-  return typeof navigator === 'undefined' || navigator.onLine !== false;
+  return online;
 }
 
 /** Runs one flush and schedules the next. Never throws to the caller. */
@@ -243,24 +277,13 @@ export function startSync(transport?: SyncTransport): void {
    * with no bars. This block is for the browser build and nothing else, and
    * it is the same shape `storage.ts` and `lock.ts` already use.
    */
-  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-    window.addEventListener('online', onOnline);
-    window.addEventListener('offline', () => void publish());
-  }
-
   schedule(0, transport);
-}
-
-function onOnline(): void {
-  consecutiveFailures = 0;
-  if (running) schedule(0);
 }
 
 export function stopSync(): void {
   running = false;
   if (timer !== null) clearTimeout(timer);
   timer = null;
-  if (typeof window !== 'undefined') window.removeEventListener('online', onOnline);
 }
 
 export interface Diagnostics {
