@@ -1,5 +1,6 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StyleSheet, Text, View } from 'react-native';
+import { TAB_MARKS } from './tab-marks';
 import { Icon, type IconName } from '../components/Icon';
 import { GrowingScreen } from '../screens/GrowingScreen';
 import { IronScreen } from '../screens/IronScreen';
@@ -24,12 +25,15 @@ import { FONTS, TAP, TYPE } from '../theme/tokens';
  * settings belong and where R3 will hang the sync chip beside them.
  */
 
-const TABS = [
-  { name: 'Today', icon: 'today', component: TodayScreen },
-  { name: 'Stock', icon: 'stock', component: StockScreen },
-  { name: 'Growing', icon: 'growing', component: GrowingScreen },
-  { name: 'Iron', icon: 'iron', component: IronScreen },
-] as const satisfies readonly { name: string; icon: IconName; component: () => React.ReactElement }[];
+/** The screen behind each mark. Names and marks live in `tab-marks.ts`. */
+const SCREENS: Record<string, () => React.ReactElement> = {
+  Today: TodayScreen,
+  Stock: StockScreen,
+  Growing: GrowingScreen,
+  Iron: IronScreen,
+};
+
+const TABS = TAB_MARKS;
 
 export type TabParamList = {
   Today: undefined;
@@ -62,14 +66,16 @@ export function Tabs(): React.ReactElement {
         tabBarItemStyle: { minHeight: TAP.primary },
       }}
     >
-      {TABS.map(({ name, icon, component }) => (
+      {TABS.map(({ name, icon }) => (
         <Tab.Screen
           key={name}
           name={name}
-          component={component}
+          component={SCREENS[name]!}
           options={{
             tabBarAccessibilityLabel: name,
-            tabBarIcon: ({ focused }) => <TabMark icon={icon} label={name} focused={focused} />,
+            tabBarIcon: ({ focused }) => (
+              <TabMark icon={icon} label={name} focused={focused} count={TABS.length} />
+            ),
           }}
         />
       ))}
@@ -77,34 +83,80 @@ export function Tabs(): React.ReactElement {
   );
 }
 
+/**
+ * One tab: its mark, and its name under it.
+ *
+ * ## Why the label needed fixing
+ *
+ * This is drawn into the navigator's ICON slot, which is a narrow box — and
+ * the label had no line limit. So "TODAY" wrapped to "TODA / Y", "STOCK" to
+ * "STOC / K" and "GROWING" to "GROW / ING", on every screen, in every
+ * screenshot. Letter-spacing on an uppercase word in a box that narrow is what
+ * pushed it over.
+ *
+ * ## Why it scales with the number of tabs
+ *
+ * The bar divides the screen by however many tabs there are, so every tab
+ * added makes every label narrower. Four is what UX-SPEC fixes today and five
+ * is already discussed, so the type gives ground before the words do:
+ * letter-spacing goes first, because it is decoration, then size.
+ *
+ * Below that the label truncates rather than wraps or shrinks to nothing —
+ * a clipped word still reads, and the accessibility label carries the whole
+ * name regardless of what is drawn.
+ */
 function TabMark({
   icon,
   label,
   focused,
+  count,
 }: {
   icon: IconName;
   label: string;
   focused: boolean;
+  count: number;
 }): React.ReactElement {
   const { colors } = useTheme();
   // Brass for the tab you are in — the only place the lantern colour appears
   // in the bar, so "where am I" is answered by colour and not by underline.
   const tint = focused ? colors.lanternInk : colors.muted;
 
+  const roomy = count <= 4;
+
   return (
     <View style={styles.mark}>
-      <Icon name={icon} size={26} color={tint} />
-      <Text style={[styles.label, { color: tint }]}>{label}</Text>
+      <Icon name={icon} size={roomy ? 26 : 24} color={tint} />
+      <Text
+        // The whole point: one line, always. Everything else is how it copes.
+        numberOfLines={1}
+        // Android honours this alongside numberOfLines, so a long name shrinks
+        // to fit before it is cut.
+        adjustsFontSizeToFit
+        minimumFontScale={0.8}
+        style={[
+          styles.label,
+          {
+            color: tint,
+            letterSpacing: roomy ? 1.2 : 0,
+            fontSize: roomy ? TYPE.label - 2 : TYPE.label - 3,
+          },
+        ]}
+      >
+        {label}
+      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  mark: { alignItems: 'center', justifyContent: 'center', gap: 3 },
+  // Full width of the slot, so the label has the whole tab to sit in rather
+  // than only as much as the icon happens to occupy.
+  mark: { alignItems: 'center', justifyContent: 'center', gap: 3, width: '100%' },
   label: {
     fontFamily: FONTS.data,
-    fontSize: TYPE.label - 2,
-    letterSpacing: 1.2,
     textTransform: 'uppercase',
+    textAlign: 'center',
+    // Size and tracking come from TabMark — they depend on how many tabs there
+    // are, and a StyleSheet cannot know that.
   },
 });
