@@ -3,8 +3,9 @@ import { StyleSheet, Text, View } from 'react-native';
 import {
   formatMass,
   formatRange,
-  laysEggs,
+
   libraryBreed,
+  productsOf,
   longestWithdrawal,
   SPECIES_TRAITS,
 } from '@steading/contracts';
@@ -57,6 +58,12 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
   if (group === null) return <Missing title="Stock" what="That group" />;
 
   const traits = SPECIES_TRAITS[group.species];
+
+  // Eggs are excluded because they are logged on Today with the morning's
+  // tally; this row is everything else the group gives.
+  const produces = productsOf(group.species, group.purposes ?? []).filter(
+    (product) => product !== 'eggs',
+  );
   const breed = group.breedId === undefined ? undefined : libraryBreed(group.breedId);
   const withdrawal = longestWithdrawal(withdrawals?.get(groupId) ?? []);
   const grow = growOutWindow(group);
@@ -131,10 +138,25 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
           onPress={() => nav.navigate('Weigh', { groupId })}
         />
         {/* Eggs are logged on Today with the rest of the morning's tally, so
-            this is deliberately everything that is not an egg. */}
+            this is deliberately everything that is not an egg.
+
+            **Named from what this group actually gives.** The title used to
+            branch on `laysEggs` alone, so a flock of hens was offered "Milk,
+            fibre or honey" — three things a chicken has never produced. The
+            model already knew better: `productsOf` intersects what the species
+            can give with what the keeper says they are for.
+
+            It still appears when there is nothing on that list, because honey
+            has no species behind it yet (there are no bees in `SPECIES`) and
+            `other` is the only route for anything the app has no name for.
+            Removing the row would remove the only way to record those. */}
         <Row
-          title={laysEggs(group.species) ? 'Milk, fibre or honey' : 'What they produce'}
-          detail="Anything off them that is not an egg"
+          title={producesTitle(produces)}
+          detail={
+            produces.length > 0
+              ? 'What you took off them, and how much'
+              : 'Honey, or anything the app has no name for'
+          }
           icon="milk"
           testID="go-produce"
           onPress={() => nav.navigate('Produce', { groupId })}
@@ -215,3 +237,17 @@ const styles = StyleSheet.create({
   },
   rows: { gap: SPACE.sm },
 });
+
+/**
+ * Names the products rather than guessing at them.
+ *
+ * "Milk or fibre" for a dual-purpose goat, "Fibre" for an alpaca, and — when
+ * the species gives nothing but eggs — a title that does not claim otherwise.
+ */
+function producesTitle(products: readonly string[]): string {
+  if (products.length === 0) return 'Anything else off them';
+
+  const named = products.map((product) => product[0]!.toUpperCase() + product.slice(1));
+  if (named.length === 1) return named[0]!;
+  return `${named.slice(0, -1).join(', ')} or ${named[named.length - 1]!.toLowerCase()}`;
+}
