@@ -22,6 +22,7 @@ import { AddServiceScreen } from '../../apps/mobile/src/screens/AddServiceScreen
 import { BreedingScreen } from '../../apps/mobile/src/screens/BreedingScreen';
 import { CareLogScreen } from '../../apps/mobile/src/screens/CareLogScreen';
 import { EditGroupScreen } from '../../apps/mobile/src/screens/EditGroupScreen';
+import { GroupScreen } from '../../apps/mobile/src/screens/GroupScreen';
 import { FeedScreen } from '../../apps/mobile/src/screens/FeedScreen';
 import { HarvestScreen } from '../../apps/mobile/src/screens/HarvestScreen';
 import { IncubationScreen } from '../../apps/mobile/src/screens/IncubationScreen';
@@ -408,5 +409,45 @@ describe('navigation out of a screen', () => {
     await screen.press('save-weight');
 
     expect(navCalls()).toContainEqual({ action: 'goBack' });
+  });
+});
+
+describe('the group hub, ranked rather than flat', () => {
+  /**
+   * From the emulator: nine rows of equal weight, each with an icon and a
+   * line of explanation. Eighteen lines of text, no ranking, and past
+   * Material's own ceiling for a related-action cluster.
+   *
+   * The split is by how often a thing is done. What must not happen is a
+   * destination disappearing (invariant 13), so this asserts all nine are
+   * still reachable.
+   */
+  const DAILY = ['go-treatment', 'go-care', 'go-feed', 'go-loss'];
+  const OCCASIONAL = ['go-produce', 'go-weigh', 'go-animals', 'go-breeding', 'go-edit'];
+
+  it('shows the four daily acts without asking', async () => {
+    await aGroup();
+    const screen = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
+
+    for (const id of DAILY) expect(screen.has(id), id).toBe(true);
+    screen.unmount();
+  });
+
+  it('folds the occasional ones away', async () => {
+    await aGroup();
+    const screen = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
+
+    for (const id of OCCASIONAL) expect(screen.has(id), id).toBe(false);
+    screen.unmount();
+  });
+
+  it('reaches every one of them in one tap, losing nothing', async () => {
+    await aGroup();
+    const screen = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
+
+    await screen.press('group-more');
+
+    for (const id of [...DAILY, ...OCCASIONAL]) expect(screen.has(id), id).toBe(true);
+    screen.unmount();
   });
 });
