@@ -336,6 +336,22 @@ export function DayPick({
   const month = date.getMonth();
   const day = date.getDate();
 
+  /**
+   * What is in the box while it is being typed into, or null when it is not.
+   *
+   * The field used to read `String(day)` straight off the clamped date, and
+   * commit only when the text parsed to 1 or more. So clearing it did nothing —
+   * the empty string parsed to 0, no commit happened, and the old digit
+   * reappeared before the next keystroke landed. Changing a hatch date from
+   * the 9th to the 21st meant fighting the box for the first digit.
+   *
+   * A draft lets the field hold states the date cannot: empty, mid-typing, or
+   * a number this month has no room for. The date only moves when the draft
+   * means something, and the draft is dropped on blur so the canonical clamped
+   * value is what is left on screen.
+   */
+  const [draft, setDraft] = useState<string | null>(null);
+
   const set = useCallback(
     (nextYear: number, nextMonth: number, nextDay: number) => {
       // Clamped rather than rolled over: picking 31 and then February should
@@ -356,6 +372,8 @@ export function DayPick({
             selected={month === index}
             onPress={() => {
               void Haptics.selectionAsync();
+              // A month change re-clamps the day, so a half-typed one is stale.
+              setDraft(null);
               set(year, index, day);
             }}
           />
@@ -364,15 +382,22 @@ export function DayPick({
 
       <View style={styles.dayRow}>
         <TextInput
-          value={String(day)}
+          value={draft ?? String(day)}
           onChangeText={(text) => {
-            const next = Number(text.replace(/[^0-9]/g, '').slice(0, 2));
-            if (next >= 1) set(year, month, next);
+            const digits = text.replace(/[^0-9]/g, '').slice(0, 2);
+            setDraft(digits);
+
+            // An empty box is a legitimate thing to be holding halfway through
+            // a change. It is not a date, so nothing is committed for it.
+            const next = Number(digits);
+            if (digits !== '' && next >= 1) set(year, month, next);
           }}
+          onBlur={() => setDraft(null)}
           keyboardType="number-pad"
           inputMode="numeric"
           maxLength={2}
           accessibilityLabel="Day of the month"
+          testID="day-of-month"
           style={[
             styles.dayField,
             { backgroundColor: colors.raised, borderColor: colors.border, color: colors.ink },

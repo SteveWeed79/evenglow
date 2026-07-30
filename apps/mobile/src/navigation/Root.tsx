@@ -14,6 +14,7 @@ import { EditGroupScreen } from '../screens/EditGroupScreen';
 import { FeedScreen } from '../screens/FeedScreen';
 import { GroupScreen } from '../screens/GroupScreen';
 import { HarvestScreen } from '../screens/HarvestScreen';
+import { QuickAddScreen } from '../screens/QuickAddScreen';
 import { InboxScreen } from '../screens/InboxScreen';
 import { IncubationScreen } from '../screens/IncubationScreen';
 import { IncubationsScreen } from '../screens/IncubationsScreen';
@@ -60,6 +61,8 @@ import { Tabs } from './Tabs';
 export type RootParamList = {
   Tabs: undefined;
   Settings: undefined;
+  /** Verb first, subject second — see QuickAddScreen. */
+  QuickAdd: undefined;
   Inbox: undefined;
   Diagnostics: undefined;
   Members: undefined;
@@ -112,6 +115,7 @@ export function Root({ onSignedOut }: { onSignedOut: () => void }): React.ReactE
       <Stack.Screen name="Settings">
         {() => <SettingsScreen onSignedOut={onSignedOut} />}
       </Stack.Screen>
+      <Stack.Screen name="QuickAdd" component={QuickAddScreen} />
       <Stack.Screen name="Inbox" component={InboxScreen} />
       <Stack.Screen name="Diagnostics" component={DiagnosticsScreen} />
       <Stack.Screen name="Members" component={MembersScreen} />

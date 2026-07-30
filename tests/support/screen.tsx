@@ -45,6 +45,15 @@ export interface Mounted {
   labels(): string[];
   /** Types into it. */
   type(testID: string, value: string): Promise<void>;
+  /**
+   * What a field is currently showing.
+   *
+   * A TextInput's value is a prop, not rendered text, so `text()` cannot see
+   * it and an assertion written against `text()` passes whatever the field
+   * does. That is exactly how a date box that snapped its old digit back
+   * survived a full screen suite.
+   */
+  shows(testID: string): string;
   /** Lets pending effects, reads and engine publishes settle. */
   settle(): Promise<void>;
   unmount(): void;
@@ -188,6 +197,11 @@ export async function mount(element: ReactElement): Promise<Mounted> {
         onPress();
       });
       await flush();
+    },
+    shows(testID) {
+      const target = mounted.get(testID);
+      const value = target.props.value as unknown;
+      return typeof value === 'string' ? value : String(value ?? '');
     },
     async type(testID, value) {
       const target = mounted.get(testID);
