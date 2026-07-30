@@ -168,6 +168,35 @@ export function createExpoDriver(db: SqliteConnection, gateOptions: GateOptions 
  * and attempted through the right method, without an emulator. That seam
  * exists because the Capacitor driver shipped a broken `journal_mode` that no
  * test could have caught.
+ *
+ * ## Which of these actually reach a write, and which do not
+ *
+ * `synchronous` and `foreign_keys` are **per-connection**, and
+ * `withExclusiveTransactionAsync` runs every transaction on a connection it
+ * opens itself (`useNewConnection: true`, expo issue #41986). So neither
+ * statement below has ever run on the connection that performs a write. Only
+ * `journal_mode` carries over, because WAL is recorded in the database file
+ * header rather than on the handle.
+ *
+ * That sounds worse than it is, and the difference matters:
+ *
+ * - **`synchronous` survives on its default.** SQLite's compile-time default
+ *   is FULL, and enabling WAL does not lower it. The setting below is
+ *   therefore belt-and-braces on the read connection rather than the thing
+ *   the guarantee rests on — a fresh write connection is already FULL. Worth
+ *   keeping, because a build that defaulted to NORMAL would otherwise be
+ *   silent.
+ * - **`foreign_keys` genuinely does not apply to writes.** Stock SQLite
+ *   defaults it OFF, so the transaction connection enforces nothing. Harmless
+ *   today — no table declares a foreign key — and a trap for whoever adds the
+ *   first one, which is why it is written down here rather than assumed.
+ *
+ * Setting them inside the transaction body is not the fix: SQLite refuses
+ * `PRAGMA synchronous` mid-transaction outright ("Safety level may not be
+ * changed inside a transaction"), and `foreign_keys` is documented as a no-op
+ * there. The real fix is to own the write connection and drive
+ * `BEGIN IMMEDIATE` on it — reasonable now that `gate.ts` serialises every
+ * statement, and the right task to take before the first foreign key lands.
  */
 export async function applyPragmas(db: SqliteConnection): Promise<void> {
   /**
