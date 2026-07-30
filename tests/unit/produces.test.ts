@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   type Product,
+  type Species,
   canProduce,
   dailyProductsOf,
   isProcessed,

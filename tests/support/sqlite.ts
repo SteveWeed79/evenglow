@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
-import type { SqlDriver, SqlValue } from '@steading/core/db/driver';
+import type { SqlDriver, SqlOps, SqlValue } from '@steading/core/db/driver';
+import { createGate } from '@steading/core/db/gate';
 
 /**
  * A `SqlDriver` over `node:sqlite`, for tests.
@@ -24,18 +25,21 @@ export function nodeSqlDriver(filename = ':memory:'): SqlDriver {
   db.exec('PRAGMA foreign_keys = ON');
 
   /**
-   * Transactions run one at a time, chained off this promise.
+   * One lane for every operation, transactions included.
    *
-   * A SQLite connection holds one transaction, so two overlapping calls would
-   * share it — each able to roll back the other's writes. The first version of
-   * this driver tried to nest them with savepoints and the concurrency test
-   * caught it unwinding into "no such savepoint", which is the polite version
-   * of the failure; the impolite version is a committed half-enqueue.
+   * This driver used to serialise transactions alone, and to refuse nesting by
+   * sampling an `inTransaction` flag. Both halves were wrong in the same way
+   * the Expo driver's were, and for the same reason: a flag read at call time
+   * cannot tell a nested call from a concurrent one, so a second genuine
+   * transaction arriving while the first was mid-body was refused and its
+   * mutation lost. `node:sqlite` is synchronous, which hid it here and did not
+   * hide it on a handset. Nesting is now refused structurally — the handle
+   * passed to the body is the only thing in scope, and its `transaction`
+   * throws.
    */
-  let tail: Promise<unknown> = Promise.resolve();
-  let inTransaction = false;
+  const gate = createGate();
 
-  return {
+  const ops = (transaction: SqlOps['transaction']): SqlOps => ({
     async run(sql, params = []) {
       db.prepare(sql).run(...(params as SqlValue[]));
     },
@@ -48,38 +52,54 @@ export function nodeSqlDriver(filename = ':memory:'): SqlDriver {
       return db.prepare(sql).get(...(params as SqlValue[])) as T | undefined;
     },
 
-    async transaction<T>(work: () => Promise<T>): Promise<T> {
-      // Refused rather than deadlocked. Serialising means a nested call would
-      // wait on the transaction it is already inside, and a hang is far harder
-      // to diagnose than a thrown error naming the rule.
-      if (inTransaction) {
-        throw new Error('Nested transactions are not supported; see SqlDriver.transaction.');
-      }
+    transaction,
+  });
 
-      const run = async (): Promise<T> => {
+  const refuseNesting = <T,>(): Promise<T> =>
+    Promise.reject(new Error('Nested transactions are not supported; see SqlOps.transaction.'));
+
+  const driver: SqlDriver = {
+    run: (sql, params = []) => gate.enter(() => ops(driver.transaction).run(sql, params)),
+
+    all: <T,>(sql: string, params: readonly SqlValue[] = []) =>
+      gate.enter(() => ops(driver.transaction).all<T>(sql, params)),
+
+    get: <T,>(sql: string, params: readonly SqlValue[] = []) =>
+      gate.enter(() => ops(driver.transaction).get<T>(sql, params)),
+
+    transaction: <T,>(work: (tx: SqlOps) => Promise<T>): Promise<T> =>
+      gate.enter(async (beat) => {
         db.exec('BEGIN');
-        inTransaction = true;
         try {
-          const result = await work();
+          // `node:sqlite` is one connection with no separate transaction
+          // handle, so the body's handle differs only in refusing to nest.
+          // That is enough: the lane guarantees nothing else runs meanwhile.
+          const inside = ops(refuseNesting);
+          const result = await work({
+            run: async (sql, params) => {
+              beat();
+              return inside.run(sql, params);
+            },
+            all: async (sql, params) => {
+              beat();
+              return inside.all(sql, params);
+            },
+            get: async (sql, params) => {
+              beat();
+              return inside.get(sql, params);
+            },
+            transaction: refuseNesting,
+          });
           db.exec('COMMIT');
           return result;
         } catch (error) {
           db.exec('ROLLBACK');
           throw error;
-        } finally {
-          inTransaction = false;
         }
-      };
+      }, true),
 
-      // Chain off the tail whether or not the previous call succeeded — one
-      // caller's rollback must not strand everyone queued behind it.
-      const queued = tail.then(run, run);
-      tail = queued.catch(() => undefined);
-      return queued;
-    },
-
-    async close() {
-      db.close();
-    },
+    close: () => gate.enter(async () => db.close()),
   };
+
+  return driver;
 }

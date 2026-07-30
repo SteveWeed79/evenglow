@@ -5,7 +5,7 @@ import {
   newId,
   type PulledMutation,
 } from '@steading/contracts';
-import type { SqlDriver, SqlValue } from './driver';
+import type { SqlDriver, SqlOps, SqlValue } from './driver';
 import { InvalidMutationError, StorageFullError } from './errors';
 import { migrate } from './migrations';
 import { migrateEnvelope } from './migrate';
@@ -118,28 +118,40 @@ export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
 
   // ── meta ───────────────────────────────────────────────────────────────────
 
+  /**
+   * Every helper below takes the handle to run on rather than closing over
+   * `driver`.
+   *
+   * That is the whole discipline of the fix. A transaction body is handed its
+   * own `SqlOps`, and a helper that reached past it to `driver` would queue
+   * behind the transaction that is waiting for it. Making the handle a
+   * parameter means the mistake is visible at the call site instead of being
+   * invisible in a closure.
+   */
   async function readMeta<K extends keyof typeof import('./schema').metaSchemas>(
+    db: SqlOps,
     key: K,
   ): Promise<unknown> {
-    const row = await driver.get<{ value: string }>('SELECT value FROM meta WHERE key = ?', [key]);
+    const row = await db.get<{ value: string }>('SELECT value FROM meta WHERE key = ?', [key]);
     return row === undefined ? undefined : readJson(row.value);
   }
 
-  async function writeMeta(key: string, value: unknown): Promise<void> {
-    await driver.run(
+  async function writeMeta(db: SqlOps, key: string, value: unknown): Promise<void> {
+    await db.run(
       'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
       [key, JSON.stringify(value)],
     );
   }
 
-  async function bumpCleared(by: number): Promise<void> {
-    const current = parseMeta('clearedCount', await readMeta('clearedCount')) ?? 0;
-    await writeMeta(META.clearedCount, current + by);
+  async function bumpCleared(db: SqlOps, by: number): Promise<void> {
+    const current = parseMeta('clearedCount', await readMeta(db, 'clearedCount')) ?? 0;
+    await writeMeta(db, META.clearedCount, current + by);
   }
 
   // ── quarantine ─────────────────────────────────────────────────────────────
 
   async function quarantine(
+    db: SqlOps,
     store: string,
     key: string,
     raw: unknown,
@@ -149,7 +161,7 @@ export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
     // key are drawn from different spaces and could otherwise collide here,
     // and a quarantine that overwrites a quarantined row defeats the point of
     // keeping the raw value at all.
-    await driver.run(
+    await db.run(
       `INSERT INTO quarantine (key, store, raw, reason, quarantinedAt)
        VALUES (?, ?, ?, ?, ?)
        ON CONFLICT(key) DO UPDATE SET raw = excluded.raw, reason = excluded.reason`,
@@ -173,6 +185,7 @@ export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
    * has to be one unit anyway (invariant 5).
    */
   async function projectOne(
+    db: SqlOps,
     entity: string,
     targetId: string,
     op: 'create' | 'update' | 'delete',
@@ -183,14 +196,14 @@ export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
 
     let previous: unknown;
     if (op !== 'create') {
-      const row = await driver.get<{ value: string }>(
+      const row = await db.get<{ value: string }>(
         'SELECT value FROM records WHERE key = ?',
         [key],
       );
       previous = row === undefined ? undefined : readJson(row.value);
     }
 
-    await driver.run(
+    await db.run(
       `INSERT INTO records (key, entity, targetId, value, updatedAt, deleted)
        VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(key) DO UPDATE SET
@@ -220,13 +233,13 @@ export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
       const targetId = request.targetId;
 
       try {
-        return await driver.transaction(async () => {
+        return await driver.transaction(async (tx) => {
           // A corrupt or missing deviceId is safe to replace: it only groups a
           // device's own mutations for ordering.
-          let deviceId = parseMeta('deviceId', await readMeta('deviceId'));
+          let deviceId = parseMeta('deviceId', await readMeta(tx, 'deviceId'));
           if (deviceId === undefined) {
             deviceId = crypto.randomUUID();
-            await writeMeta(META.deviceId, deviceId);
+            await writeMeta(tx, META.deviceId, deviceId);
           }
 
           /**
@@ -235,8 +248,8 @@ export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
            * the highest seq still in the outbox as a floor, so monotonicity
            * survives losing the counter as long as the queue did.
            */
-          const stored = parseMeta('nextClientSeq', await readMeta('nextClientSeq')) ?? 0;
-          const highest = await driver.get<{ seq: number | null }>(
+          const stored = parseMeta('nextClientSeq', await readMeta(tx, 'nextClientSeq')) ?? 0;
+          const highest = await tx.get<{ seq: number | null }>(
             'SELECT MAX(clientSeq) AS seq FROM outbox',
           );
           const floor = highest?.seq === null || highest?.seq === undefined ? 0 : highest.seq + 1;
@@ -268,7 +281,7 @@ export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
             enqueuedAt: Date.now(),
           };
 
-          await driver.run(
+          await tx.run(
             `INSERT INTO outbox
                (id, schemaVersion, targetId, entity, op, payload, deviceId,
                 clientSeq, clientTs, status, attempts, enqueuedAt)
@@ -289,9 +302,10 @@ export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
             ],
           );
 
-          await writeMeta(META.nextClientSeq, clientSeq + 1);
+          await writeMeta(tx, META.nextClientSeq, clientSeq + 1);
 
           await projectOne(
+            tx,
             request.entity,
             targetId,
             request.op,
@@ -317,7 +331,7 @@ export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
     async resolveBatch(batch, results): Promise<void> {
       const byId = new Map(results.map((r) => [r.id, r] as const));
 
-      await driver.transaction(async () => {
+      await driver.transaction(async (tx) => {
         let cleared = 0;
 
         for (const mutation of batch) {
@@ -325,39 +339,39 @@ export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
           if (!result) {
             // Answered without mentioning it. Stays queued — resending is safe
             // — but the attempt is counted so it cannot retry forever unseen.
-            await driver.run('UPDATE outbox SET attempts = attempts + 1 WHERE id = ?', [
+            await tx.run('UPDATE outbox SET attempts = attempts + 1 WHERE id = ?', [
               mutation.id,
             ]);
             continue;
           }
 
           if (result.status === 'applied' || result.status === 'duplicate') {
-            await driver.run('DELETE FROM outbox WHERE id = ?', [mutation.id]);
+            await tx.run('DELETE FROM outbox WHERE id = ?', [mutation.id]);
             cleared += 1;
             continue;
           }
 
-          await driver.run(
+          await tx.run(
             'UPDATE outbox SET status = ?, rejectedReason = ?, rejectedAt = ? WHERE id = ?',
             ['rejected', result.reason ?? 'The server refused that record.', Date.now(), mutation.id],
           );
         }
 
-        if (cleared > 0) await bumpCleared(cleared);
+        if (cleared > 0) await bumpCleared(tx, cleared);
       });
     },
 
     async markSynced(at): Promise<void> {
-      await driver.transaction(async () => {
-        await writeMeta(META.lastSyncAt, at);
-        await driver.run('DELETE FROM meta WHERE key = ?', [META.lastError]);
+      await driver.transaction(async (tx) => {
+        await writeMeta(tx, META.lastSyncAt, at);
+        await tx.run('DELETE FROM meta WHERE key = ?', [META.lastError]);
       });
     },
 
     async recordAttempt(batch, error): Promise<void> {
-      await driver.transaction(async () => {
+      await driver.transaction(async (tx) => {
         for (const mutation of batch) {
-          await driver.run(
+          await tx.run(
             'UPDATE outbox SET attempts = attempts + 1, lastError = ? WHERE id = ?',
             [error, mutation.id],
           );
@@ -366,9 +380,9 @@ export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
     },
 
     async rejectExhausted(batch, maxAttempts, reason): Promise<void> {
-      await driver.transaction(async () => {
+      await driver.transaction(async (tx) => {
         for (const mutation of batch) {
-          await driver.run(
+          await tx.run(
             `UPDATE outbox SET status = 'rejected', rejectedReason = ?, rejectedAt = ?
              WHERE id = ? AND attempts >= ?`,
             [reason, Date.now(), mutation.id, maxAttempts],
@@ -387,16 +401,16 @@ export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
     },
 
     async retryRejected(id, payload): Promise<void> {
-      await driver.transaction(async () => {
+      await driver.transaction(async (tx) => {
         if (payload !== undefined) {
-          await driver.run('UPDATE outbox SET payload = ? WHERE id = ?', [
+          await tx.run('UPDATE outbox SET payload = ? WHERE id = ?', [
             JSON.stringify(payload),
             id,
           ]);
         }
         // A clean attempt count, or the retry inherits the ceiling that parked
         // it and is refused before it is sent.
-        await driver.run(
+        await tx.run(
           `UPDATE outbox SET status = 'queued', attempts = 0,
              lastError = NULL, rejectedReason = NULL, rejectedAt = NULL
            WHERE id = ?`,
@@ -411,18 +425,18 @@ export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
      * did on purpose.
      */
     async discardRejected(id): Promise<void> {
-      await driver.transaction(async () => {
+      await driver.transaction(async (tx) => {
         // ONLY a rejected mutation. Without the status check a stray call
         // deletes queued work that has not been sent yet — the one thing the
         // outbox exists to make impossible.
-        const existing = await driver.get<{ status: string }>(
+        const existing = await tx.get<{ status: string }>(
           'SELECT status FROM outbox WHERE id = ?',
           [id],
         );
         if (!existing || existing.status !== 'rejected') return;
 
-        await driver.run('DELETE FROM outbox WHERE id = ?', [id]);
-        await bumpCleared(1);
+        await tx.run('DELETE FROM outbox WHERE id = ?', [id]);
+        await bumpCleared(tx, 1);
       });
     },
 
@@ -472,7 +486,7 @@ export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
       }
 
       for (const bad of corrupt) {
-        await quarantine('outbox', bad.key, bad.raw, bad.reason);
+        await quarantine(driver, 'outbox', bad.key, bad.raw, bad.reason);
         await driver.run('DELETE FROM outbox WHERE id = ?', [bad.key]);
       }
 
@@ -490,6 +504,7 @@ export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
           continue;
         }
         await quarantine(
+          driver,
           'records',
           row.key,
           rowToRecord(row),
@@ -522,8 +537,8 @@ export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
      * acknowledged and the result is what the outbox should still hold.
      */
     async checkIntegrity(): Promise<IntegrityReport> {
-      const everEnqueued = parseMeta('nextClientSeq', await readMeta('nextClientSeq')) ?? 0;
-      const cleared = parseMeta('clearedCount', await readMeta('clearedCount')) ?? 0;
+      const everEnqueued = parseMeta('nextClientSeq', await readMeta(driver, 'nextClientSeq')) ?? 0;
+      const cleared = parseMeta('clearedCount', await readMeta(driver, 'clearedCount')) ?? 0;
       const row = await driver.get<{ n: number }>('SELECT COUNT(*) AS n FROM outbox');
       const actualInOutbox = row?.n ?? 0;
       const expectedInOutbox = everEnqueued - cleared;
@@ -544,10 +559,10 @@ export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
      * written.
      */
     async applyPulled(mutations: readonly PulledMutation[], cursor): Promise<PullResult> {
-      return driver.transaction(async () => {
+      return driver.transaction(async (tx) => {
         // Anything this device still holds is newer than what the server can
         // say about it, so local optimistic state wins until it flushes.
-        const pendingRows = await driver.all<{ targetId: string }>(
+        const pendingRows = await tx.all<{ targetId: string }>(
           'SELECT DISTINCT targetId FROM outbox',
         );
         const pending = new Set(pendingRows.map((r) => r.targetId));
@@ -562,6 +577,7 @@ export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
           }
 
           await projectOne(
+            tx,
             mutation.entity,
             mutation.targetId,
             mutation.op,
@@ -571,8 +587,8 @@ export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
           applied += 1;
         }
 
-        await writeMeta(META.pulledThrough, cursor.through);
-        if (cursor.throughId !== null) await writeMeta(META.pulledThroughId, cursor.throughId);
+        await writeMeta(tx, META.pulledThrough, cursor.through);
+        if (cursor.throughId !== null) await writeMeta(tx, META.pulledThroughId, cursor.throughId);
 
         return { applied, skipped };
       });
@@ -580,25 +596,25 @@ export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
 
     async pulledThrough(): Promise<SnapshotWatermark> {
       return {
-        through: parseMeta('pulledThrough', await readMeta('pulledThrough')) ?? 0,
-        throughId: parseMeta('pulledThroughId', await readMeta('pulledThroughId')) ?? null,
+        through: parseMeta('pulledThrough', await readMeta(driver, 'pulledThrough')) ?? 0,
+        throughId: parseMeta('pulledThroughId', await readMeta(driver, 'pulledThroughId')) ?? null,
       };
     },
 
     async getLastSyncAt(): Promise<number | null> {
-      return parseMeta('lastSyncAt', await readMeta('lastSyncAt')) ?? null;
+      return parseMeta('lastSyncAt', await readMeta(driver, 'lastSyncAt')) ?? null;
     },
 
     async getLastError(): Promise<string | null> {
-      return parseMeta('lastError', await readMeta('lastError')) ?? null;
+      return parseMeta('lastError', await readMeta(driver, 'lastError')) ?? null;
     },
 
     async setLastError(message): Promise<void> {
-      await writeMeta(META.lastError, message);
+      await writeMeta(driver, META.lastError, message);
     },
 
     async getDeviceId(): Promise<string | null> {
-      return parseMeta('deviceId', await readMeta('deviceId')) ?? null;
+      return parseMeta('deviceId', await readMeta(driver, 'deviceId')) ?? null;
     },
 
     async quarantineCount(): Promise<number> {
@@ -631,9 +647,9 @@ export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
      * immediately afterwards without re-running the ladder.
      */
     async wipe(): Promise<void> {
-      await driver.transaction(async () => {
+      await driver.transaction(async (tx) => {
         for (const table of ['outbox', 'records', 'meta', 'quarantine']) {
-          await driver.run(`DELETE FROM ${table}`);
+          await tx.run(`DELETE FROM ${table}`);
         }
       });
     },
