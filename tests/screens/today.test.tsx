@@ -46,7 +46,15 @@ describe('husbandry', () => {
   it('sits on Today until the job is recorded, then goes', async () => {
     await theGoats();
 
+    /**
+     * A group's husbandry arrives as one bundle now, so the individual jobs
+     * are one tap in — see `todayBundles`. Expanded here deliberately rather
+     * than asserted around, because what this test is about is that a job
+     * sits on the list until it is recorded, and that is still true of the
+     * row whether or not it is the one on top.
+     */
     const before = await mount(<TodayScreen />);
+    await before.pressLabel('more');
     expect(before.text()).toContain('Trim feet — The goats');
 
     const care = await mount(<CareLogScreen {...routeProps({ groupId: GROUP })} />);
@@ -54,6 +62,7 @@ describe('husbandry', () => {
     await care.press('save-care');
 
     const after = await mount(<TodayScreen />);
+    await after.pressLabel('more');
     expect(after.text()).not.toContain('Trim feet');
     // The jobs that were NOT done are still there — logging one clears one.
     expect(after.text()).toContain('Check minerals — The goats');
@@ -287,5 +296,57 @@ describe('the rejected inbox', () => {
       route: 'Diagnostics',
       params: undefined,
     });
+  });
+});
+
+describe('the shape of the morning', () => {
+  /**
+   * The screenshot that prompted this: a two-group farm opening on nine
+   * husbandry rows differing by one word, with the tally pushed off the
+   * bottom of the screen.
+   */
+  async function twoGroups(): Promise<void> {
+    await theGoats();
+    await enqueue({
+      entity: 'flock',
+      op: 'create',
+      targetId: '01J8XQK5T7WZ3P4N6M8R2V9C0Z',
+      payload: { name: 'The hens', species: 'chicken', count: 6, purposes: ['eggs'] },
+    });
+  }
+
+  it('shows one row per group, not one per job', async () => {
+    await twoGroups();
+    const screen = await mount(<TodayScreen />);
+    const text = screen.text();
+
+    // One lead row each, and the rest folded behind a count.
+    expect(text).toContain('The goats');
+    expect(text).toContain('The hens');
+    expect(text).toMatch(/and \d+ more/);
+  });
+
+  it('still reaches the tally, which is what most people opened it for', async () => {
+    await twoGroups();
+    const screen = await mount(<TodayScreen />);
+
+    // The failure this cap exists to prevent: dues pushing the log path off
+    // the screen. Both groups' tallies are still rendered.
+    expect(screen.has('tally-open-01J8XQK5T7WZ3P4N6M8R2V9C0Z:eggs')).toBe(true);
+  });
+
+  it('opens every job of a group with one tap', async () => {
+    await twoGroups();
+    const screen = await mount(<TodayScreen />);
+
+    // Opens the first bundle on the list. Which group that is depends on the
+    // sort, so the assertion is about a job that was folded rather than about
+    // a particular animal.
+    const folded = screen.text();
+    expect(folded).not.toContain('Worm check — The hens');
+
+    await screen.pressLabel('more');
+    // Nothing was dropped — the jobs are all still there, one tap in.
+    expect(screen.text()).toContain('Worm check — The hens');
   });
 });

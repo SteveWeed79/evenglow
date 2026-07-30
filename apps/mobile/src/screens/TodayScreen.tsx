@@ -4,8 +4,10 @@ import {
   type ActiveWithdrawal,
   dailyProductsOf,
   type Due,
+  type DueBundle,
   longestWithdrawal,
   type Product,
+  todayBundles,
 } from '@steading/contracts';
 import type { Group } from '@steading/core/read/groups';
 import { basketConfirmation } from '@steading/core/voice';
@@ -49,6 +51,16 @@ import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
  * row would be a tap between somebody and the only reason they opened the app.
  * That one opens itself.
  */
+
+/**
+ * How many bundles the morning shows before it asks.
+ *
+ * Five is what fits above the fold on a Pixel with the tally still visible,
+ * which is the constraint that matters: the list is what you did not already
+ * know, and the tally is what you came to do. Pushing the second off the
+ * screen to show more of the first gets the priority backwards.
+ */
+const VISIBLE_DUES = 5;
 
 const MARKS: Record<Product, IconName> = { eggs: 'egg', milk: 'milk', fibre: 'basic-full' };
 const UNITS: Record<Product, string> = { eggs: 'eggs', milk: 'ml', fibre: 'g' };
@@ -107,6 +119,22 @@ export function TodayScreen(): React.ReactElement {
     [groups],
   );
 
+  /**
+   * The morning's rows, gathered per group and capped.
+   *
+   * Two problems, one shape. `careDues` emits a row per care kind per group,
+   * so a two-group farm that has recorded no husbandry opens on nine rows
+   * differing by one word — and a list like that is one nobody reads. And
+   * however few rows there are, an unbounded list pushes the tally, which is
+   * what most people opened the app to reach, off the bottom of the screen.
+   *
+   * Bundling is in the due engine where it is tested (`todayBundles`); the cap
+   * is here, because it is a fact about a screen rather than about the farm.
+   */
+  const bundles = useMemo(() => todayBundles(dues, Date.now()), [dues]);
+  const [showAll, setShowAll] = useState(false);
+  const shown = showAll ? bundles : bundles.slice(0, VISIBLE_DUES);
+
   const [opened, setOpened] = useState<string | null>(null);
   // A farm with one thing to log should not have to tap to reach it.
   const open = loggable.length === 1 ? loggable[0]!.key : opened;
@@ -117,11 +145,24 @@ export function TodayScreen(): React.ReactElement {
 
   return (
     <Screen title="Today">
-      {dues.length > 0 ? (
+      {bundles.length > 0 ? (
         <View style={styles.dues}>
-          {dues.map((due) => (
-            <DueRow key={due.key} due={due} now={now} onPress={openDue(due)} />
+          {shown.map((bundle) => (
+            <DueBundleRow key={bundle.key} bundle={bundle} now={now} open={openDue} />
           ))}
+
+          {bundles.length > shown.length ? (
+            <Pressable
+              onPress={() => setShowAll(true)}
+              accessibilityRole="button"
+              testID="show-all-dues"
+              style={({ pressed }) => [styles.more, { opacity: pressed ? 0.7 : 1 }]}
+            >
+              <Text style={[styles.moreLabel, { color: colors.muted }]}>
+                Show all {bundles.length}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
 
@@ -160,6 +201,62 @@ export function TodayScreen(): React.ReactElement {
         />
       ))}
     </Screen>
+  );
+}
+
+/**
+ * One bundle: its most pressing row, and the rest a tap away.
+ *
+ * Collapsed by default and expanded in place rather than navigated to, because
+ * the other rows are the same kind of thing — four husbandry jobs on one group
+ * — and a screen change to read three more lines is a change nobody asked for.
+ */
+function DueBundleRow({
+  bundle,
+  now,
+  open,
+}: {
+  bundle: DueBundle;
+  now: number;
+  open: (due: Due) => (() => void) | undefined;
+}): React.ReactElement {
+  const { colors } = useTheme();
+  const [expanded, setExpanded] = useState(false);
+
+  const rest = bundle.dues.length - 1;
+  if (rest === 0) {
+    return <DueRow due={bundle.lead} now={now} onPress={open(bundle.lead)} />;
+  }
+
+  return (
+    <View style={styles.bundle}>
+      <DueRow due={bundle.lead} now={now} onPress={open(bundle.lead)} />
+
+      {expanded ? (
+        bundle.dues.slice(1).map((due) => (
+          <DueRow key={due.key} due={due} now={now} onPress={open(due)} />
+        ))
+      ) : null}
+
+      <Pressable
+        onPress={() => setExpanded(!expanded)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        // Said in full, because "+3" read aloud on its own means nothing.
+        accessibilityLabel={
+          expanded
+            ? `Hide the other ${rest} jobs for this group`
+            : `Show ${rest} more ${rest === 1 ? 'job' : 'jobs'} for this group`
+        }
+        testID={`bundle-more-${bundle.key}`}
+        hitSlop={8}
+        style={({ pressed }) => [styles.more, { opacity: pressed ? 0.7 : 1 }]}
+      >
+        <Text style={[styles.moreLabel, { color: colors.muted }]}>
+          {expanded ? 'Fewer' : `and ${rest} more`}
+        </Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -277,6 +374,14 @@ function ProductTally({
 
 const styles = StyleSheet.create({
   dues: { gap: SPACE.sm, marginBottom: SPACE.sm },
+  bundle: { gap: SPACE.xs },
+  more: { alignSelf: 'flex-start', paddingVertical: SPACE.xs, paddingHorizontal: SPACE.sm },
+  moreLabel: {
+    fontFamily: FONTS.data,
+    fontSize: TYPE.label,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
   spot: { alignItems: 'center', paddingVertical: SPACE.md },
   group: { gap: SPACE.sm },
   head: {
