@@ -67,6 +67,24 @@ export function Screen({
         )}
 
         <View style={styles.controls}>
+          {/* Only on a tab, never on a form.
+              A quick-add on the screen you are already logging into is noise,
+              and a control that appears everywhere stops being noticed. It
+              also has nowhere sensible to go from inside a form it would
+              replace. */}
+          {back ? null : (
+            <Pressable
+              onPress={() => navigation.navigate('QuickAdd')}
+              accessibilityRole="button"
+              accessibilityLabel="Log something"
+              accessibilityHint="Records a treatment, a job, a feed or a loss against any group"
+              hitSlop={12}
+              testID="quick-add"
+              style={styles.control}
+            >
+              <Icon name="plus" size={24} color={colors.lanternInk} />
+            </Pressable>
+          )}
           <SyncChip />
           <LampToggle />
           {back ? null : (
