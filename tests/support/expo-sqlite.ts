@@ -109,3 +109,113 @@ export function fakeExpoConnection(filename = ':memory:'): SqliteConnection {
     },
   };
 }
+
+/**
+ * The same fake, plus the native lifecycle that produced the crash.
+ *
+ * `withExclusiveTransactionAsync` builds a SECOND connection
+ * (`Transaction.createAsync` → `new NativeDatabase(path, {useNewConnection:
+ * true})`) and closes it in a `finally` without waiting for anything the
+ * caller may still have in flight against it. On device, a statement prepared
+ * against that connection after it is gone fails inside expo-modules-core's
+ * shared-object registry — the "Cannot use shared object that was already
+ * released" the emulator reported.
+ *
+ * Modelled here so the regression is provable in Node. `where` records which
+ * connection every statement actually ran on, which is the property under
+ * test: a read that has nothing to do with the transaction must never touch
+ * the transaction's connection.
+ */
+export interface TracingConnection extends SqliteConnection {
+  /** One entry per statement: `db` or `txn`, and the SQL. */
+  readonly where: { on: 'db' | 'txn'; sql: string }[];
+}
+
+export function tracingExpoConnection(
+  filename = ':memory:',
+  /**
+   * Milliseconds a statement spends in flight before it touches the
+   * connection, modelling the JSI hop onto `Dispatchers.IO` and back. Zero is
+   * fine for routing assertions; a non-zero value is what makes "still in
+   * flight when the connection was released" reachable at all.
+   */
+  latencyMs = 0,
+): TracingConnection {
+  const db = new DatabaseSync(filename);
+  db.exec('PRAGMA foreign_keys = ON');
+
+  const where: { on: 'db' | 'txn'; sql: string }[] = [];
+  let released = false;
+
+  const statements = (on: 'db' | 'txn'): Omit<SqliteConnection, 'withExclusiveTransactionAsync' | 'closeAsync'> => ({
+    async runAsync(sql, params) {
+      await arrive(on, sql);
+      db.prepare(sql).run(...(params as SqlValue[]));
+      return undefined;
+    },
+    async getAllAsync<T>(sql: string, params: SqlValue[]) {
+      await arrive(on, sql);
+      return db.prepare(sql).all(...params) as T[];
+    },
+    async getFirstAsync<T>(sql: string, params: SqlValue[]) {
+      await arrive(on, sql);
+      return (db.prepare(sql).get(...params) ?? null) as T | null;
+    },
+    async execAsync(sql) {
+      await arrive(on, sql);
+      db.exec(sql);
+    },
+  });
+
+  /**
+   * The connection is recorded when the statement is ISSUED and checked when
+   * it lands, which is the whole shape of the crash: the driver chose the
+   * connection at call time, and the native side prepared against it later.
+   */
+  async function arrive(on: 'db' | 'txn', sql: string): Promise<void> {
+    where.push({ on, sql });
+    if (latencyMs > 0) await new Promise((resolve) => setTimeout(resolve, latencyMs));
+    if (on === 'txn' && released) {
+      // Verbatim from expo-modules-core's SharedObjectRegistry, so a
+      // regression reads here the way it reads in logcat.
+      throw new Error('Cannot use shared object that was already released');
+    }
+  }
+
+  const txn: SqliteConnection = {
+    ...statements('txn'),
+    async withExclusiveTransactionAsync() {
+      throw new Error('nested transaction on the transaction connection');
+    },
+    async closeAsync() {
+      // No-op: the outer connection outlives the transaction.
+    },
+  };
+
+  return {
+    where,
+    ...statements('db'),
+
+    async withExclusiveTransactionAsync(task) {
+      released = false;
+      try {
+        db.exec('BEGIN');
+        try {
+          await task(txn);
+          db.exec('COMMIT');
+        } catch (error) {
+          db.exec('ROLLBACK');
+          throw error;
+        }
+      } finally {
+        // expo closes the transaction's connection here, synchronously with
+        // the end of the task and regardless of what is still in flight.
+        released = true;
+      }
+    },
+
+    async closeAsync() {
+      db.close();
+    },
+  };
+}

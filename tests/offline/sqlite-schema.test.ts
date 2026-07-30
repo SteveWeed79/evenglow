@@ -78,9 +78,9 @@ describe('migration ladder', () => {
     const good = await currentVersion(db);
 
     await expect(
-      db.transaction(async () => {
-        await db.run('CREATE TABLE later (x TEXT)');
-        await db.run(`PRAGMA user_version = ${good + 1}`);
+      db.transaction(async (tx) => {
+        await tx.run('CREATE TABLE later (x TEXT)');
+        await tx.run(`PRAGMA user_version = ${good + 1}`);
         throw new Error('migration failed half way');
       }),
     ).rejects.toThrow(/half way/);
@@ -116,9 +116,9 @@ describe('transactions (invariant 5)', () => {
     await migrate(db);
 
     await expect(
-      db.transaction(async () => {
-        await db.run("INSERT INTO meta (key, value) VALUES ('deviceId', 'abc')");
-        await db.run("INSERT INTO meta (key, value) VALUES ('nextClientSeq', '1')");
+      db.transaction(async (tx) => {
+        await tx.run("INSERT INTO meta (key, value) VALUES ('deviceId', 'abc')");
+        await tx.run("INSERT INTO meta (key, value) VALUES ('nextClientSeq', '1')");
         throw new Error('failed after two writes');
       }),
     ).rejects.toThrow(/after two writes/);
@@ -133,8 +133,8 @@ describe('transactions (invariant 5)', () => {
     const db = open();
     await migrate(db);
 
-    await db.transaction(async () => {
-      await db.run("INSERT INTO meta (key, value) VALUES ('deviceId', 'abc')");
+    await db.transaction(async (tx) => {
+      await tx.run("INSERT INTO meta (key, value) VALUES ('deviceId', 'abc')");
     });
 
     expect(await db.get<{ value: string }>("SELECT value FROM meta WHERE key = 'deviceId'")).toEqual(
@@ -156,9 +156,9 @@ describe('transactions (invariant 5)', () => {
     const order: string[] = [];
     await Promise.all(
       ['a', 'b', 'c'].map((key) =>
-        db.transaction(async () => {
+        db.transaction(async (tx) => {
           order.push(`${key}:start`);
-          await db.run('INSERT INTO meta (key, value) VALUES (?, ?)', [key, '1']);
+          await tx.run('INSERT INTO meta (key, value) VALUES (?, ?)', [key, '1']);
           // Yield inside the transaction — the point at which an unserialised
           // driver lets the next caller in.
           await Promise.resolve();
@@ -176,12 +176,12 @@ describe('transactions (invariant 5)', () => {
     const db = open();
     await migrate(db);
 
-    const failed = db.transaction(async () => {
-      await db.run("INSERT INTO meta (key, value) VALUES ('doomed', '1')");
+    const failed = db.transaction(async (tx) => {
+      await tx.run("INSERT INTO meta (key, value) VALUES ('doomed', '1')");
       throw new Error('rolled back');
     });
-    const after = db.transaction(async () => {
-      await db.run("INSERT INTO meta (key, value) VALUES ('after', '1')");
+    const after = db.transaction(async (tx) => {
+      await tx.run("INSERT INTO meta (key, value) VALUES ('after', '1')");
     });
 
     await expect(failed).rejects.toThrow(/rolled back/);
@@ -196,14 +196,14 @@ describe('transactions (invariant 5)', () => {
     await migrate(db);
 
     await expect(
-      db.transaction(async () => {
-        await db.transaction(async () => undefined);
+      db.transaction(async (tx) => {
+        await tx.transaction(async () => undefined);
       }),
     ).rejects.toThrow(/Nested transactions are not supported/);
 
     // And the connection is usable afterwards, not left mid-transaction.
-    await db.transaction(async () => {
-      await db.run("INSERT INTO meta (key, value) VALUES ('ok', '1')");
+    await db.transaction(async (tx) => {
+      await tx.run("INSERT INTO meta (key, value) VALUES ('ok', '1')");
     });
     expect(await db.all('SELECT key FROM meta')).toHaveLength(1);
   });

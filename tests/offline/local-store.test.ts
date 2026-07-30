@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { newId } from '@steading/contracts';
-import type { SqlDriver } from '@steading/core/db/driver';
+import type { SqlDriver, SqlOps } from '@steading/core/db/driver';
 import type { LocalStore } from '@steading/core/db/port';
 import { openSqliteStore } from '@steading/core/db/sqlite-store';
 import { createExpoDriver } from '@steading/mobile/db/expo-driver';
@@ -76,15 +76,40 @@ function sqlBacking(name: string, make: () => SqlDriver): Backing {
         [key],
       );
     },
+    /**
+     * The fault has to be injected into the TRANSACTION'S handle, not only the
+     * driver's own `run`.
+     *
+     * Since every statement inside a transaction goes through the handle the
+     * body was given, patching `driver.run` alone injures nothing that enqueue
+     * actually calls — which is the same reason the fix works: there is exactly
+     * one object a transaction's statements can travel through.
+     */
     failNextWriteTo(table) {
-      const original = driver!.run.bind(driver!);
+      const target = driver!;
+      const originalRun = target.run.bind(target);
+      const originalTransaction = target.transaction.bind(target);
       const full = Object.assign(new Error('database or disk is full'), { code: 'SQLITE_FULL' });
-      driver!.run = async (sql, params) => {
+
+      const injure = (ops: SqlOps): SqlOps => ({
+        run: async (sql, params) => {
+          if (sql.includes(`INSERT INTO ${table}`)) throw full;
+          return ops.run(sql, params);
+        },
+        all: (sql, params) => ops.all(sql, params),
+        get: (sql, params) => ops.get(sql, params),
+        transaction: (work) => ops.transaction(work),
+      });
+
+      target.run = async (sql, params) => {
         if (sql.includes(`INSERT INTO ${table}`)) throw full;
-        return original(sql, params);
+        return originalRun(sql, params);
       };
+      target.transaction = (work) => originalTransaction((tx) => work(injure(tx)));
+
       return () => {
-        driver!.run = original;
+        target.run = originalRun;
+        target.transaction = originalTransaction;
       };
     },
   };

@@ -1,4 +1,4 @@
-import type { SqlDriver } from './driver';
+import type { SqlOps } from './driver';
 
 /**
  * The SQLite schema, as an additive ladder.
@@ -97,7 +97,7 @@ export const MIGRATIONS: readonly Migration[] = [
 /** The version a fresh database is brought to. */
 export const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;
 
-export async function currentVersion(driver: SqlDriver): Promise<number> {
+export async function currentVersion(driver: SqlOps): Promise<number> {
   const row = await driver.get<{ user_version: number }>('PRAGMA user_version');
   return row?.user_version ?? 0;
 }
@@ -114,17 +114,17 @@ export async function currentVersion(driver: SqlDriver): Promise<number> {
  * `user_version` cannot be parameterised, so it is interpolated. The value is
  * a number from this module's own constant list, never from input.
  */
-export async function migrate(driver: SqlDriver): Promise<number> {
+export async function migrate(driver: SqlOps): Promise<number> {
   const from = await currentVersion(driver);
 
   for (const migration of MIGRATIONS) {
     if (migration.version <= from) continue;
 
-    await driver.transaction(async () => {
+    await driver.transaction(async (tx) => {
       for (const statement of migration.statements) {
-        await driver.run(statement);
+        await tx.run(statement);
       }
-      await driver.run(`PRAGMA user_version = ${migration.version}`);
+      await tx.run(`PRAGMA user_version = ${migration.version}`);
     });
   }
 

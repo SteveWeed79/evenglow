@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  type Product,
+  type Species,
   canProduce,
   dailyProductsOf,
   isProcessed,
@@ -168,5 +170,54 @@ describe('the processing clock, with two real breeds', () => {
     // A processing date on a flock of pet bantams is not a helpful default.
     expect(growOutWindow({ ...base, bornAt: hatched, purposes: ['eggs'] })).toBeNull();
     expect(growOutWindow({ ...base, purposes: ['meat'] })).toBeNull();
+  });
+});
+
+describe('what the group hub offers, per species', () => {
+  /**
+   * The screenshot: a flock of hens offered "Milk, fibre or honey".
+   *
+   * `GroupScreen` branched on `laysEggs(species)` for the title and never
+   * asked what the group could actually give. The model already knew — this
+   * pins the answer it should have been reading.
+   */
+  const nonEgg = (species: Species, purposes: string[] = []): Product[] =>
+    productsOf(species, purposes).filter((product) => product !== 'eggs');
+
+  it('offers a chicken nothing beyond its eggs', () => {
+    expect(nonEgg('chicken')).toEqual([]);
+    expect(nonEgg('chicken', ['eggs'])).toEqual([]);
+    expect(nonEgg('chicken', ['eggs', 'meat'])).toEqual([]);
+  });
+
+  it('offers a dairy goat milk, and a fibre goat fibre', () => {
+    expect(nonEgg('goat', ['milk'])).toEqual(['milk']);
+    expect(nonEgg('goat', ['fibre'])).toEqual(['fibre']);
+    expect(nonEgg('goat', ['milk', 'fibre'])).toEqual(['milk', 'fibre']);
+  });
+
+  it('offers an alpaca fibre and never milk', () => {
+    expect(nonEgg('alpaca')).toEqual(['fibre']);
+  });
+
+  it('offers a cow milk and never fibre', () => {
+    expect(nonEgg('cattle')).toEqual(['milk']);
+  });
+
+  it('offers nothing to stock kept only to work or guard', () => {
+    for (const species of SPECIES) {
+      expect(nonEgg(species, ['work']), species).toEqual([]);
+      expect(nonEgg(species, ['guarding']), species).toEqual([]);
+    }
+  });
+
+  /**
+   * Honey has no species behind it — there are no bees in `SPECIES` — so the
+   * row has to survive an empty list rather than disappear, or the only route
+   * to recording honey and one-off produce disappears with it.
+   */
+  it('leaves species with nothing to give reachable anyway', () => {
+    expect(nonEgg('chicken')).toEqual([]);
+    expect(PRODUCTS).not.toContain('honey');
   });
 });

@@ -64,3 +64,6 @@ apps/mobile/ios/
 
 # Local development database made by `pnpm farm`
 .steading-data/
+
+# JetBrains IDEs
+.idea/

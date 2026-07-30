@@ -1,10 +1,11 @@
-import { useCallback } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   formatMass,
   formatRange,
-  laysEggs,
+
   libraryBreed,
+  productsOf,
   longestWithdrawal,
   SPECIES_TRAITS,
 } from '@steading/contracts';
@@ -12,6 +13,7 @@ import { latestWeightBySubject, listWeights } from '@steading/core/read/breeding
 import { lastFedByGroup, listGroups, lossesByGroup, produceToday } from '@steading/core/read/groups';
 import { withdrawalsBySubject } from '@steading/core/read/withdrawals';
 import { Row } from '../components/Form';
+import { Icon } from '../components/Icon';
 import { Loading, Missing } from '../components/Missing';
 import { Notes } from '../components/Notes';
 import { Body, Panel } from '../components/Panel';
@@ -45,6 +47,9 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
   const groups = useLive(listGroups);
   const group = groups?.find((g) => g.id === groupId) ?? null;
 
+  // Above the guards below: hooks cannot sit behind an early return.
+  const [more, setMore] = useState(false);
+
   const withdrawals = useLive(
     useCallback(() => withdrawalsBySubject('egg', [groupId]), [groupId]),
   );
@@ -57,6 +62,12 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
   if (group === null) return <Missing title="Stock" what="That group" />;
 
   const traits = SPECIES_TRAITS[group.species];
+
+  // Eggs are excluded because they are logged on Today with the morning's
+  // tally; this row is everything else the group gives.
+  const produces = productsOf(group.species, group.purposes ?? []).filter(
+    (product) => product !== 'eggs',
+  );
   const breed = group.breedId === undefined ? undefined : libraryBreed(group.breedId);
   const withdrawal = longestWithdrawal(withdrawals?.get(groupId) ?? []);
   const grow = growOutWindow(group);
@@ -108,6 +119,21 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
 
       <Notes subjectEntity="flock" subjectId={groupId} subject={group.name} />
 
+      {/* ## Four acts, then the rest behind a tap
+          Nine rows of equal weight, each with an icon and a line of
+          explanation, is eighteen lines of text and no ranking — read for the
+          thousandth time by somebody who has used the app since March. It also
+          exceeds Material's own ceiling for a related-action cluster (2-6) by
+          half.
+
+          The split is by how often a thing is done, not by what module it
+          belongs to. A treatment, a job, a feed and a loss are the daily acts
+          and keep their explanations. Weighing, produce, the named animals and
+          the breeding book are occasional — they keep their place, lose the
+          teaching copy, and sit behind one tap.
+
+          Nothing is removed (invariant 13): every destination that was here is
+          still here. */}
       <View style={styles.rows}>
         <Row
           title="Record a treatment"
@@ -124,22 +150,6 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
           onPress={() => nav.navigate('CareLog', { groupId })}
         />
         <Row
-          title="Weigh them"
-          detail="One animal, or a sample of the pen"
-          icon="milestone"
-          testID="go-weigh"
-          onPress={() => nav.navigate('Weigh', { groupId })}
-        />
-        {/* Eggs are logged on Today with the rest of the morning's tally, so
-            this is deliberately everything that is not an egg. */}
-        <Row
-          title={laysEggs(group.species) ? 'Milk, fibre or honey' : 'What they produce'}
-          detail="Anything off them that is not an egg"
-          icon="milk"
-          testID="go-produce"
-          onPress={() => nav.navigate('Produce', { groupId })}
-        />
-        <Row
           title="Log a feed"
           detail="What went in, and how much"
           icon="feed"
@@ -153,28 +163,67 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
           testID="go-loss"
           onPress={() => nav.navigate('Loss', { groupId })}
         />
-        <Row
-          title="Named animals"
-          detail="The ones you know individually"
-          icon="stock"
-          testID="go-animals"
-          onPress={() => nav.navigate('Animals', { groupId })}
-        />
-        <Row
-          title="Matings and births"
-          detail="Counts to a due date six weeks ahead"
-          icon="date-due"
-          testID="go-breeding"
-          onPress={() => nav.navigate('Breeding', { groupId })}
-        />
-        <Row
-          title="Change this group"
-          detail="Name, head count, or put it away"
-          icon="edit"
-          testID="go-edit"
-          onPress={() => nav.navigate('EditGroup', { groupId })}
-        />
       </View>
+
+      <Pressable
+        onPress={() => setMore(!more)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: more }}
+        accessibilityLabel={more ? 'Fewer things to do with this group' : 'More things to do with this group'}
+        testID="group-more"
+        hitSlop={8}
+        style={({ pressed }) => [styles.more, { opacity: pressed ? 0.7 : 1 }]}
+      >
+        <Text style={[styles.moreLabel, { color: colors.muted }]}>{more ? 'Fewer' : 'More'}</Text>
+        <Icon name={more ? 'minus' : 'plus'} size={16} color={colors.muted} />
+      </Pressable>
+
+      {more ? (
+        <View style={styles.rows}>
+          {/* Eggs are logged on Today with the rest of the morning's tally, so
+              this is deliberately everything that is not an egg.
+
+              **Named from what this group actually gives.** The title used to
+              branch on `laysEggs` alone, so a flock of hens was offered "Milk,
+              fibre or honey" — three things a chicken has never produced.
+              `productsOf` intersects what the species can give with what the
+              keeper says they are for.
+
+              It still appears when there is nothing on that list, because honey
+              has no species behind it yet (there are no bees in `SPECIES`) and
+              `other` is the only route for anything the app has no name for. */}
+          <Row
+            title={producesTitle(produces)}
+            icon="milk"
+            testID="go-produce"
+            onPress={() => nav.navigate('Produce', { groupId })}
+          />
+          <Row
+            title="Weigh them"
+            icon="milestone"
+            testID="go-weigh"
+            onPress={() => nav.navigate('Weigh', { groupId })}
+          />
+          <Row
+            title="Named animals"
+            icon="stock"
+            testID="go-animals"
+            onPress={() => nav.navigate('Animals', { groupId })}
+          />
+          <Row
+            title="Matings and births"
+            icon="date-due"
+            testID="go-breeding"
+            onPress={() => nav.navigate('Breeding', { groupId })}
+          />
+          <Row
+            title="Change this group"
+            icon="edit"
+            testID="go-edit"
+            onPress={() => nav.navigate('EditGroup', { groupId })}
+          />
+        </View>
+      ) : null}
     </Screen>
   );
 }
@@ -207,6 +256,20 @@ function relative(at: number): string {
 }
 
 const styles = StyleSheet.create({
+  more: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: SPACE.xs,
+    paddingVertical: SPACE.sm,
+    paddingHorizontal: SPACE.sm,
+  },
+  moreLabel: {
+    fontFamily: FONTS.data,
+    fontSize: TYPE.label,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
   label: {
     fontFamily: FONTS.data,
     fontSize: TYPE.label,
@@ -215,3 +278,17 @@ const styles = StyleSheet.create({
   },
   rows: { gap: SPACE.sm },
 });
+
+/**
+ * Names the products rather than guessing at them.
+ *
+ * "Milk or fibre" for a dual-purpose goat, "Fibre" for an alpaca, and — when
+ * the species gives nothing but eggs — a title that does not claim otherwise.
+ */
+function producesTitle(products: readonly string[]): string {
+  if (products.length === 0) return 'Anything else off them';
+
+  const named = products.map((product) => product[0]!.toUpperCase() + product.slice(1));
+  if (named.length === 1) return named[0]!;
+  return `${named.slice(0, -1).join(', ')} or ${named[named.length - 1]!.toLowerCase()}`;
+}

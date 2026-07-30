@@ -1,6 +1,6 @@
 import { AppState, type AppStateStatus } from 'react-native';
 import { addNetworkStateListener, type NetworkStateEvent } from 'expo-network';
-import { nudge } from '@steading/core/sync/engine';
+import { nudge, setOnline } from '@steading/core/sync/engine';
 import { reportEngineError } from '@steading/core/sync/report';
 import { refreshSession } from '../auth/session';
 
@@ -93,6 +93,15 @@ export function startTriggers(): TriggerHandles {
       // wifi that has not been signed into is exactly where a keeper still
       // wants the attempt made — the flush finding out is cheaper than not
       // trying.
+      /**
+       * Reported both ways, not just on regain.
+       *
+       * The engine's own online check has no way to ask a native module, so
+       * this is the only thing that can tell it. Losing the network matters as
+       * much as regaining it: without the `false` the engine spends a flush
+       * and a backoff discovering what the OS already knew.
+       */
+      setOnline(event.isConnected === true);
       if (event.isConnected === true) void wake();
     });
 

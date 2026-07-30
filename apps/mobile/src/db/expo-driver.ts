@@ -1,4 +1,5 @@
-import type { SqlDriver, SqlValue } from '@steading/core/db/driver';
+import { createGate, type GateOptions } from '@steading/core/db/gate';
+import type { SqlDriver, SqlOps, SqlValue } from '@steading/core/db/driver';
 
 /**
  * A `SqlDriver` over `expo-sqlite`. The device backing for `LocalStore`.
@@ -6,20 +7,33 @@ import type { SqlDriver, SqlValue } from '@steading/core/db/driver';
  * Written against the same seam as the Node driver the test suite uses, so
  * everything above it — sequence monotonicity, atomic enqueue, quarantine, the
  * migration ladder — is already proven by 430 tests before this file runs. Its
- * only job is to be a faithful SQLite, and the two ways the last driver was
- * unfaithful are both handled deliberately below.
+ * only job is to be a faithful SQLite, and the three ways the last two drivers
+ * were unfaithful are all handled deliberately below.
  *
- * ## Two lessons carried over from the Capacitor driver
+ * ## Three lessons, one per driver generation
  *
- * **Use the library's transaction, not raw BEGIN.** The previous driver drove
+ * **Use the library's transaction, not raw BEGIN.** The Capacitor driver drove
  * `BEGIN`/`COMMIT` by hand and the plugin's own queueing interleaved
  * statements into them. `withExclusiveTransactionAsync` opens a second
- * connection, holds the write lock, and commits or rolls back as one unit.
+ * connection, holds it for the duration, and commits or rolls back as one unit.
  *
  * **Row-returning statements go through the query path.** Android's `execSQL`
  * refuses anything that returns rows, which is how `PRAGMA journal_mode = WAL`
- * failed silently-then-loudly last time. `getFirstAsync` is used for it here,
- * because that PRAGMA reports the mode it settled on.
+ * failed silently-then-loudly. `getFirstAsync` is used for it here, because
+ * that PRAGMA reports the mode it settled on.
+ *
+ * **Which connection a statement uses is decided lexically, never from
+ * ambient state.** The first Expo driver kept a module-level `active`
+ * connection and sent every `run`/`all`/`get` to it while a transaction was
+ * open. That is unanswerable by construction: the driver sees the same call
+ * from a statement inside the transaction body and from a screen refresh that
+ * merely overlapped it. Today's list issues eleven reads in one burst on every
+ * engine publish, and the sync engine opens transactions from a timer, so the
+ * overlap was routine — those reads were sent to the transaction's connection,
+ * and `withExclusiveTransactionAsync` closes that connection in a `finally`
+ * without waiting for them. Now the transaction body is handed its own `SqlOps`
+ * and everything else waits behind it in `gate`, so a statement's connection is
+ * a property of where it was written, not of when it ran.
  *
  * ## Why this file names its own connection type
  *
@@ -44,79 +58,107 @@ export interface SqliteConnection {
   closeAsync(): Promise<void>;
 }
 
-export function createExpoDriver(db: SqliteConnection): SqlDriver {
-  /**
-   * Statements are routed to the transaction's connection while one is open.
-   *
-   * Not a nicety. `withExclusiveTransactionAsync` runs on a SECOND connection
-   * holding the write lock, so a statement sent to `db` during a transaction
-   * does not join it — it contends with it, and the documented outcome is
-   * `database is locked`. Every read and write inside `work()` must land on
-   * the same handle that will be committed.
-   */
-  let active: SqliteConnection | null = null;
-  const handle = (): SqliteConnection => active ?? db;
-
-  /**
-   * Transactions run one at a time, chained off this promise.
-   *
-   * A connection holds one transaction, so two overlapping calls would share
-   * it, each able to roll back the other's writes. Two taps on the Tally in
-   * quick succession is enough to reach that.
-   */
-  let tail: Promise<unknown> = Promise.resolve();
-
+/**
+ * The statement surface bound to one connection.
+ *
+ * `beat` tells the lane's stall guard that this holder is still working; only
+ * a transaction's handle passes a real one.
+ */
+function opsOn(
+  connection: SqliteConnection,
+  beat: () => void,
+  transaction: SqlOps['transaction'],
+): SqlOps {
   return {
-    async run(sql, params = []) {
-      await handle().runAsync(sql, params as SqlValue[]);
+    async run(sql, params = []): Promise<void> {
+      beat();
+      await connection.runAsync(sql, params as SqlValue[]);
     },
 
     async all<T>(sql: string, params: readonly SqlValue[] = []): Promise<T[]> {
-      return handle().getAllAsync<T>(sql, params as SqlValue[]);
+      beat();
+      return connection.getAllAsync<T>(sql, params as SqlValue[]);
     },
 
     async get<T>(sql: string, params: readonly SqlValue[] = []): Promise<T | undefined> {
+      beat();
       // expo-sqlite reports "no row" as null; the port's contract is undefined.
       // Converted here rather than at the call sites, because a null reaching a
       // Zod parse is a confusing error a long way from its cause.
-      const row = await handle().getFirstAsync<T>(sql, params as SqlValue[]);
+      const row = await connection.getFirstAsync<T>(sql, params as SqlValue[]);
       return row ?? undefined;
     },
 
-    async transaction<T>(work: () => Promise<T>): Promise<T> {
-      // Refused rather than deadlocked. Serialising means a nested call would
-      // wait on the transaction it is already inside, and a hang is far harder
-      // to diagnose than a thrown error naming the rule.
-      if (active) {
-        throw new Error('Nested transactions are not supported; see SqlDriver.transaction.');
-      }
+    transaction,
+  };
+}
 
-      const run = async (): Promise<T> => {
-        let result!: T;
-        await db.withExclusiveTransactionAsync(async (txn) => {
-          active = txn;
-          try {
-            result = await work();
-          } finally {
-            // Cleared inside the task, before the commit that follows it, so a
-            // throw in work() cannot leave a closed connection as the handle.
-            active = null;
-          }
-        });
-        return result;
-      };
+/** The transaction handle's own `transaction`: always a refusal. */
+function refuseNesting<T>(): Promise<T> {
+  // Thrown at the point of the mistake rather than deadlocked behind the lane.
+  // A hang on a handset produces no message, no log line and no crash report;
+  // this produces a stack pointing at the offending call.
+  return Promise.reject(
+    new Error('Nested transactions are not supported; see SqlOps.transaction.'),
+  );
+}
 
-      // Chain off the tail whether or not the previous call succeeded — one
-      // caller's rollback must not strand everyone queued behind it.
-      const queued = tail.then(run, run);
-      tail = queued.catch(() => undefined);
-      return queued;
+export function createExpoDriver(db: SqliteConnection, gateOptions: GateOptions = {}): SqlDriver {
+  /**
+   * One lane for every operation on this file — reads included.
+   *
+   * Serialising transactions alone is not enough. The connection a statement
+   * runs on has to be decided when the statement is written, and that is only
+   * enforceable if no statement can be issued while a transaction is open. See
+   * `gate.ts` and the port doc.
+   *
+   * `gateOptions` exists so a test can drive the stall guard's clock. Nothing
+   * in the app passes it; `open.ts` takes the defaults.
+   */
+  const gate = createGate(gateOptions);
+
+  const outer = (): SqlOps =>
+    opsOn(db, () => undefined, (work) => driver.transaction(work));
+
+  const driver: SqlDriver = {
+    run(sql, params = []): Promise<void> {
+      return gate.enter(() => outer().run(sql, params));
     },
 
-    async close() {
-      await db.closeAsync();
+    all<T>(sql: string, params: readonly SqlValue[] = []): Promise<T[]> {
+      return gate.enter(() => outer().all<T>(sql, params));
+    },
+
+    get<T>(sql: string, params: readonly SqlValue[] = []): Promise<T | undefined> {
+      return gate.enter(() => outer().get<T>(sql, params));
+    },
+
+    transaction<T>(work: (tx: SqlOps) => Promise<T>): Promise<T> {
+      return gate.enter(async (beat) => {
+        let result!: T;
+        let ran = false;
+
+        await db.withExclusiveTransactionAsync(async (txn) => {
+          ran = true;
+          result = await work(opsOn(txn, beat, refuseNesting));
+        });
+
+        // A transaction that never invoked its body has committed nothing but
+        // would return `undefined` typed as T. Silent, and precisely the shape
+        // of bug invariant 5 exists to prevent.
+        if (!ran) throw new Error('The transaction body never ran.');
+        return result;
+      }, true);
+    },
+
+    close(): Promise<void> {
+      // Queued behind everything else, so no statement can be in flight against
+      // a connection that is being closed.
+      return gate.enter(() => db.closeAsync());
     },
   };
+
+  return driver;
 }
 
 /**
@@ -126,6 +168,35 @@ export function createExpoDriver(db: SqliteConnection): SqlDriver {
  * and attempted through the right method, without an emulator. That seam
  * exists because the Capacitor driver shipped a broken `journal_mode` that no
  * test could have caught.
+ *
+ * ## Which of these actually reach a write, and which do not
+ *
+ * `synchronous` and `foreign_keys` are **per-connection**, and
+ * `withExclusiveTransactionAsync` runs every transaction on a connection it
+ * opens itself (`useNewConnection: true`, expo issue #41986). So neither
+ * statement below has ever run on the connection that performs a write. Only
+ * `journal_mode` carries over, because WAL is recorded in the database file
+ * header rather than on the handle.
+ *
+ * That sounds worse than it is, and the difference matters:
+ *
+ * - **`synchronous` survives on its default.** SQLite's compile-time default
+ *   is FULL, and enabling WAL does not lower it. The setting below is
+ *   therefore belt-and-braces on the read connection rather than the thing
+ *   the guarantee rests on — a fresh write connection is already FULL. Worth
+ *   keeping, because a build that defaulted to NORMAL would otherwise be
+ *   silent.
+ * - **`foreign_keys` genuinely does not apply to writes.** Stock SQLite
+ *   defaults it OFF, so the transaction connection enforces nothing. Harmless
+ *   today — no table declares a foreign key — and a trap for whoever adds the
+ *   first one, which is why it is written down here rather than assumed.
+ *
+ * Setting them inside the transaction body is not the fix: SQLite refuses
+ * `PRAGMA synchronous` mid-transaction outright ("Safety level may not be
+ * changed inside a transaction"), and `foreign_keys` is documented as a no-op
+ * there. The real fix is to own the write connection and drive
+ * `BEGIN IMMEDIATE` on it — reasonable now that `gate.ts` serialises every
+ * statement, and the right task to take before the first foreign key lands.
  */
 export async function applyPragmas(db: SqliteConnection): Promise<void> {
   /**

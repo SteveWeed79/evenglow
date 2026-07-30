@@ -180,6 +180,88 @@ export function todayList(dues: readonly Due[], now: number): Due[] {
 }
 
 /**
+ * The same list, with a group's husbandry gathered into one row.
+ *
+ * ## Why this exists
+ *
+ * A farm with two groups and the ordinary intervals gets this on a Tuesday
+ * morning: "Look over — Chickens", "Check for parasites — Chickens",
+ * "Vaccinations — Chickens", "Worm check — Chickens", then the same four for
+ * the goats. Nine rows, none of them wrong, and a list nobody reads. `careDues`
+ * emits one row per care kind per group by design — it has to, because each
+ * clears separately — but that is a fact about the engine, not about the
+ * morning.
+ *
+ * A bundle keeps every row and shows one. Nothing is dropped, nothing is
+ * merged: `dues` still has all four, and logging any one of them clears that
+ * one.
+ *
+ * ## What is bundled, and what is deliberately not
+ *
+ * Only `task` — the husbandry rows, which are the ones that multiply. A
+ * withdrawal closing and a hatch date are one-of-a-kind facts about the same
+ * animals and must never be folded together: they mean different things, they
+ * clear differently, and the whole point of Today is that a withdrawal is
+ * visible.
+ *
+ * Urgency is part of the bundling key for the same reason. An overdue worming
+ * and a mineral check due next week are not one row, however much they share a
+ * subject — collapsing them would hide the overdue one behind the count.
+ *
+ * ## Screen-reader note
+ *
+ * Android's accessibility guidance asks that each item in a list carry a
+ * different description; nine rows differing by one word read as a list where
+ * focus never moved. This is the fix for that as much as for the eye.
+ */
+export interface DueBundle {
+  /** Stable across recomputations, like `Due.key`, and for the same reason. */
+  key: string;
+  subject: Due['subject'];
+  kind: DueKind;
+  /** Every row this stands for, most pressing first. Never empty. */
+  dues: Due[];
+  /** The row that decides where the bundle sorts and what it says. */
+  lead: Due;
+}
+
+/** Whether a kind is one that repeats per subject and is worth gathering. */
+function bundles(kind: DueKind): boolean {
+  return kind === 'task';
+}
+
+export function todayBundles(dues: readonly Due[], now: number): DueBundle[] {
+  const ordered = todayList(dues, now);
+  const byKey = new Map<string, Due[]>();
+  const order: string[] = [];
+
+  for (const due of ordered) {
+    // A row that does not bundle still gets a bundle of one, so the caller has
+    // a single shape to render rather than two.
+    const key = bundles(due.kind)
+      ? `${due.kind}:${due.subject.entity}:${due.subject.id}:${urgencyOf(due, now)}`
+      : `one:${due.key}`;
+
+    const existing = byKey.get(key);
+    if (existing === undefined) {
+      byKey.set(key, [due]);
+      order.push(key);
+    } else {
+      existing.push(due);
+    }
+  }
+
+  // `order` preserves the sorted order of each bundle's FIRST row, which is
+  // its most pressing one — so the bundles come out in the same order the flat
+  // list would have.
+  return order.map((key) => {
+    const group = byKey.get(key) ?? [];
+    const lead = group[0]!;
+    return { key, subject: lead.subject, kind: lead.kind, dues: group, lead };
+  });
+}
+
+/**
  * When a machine is expected to reach a meter reading.
  *
  * Returns null rather than a guess when usage is unknown or non-positive. A

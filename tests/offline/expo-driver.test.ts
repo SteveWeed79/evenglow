@@ -105,8 +105,8 @@ describe('createExpoDriver', () => {
     const driver = createExpoDriver(fakeExpoConnection());
 
     await expect(
-      driver.transaction(async () => {
-        await driver.transaction(async () => undefined);
+      driver.transaction(async (tx) => {
+        await tx.transaction(async () => undefined);
       }),
     ).rejects.toThrow(/nested/i);
   });
@@ -140,12 +140,12 @@ describe('createExpoDriver', () => {
     const driver = createExpoDriver(fakeExpoConnection());
     await driver.run('CREATE TABLE t (v INTEGER)');
 
-    const failed = driver.transaction(async () => {
-      await driver.run('INSERT INTO t (v) VALUES (1)');
+    const failed = driver.transaction(async (tx) => {
+      await tx.run('INSERT INTO t (v) VALUES (1)');
       throw new Error('nope');
     });
-    const after = driver.transaction(async () => {
-      await driver.run('INSERT INTO t (v) VALUES (2)');
+    const after = driver.transaction(async (tx) => {
+      await tx.run('INSERT INTO t (v) VALUES (2)');
     });
 
     await expect(failed).rejects.toThrow('nope');
