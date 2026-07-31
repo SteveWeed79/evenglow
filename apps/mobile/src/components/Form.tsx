@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { reportTrouble } from '../hooks/useTrouble';
 import { describeLogFailure } from '@steading/core/sync/failure';
 import { Icon, type IconName } from './Icon';
 import { Body, Panel } from './Panel';
@@ -587,6 +588,13 @@ export function useSaver(onDone: () => void): Saver {
       } catch (error) {
         setSaving(false);
         setFailure(describeLogFailure(error));
+        /**
+         * Also to the banner, which carries the first stack frame that is not
+         * node_modules. The sentence on the form tells a farmer what to do;
+         * this tells whoever is fixing it where to look, and the two are not
+         * the same audience.
+         */
+        reportTrouble('saving that', error);
         return;
       }
 

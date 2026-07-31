@@ -26,14 +26,36 @@ describe('describeLogFailure', () => {
     );
   });
 
-  it('does not surface a raw platform error to the user', () => {
-    // An IndexedDB abort reads like "AbortError: transaction aborted", which
-    // tells a keeper nothing and reads as the app blaming them.
+  it('leads with the sentence a person can act on, then names the cause', () => {
+    /**
+     * This used to assert the opposite — that the platform's own words never
+     * reached the screen, because "AbortError: transaction aborted" tells a
+     * keeper nothing and reads as the app blaming them.
+     *
+     * Right about the first line, wrong to stop there. Discarding the detail
+     * threw away the only evidence a failure produced, and it cost two rounds
+     * of "it will not save anywhere" with nothing to go on — not the call, not
+     * the file, not even whether it was storage, the network or a missing
+     * global. A person can ignore a second line. Nobody can debug a missing
+     * one.
+     */
     const raw = new DOMException('transaction aborted', 'AbortError');
     const message = describeLogFailure(raw);
 
-    expect(message).not.toContain('AbortError');
-    expect(message).not.toContain('transaction');
+    // What to do comes first and is unchanged.
+    expect(message.split('\n')[0]).toContain('That did not save');
+    // What went wrong comes after it.
+    expect(message).toContain('transaction aborted');
+  });
+
+  it('says only the actionable sentence when there is no detail to add', () => {
+    // An error with nothing in it must not produce a dangling blank line.
+    expect(describeLogFailure(new Error(''))).toBe(
+      'That did not save. Your count is still here — try again.',
+    );
+    expect(describeLogFailure(undefined)).toBe(
+      'That did not save. Your count is still here — try again.',
+    );
   });
 
   it('says the count is still there, because after the fix it is', () => {
