@@ -69,7 +69,7 @@ export function HistoryScreen(): React.ReactElement {
 
   if (days.length === 0) {
     return (
-      <Screen title="What happened" back>
+      <Screen title="What happened">
         <Panel label="Nothing logged yet">
           {/* Empty screens invite (UX-SPEC §6). */}
           <View style={styles.spot}>
@@ -88,7 +88,7 @@ export function HistoryScreen(): React.ReactElement {
   const open = opened ?? days[0]?.day;
 
   return (
-    <Screen title="What happened" back>
+    <Screen title="What happened">
       {shown.map((day) => (
         <DayBlock
           key={day.day}

@@ -1,18 +1,20 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StyleSheet, Text, View } from 'react-native';
-import { tabsFor } from './tab-marks';
+import { tabs } from './tab-marks';
 import { Icon, type IconName } from '../components/Icon';
-import { GrowingScreen } from '../screens/GrowingScreen';
-import { IronScreen } from '../screens/IronScreen';
-import { StockScreen } from '../screens/StockScreen';
+import { FarmScreen } from '../screens/FarmScreen';
+import { HistoryScreen } from '../screens/HistoryScreen';
 import { TodayScreen } from '../screens/TodayScreen';
-import { useEnterprises } from '../hooks/useEnterprises';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, TAP, TYPE } from '../theme/tokens';
 
 /**
- * The four tabs (UX-SPEC §4). Four, not six — every additional tab is a
- * decision made at 6am.
+ * The tabs (UX-SPEC §4). Four, five where a farm runs everything — not six,
+ * because every additional tab is a decision made at 6am.
+ *
+ * The bar is built per farm, which is what makes room for the fifth: a keeper
+ * with only animals never sees Growing or Iron, so "four" was always "at most
+ * four". Only a farm running all three enterprises sees five.
  *
  * Real navigation rather than the `useState` switch the web shell used. That
  * choice was right for a precached web shell and wrong for an app: a back
@@ -29,18 +31,16 @@ import { FONTS, TAP, TYPE } from '../theme/tokens';
 /** The screen behind each mark. Names and marks live in `tab-marks.ts`. */
 const SCREENS: Record<string, () => React.ReactElement> = {
   Today: TodayScreen,
-  Stock: StockScreen,
-  Growing: GrowingScreen,
-  Iron: IronScreen,
+  Farm: FarmScreen,
+  History: HistoryScreen,
 };
 
 
 
 export type TabParamList = {
   Today: undefined;
-  Stock: undefined;
-  Growing: undefined;
-  Iron: undefined;
+  Farm: undefined;
+  History: undefined;
 };
 
 const Tab = createBottomTabNavigator<TabParamList>();
@@ -49,11 +49,11 @@ export function Tabs(): React.ReactElement {
   const { colors } = useTheme();
 
   /**
-   * Which tabs this farm asked for. Reads the site like any other screen —
-   * through the local projection — so it is correct offline and updates when
-   * the setting syncs from another device.
+   * The same three for every farm. What a farm runs still decides what it
+   * sees — that now hides a row inside `FarmScreen` rather than a whole tab,
+   * so the bar does not change shape under somebody's thumb.
    */
-  const TABS = tabsFor(useEnterprises());
+  const TABS = tabs();
 
   return (
     <Tab.Navigator

@@ -27,12 +27,12 @@ export function IronScreen(): React.ReactElement {
   const machines = useLive(listMachines);
   const inventory = useLive(listInventory);
 
-  if (machines === null) return <Screen title="Iron">{null}</Screen>;
+  if (machines === null) return <Screen title="Iron" back>{null}</Screen>;
 
   const low = runningLow(inventory ?? []);
 
   return (
-    <Screen title="Iron">
+    <Screen title="Iron" back>
       {machines.length === 0 ? (
         <Panel label="No equipment yet">
           <View style={styles.spot}>
