@@ -92,6 +92,38 @@ export const MIGRATIONS: readonly Migration[] = [
        )`,
     ],
   },
+
+  {
+    version: 2,
+    statements: [
+      /**
+       * The forecast, cached — **not** a record, and the distinction is the
+       * whole design.
+       *
+       * Nobody authors a forecast. It cannot conflict, it is not something the
+       * farm did, and two devices fetching the same site would mint two ULIDs
+       * for one fact. So it is not an entity: it never enters the outbox,
+       * never reaches `records`, and never crosses the wire. The same category
+       * the codebase already grants the bundled zone lookup, and the same
+       * reasoning that keeps `Due` off the wire.
+       *
+       * One row, enforced by the CHECK: a farm has one position and therefore
+       * one forecast, and a table that could hold two would invite a bug about
+       * which is current. Each fetch replaces it.
+       *
+       * `fetchedAt` is when this device asked and `issuedAt` is when the
+       * provider made the run — staleness is judged on the second, because a
+       * device asleep for a day did not make the forecast older, it just
+       * stopped hearing about it.
+       */
+      `CREATE TABLE IF NOT EXISTS forecast (
+         id         INTEGER PRIMARY KEY CHECK (id = 1),
+         issuedAt   INTEGER NOT NULL,
+         fetchedAt  INTEGER NOT NULL,
+         value      TEXT NOT NULL
+       )`,
+    ],
+  },
 ];
 
 /** The version a fresh database is brought to. */

@@ -39,13 +39,25 @@ describe('migration ladder', () => {
     expect(await migrate(db)).toBe(SCHEMA_VERSION);
   });
 
-  it('creates the four stores the engine expects', async () => {
+  it('creates the stores the engine expects', async () => {
     const db = open();
     await migrate(db);
 
-    // The same four IndexedDB used. The engine above is unchanged, so the
-    // shapes it reads and writes must be too.
-    expect(await tableNames(db)).toEqual(['meta', 'outbox', 'quarantine', 'records']);
+    /**
+     * The four IndexedDB used, plus the forecast cache.
+     *
+     * `forecast` is deliberately NOT one of the engine's stores: it holds no
+     * records, never enters the outbox and never reaches the wire. It is here
+     * because it is in the same file, not because it is part of the same
+     * system — see the migration's note and `contracts/weather.ts`.
+     */
+    expect(await tableNames(db)).toEqual([
+      'forecast',
+      'meta',
+      'outbox',
+      'quarantine',
+      'records',
+    ]);
   });
 
   it('is idempotent', async () => {
@@ -64,7 +76,7 @@ describe('migration ladder', () => {
     await Promise.all([migrate(db), migrate(db)]);
 
     expect(await currentVersion(db)).toBe(SCHEMA_VERSION);
-    expect(await tableNames(db)).toHaveLength(4);
+    expect(await tableNames(db)).toHaveLength(5);
   });
 
   /**

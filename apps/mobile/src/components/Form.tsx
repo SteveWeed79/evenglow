@@ -516,12 +516,22 @@ export function Row({
   icon,
   onPress,
   testID,
+  mark = 'forward',
 }: {
   title: string;
   detail?: string;
   icon?: IconName;
   onPress: () => void;
   testID?: string;
+  /**
+   * The mark on the right, which is a promise about what pressing does.
+   *
+   * A chevron means "this opens something", and almost every row here does.
+   * The Jobs list does not — pressing a job finishes it — and a chevron there
+   * invites somebody to tap expecting a detail screen and tick the job off
+   * instead. The affordance has to match the act.
+   */
+  mark?: IconName;
 }): React.ReactElement {
   const { colors } = useTheme();
 
@@ -542,7 +552,7 @@ export function Row({
           <Text style={[styles.rowDetail, { color: colors.muted }]}>{detail}</Text>
         )}
       </View>
-      <Icon name="forward" size={20} color={colors.muted} />
+      <Icon name={mark} size={20} color={colors.muted} />
     </Pressable>
   );
 }

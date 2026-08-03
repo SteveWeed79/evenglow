@@ -59,6 +59,13 @@ export interface SnapshotWatermark {
   throughId: string | null;
 }
 
+/** A forecast as it sits in the cache. `value` is the JSON, unparsed. */
+export interface CachedForecast {
+  issuedAt: number;
+  fetchedAt: number;
+  value: string;
+}
+
 export interface LocalStore {
   // ── Writing ───────────────────────────────────────────────────────────────
 
@@ -164,6 +171,23 @@ export interface LocalStore {
   getLastError(): Promise<string | null>;
   setLastError(message: string): Promise<void>;
   getDeviceId(): Promise<string | null>;
+
+  // ── Forecast cache ────────────────────────────────────────────────────────
+
+  /**
+   * The cached forecast, or null.
+   *
+   * Its own pair of methods rather than a `meta` key, because `meta` is small
+   * bookkeeping — a device id, a watermark, a last error — and this is a blob
+   * that is replaced wholesale. Keeping them apart means a corrupt forecast
+   * cannot take the device id with it.
+   *
+   * **Deliberately not part of the record or outbox system.** A forecast is
+   * not authored, cannot conflict, and must never reach the wire; see
+   * `weather/provider.ts` and `contracts/weather.ts`.
+   */
+  readForecast(): Promise<CachedForecast | null>;
+  writeForecast(entry: CachedForecast): Promise<void>;
 
   quarantineCount(): Promise<number>;
   listQuarantined(): Promise<Quarantined[]>;
