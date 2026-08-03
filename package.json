@@ -34,7 +34,7 @@
     "@steading/contracts": "workspace:*",
     "@steading/core": "workspace:*",
     "mongodb": "^7.5.0",
-    "react": "19.2.4",
+    "react": "19.2.3",
     "ulid": "^3.0.2",
     "zod": "^4.4.3"
   },
