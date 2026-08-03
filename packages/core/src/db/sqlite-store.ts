@@ -11,6 +11,7 @@ import { migrate } from './migrations';
 import { migrateEnvelope } from './migrate';
 import { nextRecordValue } from './project';
 import type {
+  CachedForecast,
   EnqueueRequest,
   IntegrityReport,
   LocalStore,
@@ -657,6 +658,32 @@ export async function openSqliteStore(
 
     async getDeviceId(): Promise<string | null> {
       return parseMeta('deviceId', await readMeta(driver, 'deviceId')) ?? null;
+    },
+
+    /**
+     * The forecast cache. Outside the record system entirely — see the port.
+     *
+     * Read and written on the outer handle rather than in a transaction: it is
+     * one row, it is a cache, and nothing else is consistent with it. Invariant
+     * 5 is about a projection and its mutation, and there is no mutation here.
+     */
+    async readForecast(): Promise<CachedForecast | null> {
+      const row = await driver.get<{ issuedAt: number; fetchedAt: number; value: string }>(
+        'SELECT issuedAt, fetchedAt, value FROM forecast WHERE id = 1',
+      );
+      return row ?? null;
+    },
+
+    async writeForecast(entry): Promise<void> {
+      // Replaced wholesale. A farm has one position and therefore one
+      // forecast; the CHECK on the table makes a second one impossible.
+      await driver.run(
+        `INSERT INTO forecast (id, issuedAt, fetchedAt, value) VALUES (1, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET issuedAt = excluded.issuedAt,
+                                       fetchedAt = excluded.fetchedAt,
+                                       value = excluded.value`,
+        [entry.issuedAt, entry.fetchedAt, entry.value],
+      );
     },
 
     async quarantineCount(): Promise<number> {

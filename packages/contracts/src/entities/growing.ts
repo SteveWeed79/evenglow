@@ -69,6 +69,22 @@ const siteShape = {
   frost: frostDatesSchema.optional(),
   /** Elevation moves a frost date more than a postcode does. Recorded, not used yet. */
   elevationUm: micrometresSchema.optional(),
+  /**
+   * Where the farm is, for the forecast. **Stored rounded, deliberately.**
+   *
+   * Two decimal places is about a kilometre — ample for weather, and useless
+   * for finding a door. A farm's coordinates identify a family's home, and the
+   * app should never hold better than it needs. Whatever the device or a
+   * search hands over is rounded before it is written; nothing anywhere keeps
+   * the precise value.
+   *
+   * Optional, and the whole weather feature is absent until it is set. That is
+   * the honest state: there is no forecast for a place nobody has named.
+   */
+  lat: z.number().min(-90).max(90).optional(),
+  lon: z.number().min(-180).max(180).optional(),
+  /** What the farm called the place, so the screen can say it back. */
+  placeName: z.string().max(120).optional(),
   units: unitSystemSchema.optional(),
   /**
    * Years before the same plant family may return to a bed. Three is the
