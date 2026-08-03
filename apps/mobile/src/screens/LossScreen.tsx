@@ -113,7 +113,10 @@ export function LossScreen({ route }: ScreenProps<'Loss'>): React.ReactElement {
       <Text style={[styles.label, { color: colors.muted }]}>{group.name}</Text>
 
       <Field label="How many?">
-        <Stepper value={count} onChange={setCount} steps={[1, 5]} min={1} suffix="head" />
+        {/* Negative, because this screen is headed "Record a loss" and a `+5`
+            under that heading reads as five more animals rather than five
+            fewer. */}
+        <Stepper value={count} onChange={setCount} steps={[1, 5]} min={1} suffix="head" negative />
       </Field>
 
       <Field label="What happened?">

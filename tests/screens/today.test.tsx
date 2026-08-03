@@ -69,6 +69,81 @@ describe('husbandry', () => {
   });
 });
 
+/**
+ * What order the morning is in.
+ *
+ * The screen used to put the whole due list above the tallies. Bundling gave
+ * each group a row plus an "and 3 more" line, so three groups of routine
+ * look-overs filled a Pixel and the tally — the one control that is tapped
+ * every single morning — started below the fold.
+ *
+ * `VISIBLE_DUES` was meant to prevent that and could not: it counts bundles,
+ * and a bundle is not one line.
+ */
+describe('the order of the morning', () => {
+  it('puts the tally above the day’s jobs', async () => {
+    await theGoats();
+
+    const today = await mount(<TodayScreen />);
+    const body = today.text();
+
+    // The goats are kept for milk, so there is a tally; husbandry supplies the
+    // jobs. Both are on screen — this is only about which comes first.
+    expect(body).toContain('Milk');
+    expect(body).toContain('Also today');
+    expect(body.indexOf('Milk')).toBeLessThan(body.indexOf('Also today'));
+    today.unmount();
+  });
+
+  /**
+   * The reason moving the list is safe, asserted rather than assumed.
+   *
+   * W2 makes withdrawals the highest-value safety surface in the app, so
+   * burying one under a tally would be a bad trade — but that is not the trade.
+   * A withdrawal row has `noticeDays: 0` and reads "clear again after", so it
+   * appears on the day the withdrawal ENDS. While produce is actually being
+   * withheld there is no due row at all, and the guard is the banner on the
+   * tally plus the second press it demands.
+   *
+   * Moving the list does not move the guard, because the guard was never in
+   * the list. This test is what stops that from being a comment nobody checked.
+   */
+  it('guards a withdrawal on the tally itself, not from the list', async () => {
+    await enqueue({
+      entity: 'flock',
+      op: 'create',
+      targetId: GROUP,
+      payload: { name: 'The hens', species: 'chicken', count: 6, purposes: ['eggs'] },
+    });
+    await enqueue({
+      entity: 'medication',
+      op: 'create',
+      targetId: newId(),
+      payload: {
+        flockId: GROUP,
+        name: 'Baytril',
+        administeredAt: Date.now(),
+        treatmentEndsAt: Date.now(),
+        withdrawalDays: { egg: 7 },
+      },
+    });
+
+    const today = await mount(<TodayScreen />);
+
+    // The warning is on the tally, so it sits with the tally — above the
+    // day's jobs, without the list having to carry it.
+    const body = today.text();
+    expect(body).toContain('Eggs withheld — Baytril');
+    expect(body.indexOf('Eggs withheld')).toBeLessThan(body.indexOf('Also today'));
+
+    // And it still will not commit on one press.
+    await today.press('tally-plus-6');
+    await today.press('tally-commit');
+    expect(await localStore().readRecordsByEntity('eggLog')).toHaveLength(0);
+    today.unmount();
+  });
+});
+
 describe('withdrawals', () => {
   it('puts a row up and makes logging through it deliberate', async () => {
     await enqueue({

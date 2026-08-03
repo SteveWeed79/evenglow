@@ -220,7 +220,15 @@ describe('what comes off them', () => {
     await aGroup();
     const screen = await mount(<LossScreen {...routeProps({ groupId: GROUP })} />);
 
-    await screen.press('step-plus-1');
+    /**
+     * `step-minus-1`, not `step-plus-1`.
+     *
+     * A screen headed "Record a loss" offering `+5` reads as five more
+     * animals. The count is still a magnitude and still goes up — only the
+     * sign the buttons show changes, so that the buttons and the heading agree.
+     */
+    expect(screen.has('step-plus-1')).toBe(false);
+    await screen.press('step-minus-1');
     await screen.press('choice-predator');
     await screen.type('loss-predator', 'Fox');
     await screen.press('save-loss');
