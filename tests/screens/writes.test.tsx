@@ -590,3 +590,82 @@ describe('feeding from the shelf', () => {
     screen.unmount();
   });
 });
+
+/**
+ * "If it's chick food… it's not for goats, well in most cases."
+ *
+ * The hedge is the design. A keeper who puts chick crumb in front of a poorly
+ * bantam, or scratch in front of the goats because it is the sack that is
+ * open, is doing an ordinary thing — so the shelf sorts and never argues.
+ */
+describe('who the feed is for', () => {
+  async function aSackFor(name: string, species?: string[]): Promise<void> {
+    await enqueue({
+      entity: 'inventory',
+      op: 'create',
+      targetId: newId(),
+      payload: {
+        name,
+        kind: 'feed',
+        unit: 'lb',
+        quantity: 50,
+        ...(species === undefined ? {} : { species }),
+      },
+    });
+  }
+
+  it('records who a feed is for', async () => {
+    await aGroup();
+    const screen = await mount(<AddItemScreen {...routeProps({})} />);
+
+    await screen.type('item-name', 'Purina Chick Starter');
+    await screen.press('item-species-chicken');
+    await screen.press('save-item');
+    screen.unmount();
+
+    const [item] = await listInventory();
+    expect(item).toMatchObject({ name: 'Purina Chick Starter', species: ['chicken'] });
+  });
+
+  /** Nineteen chips for animals nobody owns is a list that gets skipped. */
+  it('offers only the species the farm keeps', async () => {
+    await aGroup();
+    const screen = await mount(<AddItemScreen {...routeProps({})} />);
+
+    expect(screen.has('item-species-chicken')).toBe(true);
+    expect(screen.has('item-species-goat')).toBe(false);
+    screen.unmount();
+  });
+
+  it('puts their feed first without hiding the rest', async () => {
+    await aGroup();
+    await aSackFor('Goat Mix', ['goat']);
+    await aSackFor('Chick Starter', ['chicken']);
+
+    const screen = await mount(<FeedScreen {...routeProps({ groupId: GROUP })} />);
+    const offered = screen.labels();
+
+    // Both reachable — the goats' sack is still a thing you can put in front
+    // of a hen if it is what is open.
+    expect(offered).toContain('Chick Starter');
+    expect(offered).toContain('Goat Mix');
+    expect(offered.indexOf('Chick Starter')).toBeLessThan(offered.indexOf('Goat Mix'));
+    screen.unmount();
+  });
+
+  /**
+   * An unanswered question is not a statement that the sack is for something
+   * else — and every item on every shelf predates the field.
+   */
+  it('treats feed with nobody named as theirs, not as somebody else’s', async () => {
+    await aGroup();
+    await aSackFor('Goat Mix', ['goat']);
+    await aSackFor('Scratch grain');
+
+    const screen = await mount(<FeedScreen {...routeProps({ groupId: GROUP })} />);
+    const offered = screen.labels();
+
+    expect(offered.indexOf('Scratch grain')).toBeLessThan(offered.indexOf('Goat Mix'));
+    screen.unmount();
+  });
+});

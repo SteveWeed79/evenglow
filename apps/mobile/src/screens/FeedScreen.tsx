@@ -39,6 +39,10 @@ import { FONTS, TYPE } from '../theme/tokens';
  * The chips are the shelf. The text field stays, because a handful of
  * windfalls or a neighbour's hay is a real feed that will never be on it.
  *
+ * Chick starter is not goat feed, so a sack that says who it is for sorts to
+ * the front for those animals — and stays offered to the rest. See the note on
+ * `fromShelf`: the shelf sorts and never argues.
+ *
  * **The shelf is not decremented.** That is a deliberate hold, not an
  * oversight: how much of a 50 lb sack a scoop represents is a guess, and a
  * quantity that drifts away from what is on the floor is worse than one nobody
@@ -75,16 +79,32 @@ export function FeedScreen({ route }: ScreenProps<'Feed'>): React.ReactElement {
   const [feedType, setFeedType] = useState('');
 
   /**
-   * The feed on the shelf, by name and deduplicated.
+   * The feed on the shelf: theirs first, then everything else.
    *
-   * Two sacks of the same feed is an ordinary thing to own and would otherwise
-   * draw two identical chips — which is both a React key collision and a
-   * choice between two things a person cannot tell apart.
+   * "If it's chick food, it's not for goats — well, in most cases." The hedge
+   * is the design. A keeper who puts chick crumb in front of a poorly bantam,
+   * or scratch in front of the goats because it is the sack that is open, is
+   * doing an ordinary thing, and a shelf that argued would be one they stopped
+   * filling in. So this **sorts and never filters**.
+   *
+   * Feed with nothing said about it sorts with theirs rather than after it: an
+   * unanswered question is not a statement that the sack is for something else,
+   * and every item on every shelf predates the field.
+   *
+   * Deduplicated by name, because two sacks of the same feed is an ordinary
+   * thing to own and would otherwise draw two chips nobody can tell apart —
+   * which is also a React key collision.
    */
-  const fromShelf = useMemo(
-    () => [...new Set((shelf ?? []).filter((i) => i.kind === 'feed').map((i) => i.name))],
-    [shelf],
-  );
+  const fromShelf = useMemo(() => {
+    const feed = (shelf ?? []).filter((item) => item.kind === 'feed');
+    const suits = (item: (typeof feed)[number]): boolean =>
+      item.species === undefined || (group !== null && item.species.includes(group.species));
+
+    const names = [...feed.filter(suits), ...feed.filter((item) => !suits(item))].map(
+      (item) => item.name,
+    );
+    return [...new Set(names)];
+  }, [shelf, group]);
 
   const pick = useCallback(
     (name: string): void => {
