@@ -425,3 +425,95 @@ describe('the shape of the morning', () => {
     expect(screen.text()).toContain('Worm check — The hens');
   });
 });
+
+/**
+ * "Can there be an option to confirm they are complete as much as they need to
+ * be, and then they roll into the What happened screen."
+ *
+ * Yes — and importantly, without a completion flag. `due/types.ts` property 3
+ * refuses one, and the reasoning still holds: a stored "done" is a second
+ * source of truth about whether something happened, and the two drift.
+ *
+ * Pressing Done writes the same `careLog` the form would have written. The row
+ * clears because that record now exists, which is the same reason every other
+ * row clears — and because it is a real record, it lands in What happened. A
+ * flag never would have.
+ */
+describe('finishing a job from the list', () => {
+  it('writes the record rather than marking anything', async () => {
+    await theGoats();
+
+    const today = await mount(<TodayScreen />);
+    const key = `${GROUP}:care:health-check`;
+
+    // Armed first: a careLog is append-only and there is no undo, so a
+    // mis-tap must not record a job nobody did.
+    await today.press(`due-done-${key}`);
+    expect(await localStore().readRecordsByEntity('careLog')).toHaveLength(0);
+
+    await today.press(`due-done-${key}`);
+    today.unmount();
+
+    const [logged] = await localStore().readRecordsByEntity('careLog');
+    expect(logged?.value).toMatchObject({ kind: 'health-check', flockId: GROUP });
+  });
+
+  it('takes the row off Today, because the thing it waited for now exists', async () => {
+    await theGoats();
+
+    const before = await mount(<TodayScreen />);
+    const key = `${GROUP}:care:health-check`;
+    expect(before.text()).toContain('Look over — The goats');
+    await before.press(`due-done-${key}`);
+    await before.press(`due-done-${key}`);
+    before.unmount();
+
+    const after = await mount(<TodayScreen />);
+    expect(after.text()).not.toContain('Look over — The goats');
+    after.unmount();
+  });
+
+  it('rolls into What happened', async () => {
+    await theGoats();
+
+    const today = await mount(<TodayScreen />);
+    // Trimming is inside the group's bundle rather than its lead row.
+    await today.pressLabel('more');
+    const key = `${GROUP}:care:hoof-trim`;
+    await today.press(`due-done-${key}`);
+    await today.press(`due-done-${key}`);
+    today.unmount();
+
+    const { listHistory } = await import('@steading/core/read/history');
+    const days = await listHistory();
+    expect(days[0]?.events[0]?.title).toBe('Trimmed feet — The goats');
+  });
+
+  /**
+   * Absent everywhere one press could not honestly stand in for the form. A
+   * hatch needs how many hatched, which is the entire point of recording it.
+   */
+  it('is not offered on a row a press could not honestly complete', async () => {
+    await enqueue({
+      entity: 'incubation',
+      op: 'create',
+      targetId: newId(),
+      payload: {
+        species: 'chicken',
+        label: 'The broody set',
+        setAt: Date.now() - 20 * DAY,
+        eggsSet: 12,
+        source: 'own',
+        method: 'broody',
+        candledAt: Date.now() - 13 * DAY,
+        fertile: 10,
+      },
+    });
+
+    const today = await mount(<TodayScreen />);
+
+    expect(today.text()).toContain('hatch');
+    expect(today.labels()).not.toContain('Done');
+    today.unmount();
+  });
+});
