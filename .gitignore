@@ -67,3 +67,9 @@ apps/mobile/ios/
 
 # JetBrains IDEs
 .idea/
+
+# Build output from the retired Capacitor client. The directory is not in the
+# repository — it was deleted when the web client was retired — but a checkout
+# that predates that still has Gradle writing into it, and those writes block
+# every later `git pull` with "your local changes would be overwritten".
+apps/app/

@@ -1,11 +1,12 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StyleSheet, Text, View } from 'react-native';
-import { TAB_MARKS } from './tab-marks';
+import { tabsFor } from './tab-marks';
 import { Icon, type IconName } from '../components/Icon';
 import { GrowingScreen } from '../screens/GrowingScreen';
 import { IronScreen } from '../screens/IronScreen';
 import { StockScreen } from '../screens/StockScreen';
 import { TodayScreen } from '../screens/TodayScreen';
+import { useEnterprises } from '../hooks/useEnterprises';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, TAP, TYPE } from '../theme/tokens';
 
@@ -33,7 +34,7 @@ const SCREENS: Record<string, () => React.ReactElement> = {
   Iron: IronScreen,
 };
 
-const TABS = TAB_MARKS;
+
 
 export type TabParamList = {
   Today: undefined;
@@ -46,6 +47,13 @@ const Tab = createBottomTabNavigator<TabParamList>();
 
 export function Tabs(): React.ReactElement {
   const { colors } = useTheme();
+
+  /**
+   * Which tabs this farm asked for. Reads the site like any other screen —
+   * through the local projection — so it is correct offline and updates when
+   * the setting syncs from another device.
+   */
+  const TABS = tabsFor(useEnterprises());
 
   return (
     <Tab.Navigator

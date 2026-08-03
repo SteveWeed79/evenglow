@@ -178,15 +178,19 @@ export function Toggle({
   label,
   value,
   onChange,
+  testID,
 }: {
   label: string;
   value: boolean;
   onChange: (next: boolean) => void;
+  /** Optional, because a toggle whose label is unique needs no other handle. */
+  testID?: string;
 }): React.ReactElement {
   const { colors } = useTheme();
 
   return (
     <Pressable
+      {...(testID === undefined ? {} : { testID })}
       onPress={() => {
         void Haptics.selectionAsync();
         onChange(!value);

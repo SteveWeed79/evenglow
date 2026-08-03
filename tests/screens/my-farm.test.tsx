@@ -1,0 +1,134 @@
+import { beforeEach, describe, expect, it } from 'vitest';
+import { newId } from '@steading/contracts';
+import { readSite } from '@steading/core/read/growing';
+import { enqueue } from '@steading/core/sync/queue';
+import { freshStore } from '../support/store';
+import { mount } from '../support/screen';
+import { MyFarmScreen } from '../../apps/mobile/src/screens/MyFarmScreen';
+
+/**
+ * "We need a settings menu that allows the user to select what they intend to
+ * farm and therefore what portions of our app they see."
+ *
+ * The load-bearing promise is the one about data: turning something off hides
+ * it and keeps it. Invariant 13 is why this is safe to offer at all, so it is
+ * the thing most worth a test.
+ */
+
+const SITE = newId();
+
+async function aFarm(enterprises?: string[]): Promise<void> {
+  await enqueue({
+    entity: 'site',
+    op: 'create',
+    targetId: SITE,
+    payload: { name: 'Hollow Farm', ...(enterprises === undefined ? {} : { enterprises }) },
+  });
+}
+
+beforeEach(async () => {
+  await freshStore();
+});
+
+describe('a farm that has never been asked', () => {
+  it('runs everything, so nothing disappears from an app already in use', async () => {
+    await aFarm();
+
+    const site = await readSite();
+    expect(site?.enterprises).toEqual(['stock', 'growing', 'iron']);
+  });
+});
+
+describe('choosing what you run', () => {
+  it('offers each part of the farm', async () => {
+    await aFarm();
+    const screen = await mount(<MyFarmScreen />);
+
+    for (const key of ['stock', 'growing', 'iron']) {
+      expect(screen.has(`enterprise-${key}`), key).toBe(true);
+    }
+    screen.unmount();
+  });
+
+  it('stores what was chosen', async () => {
+    await aFarm();
+    const screen = await mount(<MyFarmScreen />);
+
+    await screen.press('enterprise-growing');
+    await screen.press('enterprise-iron');
+    await screen.press('save-my-farm');
+
+    expect((await readSite())?.enterprises).toEqual(['stock']);
+    screen.unmount();
+  });
+
+  it('stores them in a fixed order, whatever order they were tapped', async () => {
+    /**
+     * Two devices that chose the same three must write the same array, or the
+     * mutable-entity conflict rules see a difference that is not one.
+     */
+    await aFarm(['stock']);
+    const screen = await mount(<MyFarmScreen />);
+
+    await screen.press('enterprise-iron');
+    await screen.press('enterprise-growing');
+    await screen.press('save-my-farm');
+
+    expect((await readSite())?.enterprises).toEqual(['stock', 'growing', 'iron']);
+    screen.unmount();
+  });
+
+  it('lets a farm say none, and that survives', async () => {
+    // A stored empty array is a real answer and must not read back as "never
+    // asked" — which is the value that means everything.
+    await aFarm();
+    const screen = await mount(<MyFarmScreen />);
+
+    for (const key of ['stock', 'growing', 'iron']) await screen.press(`enterprise-${key}`);
+    await screen.press('save-my-farm');
+
+    expect((await readSite())?.enterprises).toEqual([]);
+    screen.unmount();
+  });
+});
+
+describe('the promise about data', () => {
+  it('says what is behind something before it is hidden', async () => {
+    await aFarm();
+    await enqueue({
+      entity: 'flock',
+      op: 'create',
+      targetId: newId(),
+      payload: { name: 'The hens', species: 'chicken', count: 6 },
+    });
+
+    const screen = await mount(<MyFarmScreen />);
+    await screen.press('enterprise-stock');
+
+    // Named before it is hidden, so the choice is an informed one.
+    expect(screen.text()).toContain('1 recorded');
+    expect(screen.text()).toContain('kept, just hidden');
+    screen.unmount();
+  });
+
+  it('keeps the records when the part they live in is switched off', async () => {
+    await aFarm();
+    const groupId = newId();
+    await enqueue({
+      entity: 'flock',
+      op: 'create',
+      targetId: groupId,
+      payload: { name: 'The hens', species: 'chicken', count: 6 },
+    });
+
+    const screen = await mount(<MyFarmScreen />);
+    await screen.press('enterprise-stock');
+    await screen.press('save-my-farm');
+    screen.unmount();
+
+    // Invariant 13. Hiding is not deleting, and this is the assertion that
+    // makes the sentence on the screen true.
+    const { listGroups } = await import('@steading/core/read/groups');
+    expect((await listGroups()).map((g) => g.id)).toContain(groupId);
+  });
+});

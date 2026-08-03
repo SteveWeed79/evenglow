@@ -27,8 +27,42 @@ import { deciCelsiusSchema, microgramsSchema, micrometresSchema, unitSystemSchem
  * belong to one or the other. Most farms will have exactly one and never think
  * about it.
  */
+/**
+ * The parts of a farm this operation actually runs.
+ *
+ * A market gardener has no stock. A poultry keeper on a suburban plot has no
+ * tractor and no beds. Both currently get four tabs, two of which will be
+ * empty forever, and every screen that lists what you can do offers them
+ * things they will never want. An app that asks once and then stops asking is
+ * a smaller app for everybody.
+ *
+ * **Coarse on purpose.** This says whether a whole area of the farm exists,
+ * not what any individual animal is for — that is `purposes` on the group, and
+ * it already decides per flock whether the processing clock runs or an egg
+ * tally appears. Two settings answering the same question is how they end up
+ * disagreeing.
+ *
+ * **Absent means all of them**, which is what every farm that has never opened
+ * the screen has. Turning the feature on must not empty an existing farm's
+ * app, and a stored empty array is a farm that has deliberately said "none" —
+ * a real answer that has to survive a round trip, and therefore cannot be the
+ * same value as "never asked".
+ */
+export const ENTERPRISES = ['stock', 'growing', 'iron'] as const;
+export type Enterprise = (typeof ENTERPRISES)[number];
+
+export const enterpriseSchema = z.enum(ENTERPRISES);
+
 const siteShape = {
   name: z.string().min(1).max(80),
+  /**
+   * Which parts of the app this farm uses. Undefined means all of them.
+   *
+   * Hiding, never deleting (invariant 13). A farm that switches Growing off
+   * keeps every planting and every harvest; the tab stops appearing and the
+   * records are exactly where they were when it comes back.
+   */
+  enterprises: z.array(enterpriseSchema).max(ENTERPRISES.length).optional(),
   /** US postcode, for the bundled zone lookup. Optional everywhere else. */
   postalCode: z.string().max(12).optional(),
   zone: zoneSchema.optional(),

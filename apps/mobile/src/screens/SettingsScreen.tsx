@@ -51,6 +51,14 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
   return (
     <Screen title="Settings" back>
       <View style={styles.rows}>
+        {/* First, because it decides what the rest of the app even shows. */}
+        <Row
+          title="My farm"
+          detail="What you run — animals, crops, machines"
+          icon="stock"
+          testID="go-my-farm"
+          onPress={() => nav.navigate('MyFarm')}
+        />
         <Row
           title="Who is on this farm"
           detail="Invite someone, or change what they may do"
