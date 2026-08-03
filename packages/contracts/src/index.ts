@@ -26,4 +26,5 @@ export * from './due/livestock';
 export * from './due/growout';
 export * from './due/care';
 export * from './due/parts';
+export * from './due/tasks';
 export * from './library';

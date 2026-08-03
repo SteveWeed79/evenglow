@@ -84,10 +84,27 @@ export type Urgency = (typeof URGENCIES)[number];
  * changed one — which is the sort of failure that reaches a handset.
  */
 export interface DueDone {
-  /** Only `careLog` today. See the note on `Due.done` for why. */
-  entity: 'careLog';
-  /** The payload, minus `occurredAt` — which is when the press happened. */
-  payload: { kind: string; flockId: string };
+  /** See the note on `Due.done` for why the list is this short. */
+  entity: 'careLog' | 'task';
+  op: 'create' | 'update';
+  /** The row to change. Absent on a create, where the id is minted. */
+  targetId?: string;
+  /**
+   * The payload, minus the moment.
+   *
+   * Loosely typed on purpose: `enqueue` validates every payload against the
+   * same contract the server does, so a wrong shape is refused at the point
+   * of the mistake rather than being caught twice, differently, here.
+   */
+  payload: Record<string, unknown>;
+  /**
+   * Which field carries the moment the button was pressed.
+   *
+   * `occurredAt` on an observation, `completedAt` on a chore — the same press
+   * meaning "now" in two vocabularies, and the difference belongs with the
+   * builder that knows which it is writing.
+   */
+  stampAs: 'occurredAt' | 'completedAt';
   /** What the button says. "Trimmed feet", not "Done". */
   label: string;
 }

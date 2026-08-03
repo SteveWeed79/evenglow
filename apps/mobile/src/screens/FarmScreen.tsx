@@ -113,6 +113,17 @@ export function FarmScreen(): React.ReactElement {
         </Panel>
       ) : null}
 
+      {/* Always here, whatever the farm runs: a gate needs fixing on a market
+          garden too, and this is the only list in the app somebody writes
+          themselves. */}
+      <Row
+        title="Jobs"
+        detail="Fix the gate, ring the vet — the ones nothing else knows about"
+        icon="date-due"
+        testID="farm-jobs"
+        onPress={() => nav.navigate('Jobs')}
+      />
+
       <Row
         title="What you run"
         detail="Animals, crops, machines — turn a part of the farm on or off"

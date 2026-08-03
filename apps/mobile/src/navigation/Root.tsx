@@ -17,6 +17,7 @@ import { HarvestScreen } from '../screens/HarvestScreen';
 import { ExportScreen } from '../screens/ExportScreen';
 import { GrowingScreen } from '../screens/GrowingScreen';
 import { IronScreen } from '../screens/IronScreen';
+import { JobsScreen } from '../screens/JobsScreen';
 import { QuickAddScreen } from '../screens/QuickAddScreen';
 import { StockScreen } from '../screens/StockScreen';
 import { MyFarmScreen } from '../screens/MyFarmScreen';
@@ -79,6 +80,8 @@ export type RootParamList = {
   Iron: undefined;
   /** Records out, as spreadsheets. */
   Export: undefined;
+  /** Chores the farm wrote down itself — the one authored due kind. */
+  Jobs: undefined;
   Inbox: undefined;
   Diagnostics: undefined;
   Members: undefined;
@@ -137,6 +140,7 @@ export function Root({ onSignedOut }: { onSignedOut: () => void }): React.ReactE
       <Stack.Screen name="Growing" component={GrowingScreen} />
       <Stack.Screen name="Iron" component={IronScreen} />
       <Stack.Screen name="Export" component={ExportScreen} />
+      <Stack.Screen name="Jobs" component={JobsScreen} />
       <Stack.Screen name="Inbox" component={InboxScreen} />
       <Stack.Screen name="Diagnostics" component={DiagnosticsScreen} />
       <Stack.Screen name="Members" component={MembersScreen} />

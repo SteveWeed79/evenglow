@@ -28,6 +28,7 @@ import { ExportScreen } from '../../apps/mobile/src/screens/ExportScreen';
 import { FarmScreen } from '../../apps/mobile/src/screens/FarmScreen';
 import { HistoryScreen } from '../../apps/mobile/src/screens/HistoryScreen';
 import { IronScreen } from '../../apps/mobile/src/screens/IronScreen';
+import { JobsScreen } from '../../apps/mobile/src/screens/JobsScreen';
 import { LogHoursScreen } from '../../apps/mobile/src/screens/LogHoursScreen';
 import { LossScreen } from '../../apps/mobile/src/screens/LossScreen';
 import { MachineScreen } from '../../apps/mobile/src/screens/MachineScreen';
@@ -176,6 +177,7 @@ const SCREENS: [string, () => React.ReactElement][] = [
   ['History', () => <HistoryScreen />],
   ['Farm', () => <FarmScreen />],
   ['Export', () => <ExportScreen />],
+  ['Jobs', () => <JobsScreen />],
   ['AddGroup', () => <AddGroupScreen />],
   ['Group', () => <GroupScreen {...routeProps({ groupId: GROUP })} />],
   ['EditGroup', () => <EditGroupScreen {...routeProps({ groupId: GROUP })} />],

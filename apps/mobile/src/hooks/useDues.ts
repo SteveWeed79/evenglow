@@ -10,6 +10,7 @@ import {
   partsDue,
   processingDue,
   serviceDue,
+  taskDues,
   todayList,
   withdrawalDue,
 } from '@steading/contracts';
@@ -19,6 +20,7 @@ import { lastCareBySubject, listCareLogs } from '@steading/core/read/care';
 import { listGroups } from '@steading/core/read/groups';
 import { listBeds, listPlantings, listVarieties } from '@steading/core/read/growing';
 import { listInventory, listMachines, listServices } from '@steading/core/read/iron';
+import { listTasks } from '@steading/core/read/tasks';
 import { withdrawalsBySubject } from '@steading/core/read/withdrawals';
 import { subscribe } from '@steading/core/sync/engine';
 import { clearTrouble, reportTrouble } from './useTrouble';
@@ -67,6 +69,7 @@ export function useDues(): DuesView {
       machines,
       services,
       inventory,
+      tasks,
     ] = await Promise.all([
       listGroups(),
       listAnimals(),
@@ -79,9 +82,13 @@ export function useDues(): DuesView {
       listMachines(),
       listServices(),
       listInventory(),
+      listTasks(),
     ]);
 
     const rows: Due[] = [];
+
+    /** Names for the subjects a job can be pinned to. */
+    const groupName = new Map(groups.map((group) => [group.id, group.name]));
 
     // ── stock ────────────────────────────────────────────────────────────────
 
@@ -208,6 +215,17 @@ export function useDues(): DuesView {
         const order = partsDue(due, parts);
         if (order) rows.push(order);
       }
+    }
+
+    /**
+     * The chores the farm wrote down itself — the one authored kind.
+     *
+     * Last, because everything above is derived from a record and these are
+     * not. A task with no date produces no row at all; it lives on the Jobs
+     * screen and never nags. See `taskDues`.
+     */
+    for (const task of tasks) {
+      rows.push(...taskDues(task, groupName.get(task.subjectId ?? '')));
     }
 
     setView({ dues: todayList(rows, now), loading: false });

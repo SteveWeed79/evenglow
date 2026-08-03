@@ -61,11 +61,17 @@ sync, and apply on the server. Nothing in the app can create one.
 **Cost of skipping it:** the schema claims the app does things it cannot do,
 and two of the four are visible holes a keeper will find.
 
-### 2a. `task` — the one authored due kind
+### 2a. `task` — the one authored due kind — **done**
 
-`DUE_KINDS` includes `task` and calls it "a chore the farm entered itself".
-Every row on Today is derived; there is no way to add *"fix the gate"*. This is
-the smallest of the four and the most obviously missing.
+Jobs, on the Farm hub. A date puts it on Today; no date keeps it on the list
+and it never nags. Recurrence counts from **when it was done**, not when it was
+due, so a weekly job finished late does not stack up overdue rows for a farm
+that is merely busy.
+
+It carries `completedAt`, which is the completion flag the due engine refuses
+everywhere else — and the exception is exact. Every other row is waiting for a
+record; this one is not. Fixing a gate produces nothing to log, so `completedAt`
+is not a second source of truth, it is the only one.
 
 ### 2b. `shearing`
 
@@ -188,6 +194,13 @@ Small, named so they stop being remembered at the wrong moment.
 - **A weather tab.** Answered by the Farm hub.
 - **Humidity targets for incubation.** The farmer's call.
 - **CSV import.** Wants its own design; see item 1.
+- **Google Drive backup or sync.** Raised and parked deliberately. Worth
+  saying what it would and would not be: the farm's records already sync
+  between devices through the Steading server, so Drive would be a *third*
+  copy — useful as somewhere a farm controls, not as the sync path. It also
+  means an OAuth flow, a Google API dependency, and a second place a farm's
+  data lives. Export covers the "get a copy out" want today; revisit when
+  somebody has wanted the automatic version for a season.
 - **Emailing the records out yearly and deleting them.** Asked for directly,
   and the answer is no — but the instinct behind it is right and export is what
   it wanted.
