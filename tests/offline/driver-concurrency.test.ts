@@ -75,8 +75,19 @@ describe('a read that overlaps a transaction', () => {
 
     await Promise.all([transaction, stray]);
 
-    // Nothing but the transaction's own statements touched its connection.
-    const onTxn = connection.where.filter((entry) => entry.on === 'txn').map((e) => e.sql);
+    /**
+     * Nothing but the transaction's own statements touched its connection.
+     *
+     * The busy_timeout PRAGMA is the driver's own and is filtered out here: it
+     * is set ON that connection deliberately, because expo opens it itself and
+     * `applyPragmas` never reaches it. What this asserts is that no statement
+     * from ELSEWHERE landed there — which is the crash this whole file exists
+     * for.
+     */
+    const onTxn = connection.where
+      .filter((entry) => entry.on === 'txn')
+      .map((e) => e.sql)
+      .filter((sql) => !sql.includes('busy_timeout'));
     expect(onTxn).toEqual(['INSERT INTO t (v) VALUES (1)', 'INSERT INTO t (v) VALUES (2)']);
     expect(connection.where.some((e) => e.on === 'txn' && e.sql.startsWith('SELECT'))).toBe(false);
 
@@ -256,9 +267,17 @@ describe('nesting', () => {
       await driver.run('INSERT INTO t (v) VALUES (2)');
     });
 
-    // Let the leaked statement reach the queue, then let the guard fire.
-    await Promise.resolve();
-    await Promise.resolve();
+    /**
+     * Drain the microtask queue before ticking, rather than counting awaits.
+     *
+     * This used to be two `await Promise.resolve()`, which is a count of how
+     * many microtasks the driver happened to take to reach the body. Adding one
+     * statement inside the transaction — the busy_timeout PRAGMA — changed that
+     * count, the tick landed before anything was queued, the guard never fired
+     * and the test hung for two minutes. A macrotask drains whatever is
+     * pending, however many that is.
+     */
+    await new Promise((resolve) => setTimeout(resolve, 0));
     clock.tick();
 
     await expect(leaked).rejects.toBeInstanceOf(SqlStalledError);
