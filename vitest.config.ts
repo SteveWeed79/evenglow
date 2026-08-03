@@ -53,6 +53,8 @@ export default defineConfig({
         replacement: here('./tests/support/native/modules.tsx'),
       },
       { find: /^expo-secure-store$/, replacement: here('./tests/support/native/modules.tsx') },
+      { find: /^expo-file-system$/, replacement: here('./tests/support/native/modules.tsx') },
+      { find: /^expo-sharing$/, replacement: here('./tests/support/native/modules.tsx') },
       {
         find: /^@react-navigation\/(native|native-stack|bottom-tabs)$/,
         replacement: here('./tests/support/native/navigation.tsx'),

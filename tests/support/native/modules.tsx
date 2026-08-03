@@ -104,3 +104,77 @@ export function seedSecureStore(entries: Record<string, string>): void {
   secure.clear();
   for (const [key, value] of Object.entries(entries)) secure.set(key, value);
 }
+
+// ── expo-file-system / expo-sharing ──────────────────────────────────────────
+
+/**
+ * A filesystem and a share sheet, in memory.
+ *
+ * Not a no-op. The export screen writes a file and then shares its URI, and
+ * the two things worth asserting are exactly those: that the CSV reaching the
+ * file is the CSV the builder produced, and that something was actually
+ * offered to the OS rather than the screen quietly succeeding.
+ *
+ * `expo-file-system` on SDK 57 is the object API — `new File(dir, name)`,
+ * `create()`, `write()` — so this models that shape rather than the legacy
+ * `writeAsStringAsync` one. A fake of the wrong API would pass tests against
+ * code that cannot run.
+ */
+export const files = new Map<string, string>();
+
+/** Every URI handed to the share sheet, in order. */
+export const shared: string[] = [];
+
+class FakeDirectory {
+  constructor(readonly uri: string) {}
+}
+
+export const Paths = {
+  cache: new FakeDirectory('file:///cache/'),
+  document: new FakeDirectory('file:///documents/'),
+};
+
+export class File {
+  readonly uri: string;
+
+  constructor(...parts: (string | FakeDirectory | File)[]) {
+    this.uri = parts
+      .map((part) => (typeof part === 'string' ? part : part.uri))
+      .join('')
+      .replace(/\/+/g, '/')
+      .replace(':/', '://');
+  }
+
+  create(): void {
+    files.set(this.uri, '');
+  }
+
+  write(content: string): void {
+    files.set(this.uri, content);
+  }
+
+  delete(): void {
+    files.delete(this.uri);
+  }
+
+  get exists(): boolean {
+    return files.has(this.uri);
+  }
+}
+
+/**
+ * `isAvailableAsync` is not redeclared here.
+ *
+ * Both modules alias to this file and expo-secure-store already exports one
+ * with the same signature answering the same way. Two would be a compile
+ * error, and the sharing check reads the secure-store one — which is correct
+ * for a test double whose answer is "yes" either way.
+ */
+export async function shareAsync(uri: string): Promise<void> {
+  if (!files.has(uri)) {
+    // The real one rejects on a URI that is not there, and a test that shared
+    // a file nobody wrote would otherwise pass.
+    throw new Error(`Nothing to share at ${uri}`);
+  }
+  shared.push(uri);
+}

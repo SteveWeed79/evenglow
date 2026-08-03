@@ -188,5 +188,34 @@ Small, named so they stop being remembered at the wrong moment.
 - **A weather tab.** Answered by the Farm hub.
 - **Humidity targets for incubation.** The farmer's call.
 - **CSV import.** Wants its own design; see item 1.
+- **Emailing the records out yearly and deleting them.** Asked for directly,
+  and the answer is no — but the instinct behind it is right and export is what
+  it wanted.
+
+  **The storage worry is measured and it is not real.** A busy year — eggs and
+  feed logged twice daily, a weekly care note, monthly losses and weighings,
+  1,540 records — is **884 KB on disk**, including the mutation log. Ten years
+  is under 9 MB. One phone photo is three to five times a decade of records.
+
+  **What the deletion would cost is the app's whole second-year value.** "Was
+  that the dry spring the beans failed?" and a lay curve against last season
+  are the questions History exists for, and P4's production graphs are a year
+  of comparison or they are nothing.
+
+  **Two harder blocks.** Medication and withdrawal records are the kind of
+  thing a farm may be required to retain for years, and the app must not be the
+  one deciding that on a timer. And invariant 7 — never delete a mutation row —
+  makes a yearly purge a fight with the sync engine: the rows are the audit
+  trail and the duplicate defence, and a device that deleted them would pull
+  them back on the next snapshot.
+
+  **There is also no email sender in this system** (see `MembersScreen`), so
+  "email it out" means either new server infrastructure carrying a farm's
+  records through a mail provider, or handing a file to the OS mail client —
+  which is export with extra steps and no proof it was sent.
+
+  Export gives the copy off the device, which is the real want.
+  `forgetDatabase` already exists for the case that genuinely needs it: handing
+  the tablet on.
 - **Anything in `Steading-Masterplan.md` §"What we are not building".** That
   section is a decision, not an oversight.

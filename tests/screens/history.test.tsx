@@ -4,7 +4,9 @@ import { intoDays, listHistory } from '@steading/core/read/history';
 import { enqueue } from '@steading/core/sync/queue';
 import { freshStore } from '../support/store';
 import { mount } from '../support/screen';
+import { ExportScreen } from '../../apps/mobile/src/screens/ExportScreen';
 import { HistoryScreen } from '../../apps/mobile/src/screens/HistoryScreen';
+import { files, shared } from '../support/native/modules';
 
 /**
  * "We need a history tab. Or somewhere that old data is visible for the user
@@ -249,6 +251,102 @@ describe('the screen', () => {
     const screen = await mount(<HistoryScreen />);
 
     expect(screen.text()).toContain('Nothing logged yet');
+    screen.unmount();
+  });
+});
+
+/**
+ * The share itself.
+ *
+ * The CSV is settled by `tests/unit/export.test.ts`; what is left is the part
+ * that suite cannot see — that a file is written, that what reaches it is what
+ * the builder produced, and that something is actually offered to the OS
+ * rather than the screen quietly succeeding.
+ */
+describe('sending records out', () => {
+  beforeEach(() => {
+    files.clear();
+    shared.length = 0;
+  });
+
+  it('writes the CSV and offers the file, not the text', async () => {
+    await theHens();
+    await enqueue({
+      entity: 'eggLog',
+      op: 'create',
+      targetId: newId(),
+      payload: { occurredAt: at(0, 8), flockId: GROUP, count: 6 },
+    });
+
+    const screen = await mount(<ExportScreen />);
+    await screen.press('export-eggs');
+    screen.unmount();
+
+    expect(shared).toHaveLength(1);
+    const written = files.get(shared[0]!);
+    expect(written).toContain('The hens');
+    expect(written).toContain('6');
+  });
+
+  /** It has to say what it is from the outside of an inbox. */
+  it('names the file for the record and the day', async () => {
+    await theHens();
+    await enqueue({
+      entity: 'eggLog',
+      op: 'create',
+      targetId: newId(),
+      payload: { occurredAt: at(0, 8), flockId: GROUP, count: 6 },
+    });
+
+    const screen = await mount(<ExportScreen />);
+    await screen.press('export-eggs');
+    screen.unmount();
+
+    expect(shared[0]).toMatch(/steading-eggs-\d{4}-\d{2}-\d{2}\.csv$/);
+  });
+
+  /**
+   * The promise on the screen: sending changes nothing on this device. It is
+   * the sentence that makes the feature safe to press, so it is worth a test
+   * rather than trust.
+   */
+  it('leaves every record exactly where it was', async () => {
+    await theHens();
+    await enqueue({
+      entity: 'eggLog',
+      op: 'create',
+      targetId: newId(),
+      payload: { occurredAt: at(0, 8), flockId: GROUP, count: 6 },
+    });
+
+    const screen = await mount(<ExportScreen />);
+    await screen.press('export-eggs');
+    screen.unmount();
+
+    const days = await listHistory();
+    expect(days[0]?.events).toHaveLength(1);
+  });
+
+  it('offers only the kinds of record the farm has', async () => {
+    await theHens();
+    await enqueue({
+      entity: 'eggLog',
+      op: 'create',
+      targetId: newId(),
+      payload: { occurredAt: at(0, 8), flockId: GROUP, count: 6 },
+    });
+
+    const screen = await mount(<ExportScreen />);
+
+    expect(screen.has('export-eggs')).toBe(true);
+    // No harvests on this farm, so no empty harvests file to be puzzled by.
+    expect(screen.has('export-harvests')).toBe(false);
+    screen.unmount();
+  });
+
+  it('invites rather than showing an empty page', async () => {
+    const screen = await mount(<ExportScreen />);
+    expect(screen.text()).toContain('Nothing to send yet');
     screen.unmount();
   });
 });

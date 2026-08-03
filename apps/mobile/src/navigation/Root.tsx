@@ -14,6 +14,7 @@ import { EditGroupScreen } from '../screens/EditGroupScreen';
 import { FeedScreen } from '../screens/FeedScreen';
 import { GroupScreen } from '../screens/GroupScreen';
 import { HarvestScreen } from '../screens/HarvestScreen';
+import { ExportScreen } from '../screens/ExportScreen';
 import { GrowingScreen } from '../screens/GrowingScreen';
 import { IronScreen } from '../screens/IronScreen';
 import { QuickAddScreen } from '../screens/QuickAddScreen';
@@ -76,6 +77,8 @@ export type RootParamList = {
   Stock: undefined;
   Growing: undefined;
   Iron: undefined;
+  /** Records out, as spreadsheets. */
+  Export: undefined;
   Inbox: undefined;
   Diagnostics: undefined;
   Members: undefined;
@@ -133,6 +136,7 @@ export function Root({ onSignedOut }: { onSignedOut: () => void }): React.ReactE
       <Stack.Screen name="Stock" component={StockScreen} />
       <Stack.Screen name="Growing" component={GrowingScreen} />
       <Stack.Screen name="Iron" component={IronScreen} />
+      <Stack.Screen name="Export" component={ExportScreen} />
       <Stack.Screen name="Inbox" component={InboxScreen} />
       <Stack.Screen name="Diagnostics" component={DiagnosticsScreen} />
       <Stack.Screen name="Members" component={MembersScreen} />

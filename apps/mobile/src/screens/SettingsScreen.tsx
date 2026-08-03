@@ -91,6 +91,13 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
           onPress={() => nav.navigate('SiteSetup')}
         />
         <Row
+          title="Get your records out"
+          detail="Spreadsheets for a vet, an accountant, or whoever buys the tractor"
+          icon="export"
+          testID="go-export"
+          onPress={() => nav.navigate('Export')}
+        />
+        <Row
           title="Sync"
           detail="What is waiting, what was refused, and why"
           icon="diagnostics"
