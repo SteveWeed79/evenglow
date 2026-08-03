@@ -8,6 +8,8 @@ import {
   PRODUCTS,
   PURPOSE_GROUPS,
   productsOf,
+  purposeGroupsFor,
+  purposesFor,
   FLOCK_PURPOSES,
   growOutWindow,
   SPECIES,
@@ -219,5 +221,103 @@ describe('what the group hub offers, per species', () => {
   it('leaves species with nothing to give reachable anyway', () => {
     expect(nonEgg('chicken')).toEqual([]);
     expect(PRODUCTS).not.toContain('honey');
+  });
+});
+
+describe('what a keeper is allowed to claim, per species', () => {
+  /**
+   * From the emulator: "Chickens do not produce milk. The first selection
+   * should determine what the user can choose below."
+   *
+   * Add Stock offered all eight purposes to every species, so a flock of hens
+   * was asked whether it was kept for milk and for fibre. The model has known
+   * better since SPECIES_TRAITS existed; the screen never asked it.
+   */
+  it('does not ask a flock of hens about milk or fibre', () => {
+    const forHens = purposesFor('chicken');
+
+    expect(forHens).not.toContain('milk');
+    expect(forHens).not.toContain('fibre');
+    expect(forHens).toContain('eggs');
+  });
+
+  it('does not ask a goat about eggs', () => {
+    expect(purposesFor('goat')).not.toContain('eggs');
+    expect(purposesFor('goat')).toContain('milk');
+    expect(purposesFor('goat')).toContain('fibre');
+  });
+
+  it('offers an alpaca fibre and never milk, and a cow the reverse', () => {
+    expect(purposesFor('alpaca')).toContain('fibre');
+    expect(purposesFor('alpaca')).not.toContain('milk');
+    expect(purposesFor('cattle')).toContain('milk');
+    expect(purposesFor('cattle')).not.toContain('fibre');
+  });
+
+  it('offers work to the animals that work and no others', () => {
+    for (const species of ['donkey', 'horse', 'cattle', 'llama'] as const) {
+      expect(purposesFor(species), species).toContain('work');
+    }
+    for (const species of ['chicken', 'quail', 'rabbit', 'pig'] as const) {
+      expect(purposesFor(species), species).not.toContain('work');
+    }
+  });
+
+  it('offers guarding to guardians and to the birds that raise the alarm', () => {
+    // Guardian donkeys and llamas run with sheep. Geese and guinea fowl do not
+    // fight anything — being the alarm is the job people keep them for.
+    for (const species of ['donkey', 'llama', 'alpaca', 'goose', 'guineafowl'] as const) {
+      expect(purposesFor(species), species).toContain('guarding');
+    }
+    expect(purposesFor('chicken')).not.toContain('guarding');
+  });
+
+  it('offers meat, breeding and companion to everything', () => {
+    /**
+     * Deliberately not capabilities. Anything kept can be bred, anything kept
+     * can be a pet, and any animal can go to the table — a decision about a
+     * farm rather than a fact about a species. Telling somebody their practice
+     * is impossible is a worse failure than one chip too many.
+     */
+    for (const species of SPECIES) {
+      const allowed = purposesFor(species);
+      for (const purpose of ['meat', 'breeding', 'companion'] as const) {
+        expect(allowed, `${species} ${purpose}`).toContain(purpose);
+      }
+    }
+  });
+
+  it('never offers a purpose that is not one of ours', () => {
+    for (const species of SPECIES) {
+      for (const purpose of purposesFor(species)) {
+        expect(FLOCK_PURPOSES, species).toContain(purpose);
+      }
+    }
+  });
+});
+
+describe('the questions the screen actually draws', () => {
+  it('drops a heading whose chips have all gone', () => {
+    // A heading with nothing under it is a question the screen is asking and
+    // refusing to let anyone answer.
+    for (const species of SPECIES) {
+      for (const group of purposeGroupsFor(species)) {
+        expect(group.purposes.length, `${species} ${group.key}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('leaves a hen keeper production and processing, but nothing about milk', () => {
+    const groups = purposeGroupsFor('chicken');
+    const production = groups.find((g) => g.key === 'production');
+
+    expect(production?.purposes).toEqual(['eggs']);
+    expect(groups.some((g) => g.key === 'processing')).toBe(true);
+  });
+
+  it('offers every species at least one thing to say', () => {
+    for (const species of SPECIES) {
+      expect(purposeGroupsFor(species).length, species).toBeGreaterThan(0);
+    }
   });
 });

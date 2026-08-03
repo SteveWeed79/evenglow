@@ -3,7 +3,7 @@ import {
   breedsForSpecies,
   type FlockPurpose,
   formatRange,
-  PURPOSE_GROUPS,
+  purposeGroupsFor,
   suggestedGrowOutWeeks,
 } from '@steading/contracts';
 import { listGroups } from '@steading/core/read/groups';
@@ -154,7 +154,7 @@ export function EditGroupScreen({ route }: ScreenProps<'EditGroup'>): React.Reac
         />
       </Field>
 
-      {PURPOSE_GROUPS.map((section) => (
+      {purposeGroupsFor(group.species).map((section) => (
         <Field key={section.key} label={section.title} hint={section.hint}>
           <View style={styles.chips}>
             {section.purposes.map((purpose) => (
