@@ -169,3 +169,88 @@ describe('local store port guard', () => {
     );
   });
 });
+
+/**
+ * The globals Node has and Hermes does not.
+ *
+ * **This is the guard that cost two days.** `crypto.randomUUID()` sat in
+ * `enqueue`, passed a thousand tests, and meant nothing could be saved on a
+ * handset — because the tests run in Node and the app runs in Hermes, and Node
+ * is the more generous of the two.
+ *
+ * The roadmap planned a vitest project that reshaped `globalThis` to what the
+ * device provides. A lint rule is better and this is why: it fires on the
+ * *reference*, so it does not depend on a test happening to exercise the line.
+ * `crypto.randomUUID` was on a path four suites touched, and not one of them
+ * ran it against a missing global.
+ *
+ * Every case below is a real defect this project shipped, or the next one of
+ * the same family.
+ */
+describe('device parity — what Hermes does not have', () => {
+  it.each([
+    ['crypto', 'export const id = (): string => crypto.randomUUID();'],
+    ['Buffer', "export const b = (s: string): unknown => Buffer.from(s, 'base64');"],
+    ['TextEncoder', 'export const e = (s: string): unknown => new TextEncoder().encode(s);'],
+    ['TextDecoder', 'export const d = (b: Uint8Array): string => new TextDecoder().decode(b);'],
+    ['structuredClone', 'export const c = (v: object): object => structuredClone(v);'],
+    ['atob', "export const a = (s: string): string => atob(s);"],
+  ])('bans %s in the shared core', async (_label, code) => {
+    expect(await rulesFiredIn('packages/core/src/sync/probe.ts', code)).toContain(
+      'no-restricted-globals',
+    );
+  });
+
+  it('bans crypto in the client too, which is where it actually shipped', async () => {
+    expect(
+      await rulesFiredIn(
+        'apps/mobile/src/db/probe.ts',
+        'export const id = (): string => crypto.randomUUID();',
+      ),
+    ).toContain('no-restricted-globals');
+  });
+
+  /**
+   * `window` and `navigator` EXIST on a handset, and that is the trap.
+   *
+   * React Native defines `window` as an alias for the global, so
+   * `typeof window !== 'undefined'` passes — and the next line calls an
+   * `addEventListener` that is not there. That is the
+   * `TypeError: undefined is not a function` that stopped the app booting, and
+   * no globals ban could have caught it because the global is present.
+   */
+  it.each([
+    ['window.addEventListener', "export const w = (): void => window.addEventListener('online', () => {});"],
+    ['navigator.onLine', 'export const n = (): boolean => navigator.onLine;'],
+  ])('bans %s, which exists on device and does not work', async (_label, code) => {
+    expect(await rulesFiredIn('packages/core/src/sync/probe.ts', code)).toContain(
+      'no-restricted-syntax',
+    );
+  });
+
+  /**
+   * The regression this file caught the moment the rule above was added.
+   *
+   * `no-restricted-syntax` REPLACES its options when a later config block sets
+   * it again — it does not merge. Naming only the new selectors silently
+   * disarmed the tenancy ones for every file in core and the client, and
+   * nothing but this test would have said so.
+   */
+  it('still bans raw collection access where the new selectors were added', async () => {
+    const fired = await rulesFiredIn(
+      'packages/core/src/sync/probe.ts',
+      "export const c = (db: { collection: (n: string) => unknown }): unknown => db.collection('x');",
+    );
+    expect(fired).toContain('no-restricted-syntax');
+  });
+
+  /** Node and the server are not the constrained runtime, and are left alone. */
+  it('leaves the Fastify API free to use Node globals', async () => {
+    expect(
+      await rulesFiredIn(
+        'apps/api/src/routes/probe.ts',
+        "export const b = (s: string): unknown => Buffer.from(s, 'base64');",
+      ),
+    ).not.toContain('no-restricted-globals');
+  });
+});

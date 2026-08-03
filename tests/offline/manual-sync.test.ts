@@ -4,7 +4,7 @@ import { openSqliteStore } from '@steading/core/db/sqlite-store';
 import { setLocalStore, resetLocalStore } from '@steading/core/db/store';
 import { nudge, setOnline, startSync, stopSync } from '@steading/core/sync/engine';
 import { enqueue, queueDepth } from '@steading/core/sync/queue';
-import { nodeSqlDriver } from '../support/sqlite';
+import { nodeIds, nodeSqlDriver } from '../support/sqlite';
 import type { SyncTransport } from '@steading/core/sync/flush';
 
 /**
@@ -25,7 +25,7 @@ import type { SyncTransport } from '@steading/core/sync/flush';
  */
 
 beforeEach(async () => {
-  setLocalStore(await openSqliteStore(nodeSqlDriver()));
+  setLocalStore(await openSqliteStore(nodeSqlDriver(), nodeIds()));
 });
 
 afterEach(() => {

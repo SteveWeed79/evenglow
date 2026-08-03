@@ -130,7 +130,7 @@ something already recorded rather than a hole.
 
 ---
 
-## 3 — A device-parity test project
+## 3 — Device parity — **done, and not the way this said**
 
 **Cost of skipping it:** two days, already, once.
 
@@ -139,10 +139,35 @@ something already recorded rather than a hole.
 thousand tests and failed on the first handset, because the test runtime is more
 generous than the phone.
 
-A vitest project that reshapes `globalThis` to what RN 0.86 / Expo 57 actually
-provide, and runs the existing suites against it.
-`tests/offline/no-crypto-global.test.ts` is the first instance of the idea; this
-makes it the default rather than one file somebody remembered to write.
+This planned a vitest project that reshaped `globalThis` and ran the suites
+against it. **A lint rule turned out to be the better instrument**, and the
+reason is worth keeping: it fires on the *reference*, so it does not depend on
+a test happening to exercise that line. `crypto.randomUUID` sat on a path four
+suites touched and not one of them ran it against a missing global. It also
+runs on every `pnpm lint` rather than in a project somebody has to remember to
+add a file to.
+
+`no-restricted-globals` covers `crypto`, `Buffer`, `TextEncoder`,
+`TextDecoder`, `structuredClone`, `atob` and `btoa` in `packages/core` and
+`apps/mobile`. `window.addEventListener` and `navigator.onLine` need a
+`no-restricted-syntax` selector instead, because those globals **exist** on a
+handset — a ban on the name would never fire, which is exactly why the boot
+crash got through. Every rule names its replacement, because a guard that says
+no without saying what instead gets disabled.
+
+`tests/unit/guards.test.ts` runs ESLint against a deliberate violation of each,
+so the coverage is asserted rather than assumed.
+
+**It found one immediately.** `openSqliteStore` still defaulted to
+`crypto.randomUUID()` — the reasoning being that Node and the browser both have
+it and only the handset does not. That is backwards: the platform that lacks it
+is the only one that ships to a farm. The default is gone; the one production
+caller already passed `expo-crypto`, and the tests now say what they use.
+
+**And it caught its own regression.** Adding the new selectors silently
+replaced the tenancy ones for every file in core and the client —
+`no-restricted-syntax` overwrites rather than merges. The guard test failed
+within a minute. The selectors are hoisted and composed now.
 
 **Related, and cheap:** the fake SQLite now opens two real connections, which
 proved that `foreign_keys` is enforced in tests and silently ignored on device.

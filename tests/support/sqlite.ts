@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import type { SqlDriver, SqlOps, SqlValue } from '@steading/core/db/driver';
 import { createGate } from '@steading/core/db/gate';
@@ -102,4 +103,17 @@ export function nodeSqlDriver(filename = ':memory:'): SqlDriver {
   };
 
   return driver;
+}
+
+/**
+ * Ids for a store under test, from Node's own crypto.
+ *
+ * `openSqliteStore` takes no default any more — see the note there. The reason
+ * this helper is in the test support rather than in `core` is the whole point:
+ * `node:crypto` is a fact about where the tests run, not about the app, and a
+ * default living in core is how every suite ended up on a path Hermes cannot
+ * execute.
+ */
+export function nodeIds(): { randomUUID: () => string } {
+  return { randomUUID: () => randomUUID() };
 }

@@ -18,6 +18,7 @@
  * the thing to attack, not the lane.
  */
 
+import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { type Entity, MUTATION_SCHEMA_VERSION, newId } from '@steading/contracts';
 import type { SqlValue } from '@steading/core/db/driver';
@@ -154,7 +155,7 @@ async function main(): Promise<void> {
   {
     const connection = fakeExpoConnection();
     const driver = createExpoDriver(connection);
-    const store = await openSqliteStore(driver);
+    const store = await openSqliteStore(driver, { randomUUID });
     setLocalStore(store);
     await seed(store);
 

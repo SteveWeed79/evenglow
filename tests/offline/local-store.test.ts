@@ -4,7 +4,7 @@ import type { SqlDriver, SqlOps } from '@steading/core/db/driver';
 import type { LocalStore } from '@steading/core/db/port';
 import { openSqliteStore } from '@steading/core/db/sqlite-store';
 import { createExpoDriver } from '@steading/mobile/db/expo-driver';
-import { nodeSqlDriver } from '../support/sqlite';
+import { nodeIds, nodeSqlDriver } from '../support/sqlite';
 import { fakeExpoConnection } from '../support/expo-sqlite';
 
 /**
@@ -60,7 +60,7 @@ function sqlBacking(name: string, make: () => SqlDriver): Backing {
     name,
     async open() {
       driver = make();
-      return openSqliteStore(driver);
+      return openSqliteStore(driver, nodeIds());
     },
     async loseSequenceCounter() {
       await driver!.run("DELETE FROM meta WHERE key = 'nextClientSeq'");

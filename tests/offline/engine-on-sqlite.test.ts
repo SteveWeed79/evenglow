@@ -6,7 +6,7 @@ import { enqueue, queueDepth, rejectedCount } from '@steading/core/sync/queue';
 import { flushOnce } from '@steading/core/sync/flush';
 import { discardRejected, listRejected, retryRejected } from '@steading/core/sync/inbox';
 import { pullOnce, pulledThrough } from '@steading/core/sync/pull';
-import { nodeSqlDriver } from '../support/sqlite';
+import { nodeIds, nodeSqlDriver } from '../support/sqlite';
 
 /**
  * The engine itself, running on SQLite.
@@ -22,7 +22,7 @@ import { nodeSqlDriver } from '../support/sqlite';
  */
 
 beforeEach(async () => {
-  setLocalStore(await openSqliteStore(nodeSqlDriver()));
+  setLocalStore(await openSqliteStore(nodeSqlDriver(), nodeIds()));
 });
 
 afterEach(() => {
