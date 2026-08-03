@@ -120,6 +120,21 @@ echo   --- Do the app's packages match Expo? ---
 :: somewhere it can be reviewed.
 cd apps\mobile
 echo n| call npx expo install --check
+:: Counted, because it was not.
+::
+:: This window printed "expo-image-manipulator ... doesn't seem to be
+:: installed" and then "Nothing missing" underneath it, which is worse than
+:: staying quiet: it told somebody their setup was fine while naming the reason
+:: it was not. A check that reports success over a failed step is a check
+:: nobody should trust.
+::
+:: The usual cause is a pull that brought a new dependency — the run scripts
+:: install for themselves now, so starting either one fixes it.
+if errorlevel 1 (
+  set /a MISSING+=1
+  echo.
+  echo   [ MISSING ] packages       - run "Start the farm server" once; it installs them
+)
 cd ..\..
 
 echo.
