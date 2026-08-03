@@ -103,6 +103,25 @@ function refuseNesting<T>(): Promise<T> {
   );
 }
 
+/**
+ * How long a statement waits for a lock before giving up.
+ *
+ * **SQLite's default is 0 — not "a moment", zero.** Any contention fails
+ * instantly with `database is locked` rather than waiting for the other writer
+ * to finish, which on this app means a save that fails for a reason that would
+ * have resolved itself in a millisecond.
+ *
+ * Contention is not hypothetical here: `withExclusiveTransactionAsync` opens a
+ * SECOND connection to the same file, so every write is two connections to one
+ * database by construction. PowerSync sets this on every connection it opens
+ * and wraps its own setup in a retry loop for exactly this.
+ *
+ * Five seconds is longer than any transaction in `LocalStore` — they are pure
+ * SQL, JSON and Zod — so a wait this long means genuine contention rather than
+ * slow work, and waiting is the right answer to that.
+ */
+const BUSY_TIMEOUT_MS = 5_000;
+
 export function createExpoDriver(db: SqliteConnection, gateOptions: GateOptions = {}): SqlDriver {
   /**
    * One lane for every operation on this file — reads included.
@@ -140,6 +159,18 @@ export function createExpoDriver(db: SqliteConnection, gateOptions: GateOptions 
 
         await db.withExclusiveTransactionAsync(async (txn) => {
           ran = true;
+
+          /**
+           * The transaction runs on a connection expo opens itself, so nothing
+           * in `applyPragmas` has ever reached it — see the note there. Most of
+           * those settings cannot be applied here (SQLite refuses
+           * `PRAGMA synchronous` mid-transaction outright), but `busy_timeout`
+           * can, and it is the one that matters most on the connection that
+           * actually writes: without it a write that meets a lock fails at once
+           * instead of waiting.
+           */
+          await txn.execAsync(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS};`);
+
           result = await work(opsOn(txn, beat, refuseNesting));
         });
 
@@ -198,7 +229,13 @@ export function createExpoDriver(db: SqliteConnection, gateOptions: GateOptions 
  * `BEGIN IMMEDIATE` on it — reasonable now that `gate.ts` serialises every
  * statement, and the right task to take before the first foreign key lands.
  */
+
 export async function applyPragmas(db: SqliteConnection): Promise<void> {
+  /**
+   * First, because it changes how every statement after it behaves on a lock.
+   */
+  await db.execAsync(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS};`);
+
   /**
    * WAL, and it is checked rather than assumed.
    *

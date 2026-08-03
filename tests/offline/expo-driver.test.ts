@@ -4,7 +4,7 @@ import {
   createExpoDriver,
   type SqliteConnection,
 } from '@steading/mobile/db/expo-driver';
-import { fakeExpoConnection } from '../support/expo-sqlite';
+import { fakeExpoConnection, tracingExpoConnection } from '../support/expo-sqlite';
 
 /**
  * The Expo driver's own contract.
@@ -67,6 +67,35 @@ describe('applyPragmas', () => {
     const journal = db.calls.filter((c) => c.sql.includes('journal_mode'));
     expect(journal).toHaveLength(1);
     expect(journal[0]?.method).toBe('getFirstAsync');
+  });
+
+  /**
+   * SQLite's default `busy_timeout` is 0 — not "a moment", zero. A statement
+   * that meets a lock fails at once with `database is locked` rather than
+   * waiting for the other writer to finish.
+   *
+   * Contention is structural here rather than hypothetical:
+   * `withExclusiveTransactionAsync` opens a SECOND connection to the same
+   * file, so every write is two connections to one database. PowerSync sets
+   * this on every connection it opens, for exactly this reason.
+   */
+  it('sets a busy timeout, because the default is zero', async () => {
+    const db = recordingConnection();
+
+    await applyPragmas(db);
+
+    const busy = db.calls.filter((c) => c.sql.includes('busy_timeout'));
+    expect(busy).toHaveLength(1);
+    expect(busy[0]?.sql).toMatch(/busy_timeout\s*=\s*\d{4,}/);
+  });
+
+  it('sets the busy timeout before anything that could meet a lock', async () => {
+    const db = recordingConnection();
+
+    await applyPragmas(db);
+
+    // It governs how every statement after it behaves, so it has to be first.
+    expect(db.calls[0]?.sql).toContain('busy_timeout');
   });
 
   it('sets synchronous to FULL', async () => {
@@ -155,6 +184,50 @@ describe('createExpoDriver', () => {
   });
 
   /** The port's contract is undefined for "no row"; expo-sqlite reports null. */
+  /**
+   * The connection that actually writes had never had a PRAGMA applied to it.
+   *
+   * `applyPragmas` runs against the handle `open.ts` opened.
+   * `withExclusiveTransactionAsync` opens its OWN connection
+   * (`useNewConnection: true`, verified in expo-sqlite's source), and these
+   * settings are per-connection — so every write this app has ever made ran on
+   * a connection that had seen none of them.
+   *
+   * Most of them cannot be fixed from inside the transaction: SQLite refuses
+   * `PRAGMA synchronous` mid-transaction outright, and `foreign_keys` is a
+   * documented no-op there. `busy_timeout` is the exception, and it is also the
+   * one that matters most on a writer — without it a write that meets a lock
+   * gives up instantly instead of waiting.
+   */
+  it('sets the busy timeout on the transaction connection too', async () => {
+    const db = tracingExpoConnection();
+    const driver = createExpoDriver(db);
+
+    await driver.transaction(async (tx) => {
+      await tx.run('CREATE TABLE t (a)');
+    });
+
+    const onTxn = db.where.filter((w) => w.on === 'txn');
+    expect(onTxn[0]?.sql).toContain('busy_timeout');
+  });
+
+  it('sets it before the transaction body runs, not after', async () => {
+    const db = tracingExpoConnection();
+    const driver = createExpoDriver(db);
+
+    await driver.transaction(async (tx) => {
+      await tx.run('CREATE TABLE t (a)');
+    });
+
+    const onTxn = db.where.filter((w) => w.on === 'txn');
+    const timeout = onTxn.findIndex((w) => w.sql.includes('busy_timeout'));
+    const work = onTxn.findIndex((w) => w.sql.includes('CREATE TABLE'));
+
+    // A timeout set after the statement it was meant to protect is decoration.
+    expect(timeout).toBeGreaterThanOrEqual(0);
+    expect(timeout).toBeLessThan(work);
+  });
+
   it('reports a missing row as undefined, not null', async () => {
     const driver = createExpoDriver(fakeExpoConnection());
     await driver.run('CREATE TABLE t (v INTEGER)');
