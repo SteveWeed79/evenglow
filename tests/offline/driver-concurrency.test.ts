@@ -105,7 +105,7 @@ describe('a read that overlaps a transaction', () => {
    * reachable in Node at all.
    */
   it('completes a read still in flight when the transaction connection is released', async () => {
-    const connection = tracingExpoConnection(':memory:', 30);
+    const connection = tracingExpoConnection(30);
     const driver = createExpoDriver(connection);
     await driver.run('CREATE TABLE t (v INTEGER)');
 
@@ -228,6 +228,98 @@ describe('two writes that overlap', () => {
       { v: 1 },
       { v: 2 },
     ]);
+  });
+});
+
+/**
+ * What SQLite itself does when two connections meet, asserted against SQLite
+ * rather than against a boolean.
+ *
+ * These drive the raw connection on purpose. Through the driver none of it is
+ * reachable — `gate.ts` holds every statement back for as long as a transaction
+ * is open, which is the point. What they pin down is the cost of that gate ever
+ * being removed, and the shape of the failure if it is.
+ */
+describe('the lock, when something does reach past the gate', () => {
+  it('refuses a write issued outside the transaction that holds it', async () => {
+    const db = fakeExpoConnection();
+    await db.execAsync('CREATE TABLE t (v INTEGER)');
+
+    await db.withExclusiveTransactionAsync(async (txn) => {
+      await txn.runAsync('INSERT INTO t (v) VALUES (1)', []);
+
+      // SQLite's own error, raised by SQLite. The default busy_timeout is 0,
+      // so it does not even wait — see BUSY_TIMEOUT_MS in the driver.
+      await expect(db.runAsync('INSERT INTO t (v) VALUES (2)', [])).rejects.toThrow(
+        /database is locked/,
+      );
+    });
+
+    expect(await db.getAllAsync('SELECT v FROM t', [])).toEqual([{ v: 1 }]);
+  });
+
+  /**
+   * A read, however, succeeds — and that is the thing the old one-connection
+   * fake got backwards.
+   *
+   * Under WAL a reader takes the snapshot as of the last commit and never
+   * blocks on a writer. The fake used to throw here, which asserted a stricter
+   * world than the device's; a driver could have been written to depend on
+   * reads failing during a transaction and passed every test.
+   */
+  it('serves a read the snapshot from before the transaction', async () => {
+    const db = fakeExpoConnection();
+    await db.execAsync('CREATE TABLE t (v INTEGER)');
+
+    await db.withExclusiveTransactionAsync(async (txn) => {
+      await txn.runAsync('INSERT INTO t (v) VALUES (1)', []);
+
+      // Not a throw, and not the uncommitted row either.
+      expect(await db.getAllAsync('SELECT v FROM t', [])).toEqual([]);
+    });
+
+    expect(await db.getAllAsync('SELECT v FROM t', [])).toEqual([{ v: 1 }]);
+
+    // And the overlap was counted. This is the only place in the suite that
+    // deliberately reaches past the gate, so it is also the only proof that an
+    // empty `strays` anywhere else means something.
+    expect(db.strays).toEqual(['SELECT v FROM t']);
+  });
+});
+
+/**
+ * The rule the boolean used to stand in for, now observed rather than enforced
+ * by the fake: nothing but the transaction's own statements may be issued
+ * while it is open, because expo closes that connection the moment the body
+ * returns.
+ */
+describe('the outer connection during a transaction', () => {
+  it('is left completely alone, even under a burst of reads', async () => {
+    const connection = fakeExpoConnection();
+    const driver = createExpoDriver(connection);
+    await driver.run('CREATE TABLE t (v INTEGER)');
+
+    let open: (() => void) | null = null;
+    const inside = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+
+    const transaction = driver.transaction(async (tx) => {
+      await tx.run('INSERT INTO t (v) VALUES (1)');
+      open?.();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      await tx.run('INSERT INTO t (v) VALUES (2)');
+    });
+
+    await inside;
+    // The `useDues.refresh` shape: eleven reads in one burst, mid-transaction.
+    const burst = Promise.all(
+      Array.from({ length: 11 }, () => driver.all<{ v: number }>('SELECT v FROM t')),
+    );
+
+    await Promise.all([transaction, burst]);
+
+    expect(connection.strays).toEqual([]);
   });
 });
 

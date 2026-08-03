@@ -235,3 +235,97 @@ describe('createExpoDriver', () => {
     expect(await driver.get('SELECT v FROM t')).toBeUndefined();
   });
 });
+
+/**
+ * The two connections, and what does and does not cross between them.
+ *
+ * Everything here was unprovable until the fake stopped being one connection
+ * with a boolean pretending to be a lock. The driver's doc has asserted these
+ * facts for months on the strength of expo's source alone; these read the
+ * values back out of SQLite.
+ */
+describe('the connection a transaction actually runs on', () => {
+  /**
+   * `applyPragmas` runs against the handle `open.ts` opened.
+   * `withExclusiveTransactionAsync` opens its OWN connection, and these
+   * settings are per-connection — so every write this app makes runs on a
+   * connection that has seen none of them.
+   *
+   * Asserted through the raw connection rather than the driver, because the
+   * driver deliberately repairs the one setting it can.
+   */
+  it('inherits none of the pragmas applyPragmas set', async () => {
+    const db = fakeExpoConnection();
+    await applyPragmas(db);
+
+    const outerBusy = await db.getFirstAsync<{ timeout: number }>('PRAGMA busy_timeout;', []);
+    const outerKeys = await db.getFirstAsync<{ foreign_keys: number }>('PRAGMA foreign_keys;', []);
+    expect(outerBusy?.timeout).toBeGreaterThanOrEqual(5_000);
+    expect(outerKeys?.foreign_keys).toBe(1);
+
+    const inner: { busy?: number | undefined; keys?: number | undefined } = {};
+    await db.withExclusiveTransactionAsync(async (txn) => {
+      inner.busy = (await txn.getFirstAsync<{ timeout: number }>('PRAGMA busy_timeout;', []))?.timeout;
+      inner.keys = (await txn.getFirstAsync<{ foreign_keys: number }>('PRAGMA foreign_keys;', []))
+        ?.foreign_keys;
+    });
+
+    expect(inner.busy).toBe(0);
+
+    /**
+     * The trap this exists to leave a marker for.
+     *
+     * No table declares a foreign key today, so an unenforced constraint costs
+     * nothing yet. Whoever adds the first one will find it enforced in every
+     * test and ignored on every device write, and this is the line that says
+     * so. Fixing it means owning the write connection and driving
+     * `BEGIN IMMEDIATE` on it, not moving the PRAGMA inside the transaction —
+     * SQLite documents it as a no-op there.
+     */
+    expect(inner.keys).toBe(0);
+  });
+
+  /**
+   * WAL is the exception, and the reason it is the exception matters: it is
+   * recorded in the database file header rather than on the handle, so it is
+   * the one thing `applyPragmas` sets that reaches the connection that writes.
+   *
+   * Against a real file, so this is SQLite reporting what it settled on rather
+   * than a stub returning what it was handed.
+   */
+  it('inherits WAL, because WAL belongs to the file', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const db = fakeExpoConnection();
+
+    await applyPragmas(db);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+
+    const inner: { mode?: string | undefined } = {};
+    await db.withExclusiveTransactionAsync(async (txn) => {
+      inner.mode = (await txn.getFirstAsync<{ journal_mode: string }>('PRAGMA journal_mode;', []))
+        ?.journal_mode;
+    });
+
+    expect(inner.mode).toBe('wal');
+  });
+
+  /**
+   * And so the driver repairs the one it can, which is the one that matters
+   * most on a writer: without it a write that meets a lock gives up instantly
+   * rather than waiting for a lock that would clear in a millisecond.
+   *
+   * This reads the value back through the handle the body was given, so it
+   * fails if the PRAGMA is dropped, misspelled, or sent to the wrong
+   * connection — none of which a traced SQL string can tell apart.
+   */
+  it('is given a busy timeout by the driver, and SQLite keeps it', async () => {
+    const driver = createExpoDriver(fakeExpoConnection());
+
+    const inside = await driver.transaction((tx) =>
+      tx.get<{ timeout: number }>('PRAGMA busy_timeout;'),
+    );
+
+    expect(inside?.timeout).toBeGreaterThanOrEqual(5_000);
+  });
+});
