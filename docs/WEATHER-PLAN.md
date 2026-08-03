@@ -126,16 +126,32 @@ From data the app already holds — species, head count, birth dates:
 - a cold snap landing on an imminent birth
 - a wet day blocking shearing
 
-### The one everybody asks for, and cannot have yet
+### Frost — buildable after all, and the correction is worth recording
 
-**"Frost tonight — bring the seedlings in" is not buildable.** Of 70 library
-varieties only 15 carry a cold floor, and all 15 are perennials. The app cannot
-currently tell you which of your plantings tonight's frost kills.
+This document previously said a frost row **was not buildable**: of 70 library
+varieties only 15 carry a cold floor and all 15 are perennials, so the app
+cannot say which of your plantings tonight's frost kills. A row protecting the
+asparagus and ignoring the tomatoes is worse than none, and would be wrong in
+May.
 
-A frost row that protects the asparagus and ignores the tomatoes is **worse than
-no row** — and it would be wrong in May, the one month it matters. This waits on
-cold floors for the 55 annuals and biennials, which is a data task, not a
-weather task.
+**That objection assumed the wrong sentence.** It is only true of a row that
+names *which* plantings die. The farm's own framing — *"warn if there is
+anything planted, and ask whether it is outdoors or under cover"* — needs no
+cold floor at all:
+
+> **Frost tonight. You have 6 plantings in uncovered beds.**
+
+True, actionable, and it defers the judgement to the person who can actually
+make it. A keeper knows their own beds; what they cannot do is watch the
+forecast at 9pm every night in May.
+
+**The data is already there.** `bed.covered` exists on every bed, is asked on
+the Add Bed screen, and defaults to false. Outdoors versus under cover is
+modelled and populated today — nothing new is needed to tell them apart.
+
+So frost moves from "blocked on a data task" to buildable with the other five
+warnings. Cold floors for the 55 annuals are still worth having, but they buy a
+**better** row (*"your tomatoes will not survive this"*), not the only one.
 
 ## 4. Staleness
 

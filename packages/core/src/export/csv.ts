@@ -1,0 +1,410 @@
+/**
+ * A farm's records, as something it can hand to somebody else.
+ *
+ * Parity floor P7 and P9, and the reason it leads the roadmap: the app could
+ * show two years of records and had no way to give any of them to an
+ * accountant, a vet, or somebody buying a tractor. A farm that cannot get its
+ * data out is a farm that cannot leave, and every review of every competitor in
+ * this category says so.
+ *
+ * ## Pure, and here rather than on the screen
+ *
+ * Nothing in this file touches the filesystem, the share sheet or a native
+ * module. It turns records into strings. That is what makes the escaping —
+ * which is the whole difficulty — testable in Node, and it is the same seam
+ * that lets `read/history.ts` be trusted.
+ *
+ * ## Built from the same reads the screens use
+ *
+ * Not from a second pass over the store. An export that disagreed with What
+ * happened would be worse than no export: the screen is what somebody checked
+ * before they sent the file.
+ */
+
+import {
+  CARE_KIND_LABELS,
+  careLogCreateSchema,
+  eggLogCreateSchema,
+  feedLogCreateSchema,
+  harvestCreateSchema,
+  hourReadingCreateSchema,
+  maintenanceCreateSchema,
+  medicationCreateSchema,
+  mortalityCreateSchema,
+  predatorCreateSchema,
+  productionLogCreateSchema,
+  shearingCreateSchema,
+  weightCreateSchema,
+} from '@steading/contracts';
+import { z } from 'zod';
+import { localStore } from '../db/store';
+import { listAnimals } from '../read/animals';
+import { listGroups } from '../read/groups';
+import { listMachines } from '../read/iron';
+
+/** One file. */
+export interface Sheet {
+  /** Becomes the filename, so no spaces and nothing a filesystem dislikes. */
+  name: string;
+  csv: string;
+  /** Data rows, not counting the header. Zero means the sheet is left out. */
+  rows: number;
+}
+
+export interface ExportRange {
+  /** Inclusive, in ms. Absent means from the beginning. */
+  from?: number | undefined;
+  /** Inclusive, in ms. Absent means up to now. */
+  to?: number | undefined;
+}
+
+/**
+ * Escapes one field for RFC 4180, and defuses it for a spreadsheet.
+ *
+ * Two separate jobs and both are necessary.
+ *
+ * **Quoting** is the standard: a field containing a comma, a quote or a
+ * newline is wrapped in quotes with its own quotes doubled. A note reading
+ * `Found her down, called the vet` breaks every row after it without this.
+ *
+ * **The formula guard** is the one people forget. Excel and Sheets treat a
+ * leading `=`, `+`, `-`, `@`, tab or carriage return as the start of a
+ * formula, so a group somebody named `=1+1` becomes a calculation, and a
+ * hostile value becomes the CSV-injection attack that is on the OWASP list.
+ * Prefixing an apostrophe is the documented fix: the spreadsheet shows the
+ * original text and evaluates nothing.
+ *
+ * A farm's own note is not an attack, but a farm importing a supplier's list
+ * and exporting it again is exactly how one arrives — and "our data only" is
+ * the assumption every CSV-injection write-up starts by demolishing.
+ */
+export function field(value: string | number | undefined | null): string {
+  if (value === undefined || value === null) return '';
+
+  const text = String(value);
+  if (text === '') return '';
+
+  const risky = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+  return /[",\n\r]/.test(risky) ? `"${risky.replaceAll('"', '""')}"` : risky;
+}
+
+/** One CSV, header first. */
+export function toCsv(header: readonly string[], rows: readonly (readonly unknown[])[]): string {
+  const lines = [header.map((h) => field(h)).join(',')];
+  for (const row of rows) {
+    lines.push(row.map((cell) => field(cell as string | number | null | undefined)).join(','));
+  }
+  // CRLF, because RFC 4180 says so and because Excel on Windows is where these
+  // land. Every reader accepts it; not every Windows reader accepts bare LF.
+  return lines.join('\r\n');
+}
+
+/**
+ * `YYYY-MM-DD HH:MM`, local.
+ *
+ * Not ISO with a Z: a farm reading its own export wants the morning it
+ * actually collected the eggs, not the same moment in UTC. Both Excel and
+ * Sheets parse this shape as a datetime without being asked.
+ */
+export function stamp(at: number): string {
+  const date = new Date(at);
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
+    `${pad(date.getHours())}:${pad(date.getMinutes())}`
+  );
+}
+
+/** Whether a moment is inside the requested range. */
+function within(at: number, range: ExportRange): boolean {
+  if (range.from !== undefined && at < range.from) return false;
+  if (range.to !== undefined && at > range.to) return false;
+  return true;
+}
+
+/** Reads one entity, parsing each row and dropping what will not parse. */
+async function rowsFrom<T>(
+  entity: string,
+  schema: z.ZodType<T>,
+  build: (value: T, id: string) => { at: number; cells: unknown[] } | null,
+  range: ExportRange,
+): Promise<unknown[][]> {
+  const records = await localStore().readRecordsByEntity(entity);
+
+  return records
+    .filter((record) => !record.deleted)
+    .flatMap((record) => {
+      const parsed = schema.safeParse(record.value);
+      if (!parsed.success) return [];
+      const built = build(parsed.data, record.targetId);
+      // A single unreadable row must not cost a farm the other nine hundred.
+      if (built === null || !within(built.at, range)) return [];
+      return [built.cells];
+    })
+    .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+}
+
+/**
+ * Every sheet a farm's records make, oldest row first.
+ *
+ * Empty sheets are dropped rather than exported as a lone header: a market
+ * gardener does not want eleven files about animals they do not keep.
+ */
+export async function buildExport(range: ExportRange = {}): Promise<Sheet[]> {
+  const [groups, animals, machines] = await Promise.all([
+    listGroups(),
+    listAnimals(),
+    listMachines(),
+  ]);
+
+  const groupName = new Map(groups.map((g) => [g.id, g.name]));
+  const animalName = new Map(animals.map((a) => [a.id, a.name]));
+  const machineName = new Map(machines.map((m) => [m.id, m.name]));
+
+  /**
+   * A name, or a plain marker when the subject is gone.
+   *
+   * An archived group still has records and they are still history
+   * (invariant 13). Writing a blank would read as a bug in the export.
+   */
+  const named = (map: Map<string, string>, id: string | undefined): string =>
+    id === undefined ? '' : (map.get(id) ?? '(archived)');
+
+  const sheets: Sheet[] = [];
+  const add = (name: string, header: readonly string[], rows: unknown[][]): void => {
+    if (rows.length === 0) return;
+    sheets.push({ name, csv: toCsv(header, rows), rows: rows.length });
+  };
+
+  add(
+    'eggs',
+    ['When', 'Group', 'Eggs', 'Logged through a withdrawal'],
+    await rowsFrom(
+      'eggLog',
+      eggLogCreateSchema,
+      (v) => ({
+        at: v.occurredAt,
+        cells: [
+          stamp(v.occurredAt),
+          named(groupName, v.flockId ?? v.birdId),
+          v.count,
+          v.withdrawalAcknowledged === true ? 'yes' : '',
+        ],
+      }),
+      range,
+    ),
+  );
+
+  add(
+    'production',
+    ['When', 'Group or animal', 'What', 'Amount', 'Unit', 'Logged through a withdrawal'],
+    await rowsFrom(
+      'productionLog',
+      productionLogCreateSchema,
+      (v) => ({
+        at: v.occurredAt,
+        cells: [
+          stamp(v.occurredAt),
+          v.flockId === undefined ? named(animalName, v.animalId) : named(groupName, v.flockId),
+          v.label ?? v.kind,
+          v.amount,
+          v.unit,
+          v.withdrawalAcknowledged === true ? 'yes' : '',
+        ],
+      }),
+      range,
+    ),
+  );
+
+  add(
+    'feed',
+    ['When', 'Group', 'Grams', 'What'],
+    await rowsFrom(
+      'feedLog',
+      feedLogCreateSchema,
+      (v) => ({
+        at: v.occurredAt,
+        cells: [stamp(v.occurredAt), named(groupName, v.flockId), v.amountGrams, v.feedType ?? ''],
+      }),
+      range,
+    ),
+  );
+
+  add(
+    'losses',
+    ['When', 'Group', 'How many', 'Cause', 'Cull weight (g)'],
+    await rowsFrom(
+      'mortality',
+      mortalityCreateSchema,
+      (v) => ({
+        at: v.occurredAt,
+        cells: [
+          stamp(v.occurredAt),
+          named(groupName, v.flockId),
+          v.count,
+          v.cause,
+          v.cullWeightGrams ?? '',
+        ],
+      }),
+      range,
+    ),
+  );
+
+  add(
+    'predators',
+    ['When', 'What', 'Lost', 'Where'],
+    await rowsFrom(
+      'predator',
+      predatorCreateSchema,
+      (v) => ({
+        at: v.occurredAt,
+        cells: [stamp(v.occurredAt), v.species, v.lossCount, v.location ?? ''],
+      }),
+      range,
+    ),
+  );
+
+  /**
+   * The sheet a vet or an inspector asks for.
+   *
+   * `medication` is mutable rather than append-only, so this is its current
+   * state rather than its history — which is what a withdrawal question needs
+   * anyway: what was given, when, and when the produce cleared.
+   */
+  add(
+    'treatments',
+    ['Given', 'Group', 'Medication', 'Treatment ends', 'Egg withdrawal (days)', 'Meat', 'Milk'],
+    await rowsFrom(
+      'medication',
+      medicationCreateSchema,
+      (v) => ({
+        at: v.administeredAt,
+        cells: [
+          stamp(v.administeredAt),
+          named(groupName, v.flockId),
+          v.name,
+          v.treatmentEndsAt === undefined ? '' : stamp(v.treatmentEndsAt),
+          v.withdrawalDays?.egg ?? '',
+          v.withdrawalDays?.meat ?? '',
+          v.withdrawalDays?.milk ?? '',
+        ],
+      }),
+      range,
+    ),
+  );
+
+  add(
+    'husbandry',
+    ['When', 'Group or animal', 'Job', 'Product', 'How many'],
+    await rowsFrom(
+      'careLog',
+      careLogCreateSchema,
+      (v) => ({
+        at: v.occurredAt,
+        cells: [
+          stamp(v.occurredAt),
+          v.flockId === undefined ? named(animalName, v.animalId) : named(groupName, v.flockId),
+          CARE_KIND_LABELS[v.kind] ?? v.kind,
+          v.product ?? '',
+          v.animalsTreated ?? '',
+        ],
+      }),
+      range,
+    ),
+  );
+
+  add(
+    'weights',
+    ['When', 'Group or animal', 'Micrograms', 'A sample'],
+    await rowsFrom(
+      'weight',
+      weightCreateSchema,
+      (v) => ({
+        at: v.occurredAt,
+        cells: [
+          stamp(v.occurredAt),
+          v.flockId === undefined ? named(animalName, v.animalId) : named(groupName, v.flockId),
+          v.massUg,
+          v.sampled === true ? 'yes' : '',
+        ],
+      }),
+      range,
+    ),
+  );
+
+  add(
+    'shearing',
+    ['When', 'Group or animal', 'Micrograms', 'Animals shorn'],
+    await rowsFrom(
+      'shearing',
+      shearingCreateSchema,
+      (v) => ({
+        at: v.occurredAt,
+        cells: [
+          stamp(v.occurredAt),
+          v.flockId === undefined ? named(animalName, v.animalId) : named(groupName, v.flockId),
+          v.massUg,
+          v.animalsShorn ?? '',
+        ],
+      }),
+      range,
+    ),
+  );
+
+  add(
+    'harvests',
+    ['When', 'Planting', 'Unit', 'Micrograms', 'Count'],
+    await rowsFrom(
+      'harvest',
+      harvestCreateSchema,
+      (v) => ({
+        at: v.occurredAt,
+        cells: [stamp(v.occurredAt), v.plantingId, v.unit, v.massUg ?? '', v.count ?? ''],
+      }),
+      range,
+    ),
+  );
+
+  /**
+   * The two machine sheets, which are P7 on their own: the history somebody
+   * hands over with the tractor.
+   */
+  add(
+    'machine-hours',
+    ['When', 'Machine', 'Hours'],
+    await rowsFrom(
+      'hourReading',
+      hourReadingCreateSchema,
+      (v) => ({
+        at: v.occurredAt,
+        cells: [stamp(v.occurredAt), named(machineName, v.equipmentId), v.hours],
+      }),
+      range,
+    ),
+  );
+
+  add(
+    'services',
+    ['Machine', 'Job', 'Every (hours)', 'Every (days)', 'Last done', 'At hours'],
+    await rowsFrom(
+      'maintenance',
+      maintenanceCreateSchema,
+      (v) => ({
+        // No occurredAt on a schedule; the last time it was done is the date
+        // that means anything to a reader.
+        at: v.lastDoneAtDate ?? 0,
+        cells: [
+          named(machineName, v.equipmentId),
+          v.title,
+          v.intervalHours ?? '',
+          v.intervalDays ?? '',
+          v.lastDoneAtDate === undefined ? '' : stamp(v.lastDoneAtDate),
+          v.lastDoneAtHours ?? '',
+        ],
+      }),
+      range,
+    ),
+  );
+
+  return sheets;
+}
