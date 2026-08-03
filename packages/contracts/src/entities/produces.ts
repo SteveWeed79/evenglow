@@ -1,4 +1,4 @@
-import { type FlockPurpose, SPECIES_TRAITS, type Species } from './livestock';
+import { FLOCK_PURPOSES, type FlockPurpose, SPECIES_TRAITS, type Species } from './livestock';
 
 /**
  * What a group actually produces — capability AND intent, not either alone.
@@ -131,3 +131,68 @@ export const PURPOSE_GROUPS = [
   hint: string;
   purposes: readonly FlockPurpose[];
 }[];
+
+/**
+ * The purposes a keeper can honestly claim for this kind of animal.
+ *
+ * ## The bug this ends
+ *
+ * Add Stock offered all eight purposes to every species, so a flock of hens
+ * was asked whether it was kept for **milk** and for **fibre**. The model has
+ * known better since `SPECIES_TRAITS` existed; the screen simply never asked
+ * it. Choosing the species first and then narrowing what follows is the whole
+ * point of asking in that order.
+ *
+ * ## Where the line is drawn
+ *
+ * Biology decides three of them — a chicken cannot give milk however the box
+ * is ticked — and husbandry decides two more: a working animal is conditioned,
+ * shod or harness-fitted, and a guardian runs with the stock it protects.
+ * Neither is true of a flock of quail.
+ *
+ * **Meat, breeding and companion are offered for every species, deliberately.**
+ * They are not capabilities. Anything kept can be bred, anything kept can be a
+ * pet, and any animal can go to the table — which is a decision about a farm
+ * rather than a fact about a species. Telling somebody their practice is
+ * impossible is a worse failure than one chip too many, and the app has no
+ * business having an opinion on whose animals are eaten.
+ */
+export function purposesFor(species: Species): FlockPurpose[] {
+  const traits = SPECIES_TRAITS[species];
+
+  return FLOCK_PURPOSES.filter((purpose) => {
+    switch (purpose) {
+      case 'eggs':
+        return traits.laysEggs;
+      case 'milk':
+        return traits.givesMilk;
+      case 'fibre':
+        return traits.givesFibre;
+      case 'work':
+        return traits.works;
+      case 'guarding':
+        return traits.guards;
+      // meat, breeding, companion — a choice, not a capability.
+      default:
+        return true;
+    }
+  });
+}
+
+/**
+ * The purpose groups with anything this species cannot do removed, and any
+ * group that empties dropped entirely.
+ *
+ * A heading with no chips under it is a question the screen is asking and
+ * refusing to let anyone answer.
+ */
+export function purposeGroupsFor(
+  species: Species,
+): { key: string; title: string; hint: string; purposes: FlockPurpose[] }[] {
+  const allowed = new Set(purposesFor(species));
+
+  return PURPOSE_GROUPS.map((group) => ({
+    ...group,
+    purposes: group.purposes.filter((purpose) => allowed.has(purpose)),
+  })).filter((group) => group.purposes.length > 0);
+}

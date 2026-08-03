@@ -451,3 +451,48 @@ describe('the group hub, ranked rather than flat', () => {
     screen.unmount();
   });
 });
+
+describe('add stock follows the species you picked', () => {
+  /**
+   * From the emulator: "Chickens do not produce milk. The first selection
+   * should determine what the user can choose below."
+   */
+  it('offers a hen keeper eggs, and never milk or fibre', async () => {
+    const screen = await mount(<AddGroupScreen />);
+
+    // Chickens are the default species.
+    expect(screen.has('purpose-eggs')).toBe(true);
+    expect(screen.has('purpose-milk')).toBe(false);
+    expect(screen.has('purpose-fibre')).toBe(false);
+    screen.unmount();
+  });
+
+  it('changes what is on offer when the species changes', async () => {
+    const screen = await mount(<AddGroupScreen />);
+
+    await screen.pressLabel('Goats');
+
+    expect(screen.has('purpose-milk')).toBe(true);
+    expect(screen.has('purpose-fibre')).toBe(true);
+    expect(screen.has('purpose-eggs')).toBe(false);
+    screen.unmount();
+  });
+
+  it('drops a purpose the new species cannot serve', async () => {
+    /**
+     * Pick goats, tick milk, change to chickens. Without this the flock is
+     * saved as kept for milk — invisibly, because the chip that would have
+     * shown it is gone with the species.
+     */
+    const screen = await mount(<AddGroupScreen />);
+
+    await screen.pressLabel('Goats');
+    await screen.press('purpose-milk');
+    await screen.pressLabel('Chickens');
+    await screen.press('save-group');
+
+    const [group] = await listGroups();
+    expect(group?.purposes ?? []).not.toContain('milk');
+    screen.unmount();
+  });
+});

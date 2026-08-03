@@ -5,7 +5,8 @@ import {
   type FlockPurpose,
   formatRange,
   newId,
-  PURPOSE_GROUPS,
+  purposeGroupsFor,
+  purposesFor,
   SPECIES_TRAITS,
   suggestedGrowOutWeeks,
   type Species,
@@ -153,6 +154,14 @@ export function AddGroupScreen(): React.ReactElement {
                     // A Rhode Island Red is not a breed of goat. Clearing is
                     // the only honest thing to do with the old choice.
                     setBreedId(null);
+                    /**
+                     * And a purpose the new species cannot serve goes with it.
+                     * Picking goats, ticking milk, then changing to chickens
+                     * would otherwise leave "milk" set on a flock of hens —
+                     * invisible, because the chip that showed it is gone.
+                     */
+                    const keeps = new Set(purposesFor(option));
+                    setPurposes((current) => current.filter((p) => keeps.has(p)));
                   }}
                 />
               ))}
@@ -161,7 +170,7 @@ export function AddGroupScreen(): React.ReactElement {
         );
       })}
 
-      {PURPOSE_GROUPS.map((section) => (
+      {purposeGroupsFor(species).map((section) => (
         <Field key={section.key} label={section.title} hint={section.hint}>
           <View style={styles.chips}>
             {section.purposes.map((purpose) => (

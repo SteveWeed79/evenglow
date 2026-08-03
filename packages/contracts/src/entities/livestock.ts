@@ -64,34 +64,50 @@ export interface SpeciesTraits {
    * gives fibre and no milk, a cow the reverse, a sheep both.
    */
   givesFibre: boolean;
+  /**
+   * Whether this kind is kept to pull, carry or pack.
+   *
+   * A real husbandry difference rather than a nicety: a working animal is
+   * conditioned, shod or harness-fitted, and none of that applies to a flock
+   * of hens. Oxen still work; a llama packs.
+   */
+  works: boolean;
+  /**
+   * Whether this kind is kept to guard other stock, or to raise the alarm.
+   *
+   * Guardian donkeys, llamas and alpacas run with sheep and goats. Geese and
+   * guinea fowl do not fight anything — they are the alarm, which is the job
+   * people keep them for.
+   */
+  guards: boolean;
   group: SpeciesGroup;
 }
 
 export const SPECIES_TRAITS: Record<Species, SpeciesTraits> = {
-  chicken: { label: 'Chickens', collective: 'flock', givesMilk: false, givesFibre: false, laysEggs: true, group: 'poultry' },
-  duck: { label: 'Ducks', collective: 'flock', givesMilk: false, givesFibre: false, laysEggs: true, group: 'poultry' },
-  goose: { label: 'Geese', collective: 'gaggle', givesMilk: false, givesFibre: false, laysEggs: true, group: 'poultry' },
-  turkey: { label: 'Turkeys', collective: 'flock', givesMilk: false, givesFibre: false, laysEggs: true, group: 'poultry' },
-  quail: { label: 'Quail', collective: 'covey', givesMilk: false, givesFibre: false, laysEggs: true, group: 'poultry' },
-  guineafowl: { label: 'Guinea fowl', collective: 'flock', givesMilk: false, givesFibre: false, laysEggs: true, group: 'poultry' },
-  pigeon: { label: 'Pigeons', collective: 'loft', givesMilk: false, givesFibre: false, laysEggs: true, group: 'poultry' },
+  chicken: { label: 'Chickens', collective: 'flock', givesMilk: false, givesFibre: false, laysEggs: true, works: false, guards: false, group: 'poultry' },
+  duck: { label: 'Ducks', collective: 'flock', givesMilk: false, givesFibre: false, laysEggs: true, works: false, guards: false, group: 'poultry' },
+  goose: { label: 'Geese', collective: 'gaggle', givesMilk: false, givesFibre: false, laysEggs: true, works: false, guards: true, group: 'poultry' },
+  turkey: { label: 'Turkeys', collective: 'flock', givesMilk: false, givesFibre: false, laysEggs: true, works: false, guards: false, group: 'poultry' },
+  quail: { label: 'Quail', collective: 'covey', givesMilk: false, givesFibre: false, laysEggs: true, works: false, guards: false, group: 'poultry' },
+  guineafowl: { label: 'Guinea fowl', collective: 'flock', givesMilk: false, givesFibre: false, laysEggs: true, works: false, guards: true, group: 'poultry' },
+  pigeon: { label: 'Pigeons', collective: 'loft', givesMilk: false, givesFibre: false, laysEggs: true, works: false, guards: false, group: 'poultry' },
 
-  emu: { label: 'Emu', collective: 'mob', givesMilk: false, givesFibre: false, laysEggs: true, group: 'ratite' },
-  ostrich: { label: 'Ostrich', collective: 'flock', givesMilk: false, givesFibre: false, laysEggs: true, group: 'ratite' },
-  rhea: { label: 'Rhea', collective: 'flock', givesMilk: false, givesFibre: false, laysEggs: true, group: 'ratite' },
+  emu: { label: 'Emu', collective: 'mob', givesMilk: false, givesFibre: false, laysEggs: true, works: false, guards: false, group: 'ratite' },
+  ostrich: { label: 'Ostrich', collective: 'flock', givesMilk: false, givesFibre: false, laysEggs: true, works: false, guards: false, group: 'ratite' },
+  rhea: { label: 'Rhea', collective: 'flock', givesMilk: false, givesFibre: false, laysEggs: true, works: false, guards: false, group: 'ratite' },
 
-  goat: { label: 'Goats', collective: 'herd', givesMilk: true, givesFibre: true, laysEggs: false, group: 'ruminant' },
-  sheep: { label: 'Sheep', collective: 'flock', givesMilk: true, givesFibre: true, laysEggs: false, group: 'ruminant' },
-  cattle: { label: 'Cattle', collective: 'herd', givesMilk: true, givesFibre: false, laysEggs: false, group: 'ruminant' },
-  alpaca: { label: 'Alpacas', collective: 'herd', givesMilk: false, givesFibre: true, laysEggs: false, group: 'ruminant' },
-  llama: { label: 'Llamas', collective: 'herd', givesMilk: false, givesFibre: true, laysEggs: false, group: 'ruminant' },
+  goat: { label: 'Goats', collective: 'herd', givesMilk: true, givesFibre: true, laysEggs: false, works: false, guards: false, group: 'ruminant' },
+  sheep: { label: 'Sheep', collective: 'flock', givesMilk: true, givesFibre: true, laysEggs: false, works: false, guards: false, group: 'ruminant' },
+  cattle: { label: 'Cattle', collective: 'herd', givesMilk: true, givesFibre: false, laysEggs: false, works: true, guards: false, group: 'ruminant' },
+  alpaca: { label: 'Alpacas', collective: 'herd', givesMilk: false, givesFibre: true, laysEggs: false, works: false, guards: true, group: 'ruminant' },
+  llama: { label: 'Llamas', collective: 'herd', givesMilk: false, givesFibre: true, laysEggs: false, works: true, guards: true, group: 'ruminant' },
 
-  pig: { label: 'Pigs', collective: 'drove', givesMilk: false, givesFibre: false, laysEggs: false, group: 'other' },
-  rabbit: { label: 'Rabbits', collective: 'colony', givesMilk: false, givesFibre: true, laysEggs: false, group: 'other' },
-  donkey: { label: 'Donkeys', collective: 'herd', givesMilk: false, givesFibre: false, laysEggs: false, group: 'other' },
-  horse: { label: 'Horses', collective: 'herd', givesMilk: false, givesFibre: false, laysEggs: false, group: 'other' },
+  pig: { label: 'Pigs', collective: 'drove', givesMilk: false, givesFibre: false, laysEggs: false, works: false, guards: false, group: 'other' },
+  rabbit: { label: 'Rabbits', collective: 'colony', givesMilk: false, givesFibre: true, laysEggs: false, works: false, guards: false, group: 'other' },
+  donkey: { label: 'Donkeys', collective: 'herd', givesMilk: false, givesFibre: false, laysEggs: false, works: true, guards: true, group: 'other' },
+  horse: { label: 'Horses', collective: 'herd', givesMilk: false, givesFibre: false, laysEggs: false, works: true, guards: false, group: 'other' },
 
-  other: { label: 'Other', collective: 'group', givesMilk: true, givesFibre: true, laysEggs: true, group: 'other' },
+  other: { label: 'Other', collective: 'group', givesMilk: true, givesFibre: true, laysEggs: true, works: false, guards: false, group: 'other' },
 };
 
 /** Whether a milk withdrawal is worth asking about for this species. */
