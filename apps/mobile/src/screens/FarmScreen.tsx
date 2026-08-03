@@ -1,0 +1,125 @@
+import { type Enterprise } from '@steading/contracts';
+import { Row } from '../components/Form';
+import { Body, Panel } from '../components/Panel';
+import { Screen } from '../components/Screen';
+import { useEnterprises } from '../hooks/useEnterprises';
+import { useNav } from '../hooks/useNav';
+import type { IconName } from '../components/Icon';
+
+/**
+ * The farm itself: what you keep, what you grow, what you run it with.
+ *
+ * ## Why a hub rather than three tabs
+ *
+ * Stock, Growing and Iron were three of the four tabs, and the bar was full
+ * before the record had anywhere to live. The choice looked like "amend the
+ * four-tab rule or lose What happened" — and it was a false one.
+ *
+ * These three are the same kind of thing. Each is a **place on the farm you go
+ * to set something up or look something over**, and none of them is where the
+ * morning happens. Today is the morning; What happened is the record; this is
+ * the farm. Three answers to three different questions, which is what a tab
+ * bar is for.
+ *
+ * It costs a press to reach a flock. That press buys back a bar that stays at
+ * three however many enterprises a farm adds, and it stops the bottom of the
+ * screen being the place every new idea has to fight for room.
+ *
+ * ## What you run lives here too
+ *
+ * It was under Settings, which was never quite right — deciding you keep bees
+ * now is not a preference, it is a fact about the farm. Putting it at the
+ * bottom of this list also means a farm that has switched everything off has
+ * somewhere obvious to switch it back on, rather than an empty hub and no
+ * route out of it.
+ *
+ * It stays reachable from Settings as well. Two doors to a room somebody
+ * visits twice a year is not clutter, it is not having to remember.
+ */
+
+/**
+ * Named individually rather than as `keyof RootParamList`.
+ *
+ * That would compile and let a route needing params through, and
+ * `nav.navigate(route)` would then be wrong at runtime on a screen expecting
+ * one. Three names is the whole list — the same reasoning as `GroupRoute` in
+ * QuickAddScreen.
+ */
+type PlaceRoute = 'Stock' | 'Growing' | 'Iron';
+
+interface Place {
+  key: Enterprise;
+  route: PlaceRoute;
+  title: string;
+  detail: string;
+  icon: IconName;
+}
+
+const PLACES: readonly Place[] = [
+  {
+    key: 'stock',
+    route: 'Stock',
+    title: 'Animals',
+    detail: 'Groups, individuals, health, and what they produce',
+    icon: 'stock',
+  },
+  {
+    key: 'growing',
+    route: 'Growing',
+    title: 'Crops and beds',
+    detail: 'Beds, plantings, sowing dates and harvests',
+    icon: 'growing',
+  },
+  {
+    key: 'iron',
+    route: 'Iron',
+    title: 'Machines and kit',
+    detail: 'Servicing, hours, and the parts shelf',
+    icon: 'iron',
+  },
+];
+
+export function FarmScreen(): React.ReactElement {
+  const nav = useNav();
+  const enterprises = useEnterprises();
+
+  /**
+   * The enterprise filter moved down here from the tab bar, and does the same
+   * job: a market gardener has no stock, and a suburban poultry keeper has no
+   * tractor. What changed is only which thing disappears — a row rather than a
+   * tab — so the bar no longer grows and shrinks under somebody.
+   */
+  const places = PLACES.filter((place) => enterprises.includes(place.key));
+
+  return (
+    <Screen title="The farm">
+      {places.map((place) => (
+        <Row
+          key={place.key}
+          title={place.title}
+          detail={place.detail}
+          icon={place.icon}
+          testID={`farm-${place.key}`}
+          onPress={() => nav.navigate(place.route)}
+        />
+      ))}
+
+      {places.length === 0 ? (
+        <Panel label="Nothing switched on yet">
+          <Body>
+            Say what you run below and the parts of the app you need appear here. Nothing you
+            have already logged has gone anywhere.
+          </Body>
+        </Panel>
+      ) : null}
+
+      <Row
+        title="What you run"
+        detail="Animals, crops, machines — turn a part of the farm on or off"
+        icon="settings"
+        testID="farm-my-farm"
+        onPress={() => nav.navigate('MyFarm')}
+      />
+    </Screen>
+  );
+}

@@ -253,20 +253,47 @@ function DueBundleRow({
   open: (due: Due) => (() => void) | undefined;
 }): React.ReactElement {
   const { colors } = useTheme();
+  const log = useLog();
   const [expanded, setExpanded] = useState(false);
+
+  /**
+   * Writes the record the row was waiting for, which is what clears it.
+   *
+   * **Not a completion flag** — see `Due.done`. This enqueues the same
+   * `careLog` the form would have written, so the row disappears on the next
+   * recomputation because the record now exists, and the job shows up in What
+   * happened. There is still nothing anywhere that stores "done".
+   */
+  const finish = useCallback(
+    (due: Due): (() => void) | undefined => {
+      const done = due.done;
+      if (done === undefined) return undefined;
+
+      return () => {
+        void log({
+          entity: done.entity,
+          op: 'create',
+          payload: { ...done.payload, occurredAt: Date.now() },
+        });
+      };
+    },
+    [log],
+  );
 
   const rest = bundle.dues.length - 1;
   if (rest === 0) {
-    return <DueRow due={bundle.lead} now={now} onPress={open(bundle.lead)} />;
+    return (
+      <DueRow due={bundle.lead} now={now} onPress={open(bundle.lead)} onDone={finish(bundle.lead)} />
+    );
   }
 
   return (
     <View style={styles.bundle}>
-      <DueRow due={bundle.lead} now={now} onPress={open(bundle.lead)} />
+      <DueRow due={bundle.lead} now={now} onPress={open(bundle.lead)} onDone={finish(bundle.lead)} />
 
       {expanded ? (
         bundle.dues.slice(1).map((due) => (
-          <DueRow key={due.key} due={due} now={now} onPress={open(due)} />
+          <DueRow key={due.key} due={due} now={now} onPress={open(due)} onDone={finish(due)} />
         ))
       ) : null}
 

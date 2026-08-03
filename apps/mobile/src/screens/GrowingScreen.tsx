@@ -29,12 +29,12 @@ export function GrowingScreen(): React.ReactElement {
   const { colors } = useTheme();
   const nav = useNav();
 
-  if (loading) return <Screen title="Growing">{null}</Screen>;
+  if (loading) return <Screen title="Growing" back>{null}</Screen>;
 
   // No site: the one thing that must come first, and the reason why.
   if (site === null || site.frost === undefined) {
     return (
-      <Screen title="Growing">
+      <Screen title="Growing" back>
         <Panel label="First, where are you?">
           <View style={styles.spot}>
             <Icon name="growing" size={56} color={colors.muted} />
@@ -59,7 +59,7 @@ export function GrowingScreen(): React.ReactElement {
   const varietyNames = new Map((varieties ?? []).map((v) => [v.id, v.name]));
 
   return (
-    <Screen title="Growing">
+    <Screen title="Growing" back>
       <View style={[styles.season, { backgroundColor: colors.raised, borderColor: colors.border }]}>
         <Icon name="season" size={24} color={colors.lanternInk} />
         <Text style={[styles.seasonWords, { color: colors.ink }]}>

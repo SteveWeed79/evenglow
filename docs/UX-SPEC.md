@@ -229,7 +229,8 @@ The one place a warning outranks speed. If an active medication withdrawal cover
 
 ## 4. Navigation
 
-Four bottom tabs. Four, not six — every additional tab is a decision made at 6am.
+At most four bottom tabs — every additional tab is a decision made at 6am.
+Three, as it turns out.
 
 ```
 ┌────────────────────────────────────┐
@@ -253,13 +254,34 @@ Four bottom tabs. Four, not six — every additional tab is a decision made at 6
 └────────────────────────────────────┘
 ```
 
-- **Today** — chores, the Tally, anything overdue.
-- **Stock** — groups, individual animals, production, health, mortality. Named Stock, not Birds:
-  a smallholding is mixed, and a goat keeper should not look for their herd under a bird tab.
-- **Iron** — equipment, hour readings, maintenance due, parts.
-- **More** — inventory, reports, export, settings, diagnostics.
+- **Today** — chores, the Tally, anything overdue. The morning.
+- **Farm** — a hub, one press to Animals, Crops and beds, Machines and kit, and
+  to what this farm runs at all.
+- **History** — the record, by day. Titled *What happened* on the screen; the
+  bar has room for one short word.
 
-Everything else is one level below these four. If a feature needs a fifth tab, it needs a rethink.
+### The three, and the amendment that was not needed
+
+Stock, Growing and Iron were three of the four tabs, so the bar was full before
+the record had anywhere to live. That framed a choice — amend this section to
+allow a fifth, or leave What happened somewhere nobody would find it.
+
+**It was a false choice.** Those three are the same kind of thing: places you
+go to set something up or look something over. Today is the morning, History is
+the record, the Farm is the farm. Three answers to three different questions,
+which is what a tab bar is for.
+
+The hub costs one press to reach a flock. It buys:
+
+- a bar that stays at three however many enterprises a farm adds, so no future
+  feature has to fight for the bottom of the screen;
+- **a bar that does not change shape under somebody's thumb.** It used to be
+  built per farm, so switching Growing on moved every other tab along — and
+  muscle memory is most of what a tab bar is for. What a farm runs still
+  decides what it sees; it now hides a row rather than a tab.
+
+**Four remains the wall.** If a feature needs a fifth tab, it needs a rethink —
+and this section is the worked example of what that rethink looks like.
 
 ---
 

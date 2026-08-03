@@ -20,8 +20,13 @@ const LONGEST_NAME = 8;
 
 /**
  * Beyond this the labels stop being readable however far the type gives way,
- * and the answer is a different structure — not a smaller font. UX-SPEC §4
- * says a fifth tab means a rethink; this is where that argument gets had.
+ * and the answer is a different structure — not a smaller font.
+ *
+ * That is exactly what happened. What happened needed a place and the bar was
+ * full, which looked like a case for amending UX-SPEC §4 to allow a fifth. The
+ * rethink §4 actually asks for turned out to be cheaper: Stock, Growing and
+ * Iron are all *places you go*, so they became one Farm hub and the bar came
+ * down to three. Four remains the wall and there is now room under it.
  */
 const MOST_TABS = 5;
 

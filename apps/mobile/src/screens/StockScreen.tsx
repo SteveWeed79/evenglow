@@ -26,10 +26,10 @@ export function StockScreen(): React.ReactElement {
   const { colors } = useTheme();
   const nav = useNav();
 
-  if (loading) return <Screen title="Stock">{null}</Screen>;
+  if (loading) return <Screen title="Stock" back>{null}</Screen>;
 
   return (
-    <Screen title="Stock">
+    <Screen title="Stock" back>
       {groups.length === 0 ? (
         <Panel label="Nothing here yet">
           <View style={styles.spot}>

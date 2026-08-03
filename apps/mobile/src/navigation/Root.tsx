@@ -14,8 +14,10 @@ import { EditGroupScreen } from '../screens/EditGroupScreen';
 import { FeedScreen } from '../screens/FeedScreen';
 import { GroupScreen } from '../screens/GroupScreen';
 import { HarvestScreen } from '../screens/HarvestScreen';
-import { HistoryScreen } from '../screens/HistoryScreen';
+import { GrowingScreen } from '../screens/GrowingScreen';
+import { IronScreen } from '../screens/IronScreen';
 import { QuickAddScreen } from '../screens/QuickAddScreen';
+import { StockScreen } from '../screens/StockScreen';
 import { MyFarmScreen } from '../screens/MyFarmScreen';
 import { InboxScreen } from '../screens/InboxScreen';
 import { IncubationScreen } from '../screens/IncubationScreen';
@@ -67,8 +69,13 @@ export type RootParamList = {
   QuickAdd: undefined;
   /** What this farm runs, and therefore what it sees. */
   MyFarm: undefined;
-  /** What happened, by day. Reached from the date in the header. */
-  History: undefined;
+  /**
+   * The three places on the farm, reached from the Farm tab rather than from
+   * the bar. See `tab-marks.ts` for why they stopped being tabs.
+   */
+  Stock: undefined;
+  Growing: undefined;
+  Iron: undefined;
   Inbox: undefined;
   Diagnostics: undefined;
   Members: undefined;
@@ -123,7 +130,9 @@ export function Root({ onSignedOut }: { onSignedOut: () => void }): React.ReactE
       </Stack.Screen>
       <Stack.Screen name="QuickAdd" component={QuickAddScreen} />
       <Stack.Screen name="MyFarm" component={MyFarmScreen} />
-      <Stack.Screen name="History" component={HistoryScreen} />
+      <Stack.Screen name="Stock" component={StockScreen} />
+      <Stack.Screen name="Growing" component={GrowingScreen} />
+      <Stack.Screen name="Iron" component={IronScreen} />
       <Stack.Screen name="Inbox" component={InboxScreen} />
       <Stack.Screen name="Diagnostics" component={DiagnosticsScreen} />
       <Stack.Screen name="Members" component={MembersScreen} />

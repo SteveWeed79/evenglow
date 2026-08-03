@@ -22,6 +22,7 @@ import { AddServiceScreen } from '../../apps/mobile/src/screens/AddServiceScreen
 import { BreedingScreen } from '../../apps/mobile/src/screens/BreedingScreen';
 import { CareLogScreen } from '../../apps/mobile/src/screens/CareLogScreen';
 import { EditGroupScreen } from '../../apps/mobile/src/screens/EditGroupScreen';
+import { FarmScreen } from '../../apps/mobile/src/screens/FarmScreen';
 import { GroupScreen } from '../../apps/mobile/src/screens/GroupScreen';
 import { FeedScreen } from '../../apps/mobile/src/screens/FeedScreen';
 import { HarvestScreen } from '../../apps/mobile/src/screens/HarvestScreen';
@@ -722,5 +723,61 @@ describe('what is under the broody', () => {
     const [set] = await listIncubations();
     expect(set?.species).toBe('duck');
     expect(set?.breedId).toBeUndefined();
+  });
+});
+
+/**
+ * "Several could be combined into a My Farm button — the flock, planting and
+ * iron set-up could all be an option in a small menu. It adds a press but
+ * cleans up the home screen."
+ *
+ * Right, and it dissolved a problem rather than trading against it: the bar
+ * was full, What happened needed a place, and this made room without amending
+ * the four-tab rule.
+ */
+describe('the farm hub', () => {
+  it('offers each part of the farm the keeper runs', async () => {
+    const screen = await mount(<FarmScreen />);
+
+    // A farm that has never been asked runs everything.
+    for (const key of ['stock', 'growing', 'iron']) {
+      expect(screen.has(`farm-${key}`), key).toBe(true);
+    }
+    screen.unmount();
+  });
+
+  it('hides what the farm does not run', async () => {
+    await enqueue({
+      entity: 'site',
+      op: 'create',
+      targetId: newId(),
+      payload: { name: 'Hollow Farm', enterprises: ['stock'] },
+    });
+
+    const screen = await mount(<FarmScreen />);
+
+    expect(screen.has('farm-stock')).toBe(true);
+    expect(screen.has('farm-growing')).toBe(false);
+    expect(screen.has('farm-iron')).toBe(false);
+    screen.unmount();
+  });
+
+  /**
+   * The dead end that has to not exist: a farm with everything switched off
+   * needs somewhere obvious to switch it back on.
+   */
+  it('keeps a way back in when everything is switched off', async () => {
+    await enqueue({
+      entity: 'site',
+      op: 'create',
+      targetId: newId(),
+      payload: { name: 'Hollow Farm', enterprises: [] },
+    });
+
+    const screen = await mount(<FarmScreen />);
+
+    expect(screen.has('farm-my-farm')).toBe(true);
+    expect(screen.text()).toContain('Nothing switched on yet');
+    screen.unmount();
   });
 });

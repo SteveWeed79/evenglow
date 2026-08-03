@@ -75,6 +75,23 @@ export type DueKind = (typeof DUE_KINDS)[number];
 export const URGENCIES = ['later', 'soon', 'now', 'overdue'] as const;
 export type Urgency = (typeof URGENCIES)[number];
 
+/**
+ * Everything needed to write the record that clears one row.
+ *
+ * Carried on the due rather than reconstructed by the screen from the `key`.
+ * The key's shape is an implementation detail of whichever builder made it,
+ * and a screen parsing it would break silently the first time a builder
+ * changed one — which is the sort of failure that reaches a handset.
+ */
+export interface DueDone {
+  /** Only `careLog` today. See the note on `Due.done` for why. */
+  entity: 'careLog';
+  /** The payload, minus `occurredAt` — which is when the press happened. */
+  payload: { kind: string; flockId: string };
+  /** What the button says. "Trimmed feet", not "Done". */
+  label: string;
+}
+
 export interface Due {
   /**
    * Stable across recomputations for the same underlying fact.
@@ -106,6 +123,34 @@ export interface Due {
    * same list as a date-based one.
    */
   projectedAt: number | null;
+
+  /**
+   * The record one press would write, when a press is honestly enough.
+   *
+   * **This is not the completion flag property 3 refuses**, and the difference
+   * is the whole reason it is allowed to exist. Pressing it writes the *real
+   * record* — a `careLog`, the same one the form would have written. The row
+   * then disappears on the next recomputation for exactly the reason every
+   * other row disappears: the thing it was waiting for now exists. Nothing is
+   * marked. There is still no `done` boolean and no `clearedBy` anywhere.
+   *
+   * The test for whether that is a shortcut or a lie is simple: **does the
+   * record it writes contain everything the form would have collected?** For a
+   * look-over it does — a health check is a date and a subject, and the form
+   * adds an optional note. For everything else it does not, which is why this
+   * is absent on almost every row:
+   *
+   * - a **service** needs its hours and what was changed;
+   * - a **hatch** needs how many hatched, which is the entire point of it;
+   * - a **withdrawal** is not a job at all, it is a date passing.
+   *
+   * A one-tap Done on any of those would write a record that says something
+   * nobody checked, and a record nobody checked is worse than a row still
+   * sitting there.
+   *
+   * It also means the job lands in What happened, which a flag never would.
+   */
+  done?: DueDone;
 
   /**
    * How far ahead this starts appearing on Today.

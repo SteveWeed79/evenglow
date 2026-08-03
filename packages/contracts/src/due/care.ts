@@ -1,4 +1,4 @@
-import type { CareKind } from '../entities/care';
+import { CARE_KIND_LABELS, type CareKind } from '../entities/care';
 import { SPECIES_TRAITS, type Species } from '../entities/livestock';
 import type { Due } from './types';
 
@@ -169,6 +169,23 @@ export function careDues(group: CareGroup, now: number): Due[] {
       atReading: null,
       projectedAt: null,
       noticeDays: NOTICE_DAYS,
+      /**
+       * Husbandry is the one family where one press is the honest whole of it.
+       *
+       * A look-over, a foot trim, a mineral check: the record is a date and a
+       * subject, and the form's only other field is an optional note. So the
+       * button writes the same `careLog` the form would, and the row clears
+       * because that record now exists — not because anything was ticked.
+       *
+       * The past-tense label is deliberate. "Done" beside four rows is four
+       * identical buttons; "Trimmed feet" says what is about to be written,
+       * which is what makes it safe to press without opening anything.
+       */
+      done: {
+        entity: 'careLog',
+        payload: { kind, flockId: group.id },
+        label: CARE_KIND_LABELS[kind],
+      },
     });
   }
 

@@ -58,32 +58,21 @@ export function Screen({
           </Pressable>
         ) : (
           /**
-           * The date opens what happened before it.
+           * Just the date.
            *
-           * A fifth control in this bar would be a fifth thing to look past,
-           * and UX-SPEC §4's argument against a fifth tab is the same argument
-           * one row up. The date was already here, already says which day this
-           * is, and "tap the date to see other dates" is the one gesture
-           * nobody has to be taught. The chevron is what makes it look
-           * pressable rather than decorative.
+           * It briefly opened What happened, on the argument that a fifth
+           * control in this bar would be a fifth thing to look past. That was
+           * true and beside the point: a pressable date is not obviously
+           * pressable, and a feature nobody finds is a feature nobody has. It
+           * is a tab now (UX-SPEC §4), so this goes back to saying the day.
            */
-          <Pressable
-            onPress={() => navigation.navigate('History')}
-            accessibilityRole="button"
-            accessibilityLabel="What happened before today"
-            hitSlop={12}
-            testID="open-history"
-            style={styles.date}
-          >
-            <Text style={[styles.label, { color: colors.muted }]}>
-              {new Date().toLocaleDateString(undefined, {
-                weekday: 'short',
-                day: 'numeric',
-                month: 'short',
-              })}
-            </Text>
-            <Icon name="forward" size={14} color={colors.muted} />
-          </Pressable>
+          <Text style={[styles.label, { color: colors.muted }]}>
+            {new Date().toLocaleDateString(undefined, {
+              weekday: 'short',
+              day: 'numeric',
+              month: 'short',
+            })}
+          </Text>
         )}
 
         <View style={styles.controls}>
