@@ -87,6 +87,26 @@ const incubationShape = {
   species: speciesSchema,
   /** The group the eggs came from, when they came from this farm. */
   flockId: z.string().length(26).optional(),
+  /**
+   * What breed they are, when it is known.
+   *
+   * **Not because it changes the dates.** Incubation length is a property of
+   * the species and hardly of the breed at all — every chicken breed is 21
+   * days, and the half-day a bantam pips early is smaller than the swing an
+   * incubator running a degree warm produces. A per-breed table here would be
+   * inventing precision, which is the same mistake as naming one humidity
+   * figure.
+   *
+   * It is here because of what comes **out**. The library knows when a Rhode
+   * Island Red starts to lay and how fast it grows; without this, a hatch
+   * produces chicks the app cannot say anything about, and the group made from
+   * them starts blank. The eggs are the last moment somebody knows for certain
+   * what they are.
+   *
+   * Optional, and it has to be: a bought set is often mixed, and own eggs from
+   * a mixed flock are honestly unknown. Absent means "not said".
+   */
+  breedId: z.string().min(1).max(80).optional(),
   label: z.string().min(1).max(80),
 
   setAt: z.number().int(),

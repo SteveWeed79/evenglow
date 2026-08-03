@@ -1,5 +1,7 @@
 import { useCallback, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 import {
+  breedsForSpecies,
   candlingDay,
   EGG_SOURCES,
   INCUBATION_DAYS,
@@ -10,6 +12,7 @@ import {
   type Species,
 } from '@steading/contracts';
 import {
+  Chip,
   Choice,
   DayPick,
   Failure,
@@ -23,6 +26,7 @@ import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useNav } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
+import { SPACE } from '../theme/tokens';
 
 /**
  * A set of eggs going under.
@@ -46,6 +50,7 @@ export function SetEggsScreen(): React.ReactElement {
   const [setAt, setSetAt] = useState(() => startOfDay(Date.now()));
   const [source, setSource] = useState<(typeof EGG_SOURCES)[number]>('own');
   const [method, setMethod] = useState<(typeof INCUBATION_METHODS)[number]>('incubator');
+  const [breedId, setBreedId] = useState<string | null>(null);
 
   const { saving, failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
 
@@ -62,10 +67,11 @@ export function SetEggsScreen(): React.ReactElement {
           eggsSet,
           source,
           method,
+          ...(breedId === null ? {} : { breedId }),
         },
       });
     });
-  }, [save, log, species, label, setAt, eggsSet, source, method]);
+  }, [save, log, species, label, setAt, eggsSet, source, method, breedId]);
 
   /** Only the birds. A goat cannot be set under a broody. */
   const layers = (Object.keys(SPECIES_TRAITS) as Species[]).filter(
@@ -73,16 +79,49 @@ export function SetEggsScreen(): React.ReactElement {
   );
   const days = INCUBATION_DAYS[species] ?? 21;
 
+  /**
+   * Deliberately not filtered any further than by species.
+   *
+   * A set of eggs is not yet a flock and nobody has decided what these birds
+   * are for, so narrowing by purpose the way the group screen does would be
+   * guessing at a decision that has not been made.
+   */
+  const breeds = breedsForSpecies(species);
+
   return (
     <Screen title="Set some eggs" back>
       <Field label="What are they?">
         <Choice
           options={layers}
           value={species}
-          onChange={setSpecies}
+          onChange={(next) => {
+            setSpecies(next);
+            // A duck breed left set on a set of chicken eggs would be
+            // invisible — the chip that showed it is gone with the species.
+            setBreedId(null);
+          }}
           labels={Object.fromEntries(layers.map((s) => [s, SPECIES_TRAITS[s].label]))}
         />
       </Field>
+
+      {breeds.length > 0 ? (
+        <Field
+          label="Which breed? (optional)"
+          hint="It does not change the dates — every chicken egg is 21 days. It is so the app can say when what hatches will start to lay."
+        >
+          <View style={styles.chips}>
+            {breeds.map((breed) => (
+              <Chip
+                key={breed.id}
+                label={breed.name}
+                selected={breedId === breed.id}
+                testID={`incubation-breed-${breed.id}`}
+                onPress={() => setBreedId(breedId === breed.id ? null : breed.id)}
+              />
+            ))}
+          </View>
+        </Field>
+      ) : null}
 
       <Field label="What will you call this set?">
         <TextField
@@ -144,3 +183,7 @@ function startOfDay(at: number): number {
   date.setHours(0, 0, 0, 0);
   return date.getTime();
 }
+
+const styles = StyleSheet.create({
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.md },
+});

@@ -669,3 +669,58 @@ describe('who the feed is for', () => {
     screen.unmount();
   });
 });
+
+/**
+ * "The set-eggs screen does not list breeds. Each is a little different I
+ * assume?"
+ *
+ * Not for the dates — see the note on `incubationShape.breedId`. Incubation
+ * length is a species property and hardly a breed one at all, and a per-breed
+ * table would be inventing precision.
+ *
+ * It matters for what comes out. The library knows when a Rhode Island Red
+ * starts to lay; without this the hatch produces chicks the app can say
+ * nothing about, and the eggs were the last moment anybody knew for certain
+ * what they were.
+ */
+describe('what is under the broody', () => {
+  it('records the breed with the set', async () => {
+    const screen = await mount(<SetEggsScreen />);
+
+    await screen.press('incubation-breed-chicken-rhode-island-red');
+    await screen.press('save-incubation');
+    screen.unmount();
+
+    const [set] = await listIncubations();
+    expect(set).toMatchObject({ species: 'chicken', breedId: 'chicken-rhode-island-red' });
+  });
+
+  /** Optional, and it must be: a bought set is often genuinely mixed. */
+  it('sets them without one', async () => {
+    const screen = await mount(<SetEggsScreen />);
+
+    await screen.press('save-incubation');
+    screen.unmount();
+
+    const [set] = await listIncubations();
+    expect(set?.species).toBe('chicken');
+    expect(set?.breedId).toBeUndefined();
+  });
+
+  /**
+   * The same bug the group screen already had: a breed left set across a
+   * species change is invisible, because the chip that showed it is gone.
+   */
+  it('drops a breed the new species cannot be', async () => {
+    const screen = await mount(<SetEggsScreen />);
+
+    await screen.press('incubation-breed-chicken-rhode-island-red');
+    await screen.pressLabel('Ducks');
+    await screen.press('save-incubation');
+    screen.unmount();
+
+    const [set] = await listIncubations();
+    expect(set?.species).toBe('duck');
+    expect(set?.breedId).toBeUndefined();
+  });
+});

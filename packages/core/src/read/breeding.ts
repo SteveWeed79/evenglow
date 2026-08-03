@@ -46,6 +46,8 @@ export interface IncubationEntry {
   source: string;
   method: string;
   flockId?: string;
+  /** What they are, when it was known when they went under. */
+  breedId?: string;
   candledAt?: number;
   fertile?: number;
   hatchedAt?: number;

@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
-import { candlingDay, INCUBATION_DAYS } from '@steading/contracts';
+import { candlingDay, INCUBATION_DAYS, libraryBreed } from '@steading/contracts';
 import {
   fertilityRate,
   hatchRate,
@@ -86,6 +86,10 @@ function Detail({ incubation }: { incubation: IncubationEntry }): React.ReactEle
 
   const fertilityPct = fertilityRate(incubation);
   const hatchPct = hatchRate(incubation);
+  const breedName =
+    incubation.breedId === undefined
+      ? null
+      : (libraryBreed(incubation.breedId)?.name ?? null);
 
   return (
     <Screen title={incubation.label} back>
@@ -95,6 +99,9 @@ function Detail({ incubation }: { incubation: IncubationEntry }): React.ReactEle
           day: 'numeric',
           month: 'long',
         })}
+        {/* Said here because the eggs were the last moment anybody knew for
+            certain what these are. */}
+        {breedName === null ? '' : ` · ${breedName}`}
       </Text>
 
       {fertilityPct === null && hatchPct === null ? null : (
