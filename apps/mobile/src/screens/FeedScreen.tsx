@@ -1,6 +1,7 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { lastFedByGroup, listGroups } from '@steading/core/read/groups';
+import { listInventory } from '@steading/core/read/iron';
 import { Choice, Failure, Field, TextField, useSaver } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
@@ -24,6 +25,29 @@ import { FONTS, TYPE } from '../theme/tokens';
  * Stored in grams — a smallholder buys bags and scoops, and the scoop is the
  * unit that gets used twice a day. The steps below are the sizes those come
  * in, not a decimal ramp.
+ *
+ * ## What is on the shelf is offered here
+ *
+ * "I log a Chick starter on The Shelf but the option to feed my chickens it
+ * does not appear. Having to enter this data twice is a time waste."
+ *
+ * Exactly right. The farm had already named the sack — `kind: 'feed'` on the
+ * inventory — and this screen asked them to type the name again into a free
+ * text box, next to a placeholder suggesting three feeds they do not own. Two
+ * spellings of one sack then sit in the records, and no report can add them up.
+ *
+ * The chips are the shelf. The text field stays, because a handful of
+ * windfalls or a neighbour's hay is a real feed that will never be on it.
+ *
+ * Chick starter is not goat feed, so a sack that says who it is for sorts to
+ * the front for those animals — and stays offered to the rest. See the note on
+ * `fromShelf`: the shelf sorts and never argues.
+ *
+ * **The shelf is not decremented.** That is a deliberate hold, not an
+ * oversight: how much of a 50 lb sack a scoop represents is a guess, and a
+ * quantity that drifts away from what is on the floor is worse than one nobody
+ * touched — the same reasoning the Loss screen gives for leaving head count
+ * alone. Drawing it down wants its own decision.
  */
 
 type Measure = 'scoop' | 'lb' | 'kg';
@@ -48,10 +72,56 @@ export function FeedScreen({ route }: ScreenProps<'Feed'>): React.ReactElement {
 
   const groups = useLive(listGroups);
   const lastFed = useLive(lastFedByGroup);
+  const shelf = useLive(listInventory);
   const group = groups?.find((g) => g.id === groupId) ?? null;
 
   const [measure, setMeasure] = useState<Measure>('scoop');
   const [feedType, setFeedType] = useState('');
+
+  /**
+   * The feed on the shelf: theirs first, then everything else.
+   *
+   * "If it's chick food, it's not for goats — well, in most cases." The hedge
+   * is the design. A keeper who puts chick crumb in front of a poorly bantam,
+   * or scratch in front of the goats because it is the sack that is open, is
+   * doing an ordinary thing, and a shelf that argued would be one they stopped
+   * filling in. So this **sorts and never filters**.
+   *
+   * Feed with nothing said about it sorts with theirs rather than after it: an
+   * unanswered question is not a statement that the sack is for something else,
+   * and every item on every shelf predates the field.
+   *
+   * Deduplicated by name, because two sacks of the same feed is an ordinary
+   * thing to own and would otherwise draw two chips nobody can tell apart —
+   * which is also a React key collision.
+   */
+  const fromShelf = useMemo(() => {
+    const feed = (shelf ?? []).filter((item) => item.kind === 'feed');
+    const suits = (item: (typeof feed)[number]): boolean =>
+      item.species === undefined || (group !== null && item.species.includes(group.species));
+
+    const names = [...feed.filter(suits), ...feed.filter((item) => !suits(item))].map(
+      (item) => item.name,
+    );
+    return [...new Set(names)];
+  }, [shelf, group]);
+
+  const pick = useCallback(
+    (name: string): void => {
+      setFeedType(name);
+
+      /**
+       * The shelf already knows what it is measured in, so do not ask twice.
+       *
+       * Only where the units are the same question: `lb` and `kg` are feed
+       * measures here too. A sack counted in bags or bales says nothing about
+       * how much goes in a trough, so that leaves the measure alone.
+       */
+      const item = (shelf ?? []).find((i) => i.name === name);
+      if (item?.unit === 'lb' || item?.unit === 'kg') setMeasure(item.unit);
+    },
+    [shelf],
+  );
 
   const { failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
 
@@ -95,8 +165,24 @@ export function FeedScreen({ route }: ScreenProps<'Feed'>): React.ReactElement {
         </Panel>
       )}
 
-      <Field label="What did they get? (optional)">
-        <TextField value={feedType} onChangeText={setFeedType} placeholder="Layers pellets, hay, goat mix" maxLength={80} />
+      {fromShelf.length > 0 ? (
+        <Field label="From the shelf">
+          {/* Empty labels on purpose: `Choice` falls back to the option
+              itself, and the option is already the farm's own words for it. */}
+          <Choice options={fromShelf} value={feedType} onChange={pick} labels={{}} />
+        </Field>
+      ) : null}
+
+      <Field
+        label={fromShelf.length > 0 ? 'Or something else (optional)' : 'What did they get? (optional)'}
+      >
+        <TextField
+          value={feedType}
+          onChangeText={setFeedType}
+          placeholder="Layers pellets, hay, goat mix"
+          maxLength={80}
+          testID="feed-type"
+        />
       </Field>
 
       <Field label="Measured in">

@@ -224,12 +224,27 @@ export function Stepper({
   steps = [1, 5, 10],
   min = 0,
   suffix,
+  negative = false,
 }: {
   value: number;
   onChange: (next: number) => void;
   steps?: readonly number[];
   min?: number;
   suffix?: string;
+  /**
+   * Whether a step reads as taking away.
+   *
+   * The value is always the magnitude — how many — and the arithmetic does not
+   * change. What changes is the sign on the chips, because on a screen headed
+   * "Record a loss" a `+5` invites you to read it as five more animals. It is
+   * five fewer, and the one word the buttons say should not contradict the one
+   * word at the top of the screen.
+   *
+   * The corrective chip flips with them: where a step takes away, the
+   * correction gives back. Both still move the same underlying count, so `min`
+   * and the disabled state need no special case.
+   */
+  negative?: boolean;
 }): React.ReactElement {
   const { colors } = useTheme();
 
@@ -246,13 +261,19 @@ export function Stepper({
       {steps.map((step) => (
         <Chip
           key={step}
-          label={`+${step}`}
+          label={`${negative ? '−' : '+'}${step}`}
           selected={false}
-          testID={`step-plus-${step}`}
+          testID={`step-${negative ? 'minus' : 'plus'}-${step}`}
           onPress={() => bump(step)}
         />
       ))}
-      <Chip label="−" selected={false} disabled={value <= min} onPress={() => bump(-1)} />
+      <Chip
+        label={negative ? '+' : '−'}
+        selected={false}
+        disabled={value <= min}
+        testID="step-correct"
+        onPress={() => bump(-1)}
+      />
       <Text style={[styles.stepperValue, { color: colors.ink }]}>
         {value}
         {suffix === undefined ? '' : ` ${suffix}`}

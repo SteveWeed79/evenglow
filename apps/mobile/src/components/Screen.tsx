@@ -57,13 +57,33 @@ export function Screen({
             <Icon name="back" size={24} color={colors.muted} />
           </Pressable>
         ) : (
-          <Text style={[styles.label, { color: colors.muted }]}>
-            {new Date().toLocaleDateString(undefined, {
-              weekday: 'short',
-              day: 'numeric',
-              month: 'short',
-            })}
-          </Text>
+          /**
+           * The date opens what happened before it.
+           *
+           * A fifth control in this bar would be a fifth thing to look past,
+           * and UX-SPEC §4's argument against a fifth tab is the same argument
+           * one row up. The date was already here, already says which day this
+           * is, and "tap the date to see other dates" is the one gesture
+           * nobody has to be taught. The chevron is what makes it look
+           * pressable rather than decorative.
+           */
+          <Pressable
+            onPress={() => navigation.navigate('History')}
+            accessibilityRole="button"
+            accessibilityLabel="What happened before today"
+            hitSlop={12}
+            testID="open-history"
+            style={styles.date}
+          >
+            <Text style={[styles.label, { color: colors.muted }]}>
+              {new Date().toLocaleDateString(undefined, {
+                weekday: 'short',
+                day: 'numeric',
+                month: 'short',
+              })}
+            </Text>
+            <Icon name="forward" size={14} color={colors.muted} />
+          </Pressable>
         )}
 
         <View style={styles.controls}>
@@ -147,6 +167,7 @@ const styles = StyleSheet.create({
     minHeight: TAP.min / 2,
   },
   controls: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  date: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
   control: {
     minWidth: TAP.min / 2,
     minHeight: TAP.min / 2,

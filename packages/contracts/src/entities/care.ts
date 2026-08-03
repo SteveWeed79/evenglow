@@ -33,6 +33,27 @@ export const CARE_KINDS = [
 export const careKindSchema = z.enum(CARE_KINDS);
 export type CareKind = z.infer<typeof careKindSchema>;
 
+/**
+ * What each job is called once it has been done.
+ *
+ * Past tense, because every place these are read is reporting: the chip you
+ * press to say what you did, and the history row that says what you did. A
+ * present-tense table would need a second one beside it, and two tables of
+ * seven words drift.
+ *
+ * Here rather than on the screen that first needed them, because the history
+ * projection lives in `core` and cannot import from `apps/mobile`.
+ */
+export const CARE_KIND_LABELS: Record<CareKind, string> = {
+  worming: 'Wormed',
+  'hoof-trim': 'Trimmed feet',
+  mineral: 'Minerals',
+  vaccination: 'Vaccinated',
+  'parasite-check': 'Checked for parasites',
+  dental: 'Teeth',
+  'health-check': 'Looked over',
+};
+
 export const careLogCreateSchema = z
   .object({
     occurredAt: z.number().int(),

@@ -1,7 +1,16 @@
-import { useCallback, useState } from 'react';
-import { INVENTORY_KINDS, INVENTORY_UNITS, newId } from '@steading/contracts';
+import { useCallback, useMemo, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
+import {
+  INVENTORY_KINDS,
+  INVENTORY_UNITS,
+  newId,
+  SPECIES_TRAITS,
+  type Species,
+} from '@steading/contracts';
+import { listGroups } from '@steading/core/read/groups';
 import { listMachines } from '@steading/core/read/iron';
 import {
+  Chip,
   Choice,
   Failure,
   Field,
@@ -17,6 +26,7 @@ import { useLive } from '../hooks/useLive';
 import { useNav } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import type { ScreenProps } from '../navigation/Root';
+import { SPACE } from '../theme/tokens';
 
 /**
  * Something onto the shelf.
@@ -50,6 +60,7 @@ export function AddItemScreen({ route }: ScreenProps<'AddItem'>): React.ReactEle
   const nav = useNav();
   const log = useLog();
   const machines = useLive(listMachines);
+  const groups = useLive(listGroups);
 
   const [name, setName] = useState('');
   const [kind, setKind] = useState<(typeof INVENTORY_KINDS)[number]>(
@@ -60,6 +71,19 @@ export function AddItemScreen({ route }: ScreenProps<'AddItem'>): React.ReactEle
   const [warns, setWarns] = useState(true);
   const [reorderBelow, setReorderBelow] = useState(1);
   const [equipmentId, setEquipmentId] = useState<string | null>(route.params.equipmentId ?? null);
+  const [species, setSpecies] = useState<Species[]>([]);
+
+  /**
+   * Only the species this farm actually keeps.
+   *
+   * Nineteen chips, seventeen of them for animals nobody here owns, is a list
+   * that gets skipped — and a skipped list means the field stays empty and the
+   * feed screen learns nothing.
+   */
+  const kept = useMemo(
+    () => [...new Set((groups ?? []).map((group) => group.species))],
+    [groups],
+  );
 
   const { saving, failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
 
@@ -75,13 +99,17 @@ export function AddItemScreen({ route }: ScreenProps<'AddItem'>): React.ReactEle
           unit,
           quantity,
           ...(warns ? { reorderBelow } : {}),
+          // Only on feed, and only when something was actually ticked: the
+          // schema refuses an empty array, because "nobody said" and "for
+          // nothing" must not be the same value.
+          ...(kind === 'feed' && species.length > 0 ? { species } : {}),
           // Only meaningful on a part: linking a bale of straw to the tractor
           // would put it in the "can this service be done" question wrongly.
           ...(kind === 'part' && equipmentId !== null ? { equipmentId } : {}),
         },
       });
     });
-  }, [save, log, name, kind, unit, quantity, warns, reorderBelow, equipmentId]);
+  }, [save, log, name, kind, unit, quantity, warns, reorderBelow, equipmentId, species]);
 
   const iron = machines ?? [];
 
@@ -114,6 +142,31 @@ export function AddItemScreen({ route }: ScreenProps<'AddItem'>): React.ReactEle
       {warns ? (
         <Field label="Low is">
           <Stepper value={reorderBelow} onChange={setReorderBelow} steps={[1, 5]} suffix={unit} />
+        </Field>
+      ) : null}
+
+      {kind === 'feed' && kept.length > 0 ? (
+        <Field
+          label="Who is it for? (optional)"
+          hint="Chick starter is not goat feed. Saying so puts it at the front when you feed them — everything on the shelf is still offered."
+        >
+          <View style={styles.chips}>
+            {kept.map((option) => (
+              <Chip
+                key={option}
+                label={SPECIES_TRAITS[option].label}
+                selected={species.includes(option)}
+                testID={`item-species-${option}`}
+                onPress={() =>
+                  setSpecies((current) =>
+                    current.includes(option)
+                      ? current.filter((s) => s !== option)
+                      : [...current, option],
+                  )
+                }
+              />
+            ))}
+          </View>
         </Field>
       ) : null}
 
@@ -154,3 +207,7 @@ export function AddItemScreen({ route }: ScreenProps<'AddItem'>): React.ReactEle
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.md },
+});

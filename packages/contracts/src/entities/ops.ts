@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { speciesSchema } from './livestock';
 
 // ── task (mutable) ───────────────────────────────────────────────────────────
 
@@ -62,6 +63,20 @@ const inventoryShape = {
   quantity: z.number().nonnegative(),
   /** Alert threshold. Absent means the item is tracked but never nags. */
   reorderBelow: z.number().nonnegative().optional(),
+  /**
+   * Who it is for. Chick starter is not goat feed.
+   *
+   * **Absent means "not said", never "for nothing"** — which is why an empty
+   * array is refused rather than allowed to mean the same thing twice. Every
+   * item on every shelf predates this field, and a farm that never answers it
+   * must keep being offered all of its feed.
+   *
+   * A hint, not a rule. The feed screen sorts by it and never hides on it: a
+   * keeper who puts chick crumb in front of a poorly bantam, or scratch in
+   * front of the goats because it is what is open, is doing an ordinary thing.
+   * A shelf that argued with them would be one they stopped filling in.
+   */
+  species: z.array(speciesSchema).min(1).optional(),
   /** Links a part to the machine it services, so W5 can warn before the window. */
   equipmentId: z.string().length(26).optional(),
   supplier: z.string().max(120).optional(),

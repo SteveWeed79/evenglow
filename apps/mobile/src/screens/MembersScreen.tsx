@@ -23,7 +23,7 @@ import {
 import { Icon } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
-import { readCachedClaims } from '../auth/session';
+import { readCachedClaims, refreshSession } from '../auth/session';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
 
@@ -90,9 +90,37 @@ async function call(
   const base = apiBase();
   if (base === null) throw new Error('This build has no farm server configured.');
 
-  const token = currentAccessToken();
+  /**
+   * No token yet? Get one, rather than telling somebody to wait for something
+   * that was never going to happen.
+   *
+   * The access token is held in memory only (see `core/api` for why) and is
+   * minted by `refreshSession` — at boot, on resume, and on network regain. A
+   * boot that happened before the network was up takes the offline path, which
+   * correctly keeps the session but leaves the token null for the rest of the
+   * process.
+   *
+   * That left this screen permanently stuck, and the recovery it offered could
+   * not work: "Try again" re-ran the members fetch with the same absent token,
+   * so the button was decoration and "in a moment" never came. Nothing else in
+   * the app shows the difference, because every other screen renders the local
+   * projection and never needs a header.
+   */
+  let token = currentAccessToken();
   if (token === null) {
-    throw new Error('Your session has not been refreshed yet. Try again in a moment.');
+    // Refuses only on a server that actually rejects the refresh token, in
+    // which case it has already cleared this device — so a null return here
+    // means signed out, not offline.
+    const renewed = await refreshSession();
+    token = currentAccessToken();
+
+    if (token === null) {
+      throw new Error(
+        renewed === null
+          ? 'This device is signed out. Sign in again to manage who is on the farm.'
+          : 'The farm server could not be reached to renew this session.',
+      );
+    }
   }
 
   const res = await fetch(`${base}${path}`, {

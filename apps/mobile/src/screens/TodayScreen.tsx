@@ -28,9 +28,36 @@ import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
  * Today — the log path, and nothing that competes with it (R1, R2).
  *
  * Reads entirely from the local projection, so it renders the same with the
- * radio off. The due list sits ABOVE the tallies, and that order is the
- * argument: what is due is what you did not already know. The tally is the
- * thing you came to do and will find whether or not it is at the top.
+ * radio off.
+ *
+ * ## The tally comes first, and that is a reversal
+ *
+ * This screen used to put the whole due list above the tallies, on the
+ * argument that what is due is what you did not already know, while the tally
+ * is the thing you came to do and would find anyway.
+ *
+ * A phone disproved it. Bundling gave each group a row plus an "and 3 more"
+ * line, so three groups of routine look-overs filled the screen and the egg
+ * tally — the one thing that gets tapped every single morning — started below
+ * the fold. "Would find it anyway" turned out to mean "would scroll past six
+ * rows of things that are not urgent, every day, to reach it".
+ *
+ * `VISIBLE_DUES` was supposed to prevent exactly that and could not: it counts
+ * bundles, and a bundle is not one line.
+ *
+ * **Nothing is held back above it, and the withdrawal case is why that is
+ * safe.** The obvious worry is W2: withdrawals are the highest-value safety
+ * surface in the app, so burying one under a tally would be a bad trade.
+ *
+ * It is not the trade being made. A withdrawal row has `noticeDays: 0` and
+ * says "eggs clear again after Baytril" — it appears on the day the withdrawal
+ * *ends*, so it is the all-clear, not a warning about collecting now. While
+ * produce is actually being withheld there is no due row at all.
+ *
+ * The warning for that lives on the tally and travels with it: an open tally
+ * under a withdrawal shows a `WithdrawalBanner` and will not commit without a
+ * second, deliberate press. Moving the list does not move the guard, because
+ * the guard was never in the list.
  *
  * ## Two corrections, both from watching it run on a phone
  *
@@ -53,12 +80,12 @@ import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
  */
 
 /**
- * How many bundles the morning shows before it asks.
+ * How many of the day's jobs are listed before it offers the rest.
  *
- * Five is what fits above the fold on a Pixel with the tally still visible,
- * which is the constraint that matters: the list is what you did not already
- * know, and the tally is what you came to do. Pushing the second off the
- * screen to show more of the first gets the priority backwards.
+ * No longer a fold calculation — the tallies are above these now, so nothing
+ * is being pushed off a screen. It is a readability cap: a farm in spring can
+ * produce twenty rows, and a list that long at the bottom of Today is one
+ * nobody finishes reading.
  */
 const VISIBLE_DUES = 5;
 
@@ -132,6 +159,7 @@ export function TodayScreen(): React.ReactElement {
    * is here, because it is a fact about a screen rather than about the farm.
    */
   const bundles = useMemo(() => todayBundles(dues, Date.now()), [dues]);
+
   const [showAll, setShowAll] = useState(false);
   const shown = showAll ? bundles : bundles.slice(0, VISIBLE_DUES);
 
@@ -145,27 +173,6 @@ export function TodayScreen(): React.ReactElement {
 
   return (
     <Screen title="Today">
-      {bundles.length > 0 ? (
-        <View style={styles.dues}>
-          {shown.map((bundle) => (
-            <DueBundleRow key={bundle.key} bundle={bundle} now={now} open={openDue} />
-          ))}
-
-          {bundles.length > shown.length ? (
-            <Pressable
-              onPress={() => setShowAll(true)}
-              accessibilityRole="button"
-              testID="show-all-dues"
-              style={({ pressed }) => [styles.more, { opacity: pressed ? 0.7 : 1 }]}
-            >
-              <Text style={[styles.moreLabel, { color: colors.muted }]}>
-                Show all {bundles.length}
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : null}
-
       {groups.length === 0 ? (
         <Panel label="Nothing to log yet">
           {/* Empty screens invite (UX-SPEC §6). */}
@@ -200,6 +207,31 @@ export function TodayScreen(): React.ReactElement {
           onToggle={() => setOpened(open === item.key ? null : item.key)}
         />
       ))}
+
+      {bundles.length > 0 ? (
+        <View style={styles.duesBelow}>
+          {/* Named, because a list of jobs under the tallies with no heading
+              reads as more tallies until you have read one. */}
+          <Text style={[styles.moreLabel, { color: colors.muted }]}>Also today</Text>
+
+          {shown.map((bundle) => (
+            <DueBundleRow key={bundle.key} bundle={bundle} now={now} open={openDue} />
+          ))}
+
+          {bundles.length > shown.length ? (
+            <Pressable
+              onPress={() => setShowAll(true)}
+              accessibilityRole="button"
+              testID="show-all-dues"
+              style={({ pressed }) => [styles.more, { opacity: pressed ? 0.7 : 1 }]}
+            >
+              <Text style={[styles.moreLabel, { color: colors.muted }]}>
+                Show all {bundles.length}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
     </Screen>
   );
 }
@@ -374,6 +406,7 @@ function ProductTally({
 
 const styles = StyleSheet.create({
   dues: { gap: SPACE.sm, marginBottom: SPACE.sm },
+  duesBelow: { gap: SPACE.sm, marginTop: SPACE.md },
   bundle: { gap: SPACE.xs },
   more: { alignSelf: 'flex-start', paddingVertical: SPACE.xs, paddingHorizontal: SPACE.sm },
   moreLabel: {

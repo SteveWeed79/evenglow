@@ -3,6 +3,7 @@ import {
   equipmentCreateSchema,
   inventoryCreateSchema,
   maintenanceCreateSchema,
+  type Species,
 } from '@steading/contracts';
 import { localStore } from '../db/store';
 
@@ -186,6 +187,8 @@ export interface StockItem {
   equipmentId?: string;
   supplier?: string;
   note?: string;
+  /** Who it is for. Absent means nobody said — see `inventoryShape.species`. */
+  species?: Species[];
 }
 
 const storedInventory = inventoryCreateSchema.partial();

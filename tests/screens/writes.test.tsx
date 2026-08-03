@@ -220,7 +220,15 @@ describe('what comes off them', () => {
     await aGroup();
     const screen = await mount(<LossScreen {...routeProps({ groupId: GROUP })} />);
 
-    await screen.press('step-plus-1');
+    /**
+     * `step-minus-1`, not `step-plus-1`.
+     *
+     * A screen headed "Record a loss" offering `+5` reads as five more
+     * animals. The count is still a magnitude and still goes up — only the
+     * sign the buttons show changes, so that the buttons and the heading agree.
+     */
+    expect(screen.has('step-plus-1')).toBe(false);
+    await screen.press('step-minus-1');
     await screen.press('choice-predator');
     await screen.type('loss-predator', 'Fox');
     await screen.press('save-loss');
@@ -494,5 +502,225 @@ describe('add stock follows the species you picked', () => {
     const [group] = await listGroups();
     expect(group?.purposes ?? []).not.toContain('milk');
     screen.unmount();
+  });
+});
+
+/**
+ * "I log a Chick starter on The Shelf but the option to feed my chickens it
+ * does not appear. Having to enter this data twice is a time waste."
+ *
+ * The farm had already named the sack. The feed screen asked them to type it
+ * again into a free text box beside a placeholder naming three feeds they do
+ * not own — so two spellings of one sack end up in the records and no report
+ * can add them up.
+ */
+describe('feeding from the shelf', () => {
+  async function aSack(name: string, unit: string): Promise<void> {
+    await enqueue({
+      entity: 'inventory',
+      op: 'create',
+      targetId: newId(),
+      payload: { name, kind: 'feed', unit, quantity: 50, reorderBelow: 10 },
+    });
+  }
+
+  it('offers what is on the shelf, so the name is not typed twice', async () => {
+    await aGroup();
+    await aSack('Purina Chick Starter', 'lb');
+
+    const screen = await mount(<FeedScreen {...routeProps({ groupId: GROUP })} />);
+    await screen.pressLabel('Purina Chick Starter');
+
+    // The name reached the field, so the record carries the farm's own
+    // spelling rather than a second one.
+    expect(screen.shows('feed-type')).toBe('Purina Chick Starter');
+    screen.unmount();
+  });
+
+  it('takes the measure from the shelf when it is the same question', async () => {
+    await aGroup();
+    await aSack('Purina Chick Starter', 'lb');
+
+    const screen = await mount(<FeedScreen {...routeProps({ groupId: GROUP })} />);
+    await screen.pressLabel('Purina Chick Starter');
+    await screen.press('tally-plus-1');
+    await screen.press('tally-commit');
+    screen.unmount();
+
+    // One pound, in grams — not one scoop. The shelf said pounds.
+    const [fed] = await localStore().readRecordsByEntity('feedLog');
+    expect(fed?.value).toMatchObject({ feedType: 'Purina Chick Starter', amountGrams: 454 });
+  });
+
+  /**
+   * A bale says nothing about how much goes in a trough, so it must not
+   * silently reinterpret the scoop the person is about to count.
+   */
+  it('leaves the measure alone when the shelf unit is not a feed measure', async () => {
+    await aGroup();
+    await aSack('Meadow hay', 'bale');
+
+    const screen = await mount(<FeedScreen {...routeProps({ groupId: GROUP })} />);
+    await screen.pressLabel('Meadow hay');
+    await screen.press('tally-plus-1');
+    await screen.press('tally-commit');
+    screen.unmount();
+
+    // Still a scoop, the default.
+    const [fed] = await localStore().readRecordsByEntity('feedLog');
+    expect(fed?.value).toMatchObject({ feedType: 'Meadow hay', amountGrams: 907 });
+  });
+
+  /** Only feed. A box of syringes is not something anybody puts in a trough. */
+  it('offers only what is feed', async () => {
+    await aGroup();
+    await aSack('Purina Chick Starter', 'lb');
+    await enqueue({
+      entity: 'inventory',
+      op: 'create',
+      targetId: newId(),
+      payload: { name: 'Syringes', kind: 'medicine', unit: 'each', quantity: 20 },
+    });
+
+    const screen = await mount(<FeedScreen {...routeProps({ groupId: GROUP })} />);
+    const offered = screen.labels();
+
+    expect(offered).toContain('Purina Chick Starter');
+    expect(offered).not.toContain('Syringes');
+    screen.unmount();
+  });
+});
+
+/**
+ * "If it's chick food… it's not for goats, well in most cases."
+ *
+ * The hedge is the design. A keeper who puts chick crumb in front of a poorly
+ * bantam, or scratch in front of the goats because it is the sack that is
+ * open, is doing an ordinary thing — so the shelf sorts and never argues.
+ */
+describe('who the feed is for', () => {
+  async function aSackFor(name: string, species?: string[]): Promise<void> {
+    await enqueue({
+      entity: 'inventory',
+      op: 'create',
+      targetId: newId(),
+      payload: {
+        name,
+        kind: 'feed',
+        unit: 'lb',
+        quantity: 50,
+        ...(species === undefined ? {} : { species }),
+      },
+    });
+  }
+
+  it('records who a feed is for', async () => {
+    await aGroup();
+    const screen = await mount(<AddItemScreen {...routeProps({})} />);
+
+    await screen.type('item-name', 'Purina Chick Starter');
+    await screen.press('item-species-chicken');
+    await screen.press('save-item');
+    screen.unmount();
+
+    const [item] = await listInventory();
+    expect(item).toMatchObject({ name: 'Purina Chick Starter', species: ['chicken'] });
+  });
+
+  /** Nineteen chips for animals nobody owns is a list that gets skipped. */
+  it('offers only the species the farm keeps', async () => {
+    await aGroup();
+    const screen = await mount(<AddItemScreen {...routeProps({})} />);
+
+    expect(screen.has('item-species-chicken')).toBe(true);
+    expect(screen.has('item-species-goat')).toBe(false);
+    screen.unmount();
+  });
+
+  it('puts their feed first without hiding the rest', async () => {
+    await aGroup();
+    await aSackFor('Goat Mix', ['goat']);
+    await aSackFor('Chick Starter', ['chicken']);
+
+    const screen = await mount(<FeedScreen {...routeProps({ groupId: GROUP })} />);
+    const offered = screen.labels();
+
+    // Both reachable — the goats' sack is still a thing you can put in front
+    // of a hen if it is what is open.
+    expect(offered).toContain('Chick Starter');
+    expect(offered).toContain('Goat Mix');
+    expect(offered.indexOf('Chick Starter')).toBeLessThan(offered.indexOf('Goat Mix'));
+    screen.unmount();
+  });
+
+  /**
+   * An unanswered question is not a statement that the sack is for something
+   * else — and every item on every shelf predates the field.
+   */
+  it('treats feed with nobody named as theirs, not as somebody else’s', async () => {
+    await aGroup();
+    await aSackFor('Goat Mix', ['goat']);
+    await aSackFor('Scratch grain');
+
+    const screen = await mount(<FeedScreen {...routeProps({ groupId: GROUP })} />);
+    const offered = screen.labels();
+
+    expect(offered.indexOf('Scratch grain')).toBeLessThan(offered.indexOf('Goat Mix'));
+    screen.unmount();
+  });
+});
+
+/**
+ * "The set-eggs screen does not list breeds. Each is a little different I
+ * assume?"
+ *
+ * Not for the dates — see the note on `incubationShape.breedId`. Incubation
+ * length is a species property and hardly a breed one at all, and a per-breed
+ * table would be inventing precision.
+ *
+ * It matters for what comes out. The library knows when a Rhode Island Red
+ * starts to lay; without this the hatch produces chicks the app can say
+ * nothing about, and the eggs were the last moment anybody knew for certain
+ * what they were.
+ */
+describe('what is under the broody', () => {
+  it('records the breed with the set', async () => {
+    const screen = await mount(<SetEggsScreen />);
+
+    await screen.press('incubation-breed-chicken-rhode-island-red');
+    await screen.press('save-incubation');
+    screen.unmount();
+
+    const [set] = await listIncubations();
+    expect(set).toMatchObject({ species: 'chicken', breedId: 'chicken-rhode-island-red' });
+  });
+
+  /** Optional, and it must be: a bought set is often genuinely mixed. */
+  it('sets them without one', async () => {
+    const screen = await mount(<SetEggsScreen />);
+
+    await screen.press('save-incubation');
+    screen.unmount();
+
+    const [set] = await listIncubations();
+    expect(set?.species).toBe('chicken');
+    expect(set?.breedId).toBeUndefined();
+  });
+
+  /**
+   * The same bug the group screen already had: a breed left set across a
+   * species change is invisible, because the chip that showed it is gone.
+   */
+  it('drops a breed the new species cannot be', async () => {
+    const screen = await mount(<SetEggsScreen />);
+
+    await screen.press('incubation-breed-chicken-rhode-island-red');
+    await screen.pressLabel('Ducks');
+    await screen.press('save-incubation');
+    screen.unmount();
+
+    const [set] = await listIncubations();
+    expect(set?.species).toBe('duck');
+    expect(set?.breedId).toBeUndefined();
   });
 });

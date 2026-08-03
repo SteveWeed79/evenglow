@@ -1,6 +1,12 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { CARE_KINDS, type CareKind, careIntervalDays, newId } from '@steading/contracts';
+import {
+  CARE_KIND_LABELS,
+  CARE_KINDS,
+  type CareKind,
+  careIntervalDays,
+  newId,
+} from '@steading/contracts';
 import { lastCareBySubject, listCareLogs } from '@steading/core/read/care';
 import { listGroups } from '@steading/core/read/groups';
 import { Chip, Failure, Field, Primary, TextField, useSaver } from '../components/Form';
@@ -32,15 +38,8 @@ import { FONTS, SPACE, TYPE } from '../theme/tokens';
  * interval kept.
  */
 
-const LABELS: Record<CareKind, string> = {
-  worming: 'Wormed',
-  'hoof-trim': 'Trimmed feet',
-  mineral: 'Minerals',
-  vaccination: 'Vaccinated',
-  'parasite-check': 'Checked for parasites',
-  dental: 'Teeth',
-  'health-check': 'Looked over',
-};
+/** The canonical table lives in contracts, so history reads the same words. */
+const LABELS = CARE_KIND_LABELS;
 
 export function CareLogScreen({ route }: ScreenProps<'CareLog'>): React.ReactElement {
   const { groupId } = route.params;

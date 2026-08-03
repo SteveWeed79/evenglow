@@ -251,9 +251,54 @@ function schedule(delay: number, transport?: SyncTransport): void {
   }, delay);
 }
 
-/** Call after enqueueing, so a log reaches the server without waiting for a timer. */
-export function nudge(transport?: SyncTransport): void {
+export interface NudgeOptions {
+  /**
+   * A person pressed "Try sending now", so try — whatever this module
+   * currently believes about the network.
+   *
+   * ## Why the belief has to be overridable
+   *
+   * `online` is set from `addNetworkStateListener`. That listener reports
+   * `isConnected: false` during transient Android transitions and leaves it
+   * `undefined` on some configurations, and `undefined === true` is false — so
+   * the engine can sit believing it is offline on a phone showing four bars.
+   * `tick` returns before flushing anything in that state, which is right for
+   * a timer and wrong for a button: the press did nothing and said nothing
+   * about having done nothing.
+   *
+   * That is the same defect as a "Try again" that retries the wrong thing. A
+   * manual override that obeys the state it exists to override is a
+   * decoration.
+   *
+   * ## Why overruling it is safe
+   *
+   * **The flush is the authority on whether there is a network; the listener
+   * is only ever a hint.** A forced attempt with no signal fails as a network
+   * error, and the queue has always handled that: the work stays queued, the
+   * attempt count rises, nothing is lost. The cost of being wrong is one round
+   * trip that a person explicitly asked for.
+   *
+   * The automatic path keeps the flag exactly as it was. A phone in a barn
+   * must not spend its battery on a radio that is not there, and only a
+   * deliberate press gets to say otherwise.
+   */
+  force?: boolean;
+}
+
+/**
+ * Call after enqueueing, so a log reaches the server without waiting for a
+ * timer — or with `force`, because somebody asked.
+ */
+export function nudge(transport?: SyncTransport, options: NudgeOptions = {}): void {
   consecutiveFailures = 0;
+
+  if (options.force === true) {
+    // Cleared rather than bypassed for this one tick: if the belief was stale,
+    // it stays cleared and the loop resumes normally. If it was right, the
+    // failed flush is what corrects it, and the OS listener will say so again.
+    online = true;
+  }
+
   if (running) schedule(0, transport);
   void publish();
 }

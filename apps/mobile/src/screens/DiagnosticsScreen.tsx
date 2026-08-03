@@ -160,7 +160,16 @@ export function DiagnosticsScreen(): React.ReactElement {
       ) : null}
 
       <View style={styles.actions}>
-        <Secondary label="Try sending now" icon="try-again" onPress={() => nudge()} testID="nudge" />
+        {/* Forced, because this is the button somebody presses when they do
+            not believe the app. Without it the press obeys the same `online`
+            flag it exists to overrule, and does nothing while saying nothing
+            — see NudgeOptions.force. */}
+        <Secondary
+          label="Try sending now"
+          icon="try-again"
+          onPress={() => nudge(undefined, { force: true })}
+          testID="nudge"
+        />
         <Secondary
           label={pulling ? 'Fetching…' : 'Fetch from the farm'}
           icon="export"

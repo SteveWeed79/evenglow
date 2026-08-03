@@ -37,6 +37,41 @@ describe('a farm that has never been asked', () => {
     const site = await readSite();
     expect(site?.enterprises).toEqual(['stock', 'growing', 'iron']);
   });
+
+  /**
+   * The farm on the device that reported this had no site record at all, and
+   * the screen was blank — title, and nothing under it, permanently.
+   *
+   * `readSite` returns null for "no site record yet". `useLive` returns null
+   * for "not read yet". Through the hook those are the same value, so the
+   * screen showed `Loading` forever. Every test below seeded a site first,
+   * which is why ~900 passing tests said nothing.
+   *
+   * A site record is made by naming your site under Growing. Nothing requires
+   * you to go there first, and someone who only keeps animals never would.
+   */
+  it('opens for a farm that has never named a site', async () => {
+    const screen = await mount(<MyFarmScreen />);
+
+    for (const key of ['stock', 'growing', 'iron']) {
+      expect(screen.has(`enterprise-${key}`), key).toBe(true);
+    }
+    screen.unmount();
+  });
+
+  /** And answering it works, which means minting the site the farm never had. */
+  it('records the answer, making the site record on the way', async () => {
+    const screen = await mount(<MyFarmScreen />);
+
+    await screen.press('enterprise-growing');
+    await screen.press('enterprise-iron');
+    await screen.press('save-my-farm');
+    screen.unmount();
+
+    const site = await readSite();
+    expect(site?.enterprises).toEqual(['stock']);
+    expect(site?.id).not.toBe('');
+  });
 });
 
 describe('choosing what you run', () => {
