@@ -1,6 +1,31 @@
-# Weather — a proposal, not a settled decision
+# Weather — a proposal, and what was actually built
 
-Status: **proposed**. Nothing here is built.
+Status: **partly built, and three of its recommendations were overruled by the
+farm.** The reasoning below is kept intact because it is why the shipped shape
+looks as it does; where the farm decided otherwise, that is recorded here at the
+top rather than quietly edited into the body.
+
+## What shipped
+
+| | the plan said | what shipped | why |
+| --- | --- | --- | --- |
+| **What comes first** | `weatherLog` — the farm's own rainfall readings | **the forecast, and no logging at all** | *"I want a weather forecast not weather user logged."* Nothing asks anyone to type in the weather. |
+| **Provider** | Open-Meteo, behind a Steading proxy built before the bill | **`api.weather.gov` (NWS), straight from the device** | *"Use the NAOO weather API please."* It is a work of the US government and in the public domain — no key, no licence tier, nothing to keep out of the bundle. The proxy becomes an optimisation instead of a condition of shipping. |
+| **A forecast screen** | none — *"every phone already has one, better"* | **a screen: the rest of today by the hour, then seven days** | Overruled deliberately. The argument was that a warning beats a table; that is still true and the warnings are still worth building, but they are not a substitute for the thing that was asked for. |
+| **Getting the position** | a manual pin, GPS discouraged | **both, GPS offered first** | A refused permission is a dead end for the whole feature, so the typed address search is the way back rather than the only way in. Both round before storing. |
+
+**The cost of NWS, stated plainly:** it is the **United States only**. `/points`
+answers 404 outside US territory and there is no fallback. A farm elsewhere gets
+an honest "outside the forecast area" and an unaffected rest-of-app. It also
+publishes about fourteen half-day periods and no more, so seven days is the
+ceiling at any price, and it carries a chance of rain and no quantity.
+
+**What has not been built:** the warnings in §3 — freezing water, poultry heat
+stress, ruminant THI, a cold snap on an imminent birth, a wet day blocking
+shearing, and frost. Those are the half of this document that makes the forecast
+Steading's rather than the phone's, and they are next.
+
+---
 
 This document exists because the ask — "roll a weather tab into the plan" —
 collides with two things already written down, and CLAUDE.md says to stop and

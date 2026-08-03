@@ -16,6 +16,7 @@ import { Icon, type IconName } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { Tally } from '../components/Tally';
+import { WeatherRow } from '../components/WeatherRow';
 import { WithdrawalBanner } from '../components/WithdrawalBanner';
 import { useDues } from '../hooks/useDues';
 import { useGroups } from '../hooks/useGroups';
@@ -173,6 +174,11 @@ export function TodayScreen(): React.ReactElement {
 
   return (
     <Screen title="Today">
+      {/* Above the tallies, and it is one line — see WeatherRow. Weather read
+          after the eggs are logged is weather read after the decision it was
+          meant to inform. */}
+      <WeatherRow />
+
       {groups.length === 0 ? (
         <Panel label="Nothing to log yet">
           {/* Empty screens invite (UX-SPEC §6). */}

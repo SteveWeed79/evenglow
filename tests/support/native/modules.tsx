@@ -257,6 +257,48 @@ export async function manipulateAsync(
   return { uri: out };
 }
 
+// ── expo-location ────────────────────────────────────────────────────────────
+
+/**
+ * The GPS, scripted.
+ *
+ * Steerable rather than real, because the three states worth testing are ones
+ * a real device cannot be asked to produce on demand: permission granted,
+ * permission refused, and granted-but-no-fix (indoors, which is where a farm
+ * opens the app to check whether to go out).
+ *
+ * The refused case is the one that matters most. It is not an error — the typed
+ * address search is the way back — and a fake that only ever granted would hide
+ * the whole fallback path from the suite.
+ */
+export const gps = {
+  granted: true,
+  /** Set to false to model a granted permission that still cannot get a fix. */
+  fixes: true,
+  /** Deliberately more precise than anything is allowed to store. */
+  at: { latitude: 44.47588, longitude: -73.21207 },
+};
+
+export const Accuracy = {
+  Lowest: 1,
+  Low: 2,
+  Balanced: 3,
+  High: 4,
+  Highest: 5,
+  BestForNavigation: 6,
+} as const;
+
+export async function requestForegroundPermissionsAsync(): Promise<{ granted: boolean }> {
+  return { granted: gps.granted };
+}
+
+export async function getCurrentPositionAsync(): Promise<{
+  coords: { latitude: number; longitude: number };
+}> {
+  if (!gps.fixes) throw new Error('Location request timed out');
+  return { coords: { ...gps.at } };
+}
+
 export class Directory {
   readonly uri: string;
 

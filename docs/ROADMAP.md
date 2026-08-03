@@ -176,26 +176,40 @@ connection owned and `BEGIN IMMEDIATE` driven on it.
 
 ---
 
-## 4 — Weather, in the order `WEATHER-PLAN.md` sets out
+## 4 — Weather
 
-The plan is written and its tab question has since answered itself: the Farm hub
-means a strip on Today and later a row under the Farm, no fifth tab, no UX-SPEC
-amendment.
+The tab question answered itself: the Farm hub means a **row on Today** above the
+tallies and a pushed screen behind it. No fifth tab, no UX-SPEC amendment.
 
-1. **`weatherLog`** — append-only observations: rainfall, a temperature, a note.
-   No provider, no key, no coordinates, no decisions. Ships on its own.
-2. **Coordinates on `site`** — rounded to two decimals (~1 km) on purpose, and
-   manually pinned rather than taken from GPS. A farm's coordinates identify a
-   family's home; the app should never hold better than it needs.
-3. **The server proxy** — *before there is a bill*. Open-Meteo's keyless tier is
-   non-commercial only and the Play Store track makes this commercial; the paid
-   tier authenticates with a query-string key, which invariant 12 forbids in an
-   APK. Behind a proxy that migration is a deploy. From the device it is a
-   rollout to people who never update.
-4. **The cache table and the staleness rule** — never in the outbox, never on
-   the wire, and not shown at all past 48 hours.
-5. **The warnings** — water freezing, poultry heat stress, ruminant THI, a cold
-   snap on an imminent birth, a wet day blocking shearing, **and frost**.
+**Done.**
+
+1. ~~**`weatherLog`**~~ — **not built, and deliberately.** *"I want a weather
+   forecast not weather user logged."* Nothing in the app asks anybody to type
+   in the weather. The plan had this first on the argument that a rain total is
+   what a farm goes back to; the farm's answer was that a forecast is what it
+   opens the app for. It can still be added later — it commits to nothing.
+2. **Coordinates on `site`** — rounded to two decimals (~1 km) **on the way in**,
+   so nowhere in the app holds better. Both doors: GPS via `expo-location`, and
+   a typed address through the US Census geocoder for a refused permission.
+3. ~~**The server proxy**~~ — **no longer a condition of shipping.**
+   `api.weather.gov` is a work of the US government and in the public domain:
+   no key, no licence tier, nothing invariant 12 could object to. The proxy
+   becomes an optimisation for sharing one fetch across a farm's devices.
+4. **The cache table and the staleness rule** — one row, never in the outbox,
+   never on the wire, and not shown at all past 48 hours. Judged on the
+   service's issuance time, not on when the device fetched.
+5. **The screen** — the rest of today by the hour, then seven days with a rain
+   column. The plan argued against a forecast screen; that was overruled.
+
+**What it costs, stated plainly:** NWS is the **United States only**, publishes
+about seven days and no more, and gives a chance of rain rather than an amount.
+The screen says the first of those honestly rather than showing an empty box.
+
+**Still to do.**
+
+6. **The warnings** — water freezing, poultry heat stress, ruminant THI, a cold
+   snap on an imminent birth, a wet day blocking shearing, **and frost**. This
+   is the half that makes the forecast Steading's rather than the phone's.
 
 **Frost was on this list as not-buildable, and that was wrong.** The objection
 — only 15 of 70 library varieties carry a cold floor, all perennials — is only

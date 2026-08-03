@@ -256,6 +256,56 @@ const MARKS: Record<string, { readonly 32: readonly El[]; readonly 24: readonly 
     32: [['P', 'M6 26V15a10 10 0 0 1 20 0v11'], ['P', 'M3 26h26']],
     24: [['P', 'M5 20V11a7 7 0 0 1 14 0v9'], ['P', 'M3 20h18']],
   },
+
+  /**
+   * The sky, in the seven states `Condition` has.
+   *
+   * One cloud outline, drawn once and reused at two heights: the six that are
+   * not `sky-clear` share it, sitting low where nothing falls out of it and
+   * lifted where something does. That is deliberate — a forecast strip is read
+   * by shape at a glance across seven days, and seven unrelated drawings would
+   * have to be read one at a time. What differs between them is only what is
+   * happening underneath, which is the thing that differs outside.
+   *
+   * `sun-mode` already draws a sun and is not reused here. It is the bright-sun
+   * theme control, and an icon that means "switch the display" cannot also mean
+   * "clear tomorrow" — the day somebody taps the forecast expecting the theme
+   * is the day the shared drawing was a false economy.
+   */
+  'sky-clear': {
+    32: [['C', 16, 16, 6.5, false], ['P', 'M16 4v3.5M16 24.5V28M4 16h3.5M24.5 16H28M7.4 7.4l2.5 2.5M22.1 22.1l2.5 2.5M24.6 7.4l-2.5 2.5M9.9 22.1l-2.5 2.5']],
+    24: [['C', 12, 12, 5, false], ['P', 'M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8']],
+  },
+  /**
+   * The cloud sits low when nothing falls out of it and is lifted when
+   * something does, so the six share one silhouette at two heights. Every
+   * drawing stays inside the master's margin — 4 units at 32, 3 at 24 — which
+   * `check:icons` does not verify and the sheet upstream does.
+   */
+  'sky-cloud': {
+    32: [['P', 'M7.5 22h14.5a5 5 0 0 0-2.2-9.5A7 7 0 0 0 7 14 4.2 4.2 0 0 0 7.5 22Z']],
+    24: [['P', 'M6 16.5h11a3.8 3.8 0 0 0-1.7-7.2A5.3 5.3 0 0 0 5.6 10.5 3.2 3.2 0 0 0 6 16.5Z']],
+  },
+  'sky-fog': {
+    32: [['P', 'M8 17h13a4.5 4.5 0 0 0-2-8.5A6.3 6.3 0 0 0 7.6 10 3.8 3.8 0 0 0 8 17Z'], ['P', 'M6 22h20M9 26.5h14']],
+    24: [['P', 'M6 12.5h10a3.4 3.4 0 0 0-1.5-6.4A4.8 4.8 0 0 0 5.7 7 2.9 2.9 0 0 0 6 12.5Z'], ['P', 'M4.5 16h15M7 20h10']],
+  },
+  'sky-drizzle': {
+    32: [['P', 'M8 17h13a4.5 4.5 0 0 0-2-8.5A6.3 6.3 0 0 0 7.6 10 3.8 3.8 0 0 0 8 17Z'], ['P', 'M11 19.5v2.5M16 19.5v2.5M21 19.5v2.5M13.5 24.5v2M18.5 24.5v2']],
+    24: [['P', 'M6 12.5h10a3.4 3.4 0 0 0-1.5-6.4A4.8 4.8 0 0 0 5.7 7 2.9 2.9 0 0 0 6 12.5Z'], ['P', 'M8 14.5v2M12 14.5v2M16 14.5v2M10 18.5v1.5M14 18.5v1.5']],
+  },
+  'sky-rain': {
+    32: [['P', 'M8 17h13a4.5 4.5 0 0 0-2-8.5A6.3 6.3 0 0 0 7.6 10 3.8 3.8 0 0 0 8 17Z'], ['P', 'M11 19v5M16 19v7M21 19v5']],
+    24: [['P', 'M6 12.5h10a3.4 3.4 0 0 0-1.5-6.4A4.8 4.8 0 0 0 5.7 7 2.9 2.9 0 0 0 6 12.5Z'], ['P', 'M8 14v3.5M12 14v5M16 14v3.5']],
+  },
+  'sky-snow': {
+    32: [['P', 'M8 17h13a4.5 4.5 0 0 0-2-8.5A6.3 6.3 0 0 0 7.6 10 3.8 3.8 0 0 0 8 17Z'], ['P', 'M9.5 21.5h3.5M11.25 19.75v3.5M19 21.5h3.5M20.75 19.75v3.5M14.25 26h3.5M16 24.25v3.5']],
+    24: [['P', 'M6 12.5h10a3.4 3.4 0 0 0-1.5-6.4A4.8 4.8 0 0 0 5.7 7 2.9 2.9 0 0 0 6 12.5Z'], ['P', 'M7 16h2.6M8.3 14.7v2.6M14.4 16H17M15.7 14.7v2.6M10.7 19.4h2.6M12 18.1v2.6']],
+  },
+  'sky-storm': {
+    32: [['P', 'M8 17h13a4.5 4.5 0 0 0-2-8.5A6.3 6.3 0 0 0 7.6 10 3.8 3.8 0 0 0 8 17Z'], ['P', 'M17.5 18 13 23.5h3.5L14 28']],
+    24: [['P', 'M6 12.5h10a3.4 3.4 0 0 0-1.5-6.4A4.8 4.8 0 0 0 5.7 7 2.9 2.9 0 0 0 6 12.5Z'], ['P', 'M13 13.5 9.5 18h3L10.5 21']],
+  },
 };
 
 export const ICON_NAMES = Object.keys(MARKS) as readonly IconName[];

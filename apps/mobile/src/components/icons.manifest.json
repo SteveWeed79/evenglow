@@ -1,6 +1,6 @@
 {
   "name": "steading-icons",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "generatedFrom": "Steading Icons v3.dc.html",
   "masters": {
     "24": {
@@ -480,6 +480,62 @@
     {
       "name": "arch",
       "group": "charm",
+      "elements": {
+        "24": 2,
+        "32": 2
+      }
+    },
+    {
+      "name": "sky-clear",
+      "group": "weather",
+      "elements": {
+        "24": 2,
+        "32": 2
+      }
+    },
+    {
+      "name": "sky-cloud",
+      "group": "weather",
+      "elements": {
+        "24": 1,
+        "32": 1
+      }
+    },
+    {
+      "name": "sky-fog",
+      "group": "weather",
+      "elements": {
+        "24": 2,
+        "32": 2
+      }
+    },
+    {
+      "name": "sky-drizzle",
+      "group": "weather",
+      "elements": {
+        "24": 2,
+        "32": 2
+      }
+    },
+    {
+      "name": "sky-rain",
+      "group": "weather",
+      "elements": {
+        "24": 2,
+        "32": 2
+      }
+    },
+    {
+      "name": "sky-snow",
+      "group": "weather",
+      "elements": {
+        "24": 2,
+        "32": 2
+      }
+    },
+    {
+      "name": "sky-storm",
+      "group": "weather",
       "elements": {
         "24": 2,
         "32": 2
