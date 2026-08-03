@@ -16,6 +16,7 @@ import { Row } from '../components/Form';
 import { Icon } from '../components/Icon';
 import { Loading, Missing } from '../components/Missing';
 import { Notes } from '../components/Notes';
+import { Photos } from '../components/Photos';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { WithdrawalBanner } from '../components/WithdrawalBanner';
@@ -119,6 +120,10 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
 
       <Notes subjectEntity="flock" subjectId={groupId} subject={group.name} />
 
+      {/* Evidence: a wound, a kill. The one a keeper reaches for and the one
+          that cannot be taken afterwards. */}
+      <Photos subjectId={groupId} what={group.name} />
+
       {/* ## Four acts, then the rest behind a tap
           Nine rows of equal weight, each with an icon and a line of
           explanation, is eighteen lines of text and no ranking — read for the
@@ -204,6 +209,18 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
             testID="go-weigh"
             onPress={() => nav.navigate('Weigh', { groupId })}
           />
+          {/* Only where the keeper said fibre. A clip on a flock of layers is
+              not a thing, and offering it would be the same mistake the egg
+              tally made before `productsOf` — a row nobody will ever fill in,
+              every time they open the group. */}
+          {(group.purposes ?? []).includes('fibre') ? (
+            <Row
+              title="Record a clip"
+              icon="basic-full"
+              testID="go-shearing"
+              onPress={() => nav.navigate('Shearing', { groupId })}
+            />
+          ) : null}
           <Row
             title="Named animals"
             icon="stock"

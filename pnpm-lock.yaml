@@ -127,18 +127,30 @@ importers:
       expo-crypto:
         specifier: ^57.0.1
         version: 57.0.1(expo@57.0.8)
+      expo-file-system:
+        specifier: ^57.0.1
+        version: 57.0.1(expo@57.0.8)(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.4))
       expo-font:
         specifier: ~57.0.1
         version: 57.0.1(expo@57.0.8)(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.4))(react@19.2.4)
       expo-haptics:
         specifier: ~57.0.1
         version: 57.0.1(expo@57.0.8)
+      expo-image-manipulator:
+        specifier: ^57.0.7
+        version: 57.0.7(expo@57.0.8)
+      expo-image-picker:
+        specifier: ^57.0.7
+        version: 57.0.7(expo@57.0.8)
       expo-network:
         specifier: ~57.0.1
         version: 57.0.1(expo@57.0.8)(react@19.2.4)
       expo-secure-store:
         specifier: ~57.0.1
         version: 57.0.1(expo@57.0.8)
+      expo-sharing:
+        specifier: ^57.0.8
+        version: 57.0.8(expo@57.0.8)(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
       expo-sqlite:
         specifier: ~57.0.1
         version: 57.0.1(expo@57.0.8)(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.4))(react@19.2.4)
@@ -2102,6 +2114,21 @@ packages:
     peerDependencies:
       expo: '*'
 
+  expo-image-loader@57.0.1:
+    resolution: {integrity: sha512-uhrZKLT/cTl2mXyR28kPpVkS5O+PK9N1QA/07IFM4f5T4g0lTW1JHT3NEWwEEsGFldPmVX4j7LwUVVZxE+woug==}
+    peerDependencies:
+      expo: '*'
+
+  expo-image-manipulator@57.0.7:
+    resolution: {integrity: sha512-opdXzhraozdHaUukC339cP15KzLNcRDeOSABFeZ6ULoTaPNKJeXJ/4NVVOgqi9hdTinvrO8NVZf06j621mc7Kw==}
+    peerDependencies:
+      expo: '*'
+
+  expo-image-picker@57.0.7:
+    resolution: {integrity: sha512-aPZis1VeeAOeWrM/VID/As7/hF/WM6egtN2AUY+ODV97oBKfAZcGHMw7MR/5BoEy3HXzR5n1ZSYMEwnHBhICvg==}
+    peerDependencies:
+      expo: '*'
+
   expo-keep-awake@57.0.1:
     resolution: {integrity: sha512-28lkFImeXTS+bhAjuCFV7w7tW5bXg27BJVrxv+nC/nyYa86qEa0oFeHwqol6ha5k4pdVDQgBF09GM4A1k76Ssg==}
     peerDependencies:
@@ -2141,6 +2168,13 @@ packages:
   expo-server@57.0.1:
     resolution: {integrity: sha512-sBfVDH6dmKVHZxqUxbfkzS00PZELMZt1IpnHKxcOTMZtR/t7CtRAFrbXcisG+EyzeqHSVDacZT+1tbYfZt5D8w==}
     engines: {node: '>=20.16.0'}
+
+  expo-sharing@57.0.8:
+    resolution: {integrity: sha512-ZjiA09iJjzveachyBlbIijSH++fiacdvuenxb/gsdW21V3SUSxMQd+krPmafnhnMus5aBqpP0TXCBfBJN+0Bfg==}
+    peerDependencies:
+      expo: '*'
+      react: '*'
+      react-native: '*'
 
   expo-sqlite@57.0.1:
     resolution: {integrity: sha512-I6KoUvfGIiROTKxr5D3H+jRIGA/iEvWEtqHK4XMukAA7tVTinz/YdS8zOz6/DdG6vgrNmvF7gyOcbhLinlfxzQ==}
@@ -6006,6 +6040,20 @@ snapshots:
     dependencies:
       expo: 57.0.8(@babel/core@7.29.7)(@expo/dom-webview@57.0.1)(react-dom@19.2.4(react@19.2.4))(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
 
+  expo-image-loader@57.0.1(expo@57.0.8):
+    dependencies:
+      expo: 57.0.8(@babel/core@7.29.7)(@expo/dom-webview@57.0.1)(react-dom@19.2.4(react@19.2.4))(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
+
+  expo-image-manipulator@57.0.7(expo@57.0.8):
+    dependencies:
+      expo: 57.0.8(@babel/core@7.29.7)(@expo/dom-webview@57.0.1)(react-dom@19.2.4(react@19.2.4))(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
+      expo-image-loader: 57.0.1(expo@57.0.8)
+
+  expo-image-picker@57.0.7(expo@57.0.8):
+    dependencies:
+      expo: 57.0.8(@babel/core@7.29.7)(@expo/dom-webview@57.0.1)(react-dom@19.2.4(react@19.2.4))(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
+      expo-image-loader: 57.0.1(expo@57.0.8)
+
   expo-keep-awake@57.0.1(expo@57.0.8)(react@19.2.4):
     dependencies:
       expo: 57.0.8(@babel/core@7.29.7)(@expo/dom-webview@57.0.1)(react-dom@19.2.4(react@19.2.4))(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
@@ -6043,6 +6091,18 @@ snapshots:
       expo: 57.0.8(@babel/core@7.29.7)(@expo/dom-webview@57.0.1)(react-dom@19.2.4(react@19.2.4))(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
 
   expo-server@57.0.1: {}
+
+  expo-sharing@57.0.8(expo@57.0.8)(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.4))(react@19.2.4)(typescript@5.9.3):
+    dependencies:
+      '@expo/config-plugins': 57.0.6(typescript@5.9.3)
+      '@expo/config-types': 57.0.2
+      '@expo/plist': 0.8.1
+      expo: 57.0.8(@babel/core@7.29.7)(@expo/dom-webview@57.0.1)(react-dom@19.2.4(react@19.2.4))(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
+      react: 19.2.4
+      react-native: 0.86.2(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.4)
+    transitivePeerDependencies:
+      - supports-color
+      - typescript
 
   expo-sqlite@57.0.1(expo@57.0.8)(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.4))(react@19.2.4):
     dependencies:

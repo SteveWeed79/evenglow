@@ -140,16 +140,21 @@ export interface StoreDeps {
 }
 
 /**
- * `node:crypto` is present in Node and in the browser, which is every context
- * that is not a handset. Keeping it as the default means the server and the
- * whole test suite carry on unchanged; only the platform that lacks it has to
- * say so.
+ * No default, and that is the fix rather than an inconvenience.
+ *
+ * It used to default to `crypto.randomUUID()`, on the reasoning that Node and
+ * the browser both have it and only the handset does not. That reasoning is
+ * exactly backwards: **the platform that lacks it is the only one that ships
+ * to a farm.** The default meant every test took a path the device could not,
+ * and the app worked everywhere except where it mattered.
+ *
+ * Requiring it costs each caller one line and buys the guarantee that nobody
+ * can reach a Node-only global by forgetting to look. `apps/mobile/src/db/`
+ * passes `expo-crypto`; the tests pass Node's.
  */
-const DEFAULT_DEPS: StoreDeps = { randomUUID: () => crypto.randomUUID() };
-
 export async function openSqliteStore(
   driver: SqlDriver,
-  deps: StoreDeps = DEFAULT_DEPS,
+  deps: StoreDeps,
 ): Promise<LocalStore> {
   await migrate(driver);
 

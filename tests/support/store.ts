@@ -5,7 +5,7 @@ import type { SqlDriver } from '@steading/core/db/driver';
 import { openSqliteStore } from '@steading/core/db/sqlite-store';
 import { localStore, resetLocalStore, setLocalStore } from '@steading/core/db/store';
 import { ENTITIES } from '@steading/contracts';
-import { nodeSqlDriver } from './sqlite';
+import { nodeIds, nodeSqlDriver } from './sqlite';
 
 /**
  * A fresh local store for each test, on SQLite.
@@ -30,7 +30,7 @@ export async function freshStore(): Promise<void> {
 
   file = join(mkdtempSync(join(tmpdir(), 'steading-')), 'store.db');
   driver = nodeSqlDriver(file);
-  setLocalStore(await openSqliteStore(driver));
+  setLocalStore(await openSqliteStore(driver, nodeIds()));
 }
 
 /**
@@ -45,7 +45,7 @@ export async function simulateRestart(): Promise<void> {
 
   driver = nodeSqlDriver(file);
   resetLocalStore();
-  setLocalStore(await openSqliteStore(driver));
+  setLocalStore(await openSqliteStore(driver, nodeIds()));
 }
 
 /** The current driver, for suites that need to injure the storage layer. */

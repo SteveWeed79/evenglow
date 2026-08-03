@@ -14,8 +14,10 @@ import { EditGroupScreen } from '../screens/EditGroupScreen';
 import { FeedScreen } from '../screens/FeedScreen';
 import { GroupScreen } from '../screens/GroupScreen';
 import { HarvestScreen } from '../screens/HarvestScreen';
+import { ExportScreen } from '../screens/ExportScreen';
 import { GrowingScreen } from '../screens/GrowingScreen';
 import { IronScreen } from '../screens/IronScreen';
+import { JobsScreen } from '../screens/JobsScreen';
 import { QuickAddScreen } from '../screens/QuickAddScreen';
 import { StockScreen } from '../screens/StockScreen';
 import { MyFarmScreen } from '../screens/MyFarmScreen';
@@ -31,6 +33,7 @@ import { MembersScreen } from '../screens/MembersScreen';
 import { PickVarietyScreen } from '../screens/PickVarietyScreen';
 import { PlantingScreen } from '../screens/PlantingScreen';
 import { ProduceScreen } from '../screens/ProduceScreen';
+import { ShearingScreen } from '../screens/ShearingScreen';
 import { ServiceDoneScreen } from '../screens/ServiceDoneScreen';
 import { SetEggsScreen } from '../screens/SetEggsScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
@@ -76,6 +79,10 @@ export type RootParamList = {
   Stock: undefined;
   Growing: undefined;
   Iron: undefined;
+  /** Records out, as spreadsheets. */
+  Export: undefined;
+  /** Chores the farm wrote down itself — the one authored due kind. */
+  Jobs: undefined;
   Inbox: undefined;
   Diagnostics: undefined;
   Members: undefined;
@@ -90,6 +97,8 @@ export type RootParamList = {
   Treatment: { groupId: string };
   CareLog: { groupId: string };
   Weigh: { groupId: string };
+  /** A clip. Offered only on a group kept for fibre. */
+  Shearing: { groupId: string };
   Produce: { groupId: string };
   Feed: { groupId: string };
   Loss: { groupId: string };
@@ -133,6 +142,8 @@ export function Root({ onSignedOut }: { onSignedOut: () => void }): React.ReactE
       <Stack.Screen name="Stock" component={StockScreen} />
       <Stack.Screen name="Growing" component={GrowingScreen} />
       <Stack.Screen name="Iron" component={IronScreen} />
+      <Stack.Screen name="Export" component={ExportScreen} />
+      <Stack.Screen name="Jobs" component={JobsScreen} />
       <Stack.Screen name="Inbox" component={InboxScreen} />
       <Stack.Screen name="Diagnostics" component={DiagnosticsScreen} />
       <Stack.Screen name="Members" component={MembersScreen} />
@@ -146,6 +157,7 @@ export function Root({ onSignedOut }: { onSignedOut: () => void }): React.ReactE
       <Stack.Screen name="Treatment" component={TreatmentScreen} />
       <Stack.Screen name="CareLog" component={CareLogScreen} />
       <Stack.Screen name="Weigh" component={WeighScreen} />
+      <Stack.Screen name="Shearing" component={ShearingScreen} />
       <Stack.Screen name="Produce" component={ProduceScreen} />
       <Stack.Screen name="Feed" component={FeedScreen} />
       <Stack.Screen name="Loss" component={LossScreen} />

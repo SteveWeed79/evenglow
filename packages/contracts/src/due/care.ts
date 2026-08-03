@@ -183,7 +183,9 @@ export function careDues(group: CareGroup, now: number): Due[] {
        */
       done: {
         entity: 'careLog',
+        op: 'create',
         payload: { kind, flockId: group.id },
+        stampAs: 'occurredAt',
         label: CARE_KIND_LABELS[kind],
       },
     });

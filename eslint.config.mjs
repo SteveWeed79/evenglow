@@ -15,6 +15,26 @@ import tseslint from 'typescript-eslint';
  * guarantees rather than intentions, and what makes a rewrite like this safe
  * to do at all.
  */
+/**
+ * Raw collection access, wherever it is written.
+ *
+ * Hoisted because `no-restricted-syntax` REPLACES its options when a later
+ * config block sets it again — it does not merge. A second block that named
+ * only its own selectors silently disarmed these for every file it covered,
+ * which `tests/unit/guards.test.ts` caught within a minute of it happening.
+ * Anything setting this rule composes from here.
+ */
+const NO_RAW_COLLECTIONS = [
+  {
+    selector: "CallExpression[callee.property.name='collection']",
+    message: 'Raw collection access is forbidden. Use scoped(orgId).col().',
+  },
+  {
+    selector: "CallExpression[callee.property.name='collections']",
+    message: 'Raw collection access is forbidden. Use scoped(orgId).col().',
+  },
+];
+
 const eslintConfig = defineConfig([
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -102,17 +122,7 @@ const eslintConfig = defineConfig([
        * on a call result, which is exactly how the driver is actually used.
        * The selector matches the call however it was reached.
        */
-      'no-restricted-syntax': [
-        'error',
-        {
-          selector: "CallExpression[callee.property.name='collection']",
-          message: 'Raw collection access is forbidden. Use scoped(orgId).col().',
-        },
-        {
-          selector: "CallExpression[callee.property.name='collections']",
-          message: 'Raw collection access is forbidden. Use scoped(orgId).col().',
-        },
-      ],
+      'no-restricted-syntax': ['error', ...NO_RAW_COLLECTIONS],
     },
   },
 
@@ -186,6 +196,88 @@ const eslintConfig = defineConfig([
         { name: 'localStorage', message: 'Use SQLite, or secure storage for tokens.' },
         { name: 'sessionStorage', message: 'Use SQLite, or secure storage for tokens.' },
         { name: 'indexedDB', message: 'SQLite is the only client store (D9, invariant 6).' },
+
+        /**
+         * ── Globals Node has and Hermes does not ──────────────────────────
+         *
+         * **This is the guard that cost two days.** `crypto.randomUUID()` sat
+         * in `enqueue`, passed a thousand tests, and meant nothing could be
+         * saved on a handset — because the test runtime is Node and the app
+         * runtime is Hermes, and Node is more generous.
+         *
+         * The planned fix was a vitest project that reshaped `globalThis` to
+         * what the device provides. This is better and it is why: a lint rule
+         * fires on the *reference*, so it does not depend on a test happening
+         * to exercise that line. `crypto.randomUUID` was on a path four suites
+         * touched and none of them ran it against a missing global.
+         *
+         * It also runs on every `pnpm lint` rather than in a project somebody
+         * has to remember to add a file to.
+         *
+         * Each of these is reachable through a module that does work on both:
+         * `expo-crypto` for randomness, `decodeBase64Url` in `auth/session.ts`
+         * for base64, `TextEncoder` via a small helper if one is ever needed.
+         * The rule names the replacement rather than only the ban, because a
+         * guard that says no without saying what instead gets disabled.
+         */
+        {
+          name: 'crypto',
+          message:
+            'Hermes has no `crypto` global — this is the bug that stopped every save on device. Use expo-crypto, or newId() from @steading/contracts.',
+        },
+        {
+          name: 'Buffer',
+          message: 'Node only. Hermes has no Buffer; use a Uint8Array, or a helper that works on both.',
+        },
+        {
+          name: 'TextEncoder',
+          message: 'Not in Hermes. Encode by hand or through a helper — see decodeBase64Url in auth/session.ts.',
+        },
+        {
+          name: 'TextDecoder',
+          message: 'Not in Hermes. Decode by hand or through a helper — see decodeBase64Url in auth/session.ts.',
+        },
+        {
+          name: 'structuredClone',
+          message: 'Not in Hermes. Clone explicitly, or round-trip through JSON if the value is plain.',
+        },
+        {
+          name: 'atob',
+          message:
+            'A global React Native happens to provide, which is a poor thing to put under the path that gates every screen. Use decodeBase64Url in auth/session.ts.',
+        },
+        { name: 'btoa', message: 'See atob — encode explicitly rather than relying on the global.' },
+      ],
+
+      /**
+       * `window` and `navigator` EXIST on a handset, and that is the trap.
+       *
+       * React Native defines `window` as an alias for the global object, so
+       * `typeof window !== 'undefined'` passes — and then
+       * `window.addEventListener` is undefined and the next line throws the
+       * `TypeError: undefined is not a function` that stopped the app booting.
+       * `navigator` is the same: present, and without `onLine`.
+       *
+       * So these cannot be banned as globals. The rule has to name the
+       * property, which is what a restricted-syntax selector does and
+       * `no-restricted-globals` cannot.
+       */
+      'no-restricted-syntax': [
+        'error',
+        // Carried, because setting this rule again would otherwise replace
+        // the tenancy selectors for every file this block covers.
+        ...NO_RAW_COLLECTIONS,
+        {
+          selector:
+            "MemberExpression[object.name='window'][property.name=/^(addEventListener|removeEventListener)$/]",
+          message:
+            'React Native defines `window` but gives it no addEventListener — guard on the METHOD, not the object. See sync/engine.ts.',
+        },
+        {
+          selector: "MemberExpression[object.name='navigator'][property.name='onLine']",
+          message:
+            'React Native defines `navigator` without onLine. Connectivity comes from expo-network through setOnline() — see sync/triggers.ts.',
+        },
       ],
     },
   },

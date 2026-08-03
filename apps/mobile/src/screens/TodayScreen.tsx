@@ -272,8 +272,10 @@ function DueBundleRow({
       return () => {
         void log({
           entity: done.entity,
-          op: 'create',
-          payload: { ...done.payload, occurredAt: Date.now() },
+          op: done.op,
+          // A create mints its own id; an update names the row it changes.
+          ...(done.targetId === undefined ? {} : { targetId: done.targetId }),
+          payload: { ...done.payload, [done.stampAs]: Date.now() },
         });
       };
     },

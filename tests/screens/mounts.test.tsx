@@ -24,9 +24,11 @@ import { IncubationScreen } from '../../apps/mobile/src/screens/IncubationScreen
 import { IncubationsScreen } from '../../apps/mobile/src/screens/IncubationsScreen';
 import { InventoryScreen } from '../../apps/mobile/src/screens/InventoryScreen';
 import { LicencesScreen } from '../../apps/mobile/src/screens/LicencesScreen';
+import { ExportScreen } from '../../apps/mobile/src/screens/ExportScreen';
 import { FarmScreen } from '../../apps/mobile/src/screens/FarmScreen';
 import { HistoryScreen } from '../../apps/mobile/src/screens/HistoryScreen';
 import { IronScreen } from '../../apps/mobile/src/screens/IronScreen';
+import { JobsScreen } from '../../apps/mobile/src/screens/JobsScreen';
 import { LogHoursScreen } from '../../apps/mobile/src/screens/LogHoursScreen';
 import { LossScreen } from '../../apps/mobile/src/screens/LossScreen';
 import { MachineScreen } from '../../apps/mobile/src/screens/MachineScreen';
@@ -39,6 +41,7 @@ import { SetEggsScreen } from '../../apps/mobile/src/screens/SetEggsScreen';
 import { SettingsScreen } from '../../apps/mobile/src/screens/SettingsScreen';
 import { SignInScreen } from '../../apps/mobile/src/screens/SignInScreen';
 import { SiteSetupScreen } from '../../apps/mobile/src/screens/SiteSetupScreen';
+import { ShearingScreen } from '../../apps/mobile/src/screens/ShearingScreen';
 import { StockScreen } from '../../apps/mobile/src/screens/StockScreen';
 import { TodayScreen } from '../../apps/mobile/src/screens/TodayScreen';
 import { TreatmentScreen } from '../../apps/mobile/src/screens/TreatmentScreen';
@@ -174,6 +177,8 @@ const SCREENS: [string, () => React.ReactElement][] = [
   ['Licences', () => <LicencesScreen />],
   ['History', () => <HistoryScreen />],
   ['Farm', () => <FarmScreen />],
+  ['Export', () => <ExportScreen />],
+  ['Jobs', () => <JobsScreen />],
   ['AddGroup', () => <AddGroupScreen />],
   ['Group', () => <GroupScreen {...routeProps({ groupId: GROUP })} />],
   ['EditGroup', () => <EditGroupScreen {...routeProps({ groupId: GROUP })} />],
@@ -182,6 +187,7 @@ const SCREENS: [string, () => React.ReactElement][] = [
   ['Treatment', () => <TreatmentScreen {...routeProps({ groupId: GROUP })} />],
   ['CareLog', () => <CareLogScreen {...routeProps({ groupId: GROUP })} />],
   ['Weigh', () => <WeighScreen {...routeProps({ groupId: GROUP })} />],
+  ['Shearing', () => <ShearingScreen {...routeProps({ groupId: GROUP })} />],
   ['Produce', () => <ProduceScreen {...routeProps({ groupId: GROUP })} />],
   ['Feed', () => <FeedScreen {...routeProps({ groupId: GROUP })} />],
   ['Loss', () => <LossScreen {...routeProps({ groupId: GROUP })} />],

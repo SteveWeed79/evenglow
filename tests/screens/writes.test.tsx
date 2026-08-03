@@ -35,6 +35,7 @@ import { PlantingScreen } from '../../apps/mobile/src/screens/PlantingScreen';
 import { ProduceScreen } from '../../apps/mobile/src/screens/ProduceScreen';
 import { ServiceDoneScreen } from '../../apps/mobile/src/screens/ServiceDoneScreen';
 import { SetEggsScreen } from '../../apps/mobile/src/screens/SetEggsScreen';
+import { ShearingScreen } from '../../apps/mobile/src/screens/ShearingScreen';
 import { SiteSetupScreen } from '../../apps/mobile/src/screens/SiteSetupScreen';
 import { TodayScreen } from '../../apps/mobile/src/screens/TodayScreen';
 import { TreatmentScreen } from '../../apps/mobile/src/screens/TreatmentScreen';
@@ -779,5 +780,81 @@ describe('the farm hub', () => {
     expect(screen.has('farm-my-farm')).toBe(true);
     expect(screen.text()).toContain('Nothing switched on yet');
     screen.unmount();
+  });
+});
+
+/**
+ * The clip.
+ *
+ * The app has offered fibre as a purpose since purposes existed and had
+ * nowhere to record the one event that purpose is about. A keeper who ticked
+ * fibre was promised something that did not exist.
+ */
+describe('shearing', () => {
+  async function fibreGoats(): Promise<void> {
+    await aGroup({ name: 'The angoras', species: 'goat', purposes: ['fibre'], count: 8 });
+  }
+
+  it('records a clip in the canonical unit', async () => {
+    await fibreGoats();
+    const screen = await mount(<ShearingScreen {...routeProps({ groupId: GROUP })} />);
+
+    await screen.type('clip-amount', '7.5');
+    await screen.press('save-clip');
+    screen.unmount();
+
+    const [clip] = await localStore().readRecordsByEntity('shearing');
+    // Pounds typed, micrograms stored — so a farm that switches to metric
+    // later reads the same record back exactly rather than approximately.
+    expect(clip?.value).toMatchObject({ flockId: GROUP, animalsShorn: 1 });
+    expect((clip?.value as { massUg: number }).massUg).toBe(Math.round(7.5 * 453_592_370));
+  });
+
+  it('counts how many were shorn, so the per-animal figure means something', async () => {
+    await fibreGoats();
+    const screen = await mount(<ShearingScreen {...routeProps({ groupId: GROUP })} />);
+
+    await screen.type('clip-amount', '40');
+    await screen.press('step-plus-5');
+    await screen.press('save-clip');
+    screen.unmount();
+
+    const [clip] = await localStore().readRecordsByEntity('shearing');
+    expect(clip?.value).toMatchObject({ animalsShorn: 6 });
+  });
+
+  /**
+   * The same mistake the egg tally made before `productsOf`: a row nobody will
+   * ever fill in, offered every time they open the group.
+   */
+  it('is offered on a fibre group and not on a laying flock', async () => {
+    await fibreGoats();
+    const fibre = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
+    // The occasional acts live behind More; the four daily ones do not.
+    await fibre.press('group-more');
+    expect(fibre.has('go-shearing')).toBe(true);
+    fibre.unmount();
+
+    await freshStore();
+    await aGroup();
+    const layers = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
+    await layers.press('group-more');
+    expect(layers.has('go-shearing')).toBe(false);
+    layers.unmount();
+  });
+
+  it('reaches the export and What happened like any other record', async () => {
+    await fibreGoats();
+    const screen = await mount(<ShearingScreen {...routeProps({ groupId: GROUP })} />);
+    await screen.type('clip-amount', '7.5');
+    await screen.press('save-clip');
+    screen.unmount();
+
+    const { listHistory } = await import('@steading/core/read/history');
+    const days = await listHistory('imperial');
+    expect(days[0]?.events[0]?.title).toContain('Shorn');
+
+    const { buildExport } = await import('@steading/core/export/csv');
+    expect((await buildExport()).some((s) => s.name === 'shearing')).toBe(true);
   });
 });
