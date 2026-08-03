@@ -14,6 +14,7 @@ import { EditGroupScreen } from '../screens/EditGroupScreen';
 import { FeedScreen } from '../screens/FeedScreen';
 import { GroupScreen } from '../screens/GroupScreen';
 import { HarvestScreen } from '../screens/HarvestScreen';
+import { HistoryScreen } from '../screens/HistoryScreen';
 import { QuickAddScreen } from '../screens/QuickAddScreen';
 import { MyFarmScreen } from '../screens/MyFarmScreen';
 import { InboxScreen } from '../screens/InboxScreen';
@@ -66,6 +67,8 @@ export type RootParamList = {
   QuickAdd: undefined;
   /** What this farm runs, and therefore what it sees. */
   MyFarm: undefined;
+  /** What happened, by day. Reached from the date in the header. */
+  History: undefined;
   Inbox: undefined;
   Diagnostics: undefined;
   Members: undefined;
@@ -120,6 +123,7 @@ export function Root({ onSignedOut }: { onSignedOut: () => void }): React.ReactE
       </Stack.Screen>
       <Stack.Screen name="QuickAdd" component={QuickAddScreen} />
       <Stack.Screen name="MyFarm" component={MyFarmScreen} />
+      <Stack.Screen name="History" component={HistoryScreen} />
       <Stack.Screen name="Inbox" component={InboxScreen} />
       <Stack.Screen name="Diagnostics" component={DiagnosticsScreen} />
       <Stack.Screen name="Members" component={MembersScreen} />
