@@ -1,3 +1,4 @@
+import { randomUUID } from 'expo-crypto';
 import type { LocalStore } from '@steading/core/db/port';
 import { openSqliteStore } from '@steading/core/db/sqlite-store';
 import { setLocalStore } from '@steading/core/db/store';
@@ -43,7 +44,15 @@ export function openLocalStore(orgId: string): Promise<LocalStore> {
     // behind on every farm switch is a file descriptor leak on a device.
     if (previous) await (await previous.store).close().catch(() => undefined);
 
-    const next = await openSqliteStore(await openExpoSqlDriver(databaseNameFor(orgId)));
+    /**
+     * The device's UUID source, handed in because there is no `crypto` global
+     * on React Native — see `StoreDeps`. `expo-crypto` exports the function
+     * rather than installing a global, which is why this has to be wired
+     * rather than polyfilled.
+     */
+    const next = await openSqliteStore(await openExpoSqlDriver(databaseNameFor(orgId)), {
+      randomUUID: () => randomUUID(),
+    });
     setLocalStore(next);
     return next;
   })();

@@ -113,7 +113,44 @@ function rowToRecord(row: RecordRow): unknown {
   };
 }
 
-export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
+/**
+ * What the store needs from the platform that it cannot get itself.
+ *
+ * One entry so far, and it earns the shape: `deviceId` is declared `z.uuid()`
+ * by `schema.ts` and by the mutation envelope, so a ULID will not do.
+ */
+export interface StoreDeps {
+  /**
+   * A v4 UUID for this device.
+   *
+   * Handed in rather than taken from a global, and this is the bug that made
+   * the rule. `enqueue` called bare `crypto.randomUUID()`. Node has that
+   * global; React Native does not, and Expo's runtime polyfills `fetch`,
+   * `URL`, `TextDecoder`, `FormData` and `AbortSignal` — not `crypto`. On a
+   * handset the line was a ReferenceError.
+   *
+   * The shape of the failure is what made it so hard to see. It sat in the
+   * `deviceId === undefined` branch, which runs on the FIRST enqueue ever. The
+   * throw rolled the transaction back, so the id was never persisted — so the
+   * next save took the identical branch and failed identically, forever.
+   * Every write on the device, from the first one, with ~900 tests green over
+   * a line that cannot execute there.
+   */
+  randomUUID: () => string;
+}
+
+/**
+ * `node:crypto` is present in Node and in the browser, which is every context
+ * that is not a handset. Keeping it as the default means the server and the
+ * whole test suite carry on unchanged; only the platform that lacks it has to
+ * say so.
+ */
+const DEFAULT_DEPS: StoreDeps = { randomUUID: () => crypto.randomUUID() };
+
+export async function openSqliteStore(
+  driver: SqlDriver,
+  deps: StoreDeps = DEFAULT_DEPS,
+): Promise<LocalStore> {
   await migrate(driver);
 
   // ── meta ───────────────────────────────────────────────────────────────────
@@ -238,7 +275,7 @@ export async function openSqliteStore(driver: SqlDriver): Promise<LocalStore> {
           // device's own mutations for ordering.
           let deviceId = parseMeta('deviceId', await readMeta(tx, 'deviceId'));
           if (deviceId === undefined) {
-            deviceId = crypto.randomUUID();
+            deviceId = deps.randomUUID();
             await writeMeta(tx, META.deviceId, deviceId);
           }
 
