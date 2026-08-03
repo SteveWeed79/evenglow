@@ -15,6 +15,7 @@ import { FeedScreen } from '../screens/FeedScreen';
 import { GroupScreen } from '../screens/GroupScreen';
 import { HarvestScreen } from '../screens/HarvestScreen';
 import { QuickAddScreen } from '../screens/QuickAddScreen';
+import { MyFarmScreen } from '../screens/MyFarmScreen';
 import { InboxScreen } from '../screens/InboxScreen';
 import { IncubationScreen } from '../screens/IncubationScreen';
 import { IncubationsScreen } from '../screens/IncubationsScreen';
@@ -63,6 +64,8 @@ export type RootParamList = {
   Settings: undefined;
   /** Verb first, subject second — see QuickAddScreen. */
   QuickAdd: undefined;
+  /** What this farm runs, and therefore what it sees. */
+  MyFarm: undefined;
   Inbox: undefined;
   Diagnostics: undefined;
   Members: undefined;
@@ -116,6 +119,7 @@ export function Root({ onSignedOut }: { onSignedOut: () => void }): React.ReactE
         {() => <SettingsScreen onSignedOut={onSignedOut} />}
       </Stack.Screen>
       <Stack.Screen name="QuickAdd" component={QuickAddScreen} />
+      <Stack.Screen name="MyFarm" component={MyFarmScreen} />
       <Stack.Screen name="Inbox" component={InboxScreen} />
       <Stack.Screen name="Diagnostics" component={DiagnosticsScreen} />
       <Stack.Screen name="Members" component={MembersScreen} />

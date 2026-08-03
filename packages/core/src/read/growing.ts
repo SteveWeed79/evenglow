@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import {
+  ENTERPRISES,
+  type Enterprise,
   bedCreateSchema,
   type FrostDates,
   frostDatesSchema,
@@ -24,6 +26,12 @@ import { localStore } from '../db/store';
 export interface Site {
   id: string;
   name: string;
+  /**
+   * What this farm runs. Always populated — a site that has never been asked
+   * reads as all of them, so no caller has to know the difference between
+   * "everything" and "not answered".
+   */
+  enterprises: Enterprise[];
   zone?: Zone;
   frost?: FrostDates;
   rotationYears: number;
@@ -86,6 +94,14 @@ export async function readSite(): Promise<Site | null> {
       // Three is the common smallholding figure. A farm with four beds
       // physically cannot manage four, which is why it is a setting.
       rotationYears: parsed.data.rotationYears ?? 3,
+      /**
+       * Absent means all of them — a farm that has never opened the screen
+       * must not lose half its app. A stored empty array is different: that is
+       * a farm that deliberately said "none", and it survives as one.
+       */
+      enterprises: parsed.data.enterprises === undefined
+        ? [...ENTERPRISES]
+        : [...parsed.data.enterprises],
     };
   }
 
