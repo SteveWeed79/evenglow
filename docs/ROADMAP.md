@@ -84,19 +84,17 @@ scouring, and a farm comparing years needs both measured the same way. It asks
 how many were shorn so the per-animal figure — the one a fleece is actually
 judged on — means something.
 
-### 2c. `photo` — **deferred, deliberately**
+### 2c. `photo` — **two of the three cases built**
 
-Parity P1 and P6. Asked directly whether it is worth the space; the honest
-answer is not yet, and the reasoning is worth keeping so this is a decision
-rather than a thing that quietly never happened.
-
-**The value is uneven across the three cases people mean by "photos".**
+Parity P6, and P1 refused. The value is uneven across the three cases people
+mean by "photos", so two were built and one was turned down — recorded here
+because a refusal nobody wrote down becomes a thing somebody rebuilds.
 
 | | worth | note |
 | --- | --- | --- |
 | **Receipts and manuals on kit** (P6) | real | LookOver's headline is the history you hand over with the machine, and a receipt cannot be reconstructed later |
 | **Evidence** — a wound, a kill, a diseased leaf | real, and time-critical | the one a keeper actually reaches for |
-| **Per-animal portraits** (P1) | thin for a working farm | you tell six hens apart with a leg ring, not a photograph; this matters at the pet-chicken end, which is Flockstar's market and not the masterplan's |
+| **Per-animal portraits** (P1) | **refused** | you tell six hens apart with a leg ring, not a photograph; this matters at the pet-chicken end, which is Flockstar's market and not the masterplan's |
 
 **The cost is not mainly space.** A photo compressed for the purpose is 200–400
 KB, so a hundred is roughly forty years of records — real but survivable. What
@@ -107,17 +105,23 @@ storage bill and a lifecycle; a device-only photo vanishes on reinstall while a
 synced one needs a transfer path that resumes; Play Store data-safety
 disclosure changes; and it is the first runtime permission the app asks for.
 
-**Why waiting is safe here and would not always be.** The trap in "wait until
-somebody asks" is that a photo is not backfillable — the one you wish you had
-taken is one you cannot take later. What makes it safe is that **notes already
-exist and already reach every subject that would want a photo**: group,
-machine, planting, incubation. *"Wound on the left hock, cleaned, watching it"*
-is most of the record-keeping value of a wound photo at two hundred bytes
-rather than three hundred thousand.
+**What was built.** A strip on a machine and on a group — not a grid, because a
+grid says "browse me" and invites a farm to treat the app as a photo library,
+which is the thing that would actually cost the space.
 
-**Revisit when** a farm says notes were not enough for a specific thing — most
-likely a receipt or an insurance claim. Build P6 first if so; it is the half
-with a clear buyer and the half where the record has to leave the app anyway.
+Resized to 1600px on the long edge and saved at quality 0.7. A phone camera
+gives 4–8 MB a frame and a receipt is legible at 1600px, so this is the
+difference between a hundred photos costing 30 MB and costing 600 MB.
+
+**The bytes stay on the device and the record syncs**, which is exactly what
+`photoShape` has said since it was written — *"metadata only, the Blob is
+uploaded separately, which is why `uploadedAt` is optional"*. A second phone
+knows a photo exists and says which device has it, rather than showing a grey
+box that reads as a bug.
+
+**Still open:** the upload. Setting `uploadedAt` and fetching on a miss is
+additive to what is there now rather than a redesign — which is why the local
+half was worth building first.
 
 ### 2d. `feedPlan`
 

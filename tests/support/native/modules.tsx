@@ -137,12 +137,25 @@ export const Paths = {
 export class File {
   readonly uri: string;
 
-  constructor(...parts: (string | FakeDirectory | File)[]) {
-    this.uri = parts
-      .map((part) => (typeof part === 'string' ? part : part.uri))
-      .join('')
-      .replace(/\/+/g, '/')
-      .replace(':/', '://');
+  constructor(...parts: (string | FakeDirectory | File | Directory)[]) {
+    const pieces = parts.map((part) => (typeof part === 'string' ? part : part.uri));
+
+    /**
+     * A single full URI is taken verbatim.
+     *
+     * The joining below collapses repeated slashes so `dir` + `name` does not
+     * produce `//`, and that mangles `file:///tmp/x.jpg` into
+     * `file://tmp/x.jpg` — a different key, so the file "vanishes". The real
+     * `File` accepts a whole URI as its only argument and this has to as well.
+     */
+    if (pieces.length === 1 && pieces[0]!.includes('://')) {
+      this.uri = pieces[0]!;
+      return;
+    }
+
+    this.uri = pieces
+      .join('/')
+      .replace(/([^:])\/+/g, '$1/');
   }
 
   create(): void {
@@ -159,6 +172,19 @@ export class File {
 
   get exists(): boolean {
     return files.has(this.uri);
+  }
+
+  get size(): number | null {
+    const content = files.get(this.uri);
+    return content === undefined ? null : content.length;
+  }
+
+  /** Real move semantics: the source stops existing. */
+  async move(destination: File): Promise<void> {
+    const content = files.get(this.uri);
+    if (content === undefined) throw new Error(`Nothing at ${this.uri}`);
+    files.set(destination.uri, content);
+    files.delete(this.uri);
   }
 }
 
@@ -177,4 +203,76 @@ export async function shareAsync(uri: string): Promise<void> {
     throw new Error(`Nothing to share at ${uri}`);
   }
   shared.push(uri);
+}
+
+// ── expo-image-picker / expo-image-manipulator ───────────────────────────────
+
+/**
+ * A camera and a resizer, scripted.
+ *
+ * What the photo tests are about is not the picker — it is that a cancel
+ * writes nothing, that a refused camera is not an error, and that removing a
+ * photo takes the bytes with it. All three need the picker to be steerable
+ * rather than real.
+ *
+ * `Directory` is here too because `photos/store.ts` creates one, and a fake
+ * filesystem missing the directory half would fail on the first capture in a
+ * way that says nothing about the code under test.
+ */
+export const camera = {
+  /** What the next launch returns. Set by a test before it presses. */
+  next: { canceled: false, assets: [{ uri: 'file:///tmp/shot.jpg', width: 4000, height: 3000 }] } as {
+    canceled: boolean;
+    assets?: { uri: string; width: number; height: number }[];
+  },
+  /** Whether the OS grants the camera. */
+  granted: true,
+  /** Every resize the manipulator was asked for, so a test can assert one. */
+  resizes: [] as unknown[],
+};
+
+export async function requestCameraPermissionsAsync(): Promise<{ granted: boolean }> {
+  return { granted: camera.granted };
+}
+
+export async function launchCameraAsync(): Promise<typeof camera.next> {
+  return camera.next;
+}
+
+export async function launchImageLibraryAsync(): Promise<typeof camera.next> {
+  return camera.next;
+}
+
+export const SaveFormat = { JPEG: 'jpeg' } as const;
+
+export async function manipulateAsync(
+  uri: string,
+  actions: unknown[],
+): Promise<{ uri: string }> {
+  camera.resizes.push(...actions);
+  // A distinct URI, so a test can tell the manipulator's output from its input
+  // and the move below is a real move.
+  const out = `${uri}.resized`;
+  files.set(out, 'JPEG-BYTES');
+  return { uri: out };
+}
+
+export class Directory {
+  readonly uri: string;
+
+  constructor(...parts: (string | { uri: string })[]) {
+    this.uri = `${parts
+      .map((part) => (typeof part === 'string' ? part : part.uri))
+      .join('/')
+      .replace(/\/+/g, '/')
+      .replace(':/', '://')}/`;
+  }
+
+  get exists(): boolean {
+    return true;
+  }
+
+  create(): void {
+    // Directories are implicit in a Map keyed by path.
+  }
 }

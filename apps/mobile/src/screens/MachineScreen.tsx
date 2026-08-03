@@ -4,6 +4,7 @@ import { partsNote } from '@steading/contracts';
 import { Primary, Row } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Notes } from '../components/Notes';
+import { Photos } from '../components/Photos';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
@@ -112,6 +113,10 @@ export function MachineScreen({ route }: ScreenProps<'Machine'>): React.ReactEle
       )}
 
       <Notes subjectEntity="equipment" subjectId={machineId} subject={machine.name} />
+
+      {/* Receipts and manuals: the history handed over with the machine, and
+          the half of P6 with a clear buyer. */}
+      <Photos subjectId={machineId} what={machine.name} />
 
       <Primary
         label={mine.length === 0 ? 'Add a service schedule' : 'Add another schedule'}
