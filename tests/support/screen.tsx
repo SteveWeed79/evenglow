@@ -106,14 +106,35 @@ function textOf(node: ReactTestInstance): string {
   return parts.join(' ').trim();
 }
 
-export async function mount(element: ReactElement): Promise<Mounted> {
+export interface MountOptions {
+  /**
+   * Whether to let the live reads finish before handing the screen back.
+   *
+   * Defaults to true, which is what almost every test wants. `false` returns
+   * the screen mid-read — the only way to assert what it says **before** the
+   * store has answered.
+   *
+   * That state has now shipped two defects: My Farm waited forever on a read
+   * that had already answered, and the photo strip told somebody they had no
+   * photos while it was still looking. Both are the same shape — `useLive`
+   * returns `null` for "not read yet", and a component that flattens it into
+   * "nothing there" promises something it does not know. Neither was testable
+   * until this existed.
+   */
+  settle?: boolean;
+}
+
+export async function mount(
+  element: ReactElement,
+  options: MountOptions = {},
+): Promise<Mounted> {
   resetNav();
 
   let tree!: ReactTestRenderer;
   await act(async () => {
     tree = create(createElement(ThemeProvider, null, element));
   });
-  await flush();
+  if (options.settle !== false) await flush();
 
   const collect = (node: unknown, out: string[]): void => {
     if (typeof node === 'string') out.push(node);

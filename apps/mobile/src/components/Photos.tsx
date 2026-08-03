@@ -91,11 +91,26 @@ export function Photos({
     [log],
   );
 
+  /**
+   * `null` is "not read yet", and it must not be drawn as "there are none".
+   *
+   * This shipped as `(all ?? []).filter(...)`, so a group with photos showed
+   * *"A receipt, a manual, or something you want to remember…"* for the beat
+   * before the store answered — telling somebody their photos were gone, every
+   * time they opened the group, and then contradicting itself.
+   *
+   * The same mistake as My Farm's blank screen, which is why it is worth
+   * naming rather than just fixing: `useLive` returns `null` for a read in
+   * flight, and any component that flattens that into an empty list has
+   * promised something it does not know. The buttons are safe to show either
+   * way — they are right before and after — so only the *claim* waits.
+   */
+  const read = all !== null;
   const mine = (all ?? []).filter((photo) => photo.subjectId === subjectId);
 
   return (
     <Panel label="Photos">
-      {mine.length === 0 ? (
+      {!read ? null : mine.length === 0 ? (
         <Body>
           A receipt, a manual, or something you want to remember the look of — a wound, a kill,
           a leaf. Kept on this phone, not sent anywhere.
