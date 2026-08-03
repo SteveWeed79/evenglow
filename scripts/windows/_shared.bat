@@ -73,7 +73,9 @@ git pull --ff-only
 if errorlevel 1 (
   echo.
   echo   Could not update automatically - carrying on with what is here.
-  echo   Send this window to Claude if the problem you are chasing persists.
+  echo.
+  echo   If it said "your local changes would be overwritten",
+  echo   close this and run "Fix my checkout" first.
   echo.
 )
 
