@@ -164,3 +164,31 @@ describe('the jobs list', () => {
     screen.unmount();
   });
 });
+
+/**
+ * The mark on a row is a promise about what pressing it does.
+ *
+ * Every other row in the app opens something, so `Row` drew a chevron
+ * unconditionally. A job does not open — pressing it finishes the job — and a
+ * chevron there invites somebody to tap expecting a detail screen and tick the
+ * job off instead.
+ */
+describe('what the row promises', () => {
+  it('shows a tick rather than a chevron, because pressing finishes it', async () => {
+    await enqueue({
+      entity: 'task',
+      op: 'create',
+      targetId: newId(),
+      payload: { title: 'Fix the gate', recurrence: 'none' },
+    });
+
+    const screen = await mount(<JobsScreen />);
+    const [task] = await listTasks();
+    const row = screen.get(`job-${task!.id}`);
+
+    const marks = row.findAllByProps({ size: 20 }).map((node) => node.props.name as string);
+    expect(marks).toContain('check');
+    expect(marks).not.toContain('forward');
+    screen.unmount();
+  });
+});
