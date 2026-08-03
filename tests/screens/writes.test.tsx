@@ -504,3 +504,89 @@ describe('add stock follows the species you picked', () => {
     screen.unmount();
   });
 });
+
+/**
+ * "I log a Chick starter on The Shelf but the option to feed my chickens it
+ * does not appear. Having to enter this data twice is a time waste."
+ *
+ * The farm had already named the sack. The feed screen asked them to type it
+ * again into a free text box beside a placeholder naming three feeds they do
+ * not own — so two spellings of one sack end up in the records and no report
+ * can add them up.
+ */
+describe('feeding from the shelf', () => {
+  async function aSack(name: string, unit: string): Promise<void> {
+    await enqueue({
+      entity: 'inventory',
+      op: 'create',
+      targetId: newId(),
+      payload: { name, kind: 'feed', unit, quantity: 50, reorderBelow: 10 },
+    });
+  }
+
+  it('offers what is on the shelf, so the name is not typed twice', async () => {
+    await aGroup();
+    await aSack('Purina Chick Starter', 'lb');
+
+    const screen = await mount(<FeedScreen {...routeProps({ groupId: GROUP })} />);
+    await screen.pressLabel('Purina Chick Starter');
+
+    // The name reached the field, so the record carries the farm's own
+    // spelling rather than a second one.
+    expect(screen.shows('feed-type')).toBe('Purina Chick Starter');
+    screen.unmount();
+  });
+
+  it('takes the measure from the shelf when it is the same question', async () => {
+    await aGroup();
+    await aSack('Purina Chick Starter', 'lb');
+
+    const screen = await mount(<FeedScreen {...routeProps({ groupId: GROUP })} />);
+    await screen.pressLabel('Purina Chick Starter');
+    await screen.press('tally-plus-1');
+    await screen.press('tally-commit');
+    screen.unmount();
+
+    // One pound, in grams — not one scoop. The shelf said pounds.
+    const [fed] = await localStore().readRecordsByEntity('feedLog');
+    expect(fed?.value).toMatchObject({ feedType: 'Purina Chick Starter', amountGrams: 454 });
+  });
+
+  /**
+   * A bale says nothing about how much goes in a trough, so it must not
+   * silently reinterpret the scoop the person is about to count.
+   */
+  it('leaves the measure alone when the shelf unit is not a feed measure', async () => {
+    await aGroup();
+    await aSack('Meadow hay', 'bale');
+
+    const screen = await mount(<FeedScreen {...routeProps({ groupId: GROUP })} />);
+    await screen.pressLabel('Meadow hay');
+    await screen.press('tally-plus-1');
+    await screen.press('tally-commit');
+    screen.unmount();
+
+    // Still a scoop, the default.
+    const [fed] = await localStore().readRecordsByEntity('feedLog');
+    expect(fed?.value).toMatchObject({ feedType: 'Meadow hay', amountGrams: 907 });
+  });
+
+  /** Only feed. A box of syringes is not something anybody puts in a trough. */
+  it('offers only what is feed', async () => {
+    await aGroup();
+    await aSack('Purina Chick Starter', 'lb');
+    await enqueue({
+      entity: 'inventory',
+      op: 'create',
+      targetId: newId(),
+      payload: { name: 'Syringes', kind: 'medicine', unit: 'each', quantity: 20 },
+    });
+
+    const screen = await mount(<FeedScreen {...routeProps({ groupId: GROUP })} />);
+    const offered = screen.labels();
+
+    expect(offered).toContain('Purina Chick Starter');
+    expect(offered).not.toContain('Syringes');
+    screen.unmount();
+  });
+});
