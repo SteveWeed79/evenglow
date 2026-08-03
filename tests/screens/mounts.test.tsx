@@ -41,6 +41,7 @@ import { SetEggsScreen } from '../../apps/mobile/src/screens/SetEggsScreen';
 import { SettingsScreen } from '../../apps/mobile/src/screens/SettingsScreen';
 import { SignInScreen } from '../../apps/mobile/src/screens/SignInScreen';
 import { SiteSetupScreen } from '../../apps/mobile/src/screens/SiteSetupScreen';
+import { ShearingScreen } from '../../apps/mobile/src/screens/ShearingScreen';
 import { StockScreen } from '../../apps/mobile/src/screens/StockScreen';
 import { TodayScreen } from '../../apps/mobile/src/screens/TodayScreen';
 import { TreatmentScreen } from '../../apps/mobile/src/screens/TreatmentScreen';
@@ -186,6 +187,7 @@ const SCREENS: [string, () => React.ReactElement][] = [
   ['Treatment', () => <TreatmentScreen {...routeProps({ groupId: GROUP })} />],
   ['CareLog', () => <CareLogScreen {...routeProps({ groupId: GROUP })} />],
   ['Weigh', () => <WeighScreen {...routeProps({ groupId: GROUP })} />],
+  ['Shearing', () => <ShearingScreen {...routeProps({ groupId: GROUP })} />],
   ['Produce', () => <ProduceScreen {...routeProps({ groupId: GROUP })} />],
   ['Feed', () => <FeedScreen {...routeProps({ groupId: GROUP })} />],
   ['Loss', () => <LossScreen {...routeProps({ groupId: GROUP })} />],

@@ -73,11 +73,16 @@ everywhere else — and the exception is exact. Every other row is waiting for a
 record; this one is not. Fixing a gate produces nothing to log, so `completedAt`
 is not a second source of truth, it is the only one.
 
-### 2b. `shearing`
+### 2b. `shearing` — **done**
 
-The app offers **fibre** as a purpose, filters species by whether they carry it,
-and has nowhere to record a clip. A keeper who ticks fibre is promised something
-that does not exist.
+Under More on a group, and **only where the keeper said fibre** — offering it on
+a flock of layers would be the same mistake the egg tally made before
+`productsOf`: a row nobody will ever fill in, every time they open the group.
+
+Greasy weight, and the screen says so: a fleece loses a quarter to a half at
+scouring, and a farm comparing years needs both measured the same way. It asks
+how many were shorn so the per-animal figure — the one a fleece is actually
+judged on — means something.
 
 ### 2c. `photo` — parity P1 and P6
 

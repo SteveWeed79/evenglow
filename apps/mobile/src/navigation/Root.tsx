@@ -33,6 +33,7 @@ import { MembersScreen } from '../screens/MembersScreen';
 import { PickVarietyScreen } from '../screens/PickVarietyScreen';
 import { PlantingScreen } from '../screens/PlantingScreen';
 import { ProduceScreen } from '../screens/ProduceScreen';
+import { ShearingScreen } from '../screens/ShearingScreen';
 import { ServiceDoneScreen } from '../screens/ServiceDoneScreen';
 import { SetEggsScreen } from '../screens/SetEggsScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
@@ -96,6 +97,8 @@ export type RootParamList = {
   Treatment: { groupId: string };
   CareLog: { groupId: string };
   Weigh: { groupId: string };
+  /** A clip. Offered only on a group kept for fibre. */
+  Shearing: { groupId: string };
   Produce: { groupId: string };
   Feed: { groupId: string };
   Loss: { groupId: string };
@@ -154,6 +157,7 @@ export function Root({ onSignedOut }: { onSignedOut: () => void }): React.ReactE
       <Stack.Screen name="Treatment" component={TreatmentScreen} />
       <Stack.Screen name="CareLog" component={CareLogScreen} />
       <Stack.Screen name="Weigh" component={WeighScreen} />
+      <Stack.Screen name="Shearing" component={ShearingScreen} />
       <Stack.Screen name="Produce" component={ProduceScreen} />
       <Stack.Screen name="Feed" component={FeedScreen} />
       <Stack.Screen name="Loss" component={LossScreen} />

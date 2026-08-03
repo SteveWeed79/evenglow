@@ -204,6 +204,18 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
             testID="go-weigh"
             onPress={() => nav.navigate('Weigh', { groupId })}
           />
+          {/* Only where the keeper said fibre. A clip on a flock of layers is
+              not a thing, and offering it would be the same mistake the egg
+              tally made before `productsOf` — a row nobody will ever fill in,
+              every time they open the group. */}
+          {(group.purposes ?? []).includes('fibre') ? (
+            <Row
+              title="Record a clip"
+              icon="basic-full"
+              testID="go-shearing"
+              onPress={() => nav.navigate('Shearing', { groupId })}
+            />
+          ) : null}
           <Row
             title="Named animals"
             icon="stock"
