@@ -119,22 +119,43 @@ echo   --- Do the app's packages match Expo? ---
 :: refuse to update the machine. It reports; fixing is a decision, made
 :: somewhere it can be reviewed.
 cd apps\mobile
-echo n| call npx expo install --check
-:: Counted, because it was not.
+:: Counted AND told apart, which took two goes to get right.
 ::
-:: This window printed "expo-image-manipulator ... doesn't seem to be
-:: installed" and then "Nothing missing" underneath it, which is worse than
-:: staying quiet: it told somebody their setup was fine while naming the reason
-:: it was not. A check that reports success over a failed step is a check
-:: nobody should trust.
+:: First this window printed "expo-image-manipulator ... doesn't seem to be
+:: installed" and then "Nothing missing" underneath it — a check reporting
+:: success over a failed step, which is worse than staying quiet.
 ::
-:: The usual cause is a pull that brought a new dependency — the run scripts
-:: install for themselves now, so starting either one fixes it.
-if errorlevel 1 (
+:: Counting the errorlevel fixed that and introduced the next fault: `expo
+:: install --check` fails for TWO unrelated reasons, and the first fix named
+:: one cure for both.
+::
+::   not installed  - a pull brought a new package. `pnpm install` fixes it,
+::                    and the run scripts now do that for themselves.
+::   wrong version  - installed, but not the version Expo Go's native side
+::                    expects. `pnpm install` CANNOT fix this: it installs
+::                    what package.json says, and package.json is the thing
+::                    that is wrong. It needs a deliberate bump, reviewed.
+::
+:: Telling somebody to reinstall when the manifest is what needs changing is
+:: the same defect as the Try again button that retried the wrong thing. So
+:: the output is captured and read, and each case gets its own line.
+echo n| call npx expo install --check > "%TEMP%\steading-expo-check.txt" 2>&1
+set EXPOFAIL=%errorlevel%
+type "%TEMP%\steading-expo-check.txt"
+
+if not "%EXPOFAIL%"=="0" (
   set /a MISSING+=1
-  echo.
-  echo   [ MISSING ] packages       - run "Start the farm server" once; it installs them
+  findstr /c:"doesn't seem to be installed" "%TEMP%\steading-expo-check.txt" >nul 2>&1
+  if errorlevel 1 (
+    echo.
+    echo   [ MISSING ] package versions - do NOT reinstall; this needs a version
+    echo               change in the project. Send this window to Claude.
+  ) else (
+    echo.
+    echo   [ MISSING ] packages       - run "Start the farm server" once; it installs them
+  )
 )
+del "%TEMP%\steading-expo-check.txt" >nul 2>&1
 cd ..\..
 
 echo.

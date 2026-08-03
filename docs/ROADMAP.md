@@ -243,6 +243,11 @@ Small, named so they stop being remembered at the wrong moment.
 - **Steppers past 99** on Feed and Produce — a farm milking a herd cannot reach
   its total by tapping.
 - **P15, per-equipment inspection checklists** — never started.
+- **TypeScript 6.** Expo SDK 57 expects `~6.0.3`; this repo is on 5.9.3 and
+  stays there for now. A major TypeScript across a strict codebase with
+  `exactOptionalPropertyTypes` is its own piece of work with its own risk, not
+  a line in a version-alignment commit. `expo install --check` will keep
+  reporting it, which is correct — it is drift, deliberately held.
 - **PR #2** — 134 commits behind, would resurrect the deleted web client, and a
   simulated merge produces 88 conflicts. Close it.
 - **Incubation stage guidance** — the date half only. The app knows the species'
