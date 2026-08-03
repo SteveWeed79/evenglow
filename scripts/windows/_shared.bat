@@ -82,6 +82,29 @@ if errorlevel 1 (
 for /f "tokens=*" %%v in ('git log -1 --pretty^=format:"%%h  %%s" 2^>nul') do echo   Running: %%v
 exit /b 0
 
+:ensure_packages
+:: The step whose absence broke a device run.
+::
+:: `:update_code` pulls, and a pull that brings a new dependency leaves
+:: node_modules behind the package.json that now names it. Expo then refuses to
+:: start with "expo-image-manipulator is added as a dependency but it doesn't
+:: seem to be installed" — a message that names a package and not the fix.
+::
+:: pnpm is fast and idempotent when nothing changed, so this runs every time
+:: rather than trying to guess whether the pull touched a manifest. Guessing
+:: wrong is a broken run; guessing right saves two seconds.
+echo   Checking the packages...
+call pnpm install --silent
+if errorlevel 1 (
+  echo.
+  echo   PROBLEM: the packages would not install.
+  echo   Copy everything in this window and send it to Claude.
+  echo.
+  exit /b 1
+)
+echo   Packages - ready.
+exit /b 0
+
 :ensure_env
 :: The settings file is deliberately not in git (it differs per machine), so a
 :: fresh clone has none and the app opens with nowhere to sync to. Making it
