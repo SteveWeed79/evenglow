@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { ENTERPRISES, type Enterprise, newId } from '@steading/contracts';
 import { listGroups } from '@steading/core/read/groups';
-import { readSite } from '@steading/core/read/growing';
+import { readSiteOrBlank } from '@steading/core/read/growing';
 import { listBeds, listPlantings } from '@steading/core/read/growing';
 import { listMachines } from '@steading/core/read/iron';
 import { Failure, Field, Primary, Toggle, useSaver } from '../components/Form';
@@ -71,7 +71,16 @@ export function MyFarmScreen(): React.ReactElement {
   const nav = useNav();
   const log = useLog();
 
-  const site = useLive(readSite, 'your farm');
+  /**
+   * `readSiteOrBlank`, not `readSite`.
+   *
+   * This screen is reachable from Settings before Growing has ever been
+   * opened, so a farm that only keeps animals has no site record — and
+   * `readSite`'s null for that is the same value `useLive` uses for "not read
+   * yet". The screen waited on a read that had already answered, and showed a
+   * title over an empty page. See the note on `readSiteOrBlank`.
+   */
+  const site = useLive(readSiteOrBlank, 'your farm');
   const groups = useLive(listGroups, 'your stock');
   const beds = useLive(listBeds, 'your beds');
   const plantings = useLive(listPlantings, 'your plantings');

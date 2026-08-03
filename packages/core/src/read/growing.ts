@@ -108,6 +108,45 @@ export async function readSite(): Promise<Site | null> {
   return null;
 }
 
+/**
+ * The site, or the blank one a farm that has never named a site is offered.
+ *
+ * ## The trap this exists to close
+ *
+ * `readSite` returns `null` for "no site record yet". `useLive` returns `null`
+ * for "not read yet". A screen reading a nullable value through that hook
+ * cannot tell the two apart — the union collapses — so it waits forever for a
+ * read that already answered.
+ *
+ * My farm shipped that way and was blank on a real device: reachable from
+ * Settings before Growing has ever been opened, which is the ordinary state of
+ * a farm that only keeps animals. Every test seeded a site first, so nothing
+ * caught it.
+ *
+ * `useLive2` is immune by accident — its tuple is a non-null wrapper — which is
+ * what this restores deliberately for the single-read case.
+ *
+ * ## Which to call
+ *
+ * `readSite` when the absence is the answer: a setup screen offering to name
+ * the place, a warning that frost dates are unset. This one when the screen can
+ * render either way, and an empty `id` is how it tells which it got — the
+ * caller mints the record on save rather than requiring one to exist first.
+ */
+export async function readSiteOrBlank(): Promise<Site> {
+  const site = await readSite();
+  if (site !== null) return site;
+
+  return {
+    id: '',
+    name: '',
+    // Both match `readSite`'s defaults, so a farm sees the same answers before
+    // and after its site record exists.
+    rotationYears: 3,
+    enterprises: [...ENTERPRISES],
+  };
+}
+
 export async function listBeds(): Promise<Bed[]> {
   const records = await localStore().readRecordsByEntity('bed');
 
