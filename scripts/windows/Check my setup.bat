@@ -119,41 +119,39 @@ echo   --- Do the app's packages match Expo? ---
 :: refuse to update the machine. It reports; fixing is a decision, made
 :: somewhere it can be reviewed.
 cd apps\mobile
-:: Counted AND told apart, which took two goes to get right.
+:: Three goes at this, and the lesson is the same each time: a check that
+:: names the wrong fix is worse than one that names none.
 ::
-:: First this window printed "expo-image-manipulator ... doesn't seem to be
-:: installed" and then "Nothing missing" underneath it — a check reporting
-:: success over a failed step, which is worse than staying quiet.
+:: 1. It printed "expo-image-manipulator ... doesn't seem to be installed"
+::    and then "Nothing missing" underneath — success reported over a failure.
+:: 2. Counting the errorlevel fixed that and named ONE cure for what turned
+::    out to be several conditions.
+:: 3. It then told somebody "do NOT reinstall" when reinstalling was exactly
+::    the fix.
 ::
-:: Counting the errorlevel fixed that and introduced the next fault: `expo
-:: install --check` fails for TWO unrelated reasons, and the first fix named
-:: one cure for both.
+:: `expo install --check` reads what is INSTALLED. It cannot see whether
+:: package.json already agrees, so it reports all of these identically:
 ::
-::   not installed  - a pull brought a new package. `pnpm install` fixes it,
-::                    and the run scripts now do that for themselves.
-::   wrong version  - installed, but not the version Expo Go's native side
-::                    expects. `pnpm install` CANNOT fix this: it installs
-::                    what package.json says, and package.json is the thing
-::                    that is wrong. It needs a deliberate bump, reviewed.
+::   absent            - a pull brought a new package
+::   stale             - package.json was bumped and node_modules was not.
+::                       THIS WINDOW ONLY LOOKS, so a pull leaves it stale
+::                       until a run script installs.
+::   genuinely pinned   - package.json itself names the wrong version
 ::
-:: Telling somebody to reinstall when the manifest is what needs changing is
-:: the same defect as the Try again button that retried the wrong thing. So
-:: the output is captured and read, and each case gets its own line.
+:: Installing is safe, idempotent and never touches package.json, so it is
+:: named first for every case. Only if it survives an install is it the third
+:: kind — and that is a decision made where it can be reviewed, not here.
 echo n| call npx expo install --check > "%TEMP%\steading-expo-check.txt" 2>&1
 set EXPOFAIL=%errorlevel%
 type "%TEMP%\steading-expo-check.txt"
 
 if not "%EXPOFAIL%"=="0" (
   set /a MISSING+=1
-  findstr /c:"doesn't seem to be installed" "%TEMP%\steading-expo-check.txt" >nul 2>&1
-  if errorlevel 1 (
-    echo.
-    echo   [ MISSING ] package versions - do NOT reinstall; this needs a version
-    echo               change in the project. Send this window to Claude.
-  ) else (
-    echo.
-    echo   [ MISSING ] packages       - run "Start the farm server" once; it installs them
-  )
+  echo.
+  echo   [ MISSING ] packages       - run "Start the farm server" once; it installs them.
+  echo               This window only looks, so it cannot fix this itself.
+  echo               If this line is STILL here afterwards, the project needs a
+  echo               version change - send this window to Claude.
 )
 del "%TEMP%\steading-expo-check.txt" >nul 2>&1
 cd ..\..
