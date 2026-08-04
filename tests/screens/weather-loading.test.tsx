@@ -30,11 +30,15 @@ vi.mock('@steading/core/weather', () => ({
     new Promise((resolve) => {
       held.release = () => resolve(null);
     }),
+  readObservation: async () => null,
   refreshWeather: async () => ({ weather: null }),
+  refreshObservation: async () => null,
   forgetWeather: async () => undefined,
   // Held at "nothing to ask for", so this test is about the read alone.
   wouldFetch: () => false,
+  wouldFetchObservation: () => false,
   MIN_GAP_MS: 3_600_000,
+  OBSERVATION_GAP_MS: 600_000,
 }));
 
 const { enqueue } = await import('@steading/core/sync/queue');

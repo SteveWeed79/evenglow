@@ -100,6 +100,69 @@ export const forecastHourSchema = z
 
 export type ForecastHour = z.infer<typeof forecastHourSchema>;
 
+/**
+ * What it is doing right now, **measured**.
+ *
+ * ## Why this is not just the first hour of the forecast
+ *
+ * It was, and that was wrong in a way that only shows up somewhere with
+ * weather. The hourly product gives a forecast FOR the current hour, so the
+ * number on Today was a prediction wearing the label "now" — and a Kansas
+ * summer afternoon can climb ten degrees in half an hour. The app would have
+ * shown 74° with confidence while it was 84° in the yard, on the one screen
+ * this app asks people to trust.
+ *
+ * An observation is a reading from a real thermometer at the nearest airfield.
+ * ASOS stations report every twenty minutes as a matter of course, and file a
+ * SPECI report out of cycle when conditions change sharply — which is to say
+ * the mechanism exists precisely because of the case this fixes.
+ *
+ * ## It carries its own age, and that is not decoration
+ *
+ * The nearest station can be forty miles away and its last report twenty-five
+ * minutes old. On a still morning that is nothing; on the afternoon this
+ * exists for it is the difference between a number and a guess. So the age
+ * travels with the reading and the screen says it.
+ */
+export const observationSchema = z
+  .object({
+    /** When the station took the reading — not when this device asked. */
+    at: z.number().int(),
+    /** Tenths of a degree Celsius. */
+    tempDeciC: z.number().int(),
+    condition: conditionSchema,
+    /** Per cent. Absent on a station that does not report it. */
+    humidity: z.number().int().min(0).max(100).optional(),
+    /**
+     * The station's own heat index, where it publishes one.
+     *
+     * Kept rather than recomputed: it is what the National Weather Service
+     * says about this reading, and a second implementation of the same
+     * arithmetic is a second thing to drift.
+     */
+    feelsLikeDeciC: z.number().int().optional(),
+    /** "Manhattan Regional Airport" — so a farm can judge how far off it is. */
+    station: z.string().max(120).optional(),
+  })
+  .strict();
+
+export type Observation = z.infer<typeof observationSchema>;
+
+/**
+ * How old a reading may be before it stops being "now".
+ *
+ * Ninety minutes, which is generous against a twenty-minute reporting cycle —
+ * the point is not to be strict, it is to refuse to call something current
+ * when the station has plainly stopped reporting. Past this the row falls back
+ * to the forecast's figure for the hour, which is worse but honest, and says
+ * which it is showing.
+ */
+export const OBSERVATION_STALE_MS = 90 * 60 * 1000;
+
+export function observationIsStale(observation: Observation, now: number): boolean {
+  return now - observation.at > OBSERVATION_STALE_MS;
+}
+
 export const forecastSchema = z
   .object({
     /** When the provider made this run — what staleness is judged on. */

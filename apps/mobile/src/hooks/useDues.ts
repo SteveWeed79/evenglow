@@ -125,6 +125,18 @@ export function useDues(): DuesView {
             name: group.name,
             species: group.species,
             lastDone: lastCare.get(group.id) ?? {},
+            /**
+             * The farm's own intervals, and when it added the group.
+             *
+             * Both existed in the engine and neither was passed. `intervals`
+             * is how a job is silenced or re-timed, so without it the only way
+             * to quiet a row was to log a job that never happened; `since` is
+             * what keeps a farm's first morning from being a wall of overdue
+             * work. A builder with no caller is a feature that exists only in
+             * the test suite — the same lesson this hook already records.
+             */
+            intervals: group.careIntervals,
+            since: group.since,
           },
           now,
         ),

@@ -2,7 +2,16 @@ import { DEFAULT_UNIT_SYSTEM, type UnitSystem } from '@steading/contracts';
 import { readSite } from '@steading/core/read/growing';
 import { localStore } from '@steading/core/db/store';
 import { subscribe as subscribeToEngine } from '@steading/core/sync/engine';
-import { readWeather, refreshWeather, type Weather, wouldFetch } from '@steading/core/weather';
+import {
+  type Measured,
+  readObservation,
+  readWeather,
+  refreshObservation,
+  refreshWeather,
+  type Weather,
+  wouldFetch,
+  wouldFetchObservation,
+} from '@steading/core/weather';
 import { clearTrouble, reportTrouble } from '../hooks/useTrouble';
 
 /**
@@ -51,6 +60,12 @@ export interface WeatherState {
    */
   placeName: string | undefined;
   weather: Weather | null;
+  /**
+   * What a thermometer at the nearest airfield actually says, and how old that
+   * is. Null when no station nearby reports, which is when the screen falls
+   * back to the forecast's figure for the hour and says so.
+   */
+  measured: Measured | null;
   /** The farm is outside what the National Weather Service covers. */
   uncovered: boolean;
   /** True only while a request is genuinely in flight. */
@@ -63,6 +78,7 @@ const BLANK: WeatherState = {
   at: null,
   placeName: undefined,
   weather: null,
+  measured: null,
   uncovered: false,
   fetching: false,
   units: DEFAULT_UNIT_SYSTEM,
@@ -96,6 +112,14 @@ function sameWeather(a: Weather | null, b: Weather | null): boolean {
   );
 }
 
+/** Two reads describing the same reading: the same station report, same age. */
+function sameMeasured(a: Measured | null, b: Measured | null): boolean {
+  if (a === b) return true;
+  if (a === null || b === null) return false;
+
+  return a.stale === b.stale && a.observation.at === b.observation.at;
+}
+
 function same(a: WeatherState, b: WeatherState): boolean {
   return (
     a.loading === b.loading &&
@@ -104,6 +128,7 @@ function same(a: WeatherState, b: WeatherState): boolean {
     a.units === b.units &&
     a.placeName === b.placeName &&
     a.weather === b.weather &&
+    a.measured === b.measured &&
     a.at?.lat === b.at?.lat &&
     a.at?.lon === b.at?.lon
   );
@@ -120,6 +145,10 @@ function set(next: Partial<WeatherState>): void {
    * recompute every threshold on every engine publish for no reason.
    */
   if (sameWeather(state.weather, merged.weather)) merged.weather = state.weather;
+  // Same trick for the reading: `readObservation` builds a fresh object every
+  // call, so without this the bail-out below could never fire once a station
+  // was reporting.
+  if (sameMeasured(state.measured, merged.measured)) merged.measured = state.measured;
 
   // The bail-out that makes `useSyncExternalStore` quiet. Without it every
   // publish hands React a new object and every consumer re-renders.
@@ -154,13 +183,20 @@ let gridPlace: string | undefined;
 export async function load(force = false): Promise<void> {
   let site: Awaited<ReturnType<typeof readSite>>;
   let cached: Weather | null;
+  let reading: Measured | null;
   let stamp: { fetchedAt: number } | null;
+  let readingStamp: { fetchedAt: number } | null;
 
   try {
     site = await readSite();
-    // The cache first, always, and before any decision about fetching: a
-    // screen must be able to paint from this alone.
-    [cached, stamp] = await Promise.all([readWeather(), localStore().readForecast()]);
+    // The caches first, always, and before any decision about fetching: a
+    // screen must be able to paint from these alone.
+    [cached, reading, stamp, readingStamp] = await Promise.all([
+      readWeather(),
+      readObservation(),
+      localStore().readForecast(),
+      localStore().readObservation(),
+    ]);
   } catch (error) {
     reportTrouble('the forecast', error);
     return;
@@ -174,6 +210,7 @@ export async function load(force = false): Promise<void> {
     at,
     placeName: nameOf(site?.placeName, gridPlace),
     weather: cached,
+    measured: reading,
     units: site?.units ?? DEFAULT_UNIT_SYSTEM,
   });
   clearTrouble();
@@ -188,20 +225,39 @@ export async function load(force = false): Promise<void> {
    * "Asking…", and cleared it a millisecond later. Once a publish arrives on
    * every mutation, that is a strobing button rather than an invisible blip.
    */
-  if (!force && !wouldFetch(stamp, Date.now())) return;
+  /**
+   * Two products, two cadences, and the decision is made per product.
+   *
+   * The forecast is regenerated about hourly, so asking faster returns the
+   * same answer. A station reading is a different thing entirely — reported
+   * every twenty minutes and out of cycle when conditions move — so it gets
+   * its own ten-minute gap. Governing both by the slower one is what made the
+   * row show an hour-old prediction and call it "now".
+   */
+  const now = Date.now();
+  const wantForecast = force || wouldFetch(stamp, now);
+  const wantReading = force || wouldFetchObservation(readingStamp, now);
+  if (!wantForecast && !wantReading) return;
 
   busy = true;
   set({ fetching: true });
 
   try {
-    const result = await refreshWeather(at, { force });
-    gridPlace = result.placeName;
+    if (wantReading) {
+      const measured = await refreshObservation(at, { force });
+      set({ measured });
+    }
 
-    set({
-      weather: result.weather,
-      uncovered: result.uncovered ?? false,
-      placeName: nameOf(site?.placeName, gridPlace),
-    });
+    if (wantForecast) {
+      const result = await refreshWeather(at, { force });
+      gridPlace = result.placeName;
+
+      set({
+        weather: result.weather,
+        uncovered: result.uncovered ?? false,
+        placeName: nameOf(site?.placeName, gridPlace),
+      });
+    }
   } finally {
     busy = false;
     set({ fetching: false });

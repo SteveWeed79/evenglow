@@ -9,6 +9,7 @@ import { AddServiceScreen } from '../screens/AddServiceScreen';
 import { AnimalsScreen } from '../screens/AnimalsScreen';
 import { BreedingScreen } from '../screens/BreedingScreen';
 import { CareLogScreen } from '../screens/CareLogScreen';
+import { CareRoutineScreen } from '../screens/CareRoutineScreen';
 import { DiagnosticsScreen } from '../screens/DiagnosticsScreen';
 import { EditGroupScreen } from '../screens/EditGroupScreen';
 import { FeedScreen } from '../screens/FeedScreen';
@@ -104,6 +105,8 @@ export type RootParamList = {
   AddAnimal: { groupId: string };
   Treatment: { groupId: string };
   CareLog: { groupId: string };
+  /** How often this group's routine jobs come round, and which it does at all. */
+  CareRoutine: { groupId: string };
   Weigh: { groupId: string };
   /** A clip. Offered only on a group kept for fibre. */
   Shearing: { groupId: string };
@@ -165,6 +168,7 @@ export function Root({ onSignedOut }: { onSignedOut: () => void }): React.ReactE
       <Stack.Screen name="AddAnimal" component={AddAnimalScreen} />
       <Stack.Screen name="Treatment" component={TreatmentScreen} />
       <Stack.Screen name="CareLog" component={CareLogScreen} />
+      <Stack.Screen name="CareRoutine" component={CareRoutineScreen} />
       <Stack.Screen name="Weigh" component={WeighScreen} />
       <Stack.Screen name="Shearing" component={ShearingScreen} />
       <Stack.Screen name="Produce" component={ProduceScreen} />

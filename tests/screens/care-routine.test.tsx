@@ -1,0 +1,160 @@
+import { beforeEach, describe, expect, it } from 'vitest';
+import { careDues, careIntervalDays, newId } from '@steading/contracts';
+import { listGroups } from '@steading/core/read/groups';
+import { enqueue } from '@steading/core/sync/queue';
+import { freshStore } from '../support/store';
+import { mount, routeProps } from '../support/screen';
+import { CareRoutineScreen } from '../../apps/mobile/src/screens/CareRoutineScreen';
+import { TodayScreen } from '../../apps/mobile/src/screens/TodayScreen';
+
+/**
+ * Turning a routine job off, which until now was impossible.
+ *
+ * `careDues` has taken a per-group `intervals` override since it was written,
+ * with `null` documented as "silences a job entirely", and **nothing anywhere
+ * set it**. So a farm that buys in vaccinated pullets had two options: log a
+ * vaccination it never gave, or scroll past that row every morning forever.
+ *
+ * A builder with no caller is a feature that exists only in the test suite —
+ * the lesson `useDues` already records about the due builders that shipped
+ * before anything could feed them. This is the caller.
+ */
+
+const GROUP = newId();
+
+beforeEach(async () => {
+  await freshStore();
+  await enqueue({
+    entity: 'flock',
+    op: 'create',
+    targetId: GROUP,
+    payload: { name: 'Chickens', species: 'chicken', count: 6, purposes: ['eggs'] },
+  });
+});
+
+describe('the defaults', () => {
+  /**
+   * Poultry were charged twice for one walk-round: a monthly look-over beside
+   * a monthly parasite check, on an animal where those are the same act.
+   */
+  it('no longer asks a chicken keeper to look at their chickens', () => {
+    expect(careIntervalDays('chicken', 'health-check')).toBeNull();
+  });
+
+  /**
+   * Red mite lives in the coop rather than on the bird and needs a torch after
+   * dark — a real job that looking a hen over does not cover, and quarterly
+   * rather than monthly.
+   */
+  it('keeps the parasite check, quarterly, because it is a different job', () => {
+    expect(careIntervalDays('chicken', 'parasite-check')).toBe(90);
+  });
+
+  /** A faecal count is nothing like a general look, so ruminants keep both. */
+  it('leaves a ruminant parasite check where it was', () => {
+    expect(careIntervalDays('goat', 'parasite-check')).toBe(60);
+  });
+
+  /**
+   * The measurable half of the complaint. A three-group farm owed roughly a
+   * hundred confirmations a year; the same farm now owes fewer than half.
+   */
+  it('roughly halves what a poultry group asks for in a year', () => {
+    const perYear = (['worming', 'parasite-check', 'vaccination', 'health-check'] as const)
+      .map((kind) => careIntervalDays('chicken', kind))
+      .filter((days): days is number => days !== null)
+      .reduce((sum, days) => sum + 365 / days, 0);
+
+    expect(Math.round(perYear)).toBeLessThan(10);
+  });
+});
+
+describe('turning a job off', () => {
+  it('stores it as never, and the row stops appearing', async () => {
+    const screen = await mount(<CareRoutineScreen {...routeProps({ groupId: GROUP })} />);
+    await screen.press('care-vaccination-never');
+    screen.unmount();
+
+    const [group] = await listGroups();
+    expect(group?.careIntervals?.vaccination).toBeNull();
+
+    const dues = careDues(
+      { id: GROUP, name: 'Chickens', species: 'chicken', lastDone: {}, intervals: group?.careIntervals },
+      Date.now(),
+    );
+    expect(dues.some((due) => due.key.endsWith('vaccination'))).toBe(false);
+  });
+
+  it('takes it off Today', async () => {
+    const before = await mount(<TodayScreen />);
+    // Behind the group's bundle, which is where husbandry rows past the first
+    // one live.
+    await before.pressLabel('more');
+    expect(before.text()).toContain('Vaccinations — Chickens');
+    before.unmount();
+
+    const screen = await mount(<CareRoutineScreen {...routeProps({ groupId: GROUP })} />);
+    await screen.press('care-vaccination-never');
+    screen.unmount();
+
+    const after = await mount(<TodayScreen />);
+    expect(after.text()).not.toContain('Vaccinations — Chickens');
+    after.unmount();
+  });
+
+  /**
+   * The other half of the same field: a keeper who worms on their own schedule
+   * should be able to say so rather than dismissing a row every four months.
+   */
+  it("accepts a farm's own interval as well as never", async () => {
+    const screen = await mount(<CareRoutineScreen {...routeProps({ groupId: GROUP })} />);
+    await screen.press('care-worming-twice-a-year');
+    screen.unmount();
+
+    const [group] = await listGroups();
+    expect(group?.careIntervals?.worming).toBe(182);
+  });
+
+  /**
+   * Three states, not two. "Default" must be the ABSENCE of a setting, so a
+   * farm that never expressed a preference moves when the default moves — a
+   * stored copy would freeze it at whatever shipped that day.
+   */
+  it('goes back to no opinion rather than to a stored copy of the default', async () => {
+    const screen = await mount(<CareRoutineScreen {...routeProps({ groupId: GROUP })} />);
+    await screen.press('care-worming-never');
+    await screen.press('care-worming-default');
+    screen.unmount();
+
+    const [group] = await listGroups();
+    expect(group?.careIntervals).not.toHaveProperty('worming');
+  });
+
+  /**
+   * The case `health-check` being off by default is meant to leave open: a
+   * group in a rented field two valleys over is genuinely worth a prompt.
+   */
+  it('lets a farm switch a job back on that the species defaults off', async () => {
+    const screen = await mount(<CareRoutineScreen {...routeProps({ groupId: GROUP })} />);
+    await screen.press('care-health-check-monthly');
+    screen.unmount();
+
+    const [group] = await listGroups();
+    const dues = careDues(
+      { id: GROUP, name: 'Chickens', species: 'chicken', lastDone: {}, intervals: group?.careIntervals },
+      Date.now(),
+    );
+    expect(dues.some((due) => due.key.endsWith('health-check'))).toBe(true);
+  });
+});
+
+describe('what the screen says is happening', () => {
+  it('names the default rather than pretending the farm chose it', async () => {
+    const screen = await mount(<CareRoutineScreen {...routeProps({ groupId: GROUP })} />);
+
+    expect(screen.get('care-now-worming').children.join('')).toContain('120 days, by default');
+    // And a job this species does not do says so, rather than hiding.
+    expect(screen.get('care-now-hoof-trim').children.join('')).toContain('Not for this kind');
+    screen.unmount();
+  });
+});

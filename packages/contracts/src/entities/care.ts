@@ -54,6 +54,25 @@ export const CARE_KIND_LABELS: Record<CareKind, string> = {
   'health-check': 'Looked over',
 };
 
+/**
+ * A farm's own intervals, per job, in days. `null` silences one entirely.
+ *
+ * Built from `CARE_KINDS` rather than written out, so a new kind cannot be
+ * added to the list and forgotten here — which would leave it permanently
+ * un-silenceable with nothing failing to say so.
+ *
+ * Partial on purpose: an absent kind means "no opinion", which is a different
+ * thing from "never" and must stay different. Storing the default instead
+ * would freeze it, so a farm that never expressed a preference would keep an
+ * old figure after the default was improved.
+ */
+const careIntervalShape = Object.fromEntries(
+  CARE_KINDS.map((kind) => [kind, z.number().int().min(1).max(3650).nullable()]),
+) as Record<CareKind, z.ZodNullable<z.ZodNumber>>;
+
+export const careIntervalsSchema = z.object(careIntervalShape).partial().strict();
+export type CareIntervals = z.infer<typeof careIntervalsSchema>;
+
 export const careLogCreateSchema = z
   .object({
     occurredAt: z.number().int(),

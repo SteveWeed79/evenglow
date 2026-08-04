@@ -43,7 +43,7 @@ import { SKY_MARKS } from '../weather/marks';
  */
 
 export function WeatherRow(): React.ReactElement | null {
-  const { loading, at, weather, units } = useWeather();
+  const { loading, at, weather, measured, units } = useWeather();
   const nav = useNav();
   const { colors } = useTheme();
 
@@ -78,9 +78,21 @@ export function WeatherRow(): React.ReactElement | null {
     );
   }
 
+  /**
+   * The measured reading wins over the forecast's figure for the hour.
+   *
+   * The hourly product predicts the current hour; a station reports what a
+   * thermometer says. A Kansas summer afternoon can climb ten degrees in half
+   * an hour, so the prediction can be badly wrong while this row shows it with
+   * a confident numeral — on the one number somebody can check by opening a
+   * door. The forecast is the fallback for a farm with no station reporting
+   * nearby, and for a reading that has gone quiet.
+   */
+  const live = measured !== null && !measured.stale ? measured.observation : null;
+
   const today = forecastFor(weather.forecast.days, Date.now());
-  const sky = weather.forecast.now.condition;
-  const temp = degrees(weather.forecast.now.tempDeciC, units);
+  const sky = live?.condition ?? weather.forecast.now.condition;
+  const temp = degrees(live?.tempDeciC ?? weather.forecast.now.tempDeciC, units);
 
   const said = [
     `${CONDITION_WORDS[sky]}, ${temp} degrees now`,

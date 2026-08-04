@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { flockCreateSchema, type Species } from '@steading/contracts';
+import {
+  type CareIntervals,
+  flockCreateSchema,
+  idMintedAt,
+  type Species,
+} from '@steading/contracts';
 import { localStore } from '../db/store';
 
 /**
@@ -31,6 +36,19 @@ export interface Group {
   bornAt?: number;
   /** The farm's own processing figure, in weeks. Beats the library. */
   processAtWeeks?: number;
+  /**
+   * The farm's own intervals for the routine jobs. `null` silences one.
+   * Absent, or a kind absent from it, means the species default applies.
+   */
+  careIntervals?: CareIntervals;
+  /**
+   * When this farm added the group, decoded from the ULID in its id.
+   *
+   * No stored field and no migration: a ULID's first 48 bits are the moment it
+   * was minted. `LocalRecord` carries only `updatedAt`, which moves on every
+   * edit and cannot answer "how long has this farm had this".
+   */
+  since?: number;
 }
 
 /** The projection stores whatever the payload held, so it is parsed on the way out. */
@@ -47,6 +65,8 @@ export async function listGroups(): Promise<Group[]> {
       // rendered half-formed; the diagnostics sheet reports the discrepancy.
       if (!parsed.success) return [];
 
+      const mintedAt = idMintedAt(record.targetId);
+
       return [
         {
           id: record.targetId,
@@ -62,6 +82,10 @@ export async function listGroups(): Promise<Group[]> {
           ...(parsed.data.processAtWeeks === undefined
             ? {}
             : { processAtWeeks: parsed.data.processAtWeeks }),
+          ...(parsed.data.careIntervals === undefined
+            ? {}
+            : { careIntervals: parsed.data.careIntervals }),
+          ...(mintedAt === null ? {} : { since: mintedAt }),
           count: parsed.data.count ?? 0,
         } satisfies Group,
       ];

@@ -1,7 +1,15 @@
-import { type Forecast, forecastSchema, isStale } from '@steading/contracts';
+import {
+  type Forecast,
+  forecastSchema,
+  isStale,
+  type Observation,
+  observationIsStale,
+  observationSchema,
+} from '@steading/contracts';
 import { localStore } from '../db/store';
 import {
   fetchForecast,
+  fetchObservation,
   findGrid,
   type Grid,
   OutsideCoverageError,
@@ -30,6 +38,7 @@ import {
  */
 
 export {
+  fetchObservation,
   findGrid,
   findPlace,
   type Grid,
@@ -45,6 +54,89 @@ export interface Weather {
   stale: boolean;
   /** When this device last heard, for the line under the row. */
   fetchedAt: number;
+}
+
+/**
+ * How often a device asks for a **measured** reading, at most.
+ *
+ * Ten minutes, against the forecast's hour, and the difference is the point.
+ * They are two products with two update rates: NWS regenerates the gridded
+ * forecast about hourly, so asking faster returns the same answer; an ASOS
+ * station reports every twenty minutes and files out of cycle when conditions
+ * change sharply.
+ *
+ * That second case is why this exists. A Kansas summer afternoon can climb ten
+ * degrees in half an hour, and an hourly refresh of a value labelled "now"
+ * would have shown a number that was wrong by the time anybody read it.
+ */
+export const OBSERVATION_GAP_MS = 10 * 60 * 1000;
+
+/** What a screen shows as "now": the reading, and how old it is. */
+export interface Measured {
+  observation: Observation;
+  /** True past ninety minutes — see OBSERVATION_STALE_MS. */
+  stale: boolean;
+}
+
+export async function readObservation(now: number = Date.now()): Promise<Measured | null> {
+  const cached = await localStore().readObservation();
+  if (cached === null) return null;
+
+  const parsed = observationSchema.safeParse(JSON.parse(cached.value));
+  if (!parsed.success) return null;
+
+  return { observation: parsed.data, stale: observationIsStale(parsed.data, now) };
+}
+
+/**
+ * Fetches a reading if the ten minutes are up, and writes what it got.
+ *
+ * Same rules as the forecast refresh: never throws, never blocks a screen, and
+ * a failure leaves the last reading in place with its age showing. A station
+ * that reports nothing usable is not an error either — the screen falls back
+ * to the forecast's figure for the hour and says which it is showing.
+ */
+export async function refreshObservation(
+  at: Position,
+  options: RefreshOptions = {},
+): Promise<Measured | null> {
+  const now = options.now ?? Date.now();
+  const cached = await localStore().readObservation();
+
+  const asked = triedAt(cached, lastTried.observation);
+  if (options.force !== true && asked !== null && now - asked < OBSERVATION_GAP_MS) {
+    return readObservation(now);
+  }
+
+  lastTried.observation = now;
+
+  try {
+    const grid = await gridFor(at);
+    const observation = await fetchObservation(grid);
+    // No station near this farm reports, or none of the nearest three is up.
+    // The attempt is recorded above, so this does not retry on every publish.
+    if (observation === null) return readObservation(now);
+
+    await localStore().writeObservation({
+      observedAt: observation.at,
+      fetchedAt: now,
+      value: JSON.stringify(observation),
+    });
+    return readObservation(now);
+  } catch {
+    // Offline, or every nearby station is down. Both leave the last reading
+    // where it was, which the screen renders with its age.
+    return readObservation(now);
+  }
+}
+
+/** Whether a refresh would actually ask. The observation's own gap. */
+export function wouldFetchObservation(
+  cached: { fetchedAt: number } | null,
+  now: number,
+): boolean {
+  const asked = triedAt(cached, lastTried.observation);
+  return asked === null || now - asked >= OBSERVATION_GAP_MS;
 }
 
 export async function readWeather(now: number = Date.now()): Promise<Weather | null> {
@@ -83,7 +175,8 @@ export const MIN_GAP_MS = 60 * 60 * 1000;
  * driving it fires on every mutation.
  */
 export function wouldFetch(cached: { fetchedAt: number } | null, now: number): boolean {
-  return cached === null || now - cached.fetchedAt >= MIN_GAP_MS;
+  const asked = triedAt(cached, lastTried.forecast);
+  return asked === null || now - asked >= MIN_GAP_MS;
 }
 
 export interface RefreshResult {
@@ -108,6 +201,31 @@ export interface RefreshResult {
  * forecasting the old valley.
  */
 let known: { key: string; grid: Grid } | null = null;
+
+/**
+ * When each product was last **asked for**, as opposed to last heard.
+ *
+ * The gap has to be "time since the last attempt", not "time since the last
+ * success" — otherwise an attempt that comes back with nothing leaves the
+ * cache's `fetchedAt` where it was and the next publish tries again, and the
+ * one after that, forever. That is the firehose this file has already been
+ * fixed for once; a station list that is simply absent, or a barn with no
+ * signal, would have reintroduced it.
+ *
+ * **In memory rather than in a column**, deliberately. It is a rate limiter,
+ * not a record: one attempt per cold start is right, and a restart should not
+ * inherit a backoff. And `fetchedAt` cannot double as this, because the screen
+ * shows it — bumping it on a failed attempt would say "last heard just now"
+ * about a forecast a day old, which is the exact lie this cache exists to
+ * avoid.
+ */
+const lastTried = { forecast: 0, observation: 0 };
+
+/** The later of "last heard" and "last asked", which is what a gap runs from. */
+function triedAt(cached: { fetchedAt: number } | null, tried: number): number | null {
+  if (cached === null && tried === 0) return null;
+  return Math.max(cached?.fetchedAt ?? 0, tried);
+}
 
 async function gridFor(at: Position): Promise<Grid> {
   const key = `${at.lat},${at.lon}`;
@@ -160,12 +278,17 @@ export async function refreshWeather(
    * `/points` requests to decide six times that it already had the answer —
    * the request the cache exists to avoid, moved one step earlier.
    */
-  if (options.force !== true && cached !== null && now - cached.fetchedAt < MIN_GAP_MS) {
+  const asked = triedAt(cached, lastTried.forecast);
+  if (options.force !== true && asked !== null && now - asked < MIN_GAP_MS) {
     return {
       weather: await readWeather(now),
       ...(known?.grid.placeName === undefined ? {} : { placeName: known.grid.placeName }),
     };
   }
+
+  // Recorded before the request rather than after, so a request that throws
+  // still counts as an attempt.
+  lastTried.forecast = now;
 
   try {
     const grid = await gridFor(at);
@@ -198,7 +321,10 @@ export async function refreshWeather(
  */
 export async function forgetWeather(): Promise<void> {
   known = null;
+  lastTried.forecast = 0;
+  lastTried.observation = 0;
   await localStore().writeForecast({ issuedAt: 0, fetchedAt: 0, value: '{}' });
+  await localStore().writeObservation({ observedAt: 0, fetchedAt: 0, value: '{}' });
 }
 
-export type { Forecast };
+export type { Forecast, Observation };

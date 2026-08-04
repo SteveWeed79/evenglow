@@ -3,13 +3,14 @@ import { StyleSheet, Text, View } from 'react-native';
 import { newId, TASK_RECURRENCES } from '@steading/contracts';
 import { isSettled, listTasks, type Task } from '@steading/core/read/tasks';
 import { Choice, Confirm, DayPick, Failure, Field, Primary, Row, TextField, Toggle, useSaver } from '../components/Form';
+import { Icon } from '../components/Icon';
 import { Loading } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
 import { useLog } from '../hooks/useSync';
 import { useTheme } from '../theme/ThemeProvider';
-import { FONTS, SPACE, TYPE } from '../theme/tokens';
+import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
 
 /**
  * The jobs a farm writes down itself.
@@ -104,7 +105,28 @@ export function JobsScreen(): React.ReactElement {
   if (tasks === null) return <Loading title="Jobs" />;
 
   const open = tasks.filter((task) => !isSettled(task));
-  const finished = tasks.filter(isSettled);
+
+  /**
+   * Only what was finished today, and that is the change.
+   *
+   * Every finished job used to stay here for ever, so a farm that had used the
+   * app for a season scrolled past a graveyard to reach the jobs it still had
+   * to do. Keeping today's gives the whole day to undo a mis-tap — which is
+   * the only reason to look at a finished job — and by morning the list is
+   * back to being about work.
+   *
+   * **They are not lost.** A completed task now appears in What happened on
+   * the day it was done, which is what makes letting go of it here safe. That
+   * projection had to be taught about tasks first: everything else in it is
+   * append-only, and this is the one mutable row whose `completedAt` is a fact
+   * rather than a flag.
+   */
+  const finished = tasks.filter(
+    (task) =>
+      isSettled(task) &&
+      task.completedAt !== undefined &&
+      task.completedAt >= startOfDay(Date.now()),
+  );
 
   return (
     <Screen title="Jobs" back>
@@ -191,33 +213,58 @@ export function JobsScreen(): React.ReactElement {
 
       {finished.length > 0 ? (
         <>
-          <Text style={[styles.label, { color: colors.muted }]}>Done</Text>
+          <Text style={[styles.label, { color: colors.muted }]}>Done today</Text>
           {finished.map((task) => (
-            <Row
-              key={task.id}
-              title={task.title}
-              detail={
-                task.completedAt === undefined
-                  ? 'Finished'
-                  : `Finished ${new Date(task.completedAt).toLocaleDateString(undefined, {
-                      day: 'numeric',
-                      month: 'long',
-                    })}`
-              }
-              icon="check"
-              testID={`job-done-${task.id}`}
-              // Tapping a finished job re-opens it: the commonest reason to
-              // look at this list is having ticked the wrong one.
-              onPress={() =>
-                void log({
-                  entity: 'task',
-                  op: 'update',
-                  targetId: task.id,
-                  payload: { completedAt: undefined },
-                })
-              }
-            />
+            <View key={task.id} style={styles.job}>
+              {/**
+                * A finished job, drawn as finished.
+                *
+                * It used to be a `Row` — a chevron promising it opened
+                * something, and a single tap that silently un-finished it
+                * instead. Two lies in one control: the mark said "opens" and
+                * the tap said nothing at all while undoing the thing the farm
+                * had just done.
+                *
+                * It is not pressable now. Reopening is its own deliberate
+                * control below, because ticking a job is the ordinary act and
+                * un-ticking is the exception.
+                */}
+              <View
+                style={[styles.done, { backgroundColor: colors.raised, borderColor: colors.border }]}
+                testID={`job-done-${task.id}`}
+                accessible
+                accessibilityLabel={`${task.title}. Done ${finishedWhen(task)}.`}
+              >
+                <Icon name="check" size={24} color={colors.leaf} />
+                <View style={styles.doneWords}>
+                  <Text style={[styles.doneTitle, { color: colors.muted }]}>{task.title}</Text>
+                  <Text style={[styles.doneWhen, { color: colors.muted }]}>
+                    Done {finishedWhen(task)}
+                  </Text>
+                </View>
+              </View>
+
+              <Confirm
+                label="Need to redo this"
+                armedLabel="Tap again to put it back"
+                testID={`job-redo-${task.id}`}
+                onConfirm={() =>
+                  void log({
+                    entity: 'task',
+                    op: 'update',
+                    targetId: task.id,
+                    payload: { completedAt: undefined },
+                  })
+                }
+              />
+            </View>
           ))}
+
+          {/* Where they go, said out loud — otherwise tomorrow's empty section
+              reads as the app having lost them. */}
+          <Body>
+            These clear overnight. They stay in What happened, on the day you did them.
+          </Body>
         </>
       ) : null}
     </Screen>
@@ -240,6 +287,16 @@ function detailOf(task: Task): string {
   return every === null ? `${when} — tap when it is done` : `${when}, then ${every.toLowerCase()}`;
 }
 
+/** "at 8:52am", or the date if a clock has crossed midnight mid-render. */
+function finishedWhen(task: Task): string {
+  if (task.completedAt === undefined) return 'today';
+
+  return `at ${new Date(task.completedAt).toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  })}`;
+}
+
 function startOfDay(at: number): number {
   const date = new Date(at);
   date.setHours(0, 0, 0, 0);
@@ -248,6 +305,19 @@ function startOfDay(at: number): number {
 
 const styles = StyleSheet.create({
   job: { gap: SPACE.xs },
+  done: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACE.md,
+    minHeight: TAP.min,
+    padding: SPACE.md,
+    borderRadius: RADII.softHead,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  doneWords: { flex: 1, gap: 2 },
+  /** Struck through, so it reads as finished before a word of it is read. */
+  doneTitle: { fontFamily: FONTS.body, fontSize: TYPE.body, textDecorationLine: 'line-through' },
+  doneWhen: { fontFamily: FONTS.data, fontSize: TYPE.label, letterSpacing: 0.4 },
   label: {
     fontFamily: FONTS.data,
     fontSize: TYPE.label,

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { careIntervalsSchema } from './care';
 
 /**
  * Multi-species from the schema up (P10).
@@ -214,6 +215,26 @@ const flockShape = {
    * got silence.
    */
   processAtWeeks: z.number().min(1).max(520).optional(),
+  /**
+   * How often this group's routine jobs come round, when the farm disagrees
+   * with the default.
+   *
+   * **`null` means never**, and that is the field's whole reason for existing.
+   * Without it the only way to silence a job the farm does not do — vaccinating
+   * a flock of bought-in pullets that arrived vaccinated — was to log a
+   * vaccination that never happened. An app that makes lying the only way to
+   * quiet it has taught somebody to distrust its own records.
+   *
+   * A number is a farm's own interval in days, which is the other half of the
+   * same problem: the defaults in `due/care.ts` are deliberately conservative,
+   * and a keeper who trims every twelve weeks should be able to say twelve
+   * rather than dismiss a row every eight.
+   *
+   * Absent, or a kind absent from it, means "no opinion" and the species
+   * default applies. That is a third state and it is a real one — it must
+   * survive a default changing, which a stored copy of the default would not.
+   */
+  careIntervals: careIntervalsSchema.optional(),
   note: z.string().max(500).optional(),
 };
 

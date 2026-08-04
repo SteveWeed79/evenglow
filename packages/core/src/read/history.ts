@@ -11,6 +11,7 @@ import {
   predatorCreateSchema,
   productionLogCreateSchema,
   shearingCreateSchema,
+  taskCreateSchema,
   type UnitSystem,
   weightCreateSchema,
 } from '@steading/contracts';
@@ -118,6 +119,16 @@ async function eventsFrom<T>(
     });
 }
 
+/**
+ * The stored task, loosened.
+ *
+ * A projection holds whatever the payload held, and a task is built by a
+ * `create` and then changed by `update`s — so a row mid-flight can be missing
+ * fields the create schema requires. Partial here, and the two fields this
+ * read actually needs are checked below.
+ */
+const storedTask = taskCreateSchema.partial();
+
 const plural = (n: number, one: string, many = `${one}s`): string =>
   `${n} ${n === 1 ? one : many}`;
 
@@ -215,6 +226,38 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
           .filter((part): part is string => part !== null)
           .join(' · '),
       })),
+
+      /**
+       * A job the farm wrote down, on the day it was ticked off.
+       *
+       * **The one mutable entity in here, and it needs saying why.** Everything
+       * else is append-only: a record exists, it happened, it is dated. A task
+       * is a row that gets edited, and `completedAt` is the moment — the one
+       * place in this app where a completion flag is the truth rather than a
+       * second copy of it, because fixing a gate produces nothing else to log.
+       *
+       * So a finished job lands in What happened, which is what lets the Jobs
+       * screen let go of it overnight instead of accumulating a graveyard.
+       *
+       * **What this cannot do, stated:** a recurring job overwrites its own
+       * `completedAt` each time, so history shows the LAST time it was done
+       * rather than every time. A one-off — which is what most written-down
+       * jobs are — is exact. Recording every occurrence would want an
+       * append-only completion record, which is a bigger change than the
+       * problem currently justifies.
+       */
+      eventsFrom('task', storedTask, (v, id) =>
+        v.completedAt === undefined || v.title === undefined
+          ? null
+          : {
+              id,
+              entity: 'task',
+              at: v.completedAt,
+              title: v.title,
+              detail: 'Job done',
+              tally: { key: 'jobs', amount: 1, unit: 'job' },
+            },
+      ),
 
       eventsFrom('careLog', careLogCreateSchema, (v, id) => ({
         id,
