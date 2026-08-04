@@ -4,6 +4,7 @@ import { enqueue } from '@steading/core/sync/queue';
 import { forgetWeather } from '@steading/core/weather';
 import { freshStore } from '../support/store';
 import { mount } from '../support/screen';
+import { resetWeatherState } from '../../apps/mobile/src/weather/store';
 import { TodayScreen } from '../../apps/mobile/src/screens/TodayScreen';
 
 /**
@@ -114,6 +115,8 @@ async function bedWithPlanting(options: { covered: boolean; status?: string }): 
 beforeEach(async () => {
   await freshStore();
   await forgetWeather();
+  // The forecast state is module-level now, so it outlives a mount.
+  resetWeatherState();
 });
 
 afterEach(() => {

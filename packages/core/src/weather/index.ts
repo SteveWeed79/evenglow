@@ -71,7 +71,20 @@ export async function readWeather(now: number = Date.now()): Promise<Weather | n
  * the answer would be the same one six times, and the fetch is the only thing
  * on this screen that costs anything.
  */
-const MIN_GAP_MS = 60 * 60 * 1000;
+export const MIN_GAP_MS = 60 * 60 * 1000;
+
+/**
+ * Whether a refresh would actually ask anybody anything.
+ *
+ * Exported because a caller has to be able to know **before** it says it is
+ * asking. Without this, a screen sets "Asking…" on every attempt and clears it
+ * a millisecond later when the gap turns the attempt into a no-op — which is
+ * invisible when it happens once and is a strobing button when the thing
+ * driving it fires on every mutation.
+ */
+export function wouldFetch(cached: { fetchedAt: number } | null, now: number): boolean {
+  return cached === null || now - cached.fetchedAt >= MIN_GAP_MS;
+}
 
 export interface RefreshResult {
   /** What to render. Null only when nothing has ever been cached. */
