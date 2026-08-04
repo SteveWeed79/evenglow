@@ -81,6 +81,20 @@ export interface CachedObservation {
   value: string;
 }
 
+/**
+ * The last set of official alerts, whole.
+ *
+ * One row holding the entire active set rather than a row per alert, because
+ * the set is what the service answers with — an alert that has been cancelled
+ * is simply absent from the next response, and rows kept individually would
+ * need a reconciliation pass to notice. Replacing the blob cannot leave a
+ * lapsed tornado warning behind.
+ */
+export interface CachedAlerts {
+  fetchedAt: number;
+  value: string;
+}
+
 export interface LocalStore {
   // ── Writing ───────────────────────────────────────────────────────────────
 
@@ -214,6 +228,17 @@ export interface LocalStore {
    */
   readObservation(): Promise<CachedObservation | null>;
   writeObservation(entry: CachedObservation): Promise<void>;
+
+  /**
+   * The last set of official watches and warnings, or null.
+   *
+   * Its own row again, and for the third distinct rate: an alert is issued and
+   * cancelled on a scale of minutes, faster than either the forecast or the
+   * station reading. It is also the only one of the three where showing a
+   * lapsed value is dangerous rather than merely wrong.
+   */
+  readAlerts(): Promise<CachedAlerts | null>;
+  writeAlerts(entry: CachedAlerts): Promise<void>;
 
   quarantineCount(): Promise<number>;
   listQuarantined(): Promise<Quarantined[]>;

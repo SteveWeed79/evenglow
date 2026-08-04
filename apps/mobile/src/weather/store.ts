@@ -1,15 +1,18 @@
-import { DEFAULT_UNIT_SYSTEM, type UnitSystem } from '@steading/contracts';
+import { type Alert, DEFAULT_UNIT_SYSTEM, type UnitSystem } from '@steading/contracts';
 import { readSite } from '@steading/core/read/growing';
 import { localStore } from '@steading/core/db/store';
 import { subscribe as subscribeToEngine } from '@steading/core/sync/engine';
 import {
   type Measured,
+  readAlerts,
   readObservation,
   readWeather,
+  refreshAlerts,
   refreshObservation,
   refreshWeather,
   type Weather,
   wouldFetch,
+  wouldFetchAlerts,
   wouldFetchObservation,
 } from '@steading/core/weather';
 import { clearTrouble, reportTrouble } from '../hooks/useTrouble';
@@ -66,6 +69,16 @@ export interface WeatherState {
    * back to the forecast's figure for the hour and says so.
    */
   measured: Measured | null;
+  /**
+   * Official watches and warnings in force, worst first.
+   *
+   * Empty when there are none, when the set has gone stale, or when the farm
+   * has no position — and the screen cannot tell those apart on purpose. There
+   * is nothing useful to say about "we could not check for a tornado" that a
+   * farm should act on differently from "there is no tornado", and a row
+   * saying so on a clear day is a row that gets ignored on the day it matters.
+   */
+  alerts: Alert[];
   /** The farm is outside what the National Weather Service covers. */
   uncovered: boolean;
   /** True only while a request is genuinely in flight. */
@@ -79,6 +92,7 @@ const BLANK: WeatherState = {
   placeName: undefined,
   weather: null,
   measured: null,
+  alerts: [],
   uncovered: false,
   fetching: false,
   units: DEFAULT_UNIT_SYSTEM,
@@ -112,6 +126,21 @@ function sameWeather(a: Weather | null, b: Weather | null): boolean {
   );
 }
 
+/**
+ * Two reads describing the same set of alerts.
+ *
+ * By id and by count, which is what a cancellation changes — an alert is
+ * withdrawn by being absent from the next response, so the set's membership is
+ * the whole signal. Compared at all for the reason `sameWeather` is: `readAlerts`
+ * builds a fresh array every call, and without this every engine publish would
+ * hand React a new array and re-render the banner.
+ */
+function sameAlerts(a: readonly Alert[], b: readonly Alert[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  return a.every((alert, index) => alert.id === b[index]?.id);
+}
+
 /** Two reads describing the same reading: the same station report, same age. */
 function sameMeasured(a: Measured | null, b: Measured | null): boolean {
   if (a === b) return true;
@@ -129,6 +158,7 @@ function same(a: WeatherState, b: WeatherState): boolean {
     a.placeName === b.placeName &&
     a.weather === b.weather &&
     a.measured === b.measured &&
+    a.alerts === b.alerts &&
     a.at?.lat === b.at?.lat &&
     a.at?.lon === b.at?.lon
   );
@@ -149,6 +179,7 @@ function set(next: Partial<WeatherState>): void {
   // call, so without this the bail-out below could never fire once a station
   // was reporting.
   if (sameMeasured(state.measured, merged.measured)) merged.measured = state.measured;
+  if (sameAlerts(state.alerts, merged.alerts)) merged.alerts = state.alerts;
 
   // The bail-out that makes `useSyncExternalStore` quiet. Without it every
   // publish hands React a new object and every consumer re-renders.
@@ -186,16 +217,20 @@ export async function load(force = false): Promise<void> {
   let reading: Measured | null;
   let stamp: { fetchedAt: number } | null;
   let readingStamp: { fetchedAt: number } | null;
+  let warned: Alert[];
+  let alertStamp: { fetchedAt: number } | null;
 
   try {
     site = await readSite();
     // The caches first, always, and before any decision about fetching: a
     // screen must be able to paint from these alone.
-    [cached, reading, stamp, readingStamp] = await Promise.all([
+    [cached, reading, warned, stamp, readingStamp, alertStamp] = await Promise.all([
       readWeather(),
       readObservation(),
+      readAlerts(),
       localStore().readForecast(),
       localStore().readObservation(),
+      localStore().readAlerts(),
     ]);
   } catch (error) {
     reportTrouble('the forecast', error);
@@ -211,6 +246,7 @@ export async function load(force = false): Promise<void> {
     placeName: nameOf(site?.placeName, gridPlace),
     weather: cached,
     measured: reading,
+    alerts: warned,
     units: site?.units ?? DEFAULT_UNIT_SYSTEM,
   });
   clearTrouble();
@@ -233,16 +269,32 @@ export async function load(force = false): Promise<void> {
    * every twenty minutes and out of cycle when conditions move — so it gets
    * its own ten-minute gap. Governing both by the slower one is what made the
    * row show an hour-old prediction and call it "now".
+   *
+   * Three products now. An alert is issued and cancelled on a scale of
+   * minutes, which is faster than either, and it is the cheapest call of the
+   * three — one request, no grid lookup, no station list.
    */
   const now = Date.now();
   const wantForecast = force || wouldFetch(stamp, now);
   const wantReading = force || wouldFetchObservation(readingStamp, now);
-  if (!wantForecast && !wantReading) return;
+  const wantAlerts = force || wouldFetchAlerts(alertStamp, now);
+  if (!wantForecast && !wantReading && !wantAlerts) return;
 
   busy = true;
   set({ fetching: true });
 
   try {
+    /**
+     * Alerts first of the three.
+     *
+     * A tornado warning must not wait behind a seven-day forecast on a slow
+     * connection in a barn. It is also the cheapest call, so putting it first
+     * costs the other two nothing measurable.
+     */
+    if (wantAlerts) {
+      set({ alerts: await refreshAlerts(at, { force }) });
+    }
+
     if (wantReading) {
       const measured = await refreshObservation(at, { force });
       set({ measured });

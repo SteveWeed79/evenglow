@@ -17,6 +17,7 @@ import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { Tally } from '../components/Tally';
 import { WeatherRow } from '../components/WeatherRow';
+import { WeatherAlerts } from '../components/WeatherAlerts';
 import { WeatherWarnings } from '../components/WeatherWarnings';
 import { WithdrawalBanner } from '../components/WithdrawalBanner';
 import { useDues } from '../hooks/useDues';
@@ -179,7 +180,13 @@ export function TodayScreen(): React.ReactElement {
       {/* What the weather MEANS comes before what it is, and both come before
           the tallies. Warnings are silent on an ordinary day, so this costs
           nothing on the mornings it has nothing to say — see WeatherWarnings.
-          The row below it is one line, so neither displaces a tally. */}
+          The row below it is one line, so neither displaces a tally.
+
+          An official alert outranks all of it. The strip below this one is
+          this app's opinion about the farm's own animals; that one is a
+          meteorologist saying a tornado is on the ground, and a farm reading
+          top to bottom must not meet "your hens are warm" first. */}
+      <WeatherAlerts />
       <WeatherWarnings />
       <WeatherRow />
 

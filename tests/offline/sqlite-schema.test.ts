@@ -44,20 +44,23 @@ describe('migration ladder', () => {
     await migrate(db);
 
     /**
-     * The four IndexedDB used, plus the two weather caches.
+     * The four IndexedDB used, plus the three weather caches.
      *
-     * `forecast` and `observation` are deliberately NOT the engine's stores:
-     * they hold no records, never enter the outbox and never reach the wire.
-     * They are here because they are in the same file, not because they are
-     * part of the same system — see the migrations' notes and
+     * `forecast`, `observation` and `alerts` are deliberately NOT the engine's
+     * stores: they hold no records, never enter the outbox and never reach the
+     * wire. They are here because they are in the same file, not because they
+     * are part of the same system — see the migrations' notes and
      * `contracts/weather.ts`.
      *
-     * They are two tables rather than one because they go out of date at
-     * completely different rates: a forecast run is regenerated hourly and is
-     * stale after two days, while an airfield thermometer reading is worthless
-     * within the hour.
+     * They are three tables rather than one because they go out of date at
+     * three different rates: a forecast run is regenerated hourly and is stale
+     * after two days; an airfield thermometer reading is worthless within the
+     * hour; an official alert is issued and cancelled on a scale of minutes,
+     * and is the one where showing a lapsed value is dangerous rather than
+     * merely wrong.
      */
     expect(await tableNames(db)).toEqual([
+      'alerts',
       'forecast',
       'meta',
       'observation',
@@ -83,7 +86,7 @@ describe('migration ladder', () => {
     await Promise.all([migrate(db), migrate(db)]);
 
     expect(await currentVersion(db)).toBe(SCHEMA_VERSION);
-    expect(await tableNames(db)).toHaveLength(6);
+    expect(await tableNames(db)).toHaveLength(7);
   });
 
   /**

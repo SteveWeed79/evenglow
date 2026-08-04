@@ -135,6 +135,7 @@ function forecast(rainChance: number): { forecast: Forecast; stale: boolean } {
     forecast: {
       issuedAt: NOW,
       now: { condition: 'rain', tempDeciC: 150 },
+      hours: [],
       days: [
         {
           day: DAY_START,
