@@ -5,6 +5,7 @@ import { type Env, readEnv } from './env';
 import { errorBody } from './http';
 import { authRoutes } from './routes/auth';
 import { memberRoutes } from './routes/members';
+import { photoRoutes } from './routes/photos';
 import { syncRoutes } from './routes/sync';
 
 /**
@@ -47,6 +48,7 @@ export async function buildServer(env: Env = readEnv()): Promise<FastifyInstance
   await authRoutes(app, env);
   await memberRoutes(app, env);
   await syncRoutes(app, env);
+  await photoRoutes(app, env);
 
   return app;
 }

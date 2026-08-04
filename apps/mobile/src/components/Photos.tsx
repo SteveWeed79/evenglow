@@ -44,11 +44,17 @@ import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
  * have to get out of, and this is an attachment on a screen somebody came to
  * for something else.
  *
- * ## The bytes are on this device only, and it says so
+ * ## A photo this device does not have yet, and it says so
  *
- * The record syncs — a second phone knows a photo exists — and the image does
- * not, yet. Rather than a grey box that reads as a bug, a photo without its
- * bytes says plainly which device took it. See `photos/store.ts`.
+ * The record syncs before the bytes do — that is the design, not a fault — so
+ * a second phone knows a photo exists for a while before it can show it.
+ * Rather than a grey box that reads as a bug, the frame says what is
+ * happening. See `sync/photos.ts` for the transfer that closes the gap.
+ *
+ * **This copy is load-bearing and was rewritten when upload landed.** It used
+ * to say the picture would arrive "when they are both on the same network",
+ * which described a peer-to-peer transfer this app has never done and now
+ * definitely does not — the bytes go via the server like everything else.
  */
 
 export function Photos({
@@ -136,7 +142,8 @@ export function Photos({
       {!read ? null : mine.length === 0 ? (
         <Body>
           A receipt, a manual, or something you want to remember the look of — a wound, a kill,
-          a leaf. Kept on this phone, not sent anywhere.
+          a leaf. Shrunk to save space, and shared with the farm&rsquo;s other phones when
+          there is signal.
         </Body>
       ) : (
         <>
@@ -197,8 +204,8 @@ export function Photos({
                   />
                 ) : (
                   <Body>
-                    This one was taken on another phone. The record reached this device; the
-                    picture has not — it will when they are both on the same network.
+                    Taken on another phone. The record is here and the picture is still coming —
+                    it arrives the next time this phone has signal and a moment spare.
                   </Body>
                 )}
 

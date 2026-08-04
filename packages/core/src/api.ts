@@ -14,11 +14,16 @@
  * and these files are compiled by webpack too.
  */
 
-export type Endpoint = 'sync' | 'snapshot';
+export type Endpoint = 'sync' | 'snapshot' | 'photo';
 
 const PATHS: Record<Endpoint, { sameOrigin: string; api: string }> = {
   sync: { sameOrigin: '/api/sync', api: '/sync' },
   snapshot: { sameOrigin: '/api/pull', api: '/snapshot' },
+  /**
+   * Bytes, not JSON. The id goes on the end as a path segment — see
+   * `photoUrl`, which is the only thing that should build one of these.
+   */
+  photo: { sameOrigin: '/api/photos', api: '/photos' },
 };
 
 /** null means same-origin — the browser build, and the default. */
@@ -70,6 +75,18 @@ export function apiUrl(endpoint: Endpoint, query = ''): string {
   const paths = PATHS[endpoint];
   const path = base === null ? paths.sameOrigin : `${base}${paths.api}`;
   return query === '' ? path : `${path}?${query}`;
+}
+
+/**
+ * Where one photo's bytes live.
+ *
+ * Its own function rather than a caller appending to `apiUrl('photo')`,
+ * because a ULID is not a query string and building the path by hand in two
+ * places is how one of them ends up missing a slash on the build that is
+ * hardest to test.
+ */
+export function photoUrl(id: string): string {
+  return `${apiUrl('photo')}/${encodeURIComponent(id)}`;
 }
 
 // ── credentials ──────────────────────────────────────────────────────────────

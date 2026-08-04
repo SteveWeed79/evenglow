@@ -2,6 +2,7 @@ import { localStore } from '../db/store';
 import { reportEngineError } from './report';
 import { backoffDelay, flushOnce, type SyncTransport } from './flush';
 import { SYNC_LOCK, withSyncLock } from './lock';
+import { transferPhotos } from './photos';
 import { pullOnce, pulledThrough } from './pull';
 import { checkIntegrity, queueDepth, rejectedCount } from './queue';
 
@@ -142,6 +143,20 @@ async function tick(transport?: SyncTransport): Promise<void> {
   // this device recognises rather than as a surprise.
   if ((await queueDepth()) === 0) {
     await pull();
+
+    /**
+     * Photo bytes move on the idle tick, and only there.
+     *
+     * An empty queue is the one moment this device is certain every metadata
+     * record it holds has reached the server — which is what a PUT needs, since
+     * bytes for a photo the server has never heard of are a 404. It is also
+     * when there is bandwidth going spare.
+     *
+     * Never inside the flush: twenty-five megabytes of JPEG must not be able
+     * to delay a morning's egg tallies, and a photo that fails must not take
+     * them with it. See `sync/photos.ts`.
+     */
+    await movePhotos();
     schedule(IDLE_MS, transport);
     await publish();
     return;
@@ -243,6 +258,19 @@ export function nextDelay(result: TickResult): { delay: number; consecutiveFailu
   }
 
   return { delay: IDLE_MS, consecutiveFailures: 0 };
+}
+
+/**
+ * Photo transfer never fails the loop either, and for a stronger reason: a
+ * photo that will not move is the least urgent thing this app does, and the
+ * records it belongs to are already synced and already readable.
+ */
+async function movePhotos(): Promise<void> {
+  try {
+    await transferPhotos();
+  } catch (error) {
+    reportEngineError('moving photos', error);
+  }
 }
 
 /** Hydration never fails the loop — a device with stale reads still logs fine. */
