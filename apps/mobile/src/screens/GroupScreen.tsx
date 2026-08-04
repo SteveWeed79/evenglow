@@ -23,6 +23,7 @@ import { WithdrawalBanner } from '../components/WithdrawalBanner';
 import { growOutWindow, layOnsetWindow } from '../hooks/useDues';
 import { useLive } from '../hooks/useLive';
 import { useNav } from '../hooks/useNav';
+import { useUnits } from '../hooks/useUnits';
 import type { ScreenProps } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, SPACE, TYPE } from '../theme/tokens';
@@ -44,6 +45,7 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
   const { groupId } = route.params;
   const nav = useNav();
   const { colors } = useTheme();
+  const units = useUnits();
 
   const groups = useLive(listGroups);
   const group = groups?.find((g) => g.id === groupId) ?? null;
@@ -102,7 +104,7 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
           {lay ? <Body>Expect first eggs at {formatRange(lay.weeks, 'weeks')} old.</Body> : null}
           {weight ? (
             <Body>
-              Last weighed {formatMass(weight.massUg, 'imperial')}
+              Last weighed {formatMass(weight.massUg, units)}
               {weight.sampled === true ? ' — a sample, not the whole group' : ''}.
             </Body>
           ) : null}
@@ -163,6 +165,15 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
           icon="date-due"
           testID="go-care-routine"
           onPress={() => nav.navigate('CareRoutine', { groupId })}
+        />
+        {/* The season, which is what a year of logging is FOR. Everything else
+            on this screen is about today. */}
+        <Row
+          title="The numbers"
+          detail="What they have produced over a season, against what they have eaten"
+          icon="streak-plant"
+          testID="go-trend"
+          onPress={() => nav.navigate('Trend', { groupId })}
         />
         <Row
           title="Log a feed"
