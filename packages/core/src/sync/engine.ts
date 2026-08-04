@@ -32,9 +32,37 @@ let consecutiveFailures = 0;
 let running = false;
 let syncing = false;
 
+/**
+ * Registers a listener and gives it a first state to work from.
+ *
+ * **The newcomer only.** This used to call `publish()`, which walks every
+ * listener — so subscribing woke all of them, and a screen with five `useLive`
+ * hooks did twenty-five reads on mount instead of five.
+ *
+ * That was waste. What made it a defect is `useLive`: its reader may be a
+ * `useCallback` whose deps come from another `useLive`'s result, and those
+ * results are freshly built objects. Waking every listener on subscribe then
+ * closes a cycle — B re-reads, hands back a new object, A's reader changes
+ * identity, A resubscribes, which wakes B. The render loop never settles and
+ * the screen hangs with no error to point at.
+ *
+ * `TrendScreen` is the first screen to derive a reader from another read and
+ * it hung on mount, which is how this surfaced. A new subscriber has no claim
+ * on anybody else's state; the ones already listening have current values
+ * already.
+ */
 export function subscribe(listener: Listener): () => void {
   listeners.add(listener);
-  void publish();
+
+  void currentState().then(
+    (state) => {
+      // It may have unsubscribed while the read was in flight — a screen that
+      // mounts and leaves inside one tick, which navigation does.
+      if (listeners.has(listener)) listener(state);
+    },
+    (error: unknown) => reportEngineError('subscribe', error),
+  );
+
   return () => listeners.delete(listener);
 }
 
