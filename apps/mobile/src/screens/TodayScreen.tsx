@@ -23,6 +23,7 @@ import { useDues } from '../hooks/useDues';
 import { useGroups } from '../hooks/useGroups';
 import { useNav } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
+import { reportTrouble } from '../hooks/useTrouble';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
 
@@ -279,13 +280,24 @@ function DueBundleRow({
       if (done === undefined) return undefined;
 
       return () => {
+        /**
+         * A failed write is said out loud, not dropped.
+         *
+         * This was `void log(...)` with nothing after it, so a refused
+         * mutation vanished and the row simply came back — indistinguishable
+         * from never having pressed the button, which is exactly the report
+         * that led here. The press is fire-and-forget by design (R6: a log is
+         * bounded by one SQLite transaction, never by signal), but
+         * fire-and-forget must still mean somebody hears about a fire that did
+         * not light.
+         */
         void log({
           entity: done.entity,
           op: done.op,
           // A create mints its own id; an update names the row it changes.
           ...(done.targetId === undefined ? {} : { targetId: done.targetId }),
           payload: { ...done.payload, [done.stampAs]: Date.now() },
-        });
+        }).catch((error: unknown) => reportTrouble(`recording ${done.label.toLowerCase()}`, error));
       };
     },
     [log],

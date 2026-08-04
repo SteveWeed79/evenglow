@@ -1,4 +1,5 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Warning, WarningKind } from '@steading/contracts';
 import { Icon, type IconName } from './Icon';
 import { useWarnings } from '../hooks/useWarnings';
@@ -25,10 +26,37 @@ import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
  *
  * ## It informs, it does not interrupt (R10)
  *
- * No modal, no confirm, nothing to dismiss. A frost warning that has to be
- * tapped away is a frost warning somebody taps away at 6am without reading.
- * These sit on the wall and are gone tomorrow if the forecast changes.
+ * No modal, no confirm, **and nothing to dismiss**. That last one was asked for
+ * directly, from a handset showing two heat warnings filling the screen, and
+ * the answer is no for four reasons worth keeping:
+ *
+ *  - It is a safety surface. Agreeing to be silent about 96°F because somebody
+ *    tapped at 8:52am is the app being wrong at three in the afternoon.
+ *  - Dismissal needs storage, and both options are bad. Device-local means a
+ *    second phone still nags and a reinstall forgets; synced means a new
+ *    mutable entity for something derived that expires in a day.
+ *  - It is the completion flag the due engine refuses (property 3) wearing
+ *    another name — a stored "I saw this" that drifts from what it describes.
+ *  - Dismissible warnings train the reflex, and the frost row in May gets
+ *    tapped away by the same thumb.
+ *
+ * **What was actually wrong was that the same warning was drawn twice.** Today
+ * and tomorrow were built independently, so one hot spell became two four-line
+ * rows saying the same thing in different tenses, and the egg tally went below
+ * the fold — which is exactly the failure `TodayScreen` already records about
+ * the due list. Identical warnings now fold into one row that names both days,
+ * and the strip is capped like the due bundles beside it.
  */
+
+/**
+ * How many rows before it offers the rest.
+ *
+ * Three, because that is the worst honest case on one night — a freeze, a
+ * frost, and a birth due — and a farm hitting all three should see all three.
+ * Past that is a screen nobody reads to the bottom of, and the tally that
+ * matters every single morning is below it.
+ */
+const VISIBLE_WARNINGS = 3;
 
 const MARKS: Record<WarningKind, IconName> = {
   frost: 'season',
@@ -41,15 +69,36 @@ const MARKS: Record<WarningKind, IconName> = {
 
 export function WeatherWarnings(): React.ReactElement | null {
   const { warnings } = useWarnings();
+  const { colors } = useTheme();
+  const [showAll, setShowAll] = useState(false);
 
   // Nothing to say, so nothing is drawn — not an empty panel with a heading.
   if (warnings.length === 0) return null;
 
+  const shown = showAll ? warnings : warnings.slice(0, VISIBLE_WARNINGS);
+
   return (
     <View style={styles.strip} testID="weather-warnings">
-      {warnings.map((warning) => (
+      {shown.map((warning) => (
         <WarningRow key={warning.key} warning={warning} />
       ))}
+
+      {warnings.length > shown.length ? (
+        <Pressable
+          onPress={() => setShowAll(true)}
+          accessibilityRole="button"
+          // Said in full: "+2" read aloud on its own means nothing, and the
+          // count is the part that decides whether it is worth the tap.
+          accessibilityLabel={`Show ${warnings.length - shown.length} more warnings`}
+          testID="show-all-warnings"
+          hitSlop={8}
+          style={({ pressed }) => [styles.more, { opacity: pressed ? 0.7 : 1 }]}
+        >
+          <Text style={[styles.moreLabel, { color: colors.muted }]}>
+            and {warnings.length - shown.length} more
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -99,6 +148,13 @@ const styles = StyleSheet.create({
     // A full-weight border rather than a hairline: this is the one thing on
     // Today that is allowed to be louder than the tally.
     borderWidth: 1,
+  },
+  more: { alignSelf: 'flex-start', paddingVertical: SPACE.xs, paddingHorizontal: SPACE.sm },
+  moreLabel: {
+    fontFamily: FONTS.data,
+    fontSize: TYPE.label,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
   },
   words: { flex: 1, gap: 2 },
   title: { fontFamily: FONTS.bodyBold, fontSize: TYPE.body, lineHeight: TYPE.body * 1.35 },
