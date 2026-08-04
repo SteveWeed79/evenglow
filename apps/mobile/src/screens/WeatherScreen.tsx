@@ -1,0 +1,456 @@
+import { useCallback, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import {
+  CONDITION_WORDS,
+  type Condition,
+  dayStart,
+  type ForecastDay,
+  type ForecastHour,
+  degrees,
+  forecastFor,
+  newId,
+  type UnitSystem,
+} from '@steading/contracts';
+import { readSiteOrBlank } from '@steading/core/read/growing';
+import { Failure, Primary, Secondary, TextField, useSaver } from '../components/Form';
+import { Icon } from '../components/Icon';
+import { Body, Panel } from '../components/Panel';
+import { Screen } from '../components/Screen';
+import { SKY_MARKS } from '../weather/marks';
+import { useLive } from '../hooks/useLive';
+import { useWeather } from '../hooks/useWeather';
+import { useLog } from '../hooks/useSync';
+import { useTheme } from '../theme/ThemeProvider';
+import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
+import { locate, findPlace, type Place } from '../weather/where';
+
+/**
+ * The forecast in full: the rest of today by the hour, then seven days.
+ *
+ * ## What this screen will not do
+ *
+ * **It does not log weather.** Rain that fell is not a farm record — nobody
+ * types it in, it cannot conflict, and a field asking for it would be a chore
+ * added to a morning. This is a forecast and only a forecast: something read,
+ * never something entered.
+ *
+ * **It does not promise thirty days.** The National Weather Service publishes
+ * about fourteen half-day periods and no more, at any price. Seven days and the
+ * rest of today is what there is, and saying so is better than a fortnight of
+ * invented numbers. It is also the honest split: "rain from four" changes what
+ * somebody does this afternoon, and "week four looks wet" changes nothing
+ * anybody can act on.
+ *
+ * ## The rain column
+ *
+ * Chance, not amount. The daily periods carry `probabilityOfPrecipitation` and
+ * no quantity — the amounts live in a much larger gridpoint product — and
+ * chance is the number a farm acts on anyway: "will I get wet", not "how many
+ * millimetres". The bar is there because seven numbers in a column are read one
+ * at a time and seven bars are read at once.
+ *
+ * ## Two ways to say where the farm is, and why the second exists
+ *
+ * A denied location permission is a dead end for the entire feature, and "open
+ * Settings, find the app, find Location" is not an instruction a farm should
+ * need. The address search asks the OS for nothing. Both round the position to
+ * about a kilometre before it is written — see `roundPosition`.
+ */
+
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+export function WeatherScreen(): React.ReactElement {
+  const { loading, at, placeName, weather, uncovered, fetching, units, again } = useWeather();
+
+  return (
+    <Screen title="Weather" back>
+      {loading ? null : at === null ? (
+        <WhereIsTheFarm />
+      ) : (
+        <>
+          {uncovered ? (
+            <Panel label="Outside the forecast area">
+              <Body>
+                The forecast comes from the US National Weather Service, which only covers the
+                United States and its territories. There is nothing here for this position — the
+                rest of the app is unaffected.
+              </Body>
+            </Panel>
+          ) : null}
+
+          {weather === null ? (
+            <Panel label={fetching ? 'Asking' : 'Nothing heard yet'}>
+              <Body>
+                {fetching
+                  ? 'Fetching the forecast for the first time.'
+                  : 'No forecast has reached this device yet. It will arrive when there is a signal.'}
+              </Body>
+            </Panel>
+          ) : (
+            <Forecast
+              days={weather.forecast.days}
+              hours={weather.forecast.hours}
+              nowDeciC={weather.forecast.now.tempDeciC}
+              nowCondition={weather.forecast.now.condition}
+              stale={weather.stale}
+              fetchedAt={weather.fetchedAt}
+              units={units}
+              where={placeName}
+            />
+          )}
+
+          <Secondary
+            label={fetching ? 'Asking…' : 'Ask again'}
+            icon="try-again"
+            testID="weather-again"
+            onPress={again}
+          />
+
+          <WhereIsTheFarm again />
+        </>
+      )}
+    </Screen>
+  );
+}
+
+function Forecast({
+  days,
+  hours,
+  nowDeciC,
+  nowCondition,
+  stale,
+  fetchedAt,
+  units,
+  where,
+}: {
+  days: readonly ForecastDay[];
+  hours: readonly ForecastHour[];
+  nowDeciC: number;
+  nowCondition: Condition;
+  stale: boolean;
+  fetchedAt: number;
+  units: UnitSystem;
+  where: string | undefined;
+}): React.ReactElement {
+  const { colors } = useTheme();
+  const now = Date.now();
+  const today = forecastFor(days, now);
+
+  /**
+   * The widest chance in the list, which is what the bars are measured against.
+   *
+   * Not a fixed 0–100 scale. A week where the wettest day is 30% would draw
+   * seven stubs under a lot of empty space, and the question the column
+   * answers is "which day is the wet one" rather than "how close to certain".
+   * Floored at 20 so a dry week does not turn a 5% Tuesday into a full bar.
+   */
+  const widest = Math.max(20, ...days.map((day) => day.rainChance));
+
+  return (
+    <>
+      <Panel label={where ?? 'Right now'}>
+        <View style={styles.nowRow}>
+          <Icon name={SKY_MARKS[nowCondition]} size={32} color={colors.lanternInk} />
+          <Text style={[styles.nowTemp, { color: colors.ink }]}>{degrees(nowDeciC, units)}°</Text>
+          <View style={styles.nowWords}>
+            <Text style={[styles.condition, { color: colors.ink }]}>
+              {CONDITION_WORDS[nowCondition]}
+            </Text>
+            {today === undefined ? null : (
+              <Text style={[styles.label, { color: colors.muted }]}>
+                High {degrees(today.highDeciC, units)}° · Low {degrees(today.lowDeciC, units)}°
+              </Text>
+            )}
+          </View>
+        </View>
+
+        {/* Age, always. A forecast with no timestamp is a claim about now that
+            might be about yesterday, and this is the one screen in the app
+            showing numbers the farm did not enter itself. */}
+        <Text style={[styles.age, { color: stale ? colors.rowan : colors.muted }]} testID="weather-age">
+          {stale
+            ? `Last heard ${when(fetchedAt, now)} — too old to trust`
+            : `Last heard ${when(fetchedAt, now)}`}
+        </Text>
+      </Panel>
+
+      {hours.length === 0 ? null : (
+        <View style={styles.section}>
+          <Text style={[styles.heading, { color: colors.muted }]}>The rest of today</Text>
+          {/* Wraps rather than scrolling sideways. A horizontal strip inside a
+              vertical scroll fights the gesture, and with a glove on it loses. */}
+          <View style={styles.hours} testID="weather-hours">
+            {hours.map((hour) => (
+              <View key={hour.at} style={styles.hour}>
+                <Text style={[styles.label, { color: colors.muted }]}>{clock(hour.at)}</Text>
+                <Icon name={SKY_MARKS[hour.condition]} size={24} color={colors.muted} />
+                <Text style={[styles.hourTemp, { color: colors.ink }]}>
+                  {degrees(hour.tempDeciC, units)}°
+                </Text>
+                <Text
+                  style={[
+                    styles.hourRain,
+                    { color: hour.rainChance === 0 ? 'transparent' : colors.lanternInk },
+                  ]}
+                >
+                  {hour.rainChance}%
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
+      <View style={styles.section}>
+        <Text style={[styles.heading, { color: colors.muted }]}>The week</Text>
+        {days.map((day, index) => (
+          <View key={day.day} style={styles.day} testID={`weather-day-${index}`}>
+            <Text style={[styles.dayName, { color: colors.ink }]}>
+              {day.day === dayStart(now) ? 'Today' : DAY_NAMES[new Date(day.day).getDay()]}
+            </Text>
+
+            <Icon
+              name={SKY_MARKS[day.condition]}
+              size={24}
+              color={colors.muted}
+              label={CONDITION_WORDS[day.condition]}
+            />
+
+            <Text style={[styles.dayTemps, { color: colors.ink }]}>
+              {degrees(day.highDeciC, units)}°
+              <Text style={{ color: colors.muted }}> {degrees(day.lowDeciC, units)}°</Text>
+            </Text>
+
+            <View
+              style={[styles.bar, { backgroundColor: colors.shade }]}
+              accessible
+              accessibilityLabel={`${day.rainChance} per cent chance of rain`}
+            >
+              <View
+                style={[
+                  styles.barFill,
+                  {
+                    backgroundColor: colors.lantern,
+                    // Never zero-width: a 4% day should read as "a little",
+                    // not as "the app forgot to draw this one".
+                    width: `${Math.max(day.rainChance === 0 ? 0 : 6, (day.rainChance / widest) * 100)}%`,
+                  },
+                ]}
+              />
+            </View>
+
+            <Text style={[styles.dayRain, { color: colors.muted }]}>{day.rainChance}%</Text>
+          </View>
+        ))}
+      </View>
+    </>
+  );
+}
+
+/**
+ * Where the farm is — asked once, changed rarely.
+ *
+ * Rendered as the whole screen before a position is set, and as a quiet
+ * secondary underneath the forecast afterwards. Same component, because "set
+ * it" and "correct it" are the same act and a second implementation of it is a
+ * second place for the rounding to be forgotten.
+ */
+function WhereIsTheFarm({ again = false }: { again?: boolean }): React.ReactElement {
+  const site = useLive(readSiteOrBlank, 'the farm');
+  const log = useLog();
+  const { colors } = useTheme();
+
+  const [open, setOpen] = useState(!again);
+  const [query, setQuery] = useState('');
+  const [found, setFound] = useState<Place[] | null>(null);
+  const [refused, setRefused] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [trouble, setTrouble] = useState<string | null>(null);
+
+  const saver = useSaver(useCallback(() => setOpen(false), []));
+
+  /**
+   * Writes the position onto the site record, creating one if this farm has
+   * never had a site.
+   *
+   * `update` when there already is one, and that matters more than it looks:
+   * `readSite` returns the FIRST site record, so a second `create` would
+   * silently become a record nothing reads. A farm that set its position here
+   * and its frost dates on the other screen would lose one of the two.
+   */
+  const put = useCallback(
+    async (lat: number, lon: number, name?: string) => {
+      if (site === null) return;
+
+      await saver.save(async () => {
+        const known = site.id !== '';
+        await log({
+          entity: 'site',
+          op: known ? 'update' : 'create',
+          targetId: known ? site.id : newId(),
+          payload: {
+            ...(known ? {} : { name: site.name === '' ? 'The farm' : site.name }),
+            lat,
+            lon,
+            ...(name === undefined ? {} : { placeName: name }),
+          },
+        });
+      });
+    },
+    [site, log, saver],
+  );
+
+  const useGps = useCallback(async () => {
+    setTrouble(null);
+    const found = await locate();
+
+    if (found.kind === 'refused') {
+      setRefused(true);
+      setTrouble('Location is switched off for this app. Type an address instead — it asks the phone for nothing.');
+      return;
+    }
+    if (found.kind === 'unavailable') {
+      setTrouble('No fix yet. That is usual indoors — step outside, or type an address.');
+      return;
+    }
+
+    await put(found.at.lat, found.at.lon);
+  }, [put]);
+
+  const search = useCallback(async () => {
+    if (query.trim() === '') return;
+    setSearching(true);
+    setTrouble(null);
+
+    try {
+      const matches = await findPlace(query.trim());
+      setFound(matches);
+      if (matches.length === 0) {
+        setTrouble('Nothing matched. A street address works best — the search is a US address lookup, not a map.');
+      }
+    } catch {
+      setTrouble('The address search could not be reached. It needs a signal.');
+    } finally {
+      setSearching(false);
+    }
+  }, [query]);
+
+  if (!open) {
+    return (
+      <Secondary
+        label={site?.placeName === undefined ? 'Where is the farm?' : `Where: ${site.placeName}`}
+        icon="search"
+        testID="weather-where"
+        onPress={() => setOpen(true)}
+      />
+    );
+  }
+
+  return (
+    <>
+      <Panel label={again ? 'Move the pin' : 'Where is the farm?'}>
+        <Body>
+          The forecast needs a position. It is stored rounded to about a kilometre — enough for
+          weather, useless for finding a door — and it never leaves this device except as the
+          coordinates the forecast is asked for.
+        </Body>
+      </Panel>
+
+      {refused ? null : (
+        <Primary label="Use my location" testID="weather-locate" onPress={() => void useGps()} />
+      )}
+
+      <View style={styles.section}>
+        <Text style={[styles.heading, { color: colors.muted }]}>Or type an address</Text>
+        <TextField
+          value={query}
+          onChangeText={setQuery}
+          placeholder="1 Farm Road, Hollow, VT"
+          testID="weather-query"
+          accessibilityLabel="The farm's address"
+        />
+        <Secondary
+          label={searching ? 'Looking…' : 'Look it up'}
+          icon="search"
+          testID="weather-search"
+          onPress={() => void search()}
+        />
+      </View>
+
+      {found?.map((place) => (
+        <Secondary
+          key={`${place.lat},${place.lon}`}
+          label={place.name}
+          testID={`weather-place-${place.lat},${place.lon}`}
+          onPress={() => void put(place.lat, place.lon, place.name)}
+        />
+      ))}
+
+      {trouble === null ? null : (
+        <Panel>
+          <Body>{trouble}</Body>
+        </Panel>
+      )}
+
+      <Failure message={saver.failure} />
+
+      {again ? (
+        <Secondary label="Leave it" testID="weather-where-close" onPress={() => setOpen(false)} />
+      ) : null}
+    </>
+  );
+}
+
+/** "14:00" in whatever the device calls that. */
+function clock(at: number): string {
+  return new Date(at).toLocaleTimeString(undefined, { hour: 'numeric' });
+}
+
+/** How long ago, in the words a person would use. */
+function when(at: number, now: number): string {
+  const minutes = Math.max(0, Math.round((now - at) / 60_000));
+  if (minutes < 2) return 'just now';
+  if (minutes < 60) return `${minutes} minutes ago`;
+
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return hours === 1 ? 'an hour ago' : `${hours} hours ago`;
+
+  const days = Math.round(hours / 24);
+  return days === 1 ? 'yesterday' : `${days} days ago`;
+}
+
+const styles = StyleSheet.create({
+  section: { gap: SPACE.sm },
+  heading: {
+    fontFamily: FONTS.data,
+    fontSize: TYPE.label,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  label: {
+    fontFamily: FONTS.data,
+    fontSize: TYPE.label,
+    letterSpacing: 0.6,
+  },
+  nowRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
+  nowTemp: { fontFamily: FONTS.display, fontSize: TYPE.hero, fontVariant: ['tabular-nums'] },
+  nowWords: { flex: 1, gap: 2 },
+  condition: { fontFamily: FONTS.body, fontSize: TYPE.body },
+  age: { fontFamily: FONTS.data, fontSize: TYPE.label },
+  hours: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
+  hour: { alignItems: 'center', gap: 2, minWidth: 56, paddingVertical: SPACE.xs },
+  hourTemp: { fontFamily: FONTS.data, fontSize: TYPE.body, fontVariant: ['tabular-nums'] },
+  hourRain: { fontFamily: FONTS.data, fontSize: TYPE.label - 1, fontVariant: ['tabular-nums'] },
+  day: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACE.md,
+    minHeight: TAP.min - 8,
+    paddingHorizontal: SPACE.xs,
+  },
+  dayName: { fontFamily: FONTS.body, fontSize: TYPE.body, width: 56 },
+  dayTemps: { fontFamily: FONTS.data, fontSize: TYPE.body, width: 76, fontVariant: ['tabular-nums'] },
+  bar: { flex: 1, height: 10, borderRadius: RADII.pill, overflow: 'hidden' },
+  barFill: { height: '100%', borderRadius: RADII.pill },
+  dayRain: { fontFamily: FONTS.data, fontSize: TYPE.label, width: 44, textAlign: 'right' },
+});

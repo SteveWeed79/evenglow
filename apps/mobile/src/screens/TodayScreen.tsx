@@ -16,6 +16,8 @@ import { Icon, type IconName } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { Tally } from '../components/Tally';
+import { WeatherRow } from '../components/WeatherRow';
+import { WeatherWarnings } from '../components/WeatherWarnings';
 import { WithdrawalBanner } from '../components/WithdrawalBanner';
 import { useDues } from '../hooks/useDues';
 import { useGroups } from '../hooks/useGroups';
@@ -173,6 +175,13 @@ export function TodayScreen(): React.ReactElement {
 
   return (
     <Screen title="Today">
+      {/* What the weather MEANS comes before what it is, and both come before
+          the tallies. Warnings are silent on an ordinary day, so this costs
+          nothing on the mornings it has nothing to say — see WeatherWarnings.
+          The row below it is one line, so neither displaces a tally. */}
+      <WeatherWarnings />
+      <WeatherRow />
+
       {groups.length === 0 ? (
         <Panel label="Nothing to log yet">
           {/* Empty screens invite (UX-SPEC §6). */}

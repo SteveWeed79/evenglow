@@ -9,6 +9,7 @@ import {
   plantingCreateSchema,
   siteCreateSchema,
   varietyCreateSchema,
+  type UnitSystem,
   type Zone,
   zoneSchema,
 } from '@steading/contracts';
@@ -36,6 +37,21 @@ export interface Site {
   frost?: FrostDates;
   rotationYears: number;
   postalCode?: string;
+  /**
+   * Where the farm is, rounded to about a kilometre. Absent until somebody has
+   * set it, and the whole weather feature is absent with it — see `siteShape`.
+   */
+  lat?: number;
+  lon?: number;
+  /** What the search or the grid called the place, so a screen can say it back. */
+  placeName?: string;
+  /**
+   * Which units this farm reads in.
+   *
+   * Carried here rather than defaulted at each call site so there is one place
+   * to change when the rest of the app stops hardcoding `'imperial'`.
+   */
+  units?: UnitSystem;
 }
 
 export interface Bed {
@@ -91,6 +107,16 @@ export async function readSite(): Promise<Site | null> {
       ...(zone.success ? { zone: zone.data } : {}),
       ...(frost.success ? { frost: frost.data } : {}),
       ...(parsed.data.postalCode === undefined ? {} : { postalCode: parsed.data.postalCode }),
+      /**
+       * Both or neither. Half a position is not a place, and a screen handed a
+       * latitude with no longitude would ask the forecast service for a point
+       * on the prime meridian rather than for the farm.
+       */
+      ...(parsed.data.lat === undefined || parsed.data.lon === undefined
+        ? {}
+        : { lat: parsed.data.lat, lon: parsed.data.lon }),
+      ...(parsed.data.placeName === undefined ? {} : { placeName: parsed.data.placeName }),
+      ...(parsed.data.units === undefined ? {} : { units: parsed.data.units }),
       // Three is the common smallholding figure. A farm with four beds
       // physically cannot manage four, which is why it is a setting.
       rotationYears: parsed.data.rotationYears ?? 3,

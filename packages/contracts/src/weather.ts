@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { deciCToFahrenheit, type UnitSystem } from './units';
 
 /**
  * The forecast, as this app uses it.
@@ -49,6 +50,22 @@ export const forecastDaySchema = z
     rainChance: z.number().int().min(0).max(100),
     /** Micrometres of rain expected, so it charts in the same unit as depth. */
     rainUm: z.number().int().nonnegative(),
+    /**
+     * Relative humidity, per cent. **Optional, and the optionality is load-
+     * bearing.**
+     *
+     * Heat stress in a ruminant is a function of temperature AND humidity —
+     * 32°C at 30% is a warm day and 32°C at 80% is dangerous — so the THI
+     * warning cannot be computed without it. But it arrived after the cache
+     * table did, and a required field would make every forecast written by an
+     * older build fail to parse: a farm updating the app would lose the
+     * forecast it had until the next fetch, for a field only one warning uses.
+     *
+     * Absent means the THI warning stays silent. Silence is the right failure
+     * for a warning: inventing a humidity would produce a confident number
+     * nobody measured.
+     */
+    humidity: z.number().int().min(0).max(100).optional(),
   })
   .strict();
 
@@ -114,15 +131,57 @@ export function isStale(forecast: Forecast, now: number): boolean {
   return now - forecast.issuedAt > FORECAST_STALE_MS;
 }
 
-/** Tenths of a degree Celsius to whole degrees Fahrenheit. */
-export function deciCToF(deciC: number): number {
-  return Math.round((deciC / 10) * (9 / 5) + 32);
+/**
+ * A temperature as a whole number, in the farm's own system.
+ *
+ * `formatTemperature` already exists and says "52°F", which is right in a
+ * sentence and wrong in a forecast: a row reading "46° · high 52 low 31" says
+ * the unit once at most, and a strip of seven days cannot afford it at all.
+ * The conversion is `deciCToFahrenheit`'s — not a second one — because two
+ * implementations of the same arithmetic is how they drift apart.
+ */
+export function degrees(deciC: number, system: UnitSystem): number {
+  const rounded = Math.round(system === 'metric' ? deciC / 10 : deciCToFahrenheit(deciC));
+  // `+ 0` normalises -0 to 0. Without it a −0.2 °C morning renders as "-0°",
+  // which reads as a bug to anyone who sees it. `trim` in units.ts does the
+  // same thing for the same reason.
+  return rounded + 0;
 }
 
-/** Tenths of a degree Celsius to whole degrees Celsius. */
-export function deciCToC(deciC: number): number {
-  return Math.round(deciC / 10);
+/** Local midnight for a moment, which is how a forecast day is keyed. */
+export function dayStart(at: number): number {
+  const date = new Date(at);
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
 }
+
+/**
+ * Today's entry in a forecast, or the nearest one still ahead.
+ *
+ * A forecast fetched last night and read this morning has yesterday at the
+ * front of the list, and showing yesterday's high beside this minute's
+ * temperature is the kind of quietly wrong that nobody reports and everybody
+ * stops trusting. Falls forward rather than back for the same reason: a
+ * tomorrow labelled honestly beats a yesterday labelled "today".
+ */
+export function forecastFor(
+  days: readonly ForecastDay[],
+  now: number,
+): ForecastDay | undefined {
+  const today = dayStart(now);
+  return days.find((day) => day.day === today) ?? days.find((day) => day.day > today);
+}
+
+/** What the sky is called, for a screen reader and for the row's own words. */
+export const CONDITION_WORDS: Record<Condition, string> = {
+  clear: 'Clear',
+  cloud: 'Cloudy',
+  fog: 'Fog',
+  drizzle: 'Drizzle',
+  rain: 'Rain',
+  snow: 'Snow',
+  storm: 'Storms',
+};
 
 /**
  * Coordinates, rounded to about a kilometre.

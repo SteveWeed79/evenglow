@@ -39,6 +39,7 @@ import { SetEggsScreen } from '../screens/SetEggsScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { SiteSetupScreen } from '../screens/SiteSetupScreen';
 import { TreatmentScreen } from '../screens/TreatmentScreen';
+import { WeatherScreen } from '../screens/WeatherScreen';
 import { WeighScreen } from '../screens/WeighScreen';
 import { Tabs } from './Tabs';
 
@@ -83,6 +84,13 @@ export type RootParamList = {
   Export: undefined;
   /** Chores the farm wrote down itself — the one authored due kind. */
   Jobs: undefined;
+  /**
+   * The forecast, and where the farm is.
+   *
+   * A pushed screen rather than a tab: it is read once in the morning off the
+   * row on Today, and the bar is full at three (see `tab-marks.ts`).
+   */
+  Weather: undefined;
   Inbox: undefined;
   Diagnostics: undefined;
   Members: undefined;
@@ -144,6 +152,7 @@ export function Root({ onSignedOut }: { onSignedOut: () => void }): React.ReactE
       <Stack.Screen name="Iron" component={IronScreen} />
       <Stack.Screen name="Export" component={ExportScreen} />
       <Stack.Screen name="Jobs" component={JobsScreen} />
+      <Stack.Screen name="Weather" component={WeatherScreen} />
       <Stack.Screen name="Inbox" component={InboxScreen} />
       <Stack.Screen name="Diagnostics" component={DiagnosticsScreen} />
       <Stack.Screen name="Members" component={MembersScreen} />

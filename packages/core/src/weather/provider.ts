@@ -113,6 +113,10 @@ const forecastResponseSchema = z.object({
         probabilityOfPrecipitation: z
           .object({ value: z.number().nullable() })
           .optional(),
+        // Added to the forecast periods by NWS after the rest of this shape
+        // was written, and optional here because a grid that omits it must
+        // still forecast. See `humidity` in the contract for what it costs.
+        relativeHumidity: z.object({ value: z.number().nullable() }).optional(),
         shortForecast: z.string(),
       }),
     ),
@@ -247,12 +251,32 @@ export async function findGrid(at: Position): Promise<Grid> {
  * that showed nothing because the optional half timed out would be worse than
  * one that showed seven days.
  */
-async function fetchHours(grid: Grid): Promise<ForecastHour[]> {
+async function fetchHours(grid: Grid, now: number): Promise<ForecastHour[]> {
   if (grid.hourlyUrl === undefined) return [];
 
   const body = await ask(grid.hourlyUrl, forecastResponseSchema);
-  const endOfToday = new Date();
+
+  /**
+   * "Today" means the DEVICE's today, and that is the right choice with a
+   * caveat worth writing down.
+   *
+   * NWS stamps its periods in the grid's own offset; the phone knows its own.
+   * For a farm standing on its own land those are the same, which is every
+   * real use of this app. They differ for a phone travelling — and a phone in
+   * Denver asking about a Vermont farm should show the Vermont day, which this
+   * does not do. It is the lesser error: bending to the grid's offset would
+   * make "the rest of today" mean a day the person holding the phone is not
+   * having.
+   *
+   * From `now` rather than from the wall clock, so a test gets the window it
+   * asked about.
+   */
+  const endOfToday = new Date(now);
   endOfToday.setHours(23, 59, 59, 999);
+
+  const thisHour = new Date(now);
+  thisHour.setMinutes(0, 0, 0);
+  const startOfHour = thisHour.getTime();
 
   return body.properties.periods
     .map((period) => ({
@@ -261,9 +285,19 @@ async function fetchHours(grid: Grid): Promise<ForecastHour[]> {
       tempDeciC: toDeciC(period.temperature, period.temperatureUnit),
       rainChance: Math.round(period.probabilityOfPrecipitation?.value ?? 0),
     }))
-    // Today only. A list running to the same hour next week is a list nobody
-    // scrolls, and the daily view already answers that question.
-    .filter((hour) => !Number.isNaN(hour.at) && hour.at <= endOfToday.getTime());
+    /**
+     * The rest of today, and no further.
+     *
+     * A list running to the same hour next week is one nobody scrolls, and the
+     * daily view already answers that question. Hours already gone are dropped
+     * too: NWS starts its hourly product at the current hour so this is usually
+     * moot, but a cached forecast read four hours later is not, and "rain at
+     * 9am" on a screen opened at one o'clock is a lie about the afternoon.
+     */
+    .filter(
+      (hour) =>
+        !Number.isNaN(hour.at) && hour.at <= endOfToday.getTime() && hour.at >= startOfHour,
+    );
 }
 
 /**
@@ -279,13 +313,13 @@ export async function fetchForecast(grid: Grid, now: number = Date.now()): Promi
   const [body, hours] = await Promise.all([
     ask(grid.forecastUrl, forecastResponseSchema),
     // Optional. A missing hourly list costs a tab, not the feature.
-    fetchHours(grid).catch(() => [] as ForecastHour[]),
+    fetchHours(grid, now).catch(() => [] as ForecastHour[]),
   ]);
   const periods = body.properties.periods;
 
   const byDay = new Map<
     number,
-    { high?: number; low?: number; condition?: Condition; chance: number }
+    { high?: number; low?: number; condition?: Condition; chance: number; humidity?: number }
   >();
 
   for (const period of periods) {
@@ -298,6 +332,16 @@ export async function fetchForecast(grid: Grid, now: number = Date.now()): Promi
       // The daytime sky is what a day is called. "Cloudy" from a night period
       // describes hours nobody was working in.
       entry.condition = conditionOf(period.shortForecast);
+      /**
+       * The DAYTIME humidity, and only that.
+       *
+       * Heat stress is a daytime problem, and overnight humidity is
+       * mechanically higher — air cools towards its dewpoint — so folding both
+       * halves together, or letting the night win, would raise a THI warning
+       * about hours when nothing was hot. Taken with the high it pairs with.
+       */
+      const said = period.relativeHumidity?.value;
+      if (said !== null && said !== undefined) entry.humidity = Math.round(said);
     } else {
       entry.low = deciC;
       // A night with no daytime beside it still needs a name — the evening
@@ -313,6 +357,10 @@ export async function fetchForecast(grid: Grid, now: number = Date.now()): Promi
 
   const days = [...byDay.entries()]
     .sort(([a], [b]) => a - b)
+    // Seven, because that is what the screen promises and what the contract
+    // documents. NWS publishes about fourteen half-day periods, which folds to
+    // seven or eight depending on the hour the app asked.
+    .slice(0, 7)
     .map(([day, entry]) => ({
       day,
       condition: entry.condition ?? 'cloud',
@@ -321,6 +369,7 @@ export async function fetchForecast(grid: Grid, now: number = Date.now()): Promi
       highDeciC: entry.high ?? entry.low ?? 0,
       lowDeciC: entry.low ?? entry.high ?? 0,
       rainChance: Math.round(entry.chance),
+      ...(entry.humidity === undefined ? {} : { humidity: entry.humidity }),
       /**
        * Always zero, and it is honest rather than missing.
        *
@@ -333,17 +382,30 @@ export async function fetchForecast(grid: Grid, now: number = Date.now()): Promi
       rainUm: 0,
     }));
 
+  /**
+   * What it is doing right now, from the hourly product where there is one.
+   *
+   * The daily periods answer a different question. "Today" carries the day's
+   * HIGH — so a phone opened at seven in the morning would say 52° when it is
+   * actually 34° outside, which is the one number on this row somebody can
+   * check by opening a door. The current hour is the honest answer, and the
+   * first daily period is the fallback for the grid that publishes no hourly.
+   */
   const first = periods[0];
+  const thisHour = hours[0];
 
   return forecastSchema.parse({
     issuedAt:
       body.properties.updated !== undefined && !Number.isNaN(Date.parse(body.properties.updated))
         ? Date.parse(body.properties.updated)
         : now,
-    now: {
-      condition: first === undefined ? 'cloud' : conditionOf(first.shortForecast),
-      tempDeciC: first === undefined ? 0 : toDeciC(first.temperature, first.temperatureUnit),
-    },
+    now:
+      thisHour === undefined
+        ? {
+            condition: first === undefined ? 'cloud' : conditionOf(first.shortForecast),
+            tempDeciC: first === undefined ? 0 : toDeciC(first.temperature, first.temperatureUnit),
+          }
+        : { condition: thisHour.condition, tempDeciC: thisHour.tempDeciC },
     days,
     hours,
   });

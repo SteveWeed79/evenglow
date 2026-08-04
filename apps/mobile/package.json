@@ -27,6 +27,7 @@
     "expo-haptics": "~57.0.1",
     "expo-image-manipulator": "^57.0.7",
     "expo-image-picker": "^57.0.7",
+    "expo-location": "^57.0.7",
     "expo-network": "~57.0.1",
     "expo-secure-store": "~57.0.1",
     "expo-sharing": "^57.0.8",

@@ -2,9 +2,11 @@ import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { isValidMonthDay, monthDay, newId, normaliseZoneValue } from '@steading/contracts';
+import { readSiteOrBlank } from '@steading/core/read/growing';
 import { describeLogFailure } from '@steading/core/sync/failure';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
+import { useLive } from '../hooks/useLive';
 import { useNav } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import { useTheme } from '../theme/ThemeProvider';
@@ -39,6 +41,17 @@ export function SiteSetupScreen(): React.ReactElement {
   const nav = useNav();
   const { colors } = useTheme();
 
+  /**
+   * The site this farm already has, if any.
+   *
+   * This screen used to `create` unconditionally. `readSite` returns the FIRST
+   * site record, so a second create became a record nothing ever reads — and
+   * the weather screen writes a position onto the same entity. A farm that set
+   * its position and then its frost dates would have lost one of the two,
+   * silently, with both writes reported as saved.
+   */
+  const site = useLive(readSiteOrBlank, 'the farm');
+
   const [name, setName] = useState('');
   const [zone, setZone] = useState('');
   const [lastMonth, setLastMonth] = useState(4); // May, zero-indexed
@@ -53,16 +66,20 @@ export function SiteSetupScreen(): React.ReactElement {
   const datesValid = isValidMonthDay(lastSpring) && isValidMonthDay(firstAutumn);
 
   const save = useCallback(async () => {
-    if (saving || !datesValid) return;
+    if (saving || !datesValid || site === null) return;
     setSaving(true);
+
+    const known = site.id !== '';
 
     try {
       await log({
         entity: 'site',
-        op: 'create',
-        targetId: newId(),
+        op: known ? 'update' : 'create',
+        targetId: known ? site.id : newId(),
         payload: {
-          name: name.trim() || 'The farm',
+          // An update carries only what this screen owns, so a position set on
+          // the weather screen is not wiped by somebody re-entering frost dates.
+          name: name.trim() || (known ? site.name : '') || 'The farm',
           frost: { lastSpring, firstAutumn, source: 'entered' as const },
           // USDA because that is what the bundled data speaks. Stored WITH its
           // system, never as a bare string — "7a" means nothing on its own,
@@ -80,7 +97,7 @@ export function SiteSetupScreen(): React.ReactElement {
 
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     nav.goBack();
-  }, [saving, datesValid, log, name, lastSpring, firstAutumn, zone, nav]);
+  }, [saving, datesValid, site, log, name, lastSpring, firstAutumn, zone, nav]);
 
   return (
     <Screen title="Your ground" back>

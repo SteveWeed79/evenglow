@@ -1,6 +1,12 @@
 import { type Forecast, forecastSchema, isStale } from '@steading/contracts';
 import { localStore } from '../db/store';
-import { fetchForecast, type Grid, OutsideCoverageError } from './provider';
+import {
+  fetchForecast,
+  findGrid,
+  type Grid,
+  OutsideCoverageError,
+  type Position,
+} from './provider';
 
 /**
  * The forecast a screen reads, and how it gets there.
@@ -68,10 +74,35 @@ export async function readWeather(now: number = Date.now()): Promise<Weather | n
 const MIN_GAP_MS = 60 * 60 * 1000;
 
 export interface RefreshResult {
-  /** Null when nothing was fetched — too soon, or no position yet. */
+  /** What to render. Null only when nothing has ever been cached. */
   weather: Weather | null;
   /** Set when the farm is outside NWS coverage, which no retry fixes. */
   uncovered?: boolean;
+  /** "Burlington, VT", when the grid lookup named the place. */
+  placeName?: string;
+}
+
+/**
+ * The grid for the position asked about last, kept for the process.
+ *
+ * NWS resolves coordinates to a grid square before it will forecast, and that
+ * mapping never changes for a fixed position — a farm does not move. Caching it
+ * in SQLite would mean a table and a migration for a value one round trip
+ * rebuilds; caching it here costs one extra request per app launch, and only on
+ * the launch that actually fetches.
+ *
+ * Keyed by the rounded position so moving the pin discards it rather than
+ * forecasting the old valley.
+ */
+let known: { key: string; grid: Grid } | null = null;
+
+async function gridFor(at: Position): Promise<Grid> {
+  const key = `${at.lat},${at.lon}`;
+  if (known !== null && known.key === key) return known.grid;
+
+  const grid = await findGrid(at);
+  known = { key, grid };
+  return grid;
 }
 
 /**
@@ -86,23 +117,55 @@ export interface RefreshResult {
  * fails leaves the last one in place with its age showing, which is exactly
  * what should happen with no signal.
  */
+export interface RefreshOptions {
+  now?: number;
+  /**
+   * Asks even inside the hour.
+   *
+   * For the one case the gap is wrong about: somebody has pressed "try again"
+   * because the last attempt failed, or has just moved the pin. Both are a
+   * person waiting at the screen, which is the opposite of the six-launches-a-
+   * morning case the gap exists for.
+   *
+   * Deliberately a flag rather than "pass a `now` an hour ahead". That trick
+   * would write a `fetchedAt` in the future and poison the gap for every later
+   * refresh — the cache would look fresh for an hour that never elapses.
+   */
+  force?: boolean;
+}
+
 export async function refreshWeather(
-  grid: Grid,
-  now: number = Date.now(),
+  at: Position,
+  options: RefreshOptions = {},
 ): Promise<RefreshResult> {
+  const now = options.now ?? Date.now();
   const cached = await localStore().readForecast();
-  if (cached !== null && now - cached.fetchedAt < MIN_GAP_MS) {
-    return { weather: await readWeather(now) };
+  /**
+   * The gap is checked before the grid lookup, not after.
+   *
+   * A farm opening the app six times in a morning would otherwise make six
+   * `/points` requests to decide six times that it already had the answer —
+   * the request the cache exists to avoid, moved one step earlier.
+   */
+  if (options.force !== true && cached !== null && now - cached.fetchedAt < MIN_GAP_MS) {
+    return {
+      weather: await readWeather(now),
+      ...(known?.grid.placeName === undefined ? {} : { placeName: known.grid.placeName }),
+    };
   }
 
   try {
+    const grid = await gridFor(at);
     const forecast = await fetchForecast(grid, now);
     await localStore().writeForecast({
       issuedAt: forecast.issuedAt,
       fetchedAt: now,
       value: JSON.stringify(forecast),
     });
-    return { weather: await readWeather(now) };
+    return {
+      weather: await readWeather(now),
+      ...(grid.placeName === undefined ? {} : { placeName: grid.placeName }),
+    };
   } catch (error) {
     if (error instanceof OutsideCoverageError) {
       return { weather: await readWeather(now), uncovered: true };
@@ -113,8 +176,15 @@ export async function refreshWeather(
   }
 }
 
-/** For tests and for a farm that moves its pin. */
+/**
+ * Drops the cached forecast and the grid with it.
+ *
+ * Both, and the grid is the one that matters: a farm that has corrected its
+ * position must not be handed the previous valley's square on the next
+ * refresh, and that square is held in memory where no store wipe reaches it.
+ */
 export async function forgetWeather(): Promise<void> {
+  known = null;
   await localStore().writeForecast({ issuedAt: 0, fetchedAt: 0, value: '{}' });
 }
 

@@ -18,7 +18,15 @@
       "bundleIdentifier": "com.steading.app",
       "supportsTablet": false
     },
-    "plugins": ["expo-system-ui"],
+    "plugins": [
+      "expo-system-ui",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Steading asks once, to find the forecast for your farm. The position is stored rounded to about a kilometre and is never sent anywhere but the weather service."
+        }
+      ]
+    ],
     "experiments": {
       "typedRoutes": false
     }
