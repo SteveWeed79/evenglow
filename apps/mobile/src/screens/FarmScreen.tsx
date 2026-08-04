@@ -113,6 +113,28 @@ export function FarmScreen(): React.ReactElement {
         </Panel>
       ) : null}
 
+      {/**
+        * The shelf, and it belongs here rather than only under Iron.
+        *
+        * It was reachable from one place: the Iron hub. So a farm that keeps
+        * chickens and owns no tractor had `iron` switched off, no Iron row,
+        * and **no way to reach its feed at all** — while the shelf's five
+        * kinds are feed, bedding, medicine, part and other, three of which are
+        * nothing to do with equipment. Feed is tied to stock; it was filed
+        * under machinery because parts happened to be filed there first.
+        *
+        * It stays on Iron as well. A part genuinely is only thought about
+        * beside the machine it belongs to, and two doors to one room is the
+        * arrangement this hub already uses for "What you run".
+        */}
+      <Row
+        title="The shelf"
+        detail="Feed, bedding, medicine and parts — what is in and what is low"
+        icon="parts"
+        testID="farm-shelf"
+        onPress={() => nav.navigate('Inventory')}
+      />
+
       {/* Always here, whatever the farm runs: a gate needs fixing on a market
           garden too, and this is the only list in the app somebody writes
           themselves. */}

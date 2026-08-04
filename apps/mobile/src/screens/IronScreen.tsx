@@ -17,8 +17,12 @@ import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
  * waterer, grease loader" — so the two halves of the app must not feel like
  * two apps.
  *
- * The shelf sits here rather than in settings because a part is only ever
- * thought about beside the machine it belongs to.
+ * The shelf sits here because a part is only ever thought about beside the
+ * machine it belongs to — but this is no longer the ONLY door to it, and that
+ * was a real defect. Iron is hidden for a farm that runs no equipment, so a
+ * poultry keeper with no tractor could not reach their feed: three of the
+ * shelf's five kinds are feed, bedding and medicine, none of which is
+ * machinery. It is on the Farm hub as well now.
  */
 export function IronScreen(): React.ReactElement {
   const { colors } = useTheme();
