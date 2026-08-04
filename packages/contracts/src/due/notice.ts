@@ -17,6 +17,8 @@ import type { DueKind } from './types';
  *   pregnant animal, and be around.
  * - A service wants three weeks, because that is roughly how long a filter
  *   takes to arrive.
+ * - A clip wants six weeks, because a shearer is booked rather than summoned,
+ *   and in spring they are booked out.
  *
  * Overridable per row where a farm knows better; these are the defaults.
  */
@@ -32,5 +34,6 @@ export const DEFAULT_NOTICE_DAYS: Record<DueKind, number> = {
   hatch: 21,
   candle: 2,
   processing: 14,
+  shearing: 42,
   task: 3,
 };

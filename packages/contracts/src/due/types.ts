@@ -58,6 +58,8 @@ export const DUE_KINDS = [
   'candle',
   /** Meat stock reaching processing weight or age. */
   'processing',
+  /** A fleece owed, from the breed's own interval. */
+  'shearing',
   /** A chore the farm entered itself. The one authored kind. */
   'task',
 ] as const;

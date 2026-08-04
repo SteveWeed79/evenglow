@@ -65,6 +65,7 @@ const MARKS: Record<WarningKind, IconName> = {
   'heat-ruminant': 'sky-clear',
   'heat-camelid': 'sky-clear',
   'birth-cold': 'milestone',
+  'shearing-wet': 'sky-rain',
 };
 
 export function WeatherWarnings(): React.ReactElement | null {

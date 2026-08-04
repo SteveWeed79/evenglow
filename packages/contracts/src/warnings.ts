@@ -53,6 +53,8 @@ export const WARNING_KINDS = [
   'heat-camelid',
   /** A cold night landing on a birth that is nearly due. */
   'birth-cold',
+  /** Rain landing on a clip that is owed. A wet fleece cannot be shorn. */
+  'shearing-wet',
 ] as const;
 
 export type WarningKind = (typeof WARNING_KINDS)[number];
@@ -139,6 +141,15 @@ export interface FarmToday {
    * builder changed a word.
    */
   births: readonly { key: string; title: string; at: number }[];
+  /**
+   * Clips owed, taken straight off the due engine's `shearing` rows.
+   *
+   * Same shape and same reasoning as `births`: the due's own key and title,
+   * because "Shearing — The Ewes" is already the sentence and a caller
+   * reconstructing a name out of it would break the first time the builder
+   * changed a word.
+   */
+  shearings?: readonly { key: string; title: string; at: number }[];
 }
 
 export interface WarnableGroup {
@@ -232,6 +243,32 @@ export function camelidHeatIndex(deciC: number, humidity: number): number {
  */
 const BIRTH_WINDOW_DAYS = 7;
 
+/**
+ * How close a clip has to be for rain to be worth saying.
+ *
+ * A month, which is far wider than the birth window and deliberately so. A
+ * shearer is booked rather than summoned, and the useful sentence is "the
+ * weather is against the week you were thinking of" — that is a planning
+ * horizon, not a tonight problem.
+ */
+const SHEARING_WINDOW_DAYS = 30;
+
+/**
+ * When a day counts as too wet to shear.
+ *
+ * A wet fleece is not a fleece with a problem, it is a fleece that cannot be
+ * baled: packed damp it heats, moulds and rots, and the whole clip is lost
+ * rather than downgraded. It is also bad for the animal, which is put back out
+ * soaked with no coat, and for the shearer's comb.
+ *
+ * Sheep also need to be dry to the SKIN, which takes far longer than the
+ * ground does — so this is deliberately a low bar. A forty per cent chance is
+ * enough to say "not that day", because the cost of the two mistakes is not
+ * symmetric: a wrong warning moves a booking, and a missed one ruins a year's
+ * wool.
+ */
+const WET_CHANCE = 40;
+
 const DAY_MS = 86_400_000;
 
 // ── the rules ────────────────────────────────────────────────────────────────
@@ -263,6 +300,7 @@ export function warningsFor(
     ...freezeWarnings(day, farm),
     ...heatWarnings(day, farm),
     ...birthWarnings(day, farm, today),
+    ...shearingWarnings(day, farm, today),
   ]);
 
   return fold(drafts, today).sort(byUrgency);
@@ -490,6 +528,47 @@ function birthWarnings(day: ForecastDay, farm: FarmToday, today: number): Draft[
     span: 'night' as const,
     subject: birth.key,
     say: (when: string) => `${birth.title}, and it is freezing ${when}.`,
+  }));
+}
+
+/**
+ * Rain landing on a clip that is owed.
+ *
+ * ## Why this is a warning and not just a due row
+ *
+ * The `shearing` due already says a fleece is owed. What it cannot say is
+ * whether the week somebody was thinking of is any good, and that is the part
+ * a farm cannot work out from the app — it means holding the forecast and the
+ * due list in your head at once, at 6am, which is exactly the job this screen
+ * exists to take off somebody.
+ *
+ * ## `watch`, never `act`
+ *
+ * Every other rule here is about an animal in trouble tonight. This one is
+ * about a booking, and a booking is not an emergency. Raising it to `act`
+ * would put it beside "your alpacas are overheating" and teach a farm that the
+ * red rows are sometimes about the diary — which is how the red rows stop
+ * being read.
+ */
+function shearingWarnings(day: ForecastDay, farm: FarmToday, today: number): Draft[] {
+  if (day.rainChance < WET_CHANCE) return [];
+
+  // The window runs from TODAY, like `birthWarnings`: a clip owed in March is
+  // not made urgent by tomorrow being wet.
+  const owed = (farm.shearings ?? []).filter(
+    (shearing) => shearing.at >= today - DAY_MS && shearing.at <= today + SHEARING_WINDOW_DAYS * DAY_MS,
+  );
+  if (owed.length === 0) return [];
+
+  return owed.map((shearing) => ({
+    kind: 'shearing-wet' as const,
+    severity: 'watch' as const,
+    detail:
+      'A fleece has to be dry to the skin. Baled damp it heats and moulds, and the clip is lost rather than downgraded.',
+    at: day.day,
+    span: 'day' as const,
+    subject: shearing.key,
+    say: (when: string) => `${shearing.title} — and it is wet ${when}.`,
   }));
 }
 

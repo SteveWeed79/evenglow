@@ -26,6 +26,7 @@ const MARKS: Record<DueKind, IconName> = {
   hatch: 'egg',
   candle: 'egg',
   processing: 'meat',
+  shearing: 'basic-full',
   task: 'date-due',
 };
 
