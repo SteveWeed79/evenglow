@@ -1,6 +1,16 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
-import { longestWithdrawal, PRODUCE_KINDS } from '@steading/contracts';
+import {
+  enteredToStored,
+  entryUnit,
+  formatMass,
+  formatVolume,
+  gramsToUg,
+  longestWithdrawal,
+  mlToUl,
+  PRODUCE_KINDS,
+  type UnitSystem,
+} from '@steading/contracts';
 import { listGroups, produceToday } from '@steading/core/read/groups';
 import { withdrawalsBySubject } from '@steading/core/read/withdrawals';
 import { Choice, Failure, Field, TextField, useSaver } from '../components/Form';
@@ -12,6 +22,7 @@ import { WithdrawalBanner } from '../components/WithdrawalBanner';
 import { useLive } from '../hooks/useLive';
 import { useNav } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
+import { useUnits } from '../hooks/useUnits';
 import type { ScreenProps } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, TYPE } from '../theme/tokens';
@@ -48,23 +59,31 @@ const LABELS: Record<Produce, string> = {
 const UNITS: Record<Produce, 'ml' | 'g'> = { milk: 'ml', fibre: 'g', honey: 'g', other: 'g' };
 
 /**
- * Steps that match how the thing is actually measured.
+ * Steps that match how the thing is actually measured, in each system.
  *
  * A milking pail moves in hundreds of millilitres and a fleece in whole
  * kilos — offering +1 for either would be a control nobody could reach the
- * real number with.
+ * real number with. The imperial column is the same argument in the units a
+ * US farm owns vessels in: a cup, a pint and a quart of milk; a quarter
+ * pound, a pound and two pounds of fleece.
  */
-const STEPS: Record<Produce, readonly number[]> = {
-  milk: [50, 100, 500],
-  fibre: [100, 500, 1000],
-  honey: [100, 500, 1000],
-  other: [1, 10, 100],
+const STEPS: Record<Produce, Record<UnitSystem, readonly number[]>> = {
+  milk: { metric: [50, 100, 500], imperial: [8, 16, 32] },
+  fibre: { metric: [100, 500, 1000], imperial: [4, 16, 32] },
+  honey: { metric: [100, 500, 1000], imperial: [4, 16, 32] },
+  other: { metric: [1, 10, 100], imperial: [1, 4, 16] },
 };
+
+/** What is already recorded today, read back in the farm's own units. */
+function alreadyToday(amount: number, unit: string, system: UnitSystem): string {
+  return unit === 'ml' ? formatVolume(mlToUl(amount), system) : formatMass(gramsToUg(amount), system);
+}
 
 export function ProduceScreen({ route }: ScreenProps<'Produce'>): React.ReactElement {
   const { groupId } = route.params;
   const nav = useNav();
   const log = useLog();
+  const units = useUnits();
   const { colors } = useTheme();
 
   const groups = useLive(listGroups);
@@ -91,7 +110,8 @@ export function ProduceScreen({ route }: ScreenProps<'Produce'>): React.ReactEle
             occurredAt: Date.now(),
             flockId: groupId,
             kind,
-            amount,
+            // The stepper counted in the farm's unit; the schema takes mL or g.
+            amount: enteredToStored(amount, UNITS[kind], units),
             unit: UNITS[kind],
             ...(kind === 'other' && label.trim() !== '' ? { label: label.trim() } : {}),
             // Recorded, not merely displayed: an acknowledged withdrawal is
@@ -101,7 +121,7 @@ export function ProduceScreen({ route }: ScreenProps<'Produce'>): React.ReactEle
         });
       });
     },
-    [save, log, groupId, kind, label],
+    [save, log, groupId, kind, label, units],
   );
 
   if (groups === null) return <Loading title="Produce" />;
@@ -129,16 +149,17 @@ export function ProduceScreen({ route }: ScreenProps<'Produce'>): React.ReactEle
       {already ? (
         <Panel label="Already today">
           <Body>
-            {already.amount} {already.unit} of {LABELS[kind].toLowerCase()} so far. This adds to
-            it — a morning and an evening milking are two records, and both are true.
+            {alreadyToday(already.amount, already.unit, units)} of {LABELS[kind].toLowerCase()} so
+            far. This adds to it — a morning and an evening milking are two records, and both are
+            true.
           </Body>
         </Panel>
       ) : null}
 
       <Tally
         label={`${LABELS[kind]} from ${group.name}`}
-        unit={UNITS[kind]}
-        steps={STEPS[kind]}
+        unit={entryUnit(UNITS[kind], units)}
+        steps={STEPS[kind][units]}
         requireConfirm={withdrawal !== null}
         onCommit={(value, acknowledged) => void commit(value, acknowledged)}
       />

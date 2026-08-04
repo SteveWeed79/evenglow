@@ -5,9 +5,17 @@ import {
   dailyProductsOf,
   type Due,
   type DueBundle,
+  enteredToStored,
+  entryUnit,
+  gramsToUg,
   longestWithdrawal,
+  massIn,
+  type Measure,
+  mlToUl,
   type Product,
   todayBundles,
+  type UnitSystem,
+  volumeIn,
 } from '@steading/contracts';
 import type { Group } from '@steading/core/read/groups';
 import { basketConfirmation } from '@steading/core/voice';
@@ -24,6 +32,7 @@ import { useDues } from '../hooks/useDues';
 import { useGroups } from '../hooks/useGroups';
 import { useNav } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
+import { useUnits } from '../hooks/useUnits';
 import { reportTrouble } from '../hooks/useTrouble';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
@@ -94,12 +103,34 @@ import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
 const VISIBLE_DUES = 5;
 
 const MARKS: Record<Product, IconName> = { eggs: 'egg', milk: 'milk', fibre: 'basic-full' };
-const UNITS: Record<Product, string> = { eggs: 'eggs', milk: 'ml', fibre: 'g' };
-const STEPS: Record<Product, readonly number[]> = {
-  eggs: [1, 6, 12],
-  milk: [50, 100, 500],
-  fibre: [100, 500],
+
+/** What `productionLog` stores this product as. Eggs are counted, not measured. */
+const STORED: Record<Exclude<Product, 'eggs'>, 'ml' | 'g'> = { milk: 'ml', fibre: 'g' };
+
+/**
+ * Steps in the fine unit of each system, chosen as vessels rather than as
+ * conversions of each other.
+ *
+ * A farm counting in fluid ounces reaches for a cup, a pint and a quart; one
+ * counting in millilitres does not think in 237s. Converting the metric steps
+ * would have produced exactly that.
+ */
+const STEPS: Record<Product, Record<UnitSystem, readonly number[]>> = {
+  eggs: { metric: [1, 6, 12], imperial: [1, 6, 12] },
+  milk: { metric: [50, 100, 500], imperial: [8, 16, 32] },
+  fibre: { metric: [100, 500], imperial: [4, 16] },
 };
+
+/**
+ * The running total, scaled to whatever the farm reads in.
+ *
+ * Eggs are counted rather than measured, so they have no unit and the row
+ * says only "today" beneath the number.
+ */
+function producedIn(product: Product, amount: number, units: UnitSystem): Measure {
+  if (product === 'eggs') return { value: String(amount), unit: '' };
+  return product === 'milk' ? volumeIn(mlToUl(amount), units) : massIn(gramsToUg(amount), units);
+}
 
 interface Loggable {
   key: string;
@@ -364,6 +395,7 @@ function ProductTally({
 }): React.ReactElement {
   const log = useLog();
   const { colors } = useTheme();
+  const units = useUnits();
   const { group, product } = item;
 
   const commit = useCallback(
@@ -384,6 +416,8 @@ function ProductTally({
         return;
       }
 
+      const stored = STORED[product];
+
       await log({
         entity: 'productionLog',
         op: 'create',
@@ -391,16 +425,20 @@ function ProductTally({
           occurredAt: Date.now(),
           flockId: group.id,
           kind: product,
-          amount,
-          unit: product === 'milk' ? 'ml' : 'g',
+          // The stepper counted in the farm's unit; the schema takes mL or g.
+          amount: enteredToStored(amount, stored, units),
+          unit: stored,
           ...(acknowledged ? { withdrawalAcknowledged: true } : {}),
         },
       });
     },
-    [log, group.id, product],
+    [log, group.id, product, units],
   );
 
   const heading = product === 'eggs' ? 'Eggs' : product === 'milk' ? 'Milk' : 'Fibre';
+  const produced = producedIn(product, today, units);
+  // Read aloud with its unit: "100 so far today" is a number about nothing.
+  const spoken = produced.unit === '' ? produced.value : `${produced.value} ${produced.unit}`;
 
   return (
     <View style={styles.group}>
@@ -408,7 +446,7 @@ function ProductTally({
         onPress={onToggle}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
-        accessibilityLabel={`${heading} from ${group.name}. ${today} so far today.`}
+        accessibilityLabel={`${heading} from ${group.name}. ${spoken} so far today.`}
         testID={`tally-open-${item.key}`}
         style={({ pressed }) => [
           styles.head,
@@ -432,9 +470,9 @@ function ProductTally({
             only question somebody asks before deciding to open this. */}
         {today > 0 ? (
           <View style={styles.today}>
-            <Text style={[styles.todayCount, { color: colors.ink }]}>{today}</Text>
+            <Text style={[styles.todayCount, { color: colors.ink }]}>{produced.value}</Text>
             <Text style={[styles.label, { color: colors.muted }]}>
-              {product === 'eggs' ? 'today' : `${UNITS[product]} today`}
+              {produced.unit === '' ? 'today' : `${produced.unit} today`}
             </Text>
           </View>
         ) : null}
@@ -449,8 +487,8 @@ function ProductTally({
 
           <Tally
             label={`${heading} from ${group.name}`}
-            unit={UNITS[product]}
-            steps={STEPS[product]}
+            unit={product === 'eggs' ? 'eggs' : entryUnit(STORED[product], units)}
+            steps={STEPS[product][units]}
             requireConfirm={withdrawal !== null}
             {...(product === 'eggs' ? { confirm: basketConfirmation } : {})}
             onCommit={commit}
