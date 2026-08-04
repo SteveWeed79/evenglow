@@ -153,8 +153,111 @@ describe('what the screen says is happening', () => {
     const screen = await mount(<CareRoutineScreen {...routeProps({ groupId: GROUP })} />);
 
     expect(screen.get('care-now-worming').children.join('')).toContain('120 days, by default');
-    // And a job this species does not do says so, rather than hiding.
-    expect(screen.get('care-now-hoof-trim').children.join('')).toContain('Not for this kind');
+    screen.unmount();
+  });
+
+  /**
+   * Off by default is not the same as impossible, and the line says which.
+   * Minerals for a laying flock is grit and oyster shell — a real job that
+   * simply is not on a schedule unless somebody asks for one.
+   */
+  it('says a job is off rather than absent when it is merely off', async () => {
+    const screen = await mount(<CareRoutineScreen {...routeProps({ groupId: GROUP })} />);
+
+    expect(screen.get('care-now-mineral').children.join('')).toContain('Off unless you ask');
+    screen.unmount();
+  });
+});
+
+/**
+ * "If the farm doesn't have the animal associated with the routine task, does
+ * it need to be on the list?"
+ *
+ * No. The screen listed all seven kinds on the argument that hiding one makes
+ * a capability invisible rather than absent — right about a job that is off by
+ * default, wrong about one that cannot exist. A chicken has no teeth that need
+ * doing, and seven interval chips under "Teeth" is a category error taking up
+ * a screen.
+ *
+ * `null` had been doing both jobs: "not on a schedule" and "this animal does
+ * not have one". `careApplies` is where the line lives now, and only anatomy
+ * makes a job impossible.
+ */
+describe('which jobs are offered at all', () => {
+  it('does not ask how often to do a chicken’s teeth', async () => {
+    const screen = await mount(<CareRoutineScreen {...routeProps({ groupId: GROUP })} />);
+
+    expect(screen.has('care-now-dental')).toBe(false);
+    expect(screen.has('care-now-hoof-trim')).toBe(false);
+    screen.unmount();
+  });
+
+  /**
+   * But keeps everything that is merely switched off. Every animal has health,
+   * can be wormed, can carry parasites, can be vaccinated, and eats.
+   */
+  it('keeps the jobs that are real and simply off', async () => {
+    const screen = await mount(<CareRoutineScreen {...routeProps({ groupId: GROUP })} />);
+
+    expect(screen.has('care-now-health-check')).toBe(true);
+    expect(screen.has('care-now-mineral')).toBe(true);
+    expect(screen.has('care-now-vaccination')).toBe(true);
+    screen.unmount();
+  });
+
+  it('offers a goat its feet, which a chicken is not asked about', async () => {
+    const goats = newId();
+    await enqueue({
+      entity: 'flock',
+      op: 'create',
+      targetId: goats,
+      payload: { name: 'The goats', species: 'goat', count: 4, purposes: ['milk'] },
+    });
+
+    const screen = await mount(<CareRoutineScreen {...routeProps({ groupId: goats })} />);
+
+    expect(screen.has('care-now-hoof-trim')).toBe(true);
+    // And still no teeth: rasping is horses and camelids.
+    expect(screen.has('care-now-dental')).toBe(false);
+    screen.unmount();
+  });
+
+  it('offers a horse its teeth', async () => {
+    const horses = newId();
+    await enqueue({
+      entity: 'flock',
+      op: 'create',
+      targetId: horses,
+      payload: { name: 'The horses', species: 'horse', count: 2, purposes: ['work'] },
+    });
+
+    const screen = await mount(<CareRoutineScreen {...routeProps({ groupId: horses })} />);
+
+    expect(screen.has('care-now-dental')).toBe(true);
+    screen.unmount();
+  });
+
+  /**
+   * A rule that arrived after a setting must not strand it. A farm that had
+   * somehow answered for a kind keeps the row, whatever the rule now says.
+   */
+  it('still shows a kind the farm has already answered', async () => {
+    const odd = newId();
+    await enqueue({
+      entity: 'flock',
+      op: 'create',
+      targetId: odd,
+      payload: {
+        name: 'The hens',
+        species: 'chicken',
+        count: 6,
+        careIntervals: { dental: 365 },
+      },
+    });
+
+    const screen = await mount(<CareRoutineScreen {...routeProps({ groupId: odd })} />);
+
+    expect(screen.has('care-now-dental')).toBe(true);
     screen.unmount();
   });
 });
