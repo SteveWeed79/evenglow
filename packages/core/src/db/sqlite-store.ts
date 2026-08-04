@@ -12,6 +12,7 @@ import { migrateEnvelope } from './migrate';
 import { nextRecordValue } from './project';
 import type {
   CachedForecast,
+  CachedObservation,
   EnqueueRequest,
   IntegrityReport,
   LocalStore,
@@ -683,6 +684,27 @@ export async function openSqliteStore(
                                        fetchedAt = excluded.fetchedAt,
                                        value = excluded.value`,
         [entry.issuedAt, entry.fetchedAt, entry.value],
+      );
+    },
+
+    /**
+     * The last measured reading. Same category as the forecast — a cache, not
+     * a record — and the same one-row treatment.
+     */
+    async readObservation(): Promise<CachedObservation | null> {
+      const row = await driver.get<{ observedAt: number; fetchedAt: number; value: string }>(
+        'SELECT observedAt, fetchedAt, value FROM observation WHERE id = 1',
+      );
+      return row ?? null;
+    },
+
+    async writeObservation(entry): Promise<void> {
+      await driver.run(
+        `INSERT INTO observation (id, observedAt, fetchedAt, value) VALUES (1, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET observedAt = excluded.observedAt,
+                                       fetchedAt = excluded.fetchedAt,
+                                       value = excluded.value`,
+        [entry.observedAt, entry.fetchedAt, entry.value],
       );
     },
 

@@ -3,6 +3,8 @@ import {
   type Forecast,
   type ForecastHour,
   forecastSchema,
+  type Observation,
+  observationSchema as observationShape,
   roundPosition,
 } from '@steading/contracts';
 import { z } from 'zod';
@@ -93,6 +95,8 @@ const pointSchema = z.object({
   properties: z.object({
     forecast: z.string(),
     forecastHourly: z.string().optional(),
+    /** The list of nearby reporting stations, nearest first. */
+    observationStations: z.string().optional(),
     relativeLocation: z
       .object({
         properties: z.object({ city: z.string(), state: z.string() }).partial(),
@@ -221,6 +225,8 @@ export interface Grid {
   forecastUrl: string;
   /** Today, hour by hour. Absent on the rare grid that publishes none. */
   hourlyUrl?: string;
+  /** Where the nearest reporting stations are listed. */
+  stationsUrl?: string;
   /** "Burlington, VT" — what the farm can be shown it picked. */
   placeName?: string;
 }
@@ -237,8 +243,102 @@ export async function findGrid(at: Position): Promise<Grid> {
     ...(body.properties.forecastHourly === undefined
       ? {}
       : { hourlyUrl: body.properties.forecastHourly }),
+    ...(body.properties.observationStations === undefined
+      ? {}
+      : { stationsUrl: body.properties.observationStations }),
     ...(named === '' ? {} : { placeName: named }),
   };
+}
+
+const stationsSchema = z.object({
+  features: z.array(
+    z.object({
+      properties: z.object({
+        stationIdentifier: z.string(),
+        name: z.string().optional(),
+      }),
+    }),
+  ),
+});
+
+const observationSchema_ = z.object({
+  properties: z.object({
+    timestamp: z.string(),
+    // Every value is nullable: a station reports what its sensors give, and a
+    // missing temperature is ordinary rather than exceptional.
+    temperature: z.object({ value: z.number().nullable() }),
+    relativeHumidity: z.object({ value: z.number().nullable() }).optional(),
+    heatIndex: z.object({ value: z.number().nullable() }).optional(),
+    textDescription: z.string().optional(),
+  }),
+});
+
+/** Celsius, as NWS reports observations, to the canonical tenths. */
+function celsiusToDeci(value: number): number {
+  return Math.round(value * 10);
+}
+
+/**
+ * The nearest station that is actually reporting, and its latest reading.
+ *
+ * ## Why it walks the list rather than taking the first
+ *
+ * `observationStations` is ordered nearest-first, and the nearest is often a
+ * small airfield whose AWOS is down for the week. Taking it and giving up
+ * would mean a farm sees no current temperature at all because of an outage
+ * forty miles away that nobody is going to fix. Three is enough to get past an
+ * ordinary outage without turning one screen into a dozen requests.
+ *
+ * ## What it costs, stated
+ *
+ * The station can be a long way off. That is why the reading carries the
+ * station's name and its own timestamp — the screen can say "Manhattan
+ * Regional, 12 minutes ago" and let a farmer judge it, which is the honest
+ * thing to do with a number measured somewhere else.
+ */
+export async function fetchObservation(grid: Grid): Promise<Observation | null> {
+  if (grid.stationsUrl === undefined) return null;
+
+  const stations = await ask(grid.stationsUrl, stationsSchema);
+
+  for (const feature of stations.features.slice(0, 3)) {
+    const id = feature.properties.stationIdentifier;
+
+    try {
+      const body = await ask(
+        `${BASE}/stations/${id}/observations/latest`,
+        observationSchema_,
+      );
+      const said = body.properties;
+      const temperature = said.temperature.value;
+      const at = Date.parse(said.timestamp);
+
+      // A station reporting no temperature is reporting nothing this app can
+      // use, so move on rather than showing a hole.
+      if (temperature === null || Number.isNaN(at)) continue;
+
+      const humidity = said.relativeHumidity?.value;
+      const feels = said.heatIndex?.value;
+
+      return observationShape.parse({
+        at,
+        tempDeciC: celsiusToDeci(temperature),
+        condition: conditionOf(said.textDescription ?? ''),
+        ...(humidity === null || humidity === undefined
+          ? {}
+          : { humidity: Math.round(humidity) }),
+        ...(feels === null || feels === undefined
+          ? {}
+          : { feelsLikeDeciC: celsiusToDeci(feels) }),
+        ...(feature.properties.name === undefined ? {} : { station: feature.properties.name }),
+      });
+    } catch {
+      // This station is down or answering oddly. Try the next one.
+      continue;
+    }
+  }
+
+  return null;
 }
 
 /**

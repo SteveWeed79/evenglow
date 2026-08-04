@@ -66,6 +66,21 @@ export interface CachedForecast {
   value: string;
 }
 
+/**
+ * A measured reading as it sits in the cache. `value` is the JSON, unparsed.
+ *
+ * `observedAt` is when the station took the reading and `fetchedAt` is when
+ * this device asked — the same split as the forecast, and it matters more
+ * here: a twenty-minute-old reading fetched a second ago is still a
+ * twenty-minute-old reading, and on an afternoon that is climbing fast that
+ * is the number worth showing beside it.
+ */
+export interface CachedObservation {
+  observedAt: number;
+  fetchedAt: number;
+  value: string;
+}
+
 export interface LocalStore {
   // ── Writing ───────────────────────────────────────────────────────────────
 
@@ -188,6 +203,17 @@ export interface LocalStore {
    */
   readForecast(): Promise<CachedForecast | null>;
   writeForecast(entry: CachedForecast): Promise<void>;
+
+  /**
+   * The last measured reading, or null.
+   *
+   * Separate from the forecast because the two go out of date at completely
+   * different rates: a forecast run is regenerated hourly and is stale after
+   * two days, while a reading from an airfield thermometer is worthless within
+   * the hour. Sharing one row would force the slower to govern the faster.
+   */
+  readObservation(): Promise<CachedObservation | null>;
+  writeObservation(entry: CachedObservation): Promise<void>;
 
   quarantineCount(): Promise<number>;
   listQuarantined(): Promise<Quarantined[]>;

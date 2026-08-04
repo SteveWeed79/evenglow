@@ -343,7 +343,11 @@ describe('the forecast screen', () => {
 
     const screen = await mount(<WeatherScreen />);
     expect(screen.get('weather-age')).toBeDefined();
-    expect(screen.text()).toContain('Last heard');
+    // And says WHICH number it is showing. The fake grid lists no observation
+    // station, so this falls back to the forecast's figure for the hour — and
+    // has to admit that rather than presenting a prediction as a measurement.
+    expect(screen.text()).toContain('Forecast for this hour');
+    expect(screen.text()).toContain('last heard');
     screen.unmount();
   });
 

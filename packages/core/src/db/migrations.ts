@@ -124,6 +124,40 @@ export const MIGRATIONS: readonly Migration[] = [
        )`,
     ],
   },
+
+  {
+    version: 3,
+    statements: [
+      /**
+       * What it is doing **now**, measured — as opposed to forecast.
+       *
+       * Its own table rather than a column on `forecast`, because the two have
+       * genuinely different lifetimes and conflating them would force the
+       * slower one to govern.
+       *
+       * A forecast run is regenerated about hourly and is stale after two
+       * days. An observation is a reading from a real thermometer at an
+       * airfield, reported every ten to twenty minutes — and on a fast-moving
+       * afternoon more often than that, because ASOS files a SPECI report when
+       * conditions change sharply. It is worthless within the hour.
+       *
+       * That difference is the whole reason this exists. The row on Today used
+       * to show the hourly forecast's figure for the current hour and call it
+       * "now". A Kansas summer afternoon can climb ten degrees in half an hour,
+       * so that number could be badly wrong while the app displayed it with
+       * confidence — on the one screen this app asks people to trust.
+       *
+       * One row, like the forecast, for the same reason: one farm, one
+       * position, one nearest station.
+       */
+      `CREATE TABLE IF NOT EXISTS observation (
+         id         INTEGER PRIMARY KEY CHECK (id = 1),
+         observedAt INTEGER NOT NULL,
+         fetchedAt  INTEGER NOT NULL,
+         value      TEXT NOT NULL
+       )`,
+    ],
+  },
 ];
 
 /** The version a fresh database is brought to. */

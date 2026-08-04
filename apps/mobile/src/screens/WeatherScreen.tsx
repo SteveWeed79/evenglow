@@ -12,6 +12,7 @@ import {
   type UnitSystem,
 } from '@steading/contracts';
 import { readSiteOrBlank } from '@steading/core/read/growing';
+import type { Measured } from '@steading/core/weather';
 import { Failure, Primary, Secondary, TextField, useSaver } from '../components/Form';
 import { Icon } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
@@ -60,7 +61,8 @@ import { locate, findPlace, type Place } from '../weather/where';
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export function WeatherScreen(): React.ReactElement {
-  const { loading, at, placeName, weather, uncovered, fetching, units, again } = useWeather();
+  const { loading, at, placeName, weather, measured, uncovered, fetching, units, again } =
+    useWeather();
 
   return (
     <Screen title="Weather" back>
@@ -92,6 +94,7 @@ export function WeatherScreen(): React.ReactElement {
               hours={weather.forecast.hours}
               nowDeciC={weather.forecast.now.tempDeciC}
               nowCondition={weather.forecast.now.condition}
+              measured={measured}
               stale={weather.stale}
               fetchedAt={weather.fetchedAt}
               units={units}
@@ -118,6 +121,7 @@ function Forecast({
   hours,
   nowDeciC,
   nowCondition,
+  measured,
   stale,
   fetchedAt,
   units,
@@ -127,6 +131,7 @@ function Forecast({
   hours: readonly ForecastHour[];
   nowDeciC: number;
   nowCondition: Condition;
+  measured: Measured | null;
   stale: boolean;
   fetchedAt: number;
   units: UnitSystem;
@@ -146,15 +151,27 @@ function Forecast({
    */
   const widest = Math.max(20, ...days.map((day) => day.rainChance));
 
+  /**
+   * A measured reading beats the forecast's figure for the hour.
+   *
+   * Null when no nearby station reports, or when the one that does has gone
+   * quiet for ninety minutes. The screen says which of the two it is showing
+   * rather than presenting a prediction as a measurement.
+   */
+  const live = measured !== null && !measured.stale ? measured.observation : null;
+  const nowCondition_ = live?.condition ?? nowCondition;
+
   return (
     <>
       <Panel label={where ?? 'Right now'}>
         <View style={styles.nowRow}>
-          <Icon name={SKY_MARKS[nowCondition]} size={32} color={colors.lanternInk} />
-          <Text style={[styles.nowTemp, { color: colors.ink }]}>{degrees(nowDeciC, units)}°</Text>
+          <Icon name={SKY_MARKS[nowCondition_]} size={32} color={colors.lanternInk} />
+          <Text style={[styles.nowTemp, { color: colors.ink }]}>
+            {degrees(live?.tempDeciC ?? nowDeciC, units)}°
+          </Text>
           <View style={styles.nowWords}>
             <Text style={[styles.condition, { color: colors.ink }]}>
-              {CONDITION_WORDS[nowCondition]}
+              {CONDITION_WORDS[nowCondition_]}
             </Text>
             {today === undefined ? null : (
               <Text style={[styles.label, { color: colors.muted }]}>
@@ -164,13 +181,36 @@ function Forecast({
           </View>
         </View>
 
-        {/* Age, always. A forecast with no timestamp is a claim about now that
-            might be about yesterday, and this is the one screen in the app
-            showing numbers the farm did not enter itself. */}
-        <Text style={[styles.age, { color: stale ? colors.rowan : colors.muted }]} testID="weather-age">
-          {stale
-            ? `Last heard ${when(fetchedAt, now)} — too old to trust`
-            : `Last heard ${when(fetchedAt, now)}`}
+        {/* What it feels like, when the service says the two differ enough to
+            matter. A 96° that feels like 108° is a different afternoon. */}
+        {live?.feelsLikeDeciC === undefined ||
+        Math.abs(live.feelsLikeDeciC - live.tempDeciC) < 20 ? null : (
+          <Text style={[styles.label, { color: colors.lanternInk }]} testID="weather-feels">
+            Feels like {degrees(live.feelsLikeDeciC, units)}°
+          </Text>
+        )}
+
+        {/**
+          * Where the number came from, and how old it is.
+          *
+          * A reading measured at an airfield forty miles away twenty-five
+          * minutes ago is a different claim from a forecast for this hour, and
+          * a farm that can tell them apart can judge them. The alternative —
+          * one confident numeral with no provenance — is the thing that makes
+          * a fast-moving afternoon look like the app lying.
+          */}
+        <Text
+          style={[styles.age, { color: stale && live === null ? colors.rowan : colors.muted }]}
+          testID="weather-age"
+        >
+          {live === null
+            ? stale
+              ? `Forecast, last heard ${when(fetchedAt, now)} — too old to trust`
+              : `Forecast for this hour · last heard ${when(fetchedAt, now)}`
+            : `Measured${live.station === undefined ? '' : ` at ${live.station}`} · ${when(
+                live.at,
+                now,
+              )}`}
         </Text>
       </Panel>
 
