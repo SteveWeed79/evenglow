@@ -76,8 +76,40 @@ export interface Warning {
   title: string;
   /** What it means, or what to do. One more line at most. */
   detail: string;
-  /** The day it bites — local midnight, matching a forecast day. */
+  /** The first day it bites — local midnight, matching a forecast day. */
   at: number;
+}
+
+/**
+ * One rule's finding for one day, before the days are folded together.
+ *
+ * Never leaves this module. The sentence is a function of the time phrase
+ * rather than a finished string, because the phrase is only known after the
+ * fold: the same heat is *"today"*, *"tomorrow"* or *"today and tomorrow"*
+ * depending on what the other day turned out to say.
+ *
+ * That indirection exists because the first version did not have it, and a
+ * farm with two hot days got two four-line warnings saying the same thing in
+ * different tenses — which pushed the egg tally below the fold. Exactly the
+ * failure `TodayScreen` already records about the due list, made again.
+ */
+interface Draft {
+  kind: WarningKind;
+  severity: WarningSeverity;
+  detail: string;
+  at: number;
+  /** Whether this is about the night or about the working day. */
+  span: 'night' | 'day';
+  /** The sentence, given the time phrase to put in it. */
+  say: (when: string) => string;
+  /**
+   * What this is about, when a kind can fire more than once for one day.
+   *
+   * Only `birth-cold` needs it — two does due the same week are two rows on
+   * the same freezing night, and a key of kind-plus-day would give them the
+   * same React key and draw one of them twice.
+   */
+  subject?: string;
 }
 
 /**
@@ -226,14 +258,84 @@ export function warningsFor(
     (day) => day.day >= today && day.day <= today + DAY_MS,
   );
 
-  return days
-    .flatMap((day) => [
-      ...frostWarnings(day, farm, today),
-      ...freezeWarnings(day, farm, today),
-      ...heatWarnings(day, farm, today),
-      ...birthWarnings(day, farm, today),
-    ])
-    .sort(byUrgency);
+  const drafts = days.flatMap((day) => [
+    ...frostWarnings(day, farm),
+    ...freezeWarnings(day, farm),
+    ...heatWarnings(day, farm),
+    ...birthWarnings(day, farm, today),
+  ]);
+
+  return fold(drafts, today).sort(byUrgency);
+}
+
+/**
+ * A placeholder no sentence would contain, used to ask two drafts whether they
+ * are the same sentence apart from the day.
+ */
+const WHEN = ' when ';
+
+/**
+ * Merges a rule's finding for today with the identical finding for tomorrow.
+ *
+ * **Only when they are identical.** Two drafts fold when the kind, the
+ * severity, the detail line and the whole sentence-apart-from-the-day all
+ * match. A watch today and an act tomorrow stay two rows, because
+ * *"Dangerous heat today and tomorrow"* would be overstating today — and a
+ * warning that overstates is one people learn to discount.
+ */
+function fold(drafts: readonly Draft[], today: number): Warning[] {
+  const groups = new Map<string, Draft[]>();
+
+  for (const draft of drafts) {
+    // The subject is in the shape as well as the sentence, so two animals that
+    // happen to share a name are never folded into one row.
+    const shape = [
+      draft.kind,
+      draft.subject ?? '',
+      draft.severity,
+      draft.detail,
+      draft.say(WHEN),
+    ].join('|');
+    const seen = groups.get(shape);
+    if (seen === undefined) groups.set(shape, [draft]);
+    else seen.push(draft);
+  }
+
+  return [...groups.values()].map((group) => {
+    const [first] = group;
+    // A group is built by pushing, so it always has a member; this is the
+    // narrowing rather than an assertion.
+    if (first === undefined) throw new Error('A fold group cannot be empty.');
+
+    const at = Math.min(...group.map((draft) => draft.at));
+    const bothDays = group.length > 1;
+    const isToday = at === today;
+
+    return {
+      key: `${first.kind}:${first.subject ?? ''}:${at}${bothDays ? '+' : ''}`,
+      kind: first.kind,
+      severity: first.severity,
+      title: first.say(phrase(first.span, isToday, bothDays)),
+      detail: first.detail,
+      at,
+    };
+  });
+}
+
+/**
+ * How the days are said.
+ *
+ * Nights and days get different words because the warnings are about different
+ * hours: frost and freezing bite overnight, heat bites in the afternoon, and
+ * "frost today" is not what anybody would say out loud.
+ */
+function phrase(span: 'night' | 'day', isToday: boolean, both: boolean): string {
+  if (span === 'night') {
+    if (both) return 'tonight and tomorrow night';
+    return isToday ? 'tonight' : 'tomorrow night';
+  }
+  if (both) return 'today and tomorrow';
+  return isToday ? 'today' : 'tomorrow';
 }
 
 /** Act before watch, then soonest, then by key so an order cannot wobble. */
@@ -243,48 +345,38 @@ function byUrgency(a: Warning, b: Warning): number {
   return a.key < b.key ? -1 : 1;
 }
 
-/** "tonight" or "tomorrow night" — a warning about a day nobody has yet. */
-function nightOf(day: ForecastDay, today: number): string {
-  return day.day === today ? 'tonight' : 'tomorrow night';
-}
-
-function dayNameOf(day: ForecastDay, today: number): string {
-  return day.day === today ? 'today' : 'tomorrow';
-}
-
-function frostWarnings(day: ForecastDay, farm: FarmToday, today: number): Warning[] {
+function frostWarnings(day: ForecastDay, farm: FarmToday): Draft[] {
   if (day.lowDeciC > FROST_DECI_C || farm.uncoveredPlantings === 0) return [];
 
   const count = farm.uncoveredPlantings;
 
   return [
     {
-      key: `frost:${day.day}`,
       kind: 'frost',
       // Below freezing is not a "watch". Above it, on a clear night, is.
       severity: day.lowDeciC <= FREEZE_DECI_C ? 'act' : 'watch',
-      title: `Frost ${nightOf(day, today)}. You have ${count} planting${
-        count === 1 ? '' : 's'
-      } in uncovered beds.`,
       detail:
         'Which of them minds is your call — the app knows what is out, not what it can take.',
       at: day.day,
+      span: 'night',
+      say: (when) =>
+        `Frost ${when}. You have ${count} planting${count === 1 ? '' : 's'} in uncovered beds.`,
     },
   ];
 }
 
-function freezeWarnings(day: ForecastDay, farm: FarmToday, today: number): Warning[] {
+function freezeWarnings(day: ForecastDay, farm: FarmToday): Draft[] {
   const head = farm.groups.reduce((sum, group) => sum + group.count, 0);
   if (day.lowDeciC > FREEZE_DECI_C || head === 0) return [];
 
   return [
     {
-      key: `freeze:${day.day}`,
       kind: 'freeze',
       severity: 'act',
-      title: `Below freezing ${nightOf(day, today)}. Waterers will ice over.`,
       detail: `${head} head with nothing to drink by morning, unless the drinkers are seen to.`,
       at: day.day,
+      span: 'night',
+      say: (when) => `Below freezing ${when}. Waterers will ice over.`,
     },
   ];
 }
@@ -297,9 +389,8 @@ function freezeWarnings(day: ForecastDay, farm: FarmToday, today: number): Warni
  * suffer on dry heat that a cow shrugs off, a cow suffers at a temperature
  * that is nothing to a goat, and an alpaca is in trouble before any of them.
  */
-function heatWarnings(day: ForecastDay, farm: FarmToday, today: number): Warning[] {
-  const out: Warning[] = [];
-  const when = dayNameOf(day, today);
+function heatWarnings(day: ForecastDay, farm: FarmToday): Draft[] {
+  const out: Draft[] = [];
 
   const birds = farm.groups.filter((group) => {
     const kind = SPECIES_TRAITS[group.species].group;
@@ -309,16 +400,14 @@ function heatWarnings(day: ForecastDay, farm: FarmToday, today: number): Warning
   if (birds.length > 0 && day.highDeciC >= POULTRY_WATCH_DECI_C) {
     const act = day.highDeciC >= POULTRY_ACT_DECI_C;
     out.push({
-      key: `heat-poultry:${day.day}`,
       kind: 'heat-poultry',
       severity: act ? 'act' : 'watch',
-      title: act
-        ? `Dangerous heat ${when} for ${say(birds)}.`
-        : `Heat ${when} for ${say(birds)}.`,
       detail: act
         ? 'Birds cannot sweat. Shade, cool water, and no handling until evening.'
         : 'Extra water in the shade, and do any handling before it warms up.',
       at: day.day,
+      span: 'day',
+      say: (when) => `${act ? 'Dangerous heat' : 'Heat'} ${when} for ${say(birds)}.`,
     });
   }
 
@@ -333,16 +422,14 @@ function heatWarnings(day: ForecastDay, farm: FarmToday, today: number): Warning
       if (index >= CAMELID_WATCH) {
         const act = index >= CAMELID_ACT;
         out.push({
-          key: `heat-camelid:${day.day}`,
           kind: 'heat-camelid',
           severity: act ? 'act' : 'watch',
-          title: act
-            ? `Heat emergency ${when} for ${say(camelids)}.`
-            : `Heat ${when} for ${say(camelids)}.`,
           detail: act
             ? 'Wet the belly and legs, fans, shade. A fleece does not come off in time.'
             : 'Shade and moving air. Check them through the afternoon.',
           at: day.day,
+          span: 'day',
+          say: (when) => `${act ? 'Heat emergency' : 'Heat'} ${when} for ${say(camelids)}.`,
         });
       }
     }
@@ -359,15 +446,25 @@ function heatWarnings(day: ForecastDay, farm: FarmToday, today: number): Warning
 
     if (stressed.length > 0) {
       const act = stressed.some(({ threshold }) => index >= threshold.act);
+      const named = say(stressed.map((one) => one.group));
+
       out.push({
-        key: `heat-ruminant:${day.day}`,
         kind: 'heat-ruminant',
         severity: act ? 'act' : 'watch',
-        title: `Heat and humidity ${when} for ${say(stressed.map((one) => one.group))}.`,
-        detail: `Heat index ${Math.round(index)}. ${
-          act ? 'Shade and water now; expect milk to drop.' : 'Watch them through the afternoon.'
-        }`,
+        /**
+         * The index is deliberately NOT in the detail line.
+         *
+         * It changes by a point between today and tomorrow, which would make
+         * two otherwise identical warnings refuse to fold — and a farm would
+         * get the same sentence twice over a number it cannot act on. What
+         * matters is that it is hot and humid, and what to do about it.
+         */
+        detail: act
+          ? 'Shade and water now; expect milk to drop.'
+          : 'Watch them through the afternoon.',
         at: day.day,
+        span: 'day',
+        say: (when) => `Heat and humidity ${when} for ${named}.`,
       });
     }
   }
@@ -375,21 +472,24 @@ function heatWarnings(day: ForecastDay, farm: FarmToday, today: number): Warning
   return out;
 }
 
-function birthWarnings(day: ForecastDay, farm: FarmToday, today: number): Warning[] {
+function birthWarnings(day: ForecastDay, farm: FarmToday, today: number): Draft[] {
   if (day.lowDeciC > FREEZE_DECI_C) return [];
 
+  // The window runs from TODAY, not from the forecast day being examined. A
+  // birth eight days out is not imminent because tomorrow happens to be cold.
   const soon = farm.births.filter(
     (birth) => birth.at >= today && birth.at <= today + BIRTH_WINDOW_DAYS * DAY_MS,
   );
   if (soon.length === 0) return [];
 
   return soon.map((birth) => ({
-    key: `birth-cold:${birth.key}:${day.day}`,
     kind: 'birth-cold' as const,
     severity: 'act' as const,
-    title: `${birth.title}, and it is freezing ${nightOf(day, today)}.`,
     detail: 'A newborn is wet and cannot keep itself warm. Somewhere dry, and out of the wind.',
     at: day.day,
+    span: 'night' as const,
+    subject: birth.key,
+    say: (when: string) => `${birth.title}, and it is freezing ${when}.`,
   }));
 }
 

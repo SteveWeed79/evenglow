@@ -320,6 +320,104 @@ describe('the order they are read in', () => {
   });
 });
 
+/**
+ * Reported from a handset: two heat warnings, four lines each, filling the
+ * screen above the egg tally. One hot spell had become two rows saying the
+ * same thing in different tenses.
+ *
+ * That is the failure `TodayScreen` already records about the due list —
+ * *"three groups of routine look-overs filled the screen and the egg tally
+ * started below the fold"* — made a second time, with warnings.
+ *
+ * The answer is emphatically NOT a dismiss button. A dismissed safety warning
+ * is the app agreeing to be silent about conditions that are still live, it
+ * needs stored state that either does not follow the farm to a second phone or
+ * becomes a mutable entity for something that expires in a day, and it is the
+ * completion flag the due engine refuses wearing another name.
+ */
+describe('the same warning on both days', () => {
+  const HOT = { highDeciC: 360 };
+
+  it('is one row that names both days', () => {
+    const warnings = warn([HOT, HOT], { groups: [HENS] });
+
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]?.title).toBe('Dangerous heat today and tomorrow for The hens.');
+    // And the detail is said once rather than twice.
+    expect(warnings[0]?.detail).toContain('Birds cannot sweat');
+  });
+
+  it('dates itself from the first of the two days', () => {
+    expect(warn([HOT, HOT], { groups: [HENS] })[0]?.at).toBe(TODAY);
+  });
+
+  /** Nights are nights. "Frost today" is not what anybody says out loud. */
+  it('says nights as nights', () => {
+    const [warning] = warn([{ lowDeciC: -20 }, { lowDeciC: -20 }], { groups: [HENS] });
+    expect(warning?.title).toBe('Below freezing tonight and tomorrow night. Waterers will ice over.');
+  });
+
+  /**
+   * A watch today and an act tomorrow stay two rows. "Dangerous heat today and
+   * tomorrow" would be overstating today, and a warning that overstates is one
+   * people learn to discount.
+   */
+  it('does not fold a watch into an act', () => {
+    const warnings = warn([{ highDeciC: 300 }, { highDeciC: 360 }], { groups: [HENS] });
+
+    expect(warnings).toHaveLength(2);
+    expect(warnings.map((one) => one.severity)).toEqual(['act', 'watch']);
+    expect(warnings.find((one) => one.severity === 'act')?.title).toContain('tomorrow');
+    expect(warnings.find((one) => one.severity === 'watch')?.title).toContain('today');
+  });
+
+  it('does not fold two different warnings that happen to share a night', () => {
+    const warnings = warn([{ lowDeciC: -20 }], { groups: [HENS], uncoveredPlantings: 3 });
+    expect(kinds(warnings).sort()).toEqual(['freeze', 'frost']);
+  });
+
+  /**
+   * The heat index is deliberately not in the detail line. It moves a point
+   * between today and tomorrow, which would make two otherwise identical
+   * warnings refuse to fold — the same sentence twice over a number nobody can
+   * act on.
+   */
+  it('folds a humid spell whose index drifts by a degree', () => {
+    const warnings = warn(
+      [
+        { highDeciC: 300, humidity: 70 },
+        { highDeciC: 305, humidity: 72 },
+      ],
+      { groups: [COWS] },
+    );
+
+    expect(warnings.filter((one) => one.kind === 'heat-ruminant')).toHaveLength(1);
+  });
+
+  /**
+   * Two does due the same week are two rows on the same freezing night, and a
+   * key of kind-plus-day would give them the same React key.
+   */
+  it('keeps two births on one night apart', () => {
+    const warnings = warn([{ lowDeciC: -30 }], {
+      births: [
+        { key: 'b1:birth', title: 'Nutmeg due', at: TODAY + DAY },
+        { key: 'b2:birth', title: 'Clover due', at: TODAY + 2 * DAY },
+      ],
+    });
+
+    expect(warnings).toHaveLength(2);
+    expect(new Set(warnings.map((one) => one.key)).size).toBe(2);
+  });
+
+  /** A birth eight days out is not imminent because tomorrow happens to be cold. */
+  it('measures the birth window from today, not from the day being examined', () => {
+    const justOutside = { key: 'b1:birth', title: 'Nutmeg due', at: TODAY + 8 * DAY };
+    expect(kinds(warn([{ lowDeciC: -30 }, { lowDeciC: -30 }], { births: [justOutside] })))
+      .not.toContain('birth-cold');
+  });
+});
+
 describe('the two indices, checked against their published figures', () => {
   /**
    * NRC (1971): THI = (1.8T + 32) − (0.55 − 0.0055 × RH)(1.8T − 26).
