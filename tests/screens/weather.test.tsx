@@ -5,6 +5,7 @@ import { enqueue } from '@steading/core/sync/queue';
 import { forgetWeather } from '@steading/core/weather';
 import { freshStore } from '../support/store';
 import { mount } from '../support/screen';
+import { resetWeatherState } from '../../apps/mobile/src/weather/store';
 import { gps } from '../support/native/modules';
 import { navCalls } from '../support/native/navigation';
 import { TodayScreen } from '../../apps/mobile/src/screens/TodayScreen';
@@ -124,6 +125,8 @@ async function sited(): Promise<void> {
 beforeEach(async () => {
   await freshStore();
   await forgetWeather();
+  // The forecast state is module-level now, so it outlives a mount.
+  resetWeatherState();
   gps.granted = true;
   gps.fixes = true;
 });
