@@ -205,20 +205,65 @@ describeDb('photo bytes', () => {
     });
 
     /**
-     * The subtle one. Org B creates its OWN record under an id whose bytes
-     * org A already stored — so the record check passes for B, and only the
-     * blob layer's own org filter keeps the two apart.
+     * The route's protection turns out to rest on something stronger than the
+     * scoped filter, and it is worth pinning because it is easy to lose.
+     *
+     * This case was written to probe a subtler attack: org B creates its OWN
+     * record under an id whose bytes org A already holds, so B's record lookup
+     * succeeds and only the blob layer's org filter stands between them.
+     *
+     * That attack cannot be mounted. `_id` is unique across the whole
+     * collection regardless of orgId, so the second insert is refused by the
+     * database — which means no org can ever hold a record under another org's
+     * photo id, and the record check alone is sufficient here.
+     *
+     * Asserted rather than assumed. If `photos` ever gained a compound key, or
+     * ids stopped being globally minted ULIDs, this failing is the warning
+     * that the route's tenancy now depends on the blob filter below instead.
      */
-    it('cannot reach another farm’s bytes by claiming the same id', async () => {
+    it('cannot even record a photo under another farm’s id', async () => {
       const id = ulid();
       await record(id, ORG_A);
       await put(USERS.ownerA, id);
 
-      await record(id, ORG_B);
+      await expect(record(id, ORG_B)).rejects.toThrow(/duplicate key/i);
 
-      // B's record exists, so this is not a record-level 404 — it is the blob
-      // layer answering "this org has no bytes under that id".
       expect((await get(USERS.ownerB, id)).status).toBe(404);
+      expect((await get(USERS.ownerA, id)).body.equals(BYTES)).toBe(true);
+    });
+
+    /**
+     * The blob layer's own filter, tested where it can actually be reached.
+     *
+     * Unreachable through the route — see above — which is exactly why it is
+     * worth a direct test. Defence in depth that nothing exercises is defence
+     * nobody notices breaking, and `blobsFor` is a general API that a future
+     * caller may reach without a record check in front of it.
+     */
+    it('will not hand one farm’s bytes to another, asked directly', async () => {
+      const id = ulid();
+      await record(id, ORG_A);
+      await put(USERS.ownerA, id);
+
+      const { blobsFor } = await import('@steading/api/db/blobs');
+
+      expect(await (await blobsFor(ORG_B)).get(id)).toBeNull();
+      expect(await (await blobsFor(ORG_B)).head(id)).toBeNull();
+      expect(await (await blobsFor(ORG_A)).head(id)).not.toBeNull();
+    });
+
+    /**
+     * And the destructive direction: a remove scoped to the wrong org must be
+     * a no-op rather than a deletion, since nothing above it would notice.
+     */
+    it('will not delete one farm’s bytes on another’s behalf', async () => {
+      const id = ulid();
+      await record(id, ORG_A);
+      await put(USERS.ownerA, id);
+
+      const { blobsFor } = await import('@steading/api/db/blobs');
+      await (await blobsFor(ORG_B)).remove(id);
+
       expect((await get(USERS.ownerA, id)).body.equals(BYTES)).toBe(true);
     });
   });
