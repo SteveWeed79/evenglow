@@ -352,6 +352,8 @@ describe('taking one back', () => {
 
     const screen = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
     await screen.press(`notes-open-${GROUP}`);
+    // The note is the control: its options live inside it, not underneath it.
+    await screen.press(`note-${id}`);
     await screen.press(`note-edit-open-${id}`);
     await screen.type(`note-edit-${id}`, 'Gate latch is loose');
     await screen.press(`note-edit-save-${id}`);
@@ -370,6 +372,7 @@ describe('taking one back', () => {
 
     const screen = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
     await screen.press(`notes-open-${GROUP}`);
+    await screen.press(`note-${id}`);
 
     await screen.press(`note-delete-${id}`);
     expect(await listNotes()).toHaveLength(1);
@@ -378,7 +381,12 @@ describe('taking one back', () => {
     expect(await listNotes()).toHaveLength(0);
   });
 
-  it('offers nothing on somebody else’s note', async () => {
+  /**
+   * A note somebody may not change is plain text, not a button that does
+   * nothing when tapped. The mark on the right is the promise, and it is only
+   * drawn where the promise holds.
+   */
+  it('offers nothing on somebody else’s note, and does not pretend to', async () => {
     await aFarm();
     const mine = await aNoteFrom('u1');
     const theirs = await aNoteFrom('u2');
@@ -387,6 +395,11 @@ describe('taking one back', () => {
     const screen = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
     await screen.press(`notes-open-${GROUP}`);
 
+    expect(screen.get(`note-${theirs}`).props.onPress).toBeUndefined();
+    expect(screen.get(`note-${mine}`).props.onPress).toBeDefined();
+
+    // And selecting theirs is not possible, so no options can appear on it.
+    await screen.press(`note-${mine}`);
     expect(screen.has(`note-edit-open-${mine}`)).toBe(true);
     expect(screen.has(`note-edit-open-${theirs}`)).toBe(false);
     expect(screen.has(`note-delete-${theirs}`)).toBe(false);
@@ -406,7 +419,131 @@ describe('taking one back', () => {
 
     const screen = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
     await screen.press(`notes-open-${GROUP}`);
+    await screen.press(`note-${theirs}`);
 
     expect(screen.has(`note-edit-open-${theirs}`)).toBe(true);
+  });
+});
+
+/**
+ * "Having the change-it or leave-it button take up that much space for a single
+ * note seems pointless. Could the user select the note and have those options
+ * within?"
+ *
+ * Every note this person could change used to render two full-width buttons,
+ * permanently — so a five-note thread drew ten of them under five lines of
+ * text, and the controls outweighed the thing they were about. A note is
+ * written once and read many times; changing or deleting one is the exception.
+ */
+describe('the options live inside the note', () => {
+  async function aNote(body: string): Promise<string> {
+    const id = newId();
+    await enqueue({
+      entity: 'note',
+      op: 'create',
+      targetId: id,
+      payload: {
+        occurredAt: Date.now(),
+        subjectEntity: 'flock',
+        subjectId: GROUP,
+        body,
+        authorName: 'Sam',
+        authorId: 'u1',
+      },
+    });
+    return id;
+  }
+
+  it('shows nothing until the note is tapped', async () => {
+    await aFarm();
+    const id = await aNote('Gate latch is loose');
+
+    const screen = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
+    await screen.press(`notes-open-${GROUP}`);
+
+    expect(screen.has(`note-edit-open-${id}`)).toBe(false);
+    expect(screen.has(`note-delete-${id}`)).toBe(false);
+
+    await screen.press(`note-${id}`);
+    expect(screen.has(`note-edit-open-${id}`)).toBe(true);
+    expect(screen.has(`note-delete-${id}`)).toBe(true);
+  });
+
+  it('folds away on a second tap', async () => {
+    await aFarm();
+    const id = await aNote('Gate latch is loose');
+
+    const screen = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
+    await screen.press(`notes-open-${GROUP}`);
+
+    await screen.press(`note-${id}`);
+    await screen.press(`note-${id}`);
+
+    expect(screen.has(`note-edit-open-${id}`)).toBe(false);
+  });
+
+  /**
+   * One at a time, which is the whole point. Per-row state would fix the
+   * default and still allow every row open at once — the same wall, one tap
+   * later.
+   */
+  it('opens one note at a time', async () => {
+    await aFarm();
+    const first = await aNote('Gate latch is loose');
+    const second = await aNote('Water butt is low');
+
+    const screen = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
+    await screen.press(`notes-open-${GROUP}`);
+
+    await screen.press(`note-${first}`);
+    await screen.press(`note-${second}`);
+
+    expect(screen.has(`note-edit-open-${second}`)).toBe(true);
+    expect(screen.has(`note-edit-open-${first}`)).toBe(false);
+  });
+
+  /**
+   * Turning to another note abandons an edit in progress.
+   *
+   * The editor replaces the row while it is open, so it has its own way out —
+   * "Leave it as it was". What it cannot see is somebody opening a DIFFERENT
+   * note, and without the reset that half-typed draft would still be sitting
+   * there on the way back, with nothing to say it had ever been open.
+   */
+  it('abandons a half-typed edit when another note is opened', async () => {
+    await aFarm();
+    const first = await aNote('Gate latch is loos');
+    const second = await aNote('Water butt is low');
+
+    const screen = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
+    await screen.press(`notes-open-${GROUP}`);
+    await screen.press(`note-${first}`);
+    await screen.press(`note-edit-open-${first}`);
+    await screen.type(`note-edit-${first}`, 'half typed');
+
+    // Turn to the other note, then back.
+    await screen.press(`note-${second}`);
+    await screen.press(`note-${first}`);
+
+    // The note as written, not the abandoned draft.
+    expect(screen.has(`note-edit-${first}`)).toBe(false);
+    expect(screen.text()).toContain('Gate latch is loos');
+    expect(screen.text()).not.toContain('half typed');
+  });
+
+  /** And the editor's own way out still works, because it is its own mode. */
+  it('leaves the note as it was when the edit is cancelled', async () => {
+    await aFarm();
+    const id = await aNote('Gate latch is loos');
+
+    const screen = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
+    await screen.press(`notes-open-${GROUP}`);
+    await screen.press(`note-${id}`);
+    await screen.press(`note-edit-open-${id}`);
+    await screen.type(`note-edit-${id}`, 'half typed');
+    await screen.press(`note-edit-cancel-${id}`);
+
+    expect(screen.has(`note-edit-${id}`)).toBe(false);
+    expect(screen.text()).toContain('Gate latch is loos');
   });
 });

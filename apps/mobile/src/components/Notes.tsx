@@ -46,6 +46,16 @@ export function Notes({
 
   const all = useLive(listNotes);
   const [open, setOpen] = useState(false);
+  /**
+   * Which note is showing its options, at most one.
+   *
+   * Held here rather than per row on purpose. Each note used to render "Change
+   * it" and "Delete it" permanently, so a thread of five drew ten full-width
+   * buttons under five lines of text — the controls outweighed the content
+   * they were about. Per-row state would fix the default and still allow every
+   * row to be open at once, which is the same wall one tap later.
+   */
+  const [selected, setSelected] = useState<string | null>(null);
   const [body, setBody] = useState('');
   const [me, setMe] = useState<{ userId: string; role: Role } | null>(null);
 
@@ -151,7 +161,13 @@ export function Notes({
       ) : (
         <View style={styles.thread}>
           {thread.map((note) => (
-            <NoteRow key={note.id} note={note} me={me} />
+            <NoteRow
+              key={note.id}
+              note={note}
+              me={me}
+              selected={selected === note.id}
+              onSelect={() => setSelected(selected === note.id ? null : note.id)}
+            />
           ))}
         </View>
       )}
@@ -185,7 +201,29 @@ export function Notes({
 }
 
 /**
- * One note, and the two ways to take it back.
+ * One note, and the two ways to take it back — behind a tap.
+ *
+ * ## Why they are not just sitting there
+ *
+ * "Having the change-it or leave-it button take up that much space for a
+ * single note seems pointless. Could the user select the note and have those
+ * options within?"
+ *
+ * Yes, and it is the same mistake as several others in this app: a permanent
+ * control for a rare action. A note is written once and read many times;
+ * changing or deleting one is the exception. Two full-width buttons under
+ * every line of text meant the controls outweighed the thing they were about,
+ * and on a five-note thread the notes were the minority of the panel.
+ *
+ * So the note is the control. Tap it and the options appear inside it; tap it
+ * again and they fold away. One note at a time — the parent holds that — so
+ * the thread cannot become a wall again one tap later.
+ *
+ * ## Only where a tap would do something
+ *
+ * A note this person may not change is **not pressable**, rather than
+ * pressable and empty. The mark on the right is the promise: three dots where
+ * there is something behind it, nothing where there is not.
  *
  * The buttons appear only on notes this person may change — their own, or any
  * of them if they run the farm. That is UX only (invariant 8): a hand who got
@@ -195,15 +233,33 @@ export function Notes({
 function NoteRow({
   note,
   me,
+  selected,
+  onSelect,
 }: {
   note: Note;
   me: { userId: string; role: Role } | null;
+  selected: boolean;
+  onSelect: () => void;
 }): React.ReactElement {
   const log = useLog();
   const { colors } = useTheme();
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(note.body);
+
+  /**
+   * Folding a note away abandons an edit in progress.
+   *
+   * Without this, opening a second note and coming back would show a
+   * half-typed draft with no indication it was ever open — and worse, the
+   * editor is what the tap toggles, so a stale `editing` would reopen straight
+   * into a text box somebody had walked away from.
+   */
+  useEffect(() => {
+    if (selected) return;
+    setEditing(false);
+    setDraft(note.body);
+  }, [selected, note.body]);
 
   const edited = useSaver(useCallback(() => setEditing(false), []));
   const removed = useSaver(useCallback(() => undefined, []));
@@ -259,33 +315,63 @@ function NoteRow({
         </>
       ) : (
         <>
-          <Text style={[styles.body, { color: colors.ink }]}>{note.body}</Text>
+          {/* The note IS the control, where there is one. A note somebody may
+              not change is plain text, not a button that does nothing. */}
+          <Pressable
+            onPress={mine ? onSelect : undefined}
+            disabled={!mine}
+            {...(mine
+              ? {
+                  accessibilityRole: 'button' as const,
+                  accessibilityState: { expanded: selected },
+                  accessibilityLabel: selected
+                    ? `${note.body}. Showing options.`
+                    : `${note.body}. Tap for options.`,
+                }
+              : {})}
+            testID={`note-${note.id}`}
+            style={({ pressed }) => [styles.said, { opacity: pressed && mine ? 0.7 : 1 }]}
+          >
+            <Text style={[styles.body, { color: colors.ink }]}>{note.body}</Text>
 
-          <View style={styles.by}>
-            <Icon name="head-count" size={16} color={colors.muted} />
-            <Text style={[styles.byline, { color: colors.muted }]}>
-              {/* Unattributed rather than guessed at: a note that synced from a
-                  build without a name should not claim to be from this device. */}
-              {note.authorName ?? 'Someone on the farm'} · {when(note.occurredAt)}
-            </Text>
-          </View>
+            <View style={styles.by}>
+              <Icon name="head-count" size={16} color={colors.muted} />
+              <Text style={[styles.byline, { color: colors.muted }]}>
+                {/* Unattributed rather than guessed at: a note that synced from a
+                    build without a name should not claim to be from this device. */}
+                {note.authorName ?? 'Someone on the farm'} · {when(note.occurredAt)}
+              </Text>
+              {/* The promise, and only where it is true. */}
+              {mine ? (
+                <Icon name={selected ? 'minus' : 'more'} size={16} color={colors.muted} />
+              ) : null}
+            </View>
+          </Pressable>
 
-          {mine ? (
+          {mine && selected ? (
             <View style={styles.actions}>
-              <Secondary
-                label="Change it"
-                icon="edit"
-                onPress={() => setEditing(true)}
-                testID={`note-edit-open-${note.id}`}
-              />
-              {/* Two taps, like everywhere else that destroys work a person
-                  entered. */}
-              <Confirm
-                label="Delete it"
-                armedLabel="Tap again to delete"
-                onConfirm={remove}
-                testID={`note-delete-${note.id}`}
-              />
+              {/* Side by side rather than stacked. They are scoped to one note
+                  now, so they no longer need to be the width of the thread. */}
+              <View style={styles.pair}>
+                <View style={styles.half}>
+                  <Secondary
+                    label="Change it"
+                    icon="edit"
+                    onPress={() => setEditing(true)}
+                    testID={`note-edit-open-${note.id}`}
+                  />
+                </View>
+                <View style={styles.half}>
+                  {/* Two taps, like everywhere else that destroys work a person
+                      entered. */}
+                  <Confirm
+                    label="Delete it"
+                    armedLabel="Tap again"
+                    onConfirm={remove}
+                    testID={`note-delete-${note.id}`}
+                  />
+                </View>
+              </View>
               <Failure message={removed.failure} />
             </View>
           ) : null}
@@ -350,7 +436,10 @@ const styles = StyleSheet.create({
     gap: SPACE.xs,
   },
   body: { fontFamily: FONTS.body, fontSize: TYPE.body, lineHeight: TYPE.body * 1.35 },
+  said: { gap: SPACE.xs },
   by: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs + 2 },
+  pair: { flexDirection: 'row', gap: SPACE.sm },
+  half: { flex: 1 },
   byline: { fontFamily: FONTS.data, fontSize: TYPE.label, letterSpacing: 0.4 },
   actions: { gap: SPACE.sm, marginTop: SPACE.xs },
   label: {
