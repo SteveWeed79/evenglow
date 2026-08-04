@@ -16,9 +16,9 @@ import { TodayScreen } from '../../apps/mobile/src/screens/TodayScreen';
  * append-only, there is no undo, and a job recorded as done that was not done
  * is worse than one still on the list. The failure was not the confirm. It was
  * that the **armed state was indistinguishable from a finished one**: a brass
- * fill, a tick, and the past-tense label "Looked over". Brass fill is what a
- * selected chip and the primary button look like in this app, and a past-tense
- * verb reads as a statement of fact rather than a question.
+ * fill, a tick, and a past-tense label. Brass fill is what a selected chip and
+ * the primary button look like in this app, and a past-tense verb reads as a
+ * statement of fact rather than a question.
  *
  * So somebody tapped once, read "✓ Looked over" on a brass chip, and walked
  * away. Nothing was written, and the row came back the next morning — which is
@@ -31,8 +31,15 @@ import { TodayScreen } from '../../apps/mobile/src/screens/TodayScreen';
 
 const GROUP = newId();
 
-/** The look-over row, which every group gets and nothing else clears. */
-const LOOK_OVER = `due-done-${GROUP}:care:health-check`;
+/**
+ * The parasite-check row.
+ *
+ * Chosen over the look-over because `health-check` is deliberately off by
+ * default now — you see your animals daily and an app asking monthly for
+ * confirmation is a chore it invented. Red mite is a real quarterly job that
+ * looking at a bird does not cover, so this is the poultry row that remains.
+ */
+const MITE_CHECK = `due-done-${GROUP}:care:parasite-check`;
 
 beforeEach(async () => {
   await freshStore();
@@ -47,7 +54,7 @@ beforeEach(async () => {
 describe('the first tap', () => {
   it('writes nothing, because the confirm is real', async () => {
     const today = await mount(<TodayScreen />);
-    await today.press(LOOK_OVER);
+    await today.press(MITE_CHECK);
     today.unmount();
 
     expect(await listCareLogs()).toEqual([]);
@@ -60,10 +67,10 @@ describe('the first tap', () => {
    */
   it('does not claim the job has been done', async () => {
     const today = await mount(<TodayScreen />);
-    await today.press(LOOK_OVER);
+    await today.press(MITE_CHECK);
 
     const said = today.text();
-    expect(said).not.toContain('Looked over');
+    expect(said).not.toContain('Checked for parasites');
     // It says what is still needed instead.
     expect(said).toContain('Tap again');
     today.unmount();
@@ -72,9 +79,9 @@ describe('the first tap', () => {
   /** A screen reader still gets the specifics, which is where they belong. */
   it('names the record it is about to write, for anyone who cannot see it', async () => {
     const today = await mount(<TodayScreen />);
-    await today.press(LOOK_OVER);
+    await today.press(MITE_CHECK);
 
-    expect(today.get(LOOK_OVER).props.accessibilityLabel).toContain('Looked over');
+    expect(today.get(MITE_CHECK).props.accessibilityLabel).toContain('Checked for parasites');
     today.unmount();
   });
 });
@@ -82,13 +89,13 @@ describe('the first tap', () => {
 describe('the second tap', () => {
   it('writes the careLog the form would have written', async () => {
     const today = await mount(<TodayScreen />);
-    await today.press(LOOK_OVER);
-    await today.press(LOOK_OVER);
+    await today.press(MITE_CHECK);
+    await today.press(MITE_CHECK);
     today.unmount();
 
     const logs = await listCareLogs();
     expect(logs).toHaveLength(1);
-    expect(logs[0]).toMatchObject({ kind: 'health-check', flockId: GROUP });
+    expect(logs[0]).toMatchObject({ kind: 'parasite-check', flockId: GROUP });
     expect(logs[0]?.occurredAt).toBeGreaterThan(0);
   });
 
@@ -99,16 +106,16 @@ describe('the second tap', () => {
    */
   it('clears the row, and it stays gone the next morning', async () => {
     const today = await mount(<TodayScreen />);
-    await today.press(LOOK_OVER);
-    await today.press(LOOK_OVER);
+    await today.press(MITE_CHECK);
+    await today.press(MITE_CHECK);
     today.unmount();
 
     const logs = await listCareLogs();
-    expect(lastCareBySubject(logs).get(GROUP)?.['health-check']).toBeDefined();
+    expect(lastCareBySubject(logs).get(GROUP)?.['parasite-check']).toBeDefined();
 
     const tomorrow = await mount(<TodayScreen />);
-    expect(tomorrow.has(LOOK_OVER)).toBe(false);
-    expect(tomorrow.text()).not.toContain('Look over — Chickens');
+    expect(tomorrow.has(MITE_CHECK)).toBe(false);
+    expect(tomorrow.text()).not.toContain('Check for parasites — Chickens');
     tomorrow.unmount();
   });
 });

@@ -444,7 +444,12 @@ describe('finishing a job from the list', () => {
     await theGoats();
 
     const today = await mount(<TodayScreen />);
-    const key = `${GROUP}:care:health-check`;
+    // Minerals rather than the look-over: `health-check` is off by default now
+    // — you see your animals daily, and an app asking monthly for confirmation
+    // is a chore it invented. See CARE_INTERVALS.
+    const key = `${GROUP}:care:mineral`;
+    // Minerals sit inside the group's bundle rather than on its lead row.
+    await today.pressLabel('more');
 
     // Armed first: a careLog is append-only and there is no undo, so a
     // mis-tap must not record a job nobody did.
@@ -455,21 +460,23 @@ describe('finishing a job from the list', () => {
     today.unmount();
 
     const [logged] = await localStore().readRecordsByEntity('careLog');
-    expect(logged?.value).toMatchObject({ kind: 'health-check', flockId: GROUP });
+    expect(logged?.value).toMatchObject({ kind: 'mineral', flockId: GROUP });
   });
 
   it('takes the row off Today, because the thing it waited for now exists', async () => {
     await theGoats();
 
     const before = await mount(<TodayScreen />);
-    const key = `${GROUP}:care:health-check`;
-    expect(before.text()).toContain('Look over — The goats');
+    const key = `${GROUP}:care:mineral`;
+    await before.pressLabel('more');
+    expect(before.text()).toContain('Check minerals — The goats');
     await before.press(`due-done-${key}`);
     await before.press(`due-done-${key}`);
     before.unmount();
 
     const after = await mount(<TodayScreen />);
-    expect(after.text()).not.toContain('Look over — The goats');
+    await after.pressLabel('more');
+    expect(after.text()).not.toContain('Check minerals — The goats');
     after.unmount();
   });
 

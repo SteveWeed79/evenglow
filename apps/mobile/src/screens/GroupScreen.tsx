@@ -154,6 +154,16 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
           testID="go-care"
           onPress={() => nav.navigate('CareLog', { groupId })}
         />
+        {/* Beside logging a job rather than under Edit: "how often does this
+            come round" is a question somebody asks while looking at the row
+            that is asking, not while renaming the group. */}
+        <Row
+          title="Routine jobs"
+          detail="How often each one asks, or turn it off"
+          icon="date-due"
+          testID="go-care-routine"
+          onPress={() => nav.navigate('CareRoutine', { groupId })}
+        />
         <Row
           title="Log a feed"
           detail="What went in, and how much"

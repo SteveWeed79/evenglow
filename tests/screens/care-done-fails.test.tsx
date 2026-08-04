@@ -42,7 +42,7 @@ const { mount } = await import('../support/screen');
 const { TodayScreen } = await import('../../apps/mobile/src/screens/TodayScreen');
 
 const GROUP = newId();
-const LOOK_OVER = `due-done-${GROUP}:care:health-check`;
+const MITE_CHECK = `due-done-${GROUP}:care:parasite-check`;
 
 beforeEach(async () => {
   await freshStore();
@@ -59,26 +59,26 @@ beforeEach(async () => {
 describe('when the record cannot be written', () => {
   it('puts the reason on the wall rather than losing it', async () => {
     const today = await mount(<TodayScreen />);
-    await today.press(LOOK_OVER);
+    await today.press(MITE_CHECK);
 
     // Refuses only the confirming press.
     enqueue.mockRejectedValueOnce(new Error('the disk is full'));
-    await today.press(LOOK_OVER);
+    await today.press(MITE_CHECK);
 
     expect(today.text()).toContain('Could not read');
-    expect(today.text()).toContain('looked over');
+    expect(today.text()).toContain('checked for parasites');
     today.unmount();
   });
 
   /** And the row is still there, which is correct — nothing was recorded. */
   it('leaves the job on the list', async () => {
     const today = await mount(<TodayScreen />);
-    await today.press(LOOK_OVER);
+    await today.press(MITE_CHECK);
 
     enqueue.mockRejectedValueOnce(new Error('the disk is full'));
-    await today.press(LOOK_OVER);
+    await today.press(MITE_CHECK);
 
-    expect(today.has(LOOK_OVER)).toBe(true);
+    expect(today.has(MITE_CHECK)).toBe(true);
     today.unmount();
   });
 });

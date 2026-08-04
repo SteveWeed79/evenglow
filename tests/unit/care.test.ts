@@ -60,15 +60,35 @@ describe('care dues', () => {
   });
 
   /**
-   * The judgement call. A farm that has never recorded trimming either is not
-   * trimming or is not recording it, and both are worth a row. Starting the
-   * clock at install would tell someone their overdue herd is fine for another
-   * eight weeks.
+   * The judgement call, and it now has a week in it.
+   *
+   * A farm that has never recorded trimming either is not trimming or is not
+   * recording it, and both are worth a row — starting the clock at one full
+   * interval would tell someone their overdue herd is fine for another eight
+   * weeks. That half is unchanged.
+   *
+   * What changed is the first morning. Every job for every new group being due
+   * the instant it was created meant adding three groups on a Sunday produced
+   * a wall of overdue rows on Monday, which is what people close an app to get
+   * away from. A week is short enough that a genuine backlog still surfaces in
+   * the first week rather than the first season.
    */
-  it('treats a job never recorded as due now, not one interval out', () => {
+  it('treats a job never recorded as due a week out, not one interval out', () => {
     const mineral = careDues(goats, NOW).find((d) => d.key.endsWith('mineral')) as Due;
-    expect(mineral.at).toBe(NOW);
-    expect(urgencyOf(mineral, NOW)).toBe('now');
+
+    expect(mineral.at).toBe(NOW + 7 * 86_400_000);
+    // Well short of the 30-day interval it would otherwise have waited.
+    expect(mineral.at).toBeLessThan(NOW + 30 * 86_400_000);
+    // Still on Today, because the notice window is a fortnight.
+    expect(urgencyOf(mineral, NOW)).toBe('soon');
+  });
+
+  /** A group the farm has had for a while is past its grace and asks now. */
+  it('does not give a group added last year a week of quiet', () => {
+    const settled = { ...goats, since: NOW - 365 * 86_400_000 };
+    const mineral = careDues(settled, NOW).find((d) => d.key.endsWith('mineral')) as Due;
+
+    expect(urgencyOf(mineral, NOW)).toBe('overdue');
   });
 
   it('raises nothing for jobs the species does not have', () => {

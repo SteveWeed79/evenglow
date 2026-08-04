@@ -1,4 +1,4 @@
-import { CARE_KIND_LABELS, type CareKind } from '../entities/care';
+import { CARE_KIND_LABELS, type CareIntervals, type CareKind } from '../entities/care';
 import { SPECIES_TRAITS, type Species } from '../entities/livestock';
 import type { Due } from './types';
 
@@ -35,9 +35,40 @@ type Group = (typeof SPECIES_TRAITS)[Species]['group'];
 /** Days. `null` means the job does not apply to this kind of animal. */
 type Intervals = Partial<Record<CareKind, number | null>>;
 
+/**
+ * ## `health-check` is off everywhere, and that is the biggest change here
+ *
+ * It was 30 days on every group, and it was the single largest source of rows
+ * in the app: a three-group farm owed roughly a hundred confirmations a year
+ * across all the routine jobs, and forty of them were this one. What it bought
+ * for each of those taps was a record that somebody looked at animals they see
+ * every morning anyway.
+ *
+ * "Look at your stock" is not a job an app schedules. It is the thing a farm
+ * is already doing while it logs the eggs, and a monthly prompt to confirm it
+ * is a chore this app invented for itself.
+ *
+ * **The record is untouched.** `health-check` is still a `CareKind`, still
+ * offered on the care form, still shown in history, and can still be turned
+ * back on per group by a farm that wants it — which is the case worth keeping:
+ * a group in a rented field two valleys over is genuinely worth a prompt, and
+ * that farm can now ask for one. Only the automatic nag is gone.
+ *
+ * ## Poultry were charged twice for one walk-round
+ *
+ * `parasite-check` at 30 days sat beside `health-check` at 30 days, and on a
+ * chicken those are the same act — you look at the bird, you look at the bird
+ * for mites. It is 90 days now, which is a real and distinct job rather than
+ * a duplicate: red mite lives in the coop and not on the bird, it explodes in
+ * warm weather, and finding it means going out after dark with a torch. That
+ * is worth asking about quarterly and is not what "look them over" covers.
+ *
+ * For a ruminant the two never overlapped — a faecal egg count or a FAMACHA
+ * score is nothing like a general look — so those intervals are unchanged.
+ */
 const POULTRY: Intervals = {
-  'parasite-check': 30,
-  'health-check': 30,
+  'parasite-check': 90,
+  'health-check': null,
   vaccination: 365,
   worming: 120,
   'hoof-trim': null,
@@ -50,13 +81,13 @@ const RUMINANT: Intervals = {
   mineral: 30,
   worming: 90,
   'parasite-check': 60,
-  'health-check': 30,
+  'health-check': null,
   vaccination: 365,
   dental: null,
 };
 
 const RATITE: Intervals = {
-  'health-check': 30,
+  'health-check': null,
   'parasite-check': 60,
   worming: 120,
   'hoof-trim': null,
@@ -66,7 +97,7 @@ const RATITE: Intervals = {
 };
 
 const OTHER: Intervals = {
-  'health-check': 30,
+  'health-check': null,
   worming: 90,
   'parasite-check': 60,
   vaccination: 365,
@@ -90,13 +121,13 @@ export const CARE_INTERVALS: Record<Group, Intervals> = {
 const BY_SPECIES: Partial<Record<Species, Intervals>> = {
   // Feet grow fast and a horse that is not trimmed goes lame quickly. Teeth
   // are an annual job no other species on the list has.
-  horse: { 'hoof-trim': 42, dental: 365, worming: 90, 'health-check': 30, vaccination: 365 },
-  donkey: { 'hoof-trim': 56, dental: 365, worming: 90, 'health-check': 30, vaccination: 365 },
+  horse: { 'hoof-trim': 42, dental: 365, worming: 90, 'health-check': null, vaccination: 365 },
+  donkey: { 'hoof-trim': 56, dental: 365, worming: 90, 'health-check': null, vaccination: 365 },
   // Cattle feet are trimmed far less often than a goat's.
-  cattle: { 'hoof-trim': 182, mineral: 30, worming: 90, 'parasite-check': 60, 'health-check': 30, vaccination: 365 },
+  cattle: { 'hoof-trim': 182, mineral: 30, worming: 90, 'parasite-check': 60, 'health-check': null, vaccination: 365 },
   // Camelids: toenails rather than hooves, and shorter than a cow.
-  alpaca: { 'hoof-trim': 90, mineral: 60, worming: 90, 'health-check': 30, dental: 365 },
-  llama: { 'hoof-trim': 90, mineral: 60, worming: 90, 'health-check': 30, dental: 365 },
+  alpaca: { 'hoof-trim': 90, mineral: 60, worming: 90, 'health-check': null, dental: 365 },
+  llama: { 'hoof-trim': 90, mineral: 60, worming: 90, 'health-check': null, dental: 365 },
 };
 
 /** How often a job comes round for this species, or null if it does not apply. */
@@ -126,9 +157,39 @@ export interface CareGroup {
   species: Species;
   /** When each job was last done. Absent means never. */
   lastDone: Partial<Record<CareKind, number>>;
-  /** Per-farm overrides, in days. `null` silences a job entirely. */
-  intervals?: Partial<Record<CareKind, number | null>> | undefined;
+  /**
+   * Per-farm overrides, in days. `null` silences a job entirely.
+   *
+   * The contract's own type rather than a restatement of it — a second
+   * `Partial<Record<CareKind, …>>` here would drift from the schema the record
+   * is actually stored against.
+   */
+  intervals?: CareIntervals | undefined;
+  /**
+   * When this farm added the group, from the ULID in its id.
+   *
+   * Absent falls back to `now`, which is the old behaviour: every job for a
+   * never-recorded group due this instant.
+   */
+  since?: number | undefined;
 }
+
+/**
+ * How long a brand-new group gets before its never-done jobs start asking.
+ *
+ * A farm that adds three groups on a Sunday afternoon used to get twelve red
+ * rows on Monday morning, because "never done" meant "due now" for every job
+ * at once. That is a wall, and a wall is the thing people close an app to get
+ * away from.
+ *
+ * The obvious alternative was worse and this codebase already rejected it:
+ * starting the clock at one full interval would tell somebody their overdue
+ * herd is fine for another eight weeks, which is the argument the original
+ * comment makes and it is right. So this is a week — long enough that setting
+ * the farm up is not a scolding, short enough that a genuine backlog surfaces
+ * in the first week rather than the first season.
+ */
+const GRACE_DAYS = 7;
 
 const TITLES: Record<CareKind, string> = {
   worming: 'Worm check',
@@ -160,12 +221,20 @@ export function careDues(group: CareGroup, now: number): Due[] {
 
     const last = group.lastDone[kind];
 
+    /**
+     * A never-done job is due a week after the group was added, not one
+     * interval after — see GRACE_DAYS. A group that has been on the app for
+     * longer than the grace is already past it, so this reduces to "due now"
+     * for every farm that is not setting up today.
+     */
+    const never = (group.since ?? now) + GRACE_DAYS * DAY_MS;
+
     dues.push({
       key: `${group.id}:care:${kind}`,
       kind: 'task',
       subject: { entity: 'flock', id: group.id },
       title: `${TITLES[kind]} — ${group.name}`,
-      at: last === undefined ? now : last + days * DAY_MS,
+      at: last === undefined ? never : last + days * DAY_MS,
       atReading: null,
       projectedAt: null,
       noticeDays: NOTICE_DAYS,

@@ -43,16 +43,19 @@ beforeEach(async () => {
 });
 
 describe('husbandry clears because the job was recorded', () => {
-  it('is due now while nothing has been logged', async () => {
+  it('is due within the week while nothing has been logged', async () => {
     const dues = careDues(
       { id: GROUP, name: 'The goats', species: 'goat', lastDone: {} },
       T0,
     );
     const trim = dues.find((d) => d.key.endsWith(':care:hoof-trim'));
 
-    // Not one interval from today — a farm that has never recorded trimming
-    // either is not trimming or is not recording it.
-    expect(trim?.at).toBe(T0);
+    // A week's grace from when the group was added, and then it asks — not one
+    // full interval, because a farm that has never recorded trimming either is
+    // not trimming or is not recording it, and eight quiet weeks would hide
+    // both. See GRACE_DAYS.
+    expect(trim?.at).toBe(T0 + 7 * 86_400_000);
+    expect(trim?.at).toBeLessThan(T0 + 56 * 86_400_000);
   });
 
   it('moves an interval out once a careLog exists', async () => {

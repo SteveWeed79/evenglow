@@ -65,3 +65,39 @@ export function newId(): string {
 export function isUlid(value: string): boolean {
   return value.length === 26 && ULID_PATTERN.test(value);
 }
+
+/**
+ * When the record carrying this id was created, from the id itself.
+ *
+ * A ULID's first 48 bits are a millisecond timestamp, so every syncable record
+ * in this app already knows its own age and no `createdAt` column is needed —
+ * `LocalRecord` only carries `updatedAt`, which moves every time anything is
+ * edited and is therefore useless for "how long has this farm had this".
+ *
+ * **This is the minting device's clock, and that is fine for what it is used
+ * for.** Invariant 4 refuses to trust `clientTs` for ORDERING, because two
+ * devices disagreeing about the time would reorder the log. Nothing here
+ * orders anything: it answers "was this group added a moment ago or last
+ * spring", to decide whether a routine job should already be nagging. A clock
+ * an hour out changes nothing about that answer.
+ *
+ * Returns null rather than throwing on anything that is not a ULID, so a
+ * caller reading external data cannot be handed a NaN.
+ */
+export function idMintedAt(id: string): number | null {
+  if (!isUlid(id)) return null;
+
+  // Crockford base32, the first ten characters. Decoded here rather than with
+  // ulid's own `decodeTime` because that throws on malformed input, and this
+  // sits on a read path where the answer "I do not know" is the useful one.
+  const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+  let time = 0;
+
+  for (const character of id.slice(0, 10)) {
+    const digit = ALPHABET.indexOf(character);
+    if (digit < 0) return null;
+    time = time * 32 + digit;
+  }
+
+  return Number.isSafeInteger(time) ? time : null;
+}
