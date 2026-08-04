@@ -103,9 +103,26 @@ export function DueRow({
    * Armed, then written. Two taps on a small target beside a bigger one.
    *
    * A `careLog` is append-only: there is no undo, and a job recorded as done
-   * that was not done is worse than one still on the list. The armed state is
-   * also where the past-tense label goes — "Trimmed feet?" says exactly what
-   * is about to be written, which "Done" never could.
+   * that was not done is worse than one still on the list.
+   *
+   * ## The armed label said the job was finished, and it was not
+   *
+   * Reported from a handset: *"I selected it done yesterday on the main
+   * screen. It asked again today."* The confirm was not the problem — this
+   * was. The armed state showed a brass fill, a tick, and the past-tense label
+   * "Looked over", and every one of those means *finished* in this app: brass
+   * is what a selected chip and the primary button look like, and a past-tense
+   * verb is a statement of fact rather than a question. So somebody tapped
+   * once, read a completed job, and walked away from a record that was never
+   * written.
+   *
+   * The original reasoning — that the past tense "says exactly what is about
+   * to be written, which 'Done' never could" — is right about what matters and
+   * wrong about where to put it. It goes in the accessibility label, where it
+   * is a description rather than a claim. The visible label follows the
+   * convention every other confirm in this app already uses (`Notes`,
+   * `Photos`, `PlantingScreen`, `BreedingScreen`, `JobsScreen`): **"Tap
+   * again"**, which cannot be mistaken for a job that is over.
    */
   const [armed, setArmed] = useState(false);
 
@@ -141,9 +158,11 @@ export function DueRow({
             },
           ]}
         >
-          <Icon name="check" size={16} color={armed ? '#241c14' : colors.muted} />
+          {/* No tick while it is armed. A tick is the app's mark for a thing
+              that has happened, and nothing has happened yet. */}
+          <Icon name={armed ? 'forward' : 'check'} size={16} color={armed ? '#241c14' : colors.muted} />
           <Text style={[styles.doneLabel, { color: armed ? '#241c14' : colors.muted }]}>
-            {armed ? due.done.label : 'Done'}
+            {armed ? 'Tap again' : 'Done'}
           </Text>
         </Pressable>
       )}
