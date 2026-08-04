@@ -154,12 +154,88 @@ describe('removing one', () => {
     const uri = [...files.keys()].find((key) => key.endsWith(`${photo!.id}.jpg`));
     expect(uri).toBeDefined();
 
+    // Removing lives inside the opened photo now — a strip of three used to
+    // draw three destructive buttons for an action nobody takes often.
+    await screen.press(`photo-${photo!.id}`);
     await screen.pressLabel('Remove');
     await screen.pressLabel('Tap again');
     screen.unmount();
 
     expect(files.has(uri!)).toBe(false);
     expect(await listPhotos()).toEqual([]);
+  });
+});
+
+/**
+ * "Seems like the same situation with images."
+ *
+ * It was, plus a second problem the notes thread did not have: the thumbnail
+ * did nothing at all when pressed. A receipt at 128px cannot be read, and the
+ * one thing somebody wants from it — see it bigger — was the one thing there
+ * was no way to ask for. So the photo is the control, and opening it is where
+ * both the larger view and Remove live.
+ */
+describe('opening one', () => {
+  it('shows nothing until the photo is tapped', async () => {
+    await aFarm();
+    const screen = await mount(<MachineScreen {...routeProps({ machineId: MACHINE })} />);
+    await screen.press('photo-camera');
+
+    const [photo] = await listPhotos();
+    expect(screen.has(`photo-open-${photo!.id}`)).toBe(false);
+    expect(screen.has(`photo-remove-${photo!.id}`)).toBe(false);
+
+    await screen.press(`photo-${photo!.id}`);
+    expect(screen.has(`photo-open-${photo!.id}`)).toBe(true);
+    expect(screen.has(`photo-remove-${photo!.id}`)).toBe(true);
+    screen.unmount();
+  });
+
+  it('folds away on a second tap', async () => {
+    await aFarm();
+    const screen = await mount(<MachineScreen {...routeProps({ machineId: MACHINE })} />);
+    await screen.press('photo-camera');
+
+    const [photo] = await listPhotos();
+    await screen.press(`photo-${photo!.id}`);
+    await screen.press(`photo-${photo!.id}`);
+
+    expect(screen.has(`photo-open-${photo!.id}`)).toBe(false);
+    screen.unmount();
+  });
+
+  /** One at a time, so the panel stays the size of a panel. */
+  it('opens one at a time', async () => {
+    await aFarm();
+    const screen = await mount(<MachineScreen {...routeProps({ machineId: MACHINE })} />);
+    await screen.press('photo-camera');
+    await screen.press('photo-camera');
+
+    const [first, second] = await listPhotos();
+    await screen.press(`photo-${first!.id}`);
+    await screen.press(`photo-${second!.id}`);
+
+    expect(screen.has(`photo-open-${second!.id}`)).toBe(true);
+    expect(screen.has(`photo-open-${first!.id}`)).toBe(false);
+    screen.unmount();
+  });
+
+  /** Nothing left to keep open once it is gone. */
+  it('closes when the photo it was showing is removed', async () => {
+    await aFarm();
+    const screen = await mount(<MachineScreen {...routeProps({ machineId: MACHINE })} />);
+    await screen.press('photo-camera');
+    await screen.press('photo-camera');
+
+    const [first] = await listPhotos();
+    await screen.press(`photo-${first!.id}`);
+    await screen.press(`photo-remove-${first!.id}`);
+    await screen.press(`photo-remove-${first!.id}`);
+
+    expect(screen.has(`photo-open-${first!.id}`)).toBe(false);
+    // And the other one is untouched.
+    expect(await listPhotos()).toHaveLength(1);
+    screen.unmount();
   });
 });
 

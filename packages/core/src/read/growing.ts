@@ -9,6 +9,7 @@ import {
   plantingCreateSchema,
   siteCreateSchema,
   varietyCreateSchema,
+  type Currency,
   type UnitSystem,
   type Zone,
   zoneSchema,
@@ -52,6 +53,8 @@ export interface Site {
    * to change when the rest of the app stops hardcoding `'imperial'`.
    */
   units?: UnitSystem;
+  /** What the farm keeps its books in. Absent means the default. */
+  currency?: Currency;
 }
 
 export interface Bed {
@@ -117,6 +120,7 @@ export async function readSite(): Promise<Site | null> {
         : { lat: parsed.data.lat, lon: parsed.data.lon }),
       ...(parsed.data.placeName === undefined ? {} : { placeName: parsed.data.placeName }),
       ...(parsed.data.units === undefined ? {} : { units: parsed.data.units }),
+      ...(parsed.data.currency === undefined ? {} : { currency: parsed.data.currency }),
       // Three is the common smallholding figure. A farm with four beds
       // physically cannot manage four, which is why it is a setting.
       rotationYears: parsed.data.rotationYears ?? 3,

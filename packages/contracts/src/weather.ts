@@ -257,3 +257,107 @@ export const CONDITION_WORDS: Record<Condition, string> = {
 export function roundPosition(lat: number, lon: number): { lat: number; lon: number } {
   return { lat: Math.round(lat * 100) / 100, lon: Math.round(lon * 100) / 100 };
 }
+
+// ── official alerts ──────────────────────────────────────────────────────────
+
+/**
+ * A watch, warning or advisory issued by the National Weather Service.
+ *
+ * ## Not the same thing as a `Warning`
+ *
+ * `warnings.ts` derives its rows from the farm's own records against the
+ * forecast: your alpacas plus this humidity is a heat problem. Those are this
+ * app's opinion, computed on the device, and they are worth having because
+ * nobody else knows what stock is in which field.
+ *
+ * An alert is not an opinion. It is a meteorologist saying a tornado is on the
+ * ground, and it is the one thing on this screen with an authority behind it.
+ * So they are a separate type, cached separately, and rendered above the
+ * derived rows — because a farm reading top to bottom must not meet "your hens
+ * are warm" before it meets a tornado warning.
+ *
+ * Folding them into `WARNING_KINDS` would also mean inventing a kind for each
+ * of roughly eighty NWS event types, and every one would be a guess at an icon
+ * and a threshold for something already carrying its own severity.
+ *
+ * ## Parsed, never trusted
+ *
+ * Invariant 11. The service's shape becomes ours at the boundary, so a field
+ * that moves cannot reach a screen.
+ */
+export const ALERT_SEVERITIES = ['extreme', 'severe', 'moderate', 'minor', 'unknown'] as const;
+export const alertSeveritySchema = z.enum(ALERT_SEVERITIES);
+export type AlertSeverity = z.infer<typeof alertSeveritySchema>;
+
+export const alertSchema = z
+  .object({
+    /** The service's own id, so a re-fetch replaces rather than duplicates. */
+    id: z.string().max(300),
+    /** "Tornado Warning", "Freeze Watch" — the official event name. */
+    event: z.string().max(120),
+    severity: alertSeveritySchema,
+    /** The one-line summary the service writes for exactly this purpose. */
+    headline: z.string().max(500).optional(),
+    /**
+     * The full text. Long — often several hundred words — and kept whole
+     * because trimming a safety instruction is not this app's call to make.
+     */
+    description: z.string().max(20_000).optional(),
+    /** What to actually do, where the service says. */
+    instruction: z.string().max(20_000).optional(),
+    /** When it starts biting. Absent means it already is. */
+    onset: z.number().int().optional(),
+    /**
+     * When it stops.
+     *
+     * **Load-bearing.** An expired alert must never show: a tornado warning
+     * still on screen an hour after it lapsed teaches a farm that this row
+     * does not mean anything, which is the one row where that lesson is fatal.
+     */
+    endsAt: z.number().int().optional(),
+    /** "Riley County, KS" — so a farm can tell whether it is actually them. */
+    area: z.string().max(500).optional(),
+  })
+  .strict();
+
+export type Alert = z.infer<typeof alertSchema>;
+
+const SEVERITY_ORDER: Record<AlertSeverity, number> = {
+  extreme: 0,
+  severe: 1,
+  moderate: 2,
+  minor: 3,
+  unknown: 4,
+};
+
+/**
+ * Whether an alert is still in force.
+ *
+ * An alert with no end time is treated as live. The service omits `ends` on
+ * some products, and dropping those would silently hide a whole class of
+ * warning — the failure has to fall on the side of showing one too many.
+ */
+export function alertLive(alert: Alert, now: number): boolean {
+  return alert.endsAt === undefined || alert.endsAt > now;
+}
+
+/** The live ones, worst first. Ties keep their id order so a list holds still. */
+export function liveAlerts(alerts: readonly Alert[], now: number): Alert[] {
+  return alerts
+    .filter((alert) => alertLive(alert, now))
+    .sort((a, b) => {
+      const bySeverity = SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity];
+      if (bySeverity !== 0) return bySeverity;
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    });
+}
+
+/**
+ * How long a cached alert set may be trusted.
+ *
+ * Far shorter than the forecast's two days, because the whole value of an
+ * alert is that it is current. Past this the screen stops showing them rather
+ * than showing old ones: silence is survivable, a lapsed tornado warning
+ * presented as live is not.
+ */
+export const ALERTS_STALE_MS = 60 * 60 * 1000;

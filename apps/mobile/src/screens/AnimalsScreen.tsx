@@ -10,6 +10,7 @@ import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
 import { useNav } from '../hooks/useNav';
+import { useUnits } from '../hooks/useUnits';
 import type { ScreenProps } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
@@ -30,6 +31,7 @@ export function AnimalsScreen({ route }: ScreenProps<'Animals'>): React.ReactEle
   const { groupId } = route.params;
   const nav = useNav();
   const { colors } = useTheme();
+  const units = useUnits();
 
   const groups = useLive(listGroups);
   const animals = useLive(listAnimals);
@@ -65,7 +67,7 @@ export function AnimalsScreen({ route }: ScreenProps<'Animals'>): React.ReactEle
             animal.tag === undefined ? null : `Tag ${animal.tag}`,
             animal.sex === undefined || animal.sex === 'unknown' ? null : animal.sex,
             animal.bornAt === undefined ? null : `born ${new Date(animal.bornAt).getFullYear()}`,
-            weight === undefined ? null : formatMass(weight.massUg, 'imperial'),
+            weight === undefined ? null : formatMass(weight.massUg, units),
           ]
             .filter((part): part is string => part !== null)
             .join(' · ');

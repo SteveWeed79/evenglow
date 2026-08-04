@@ -40,6 +40,7 @@ import { SetEggsScreen } from '../screens/SetEggsScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { SiteSetupScreen } from '../screens/SiteSetupScreen';
 import { TreatmentScreen } from '../screens/TreatmentScreen';
+import { TrendScreen } from '../screens/TrendScreen';
 import { WeatherScreen } from '../screens/WeatherScreen';
 import { WeighScreen } from '../screens/WeighScreen';
 import { Tabs } from './Tabs';
@@ -107,6 +108,8 @@ export type RootParamList = {
   CareLog: { groupId: string };
   /** How often this group's routine jobs come round, and which it does at all. */
   CareRoutine: { groupId: string };
+  /** What this group has produced over a season, against what it has eaten. */
+  Trend: { groupId: string };
   Weigh: { groupId: string };
   /** A clip. Offered only on a group kept for fibre. */
   Shearing: { groupId: string };
@@ -169,6 +172,7 @@ export function Root({ onSignedOut }: { onSignedOut: () => void }): React.ReactE
       <Stack.Screen name="Treatment" component={TreatmentScreen} />
       <Stack.Screen name="CareLog" component={CareLogScreen} />
       <Stack.Screen name="CareRoutine" component={CareRoutineScreen} />
+      <Stack.Screen name="Trend" component={TrendScreen} />
       <Stack.Screen name="Weigh" component={WeighScreen} />
       <Stack.Screen name="Shearing" component={ShearingScreen} />
       <Stack.Screen name="Produce" component={ProduceScreen} />

@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { newId } from '@steading/contracts';
 import { listPhotos, type Photo } from '@steading/core/read/photos';
 import { capture, forgetBytes, hasBytes, photoUri } from '../photos/store';
@@ -26,11 +26,35 @@ import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
  * thing that would actually cost the space. A strip says "there are three of
  * these" and gets out of the way.
  *
- * ## The bytes are on this device only, and it says so
+ * ## Tapping one opens it, and that is where Remove lives
  *
- * The record syncs — a second phone knows a photo exists — and the image does
- * not, yet. Rather than a grey box that reads as a bug, a photo without its
- * bytes says plainly which device took it. See `photos/store.ts`.
+ * Two problems, one shape — the same one the notes thread had. Every thumbnail
+ * carried a permanent "Remove" button underneath it, so a strip of three drew
+ * three destructive controls for an action nobody takes often; and the
+ * thumbnail itself did nothing at all when pressed. A receipt at 128px cannot
+ * be read, and the one thing somebody wants from it — see it bigger — was the
+ * one thing there was no way to ask for.
+ *
+ * So the photo is the control. Tapping one opens it below the strip at a size
+ * a receipt can actually be read at, with the date it was taken and the way to
+ * remove it. Tapping it again folds it away. One at a time, so the panel stays
+ * the size of a panel.
+ *
+ * Larger in place rather than a full-screen viewer: a modal is a route you
+ * have to get out of, and this is an attachment on a screen somebody came to
+ * for something else.
+ *
+ * ## A photo this device does not have yet, and it says so
+ *
+ * The record syncs before the bytes do — that is the design, not a fault — so
+ * a second phone knows a photo exists for a while before it can show it.
+ * Rather than a grey box that reads as a bug, the frame says what is
+ * happening. See `sync/photos.ts` for the transfer that closes the gap.
+ *
+ * **This copy is load-bearing and was rewritten when upload landed.** It used
+ * to say the picture would arrive "when they are both on the same network",
+ * which described a peer-to-peer transfer this app has never done and now
+ * definitely does not — the bytes go via the server like everything else.
  */
 
 export function Photos({
@@ -47,6 +71,8 @@ export function Photos({
 
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  /** Which photo is open, at most one — see the note above. */
+  const [open, setOpen] = useState<string | null>(null);
 
   const add = useCallback(
     async (source: 'camera' | 'library'): Promise<void> => {
@@ -87,6 +113,9 @@ export function Photos({
       // they are not the audit trail, they are the weight.
       forgetBytes(photo.id);
       void log({ entity: 'photo', op: 'delete', targetId: photo.id, payload: {} });
+      // Nothing left to have open. Without this the panel keeps a slot for a
+      // photo that is no longer in the list.
+      setOpen(null);
     },
     [log],
   );
@@ -113,37 +142,84 @@ export function Photos({
       {!read ? null : mine.length === 0 ? (
         <Body>
           A receipt, a manual, or something you want to remember the look of — a wound, a kill,
-          a leaf. Kept on this phone, not sent anywhere.
+          a leaf. Shrunk to save space, and shared with the farm&rsquo;s other phones when
+          there is signal.
         </Body>
       ) : (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.strip}>
-          {mine.map((photo) => (
-            <View key={photo.id} style={styles.item}>
-              {hasBytes(photo.id) ? (
-                <Image
-                  source={{ uri: photoUri(photo.id) }}
-                  style={[styles.shot, { borderColor: colors.border }]}
-                  accessibilityLabel={`Photo of ${what}, ${new Date(
-                    photo.capturedAt,
-                  ).toLocaleDateString()}`}
-                />
-              ) : (
-                /* Said rather than shown as a grey square, which reads as a
-                   bug. The record travelled; the image has not, yet. */
-                <View style={[styles.missing, { borderColor: colors.border }]}>
-                  <Icon name="offline" size={24} color={colors.muted} />
-                  <Text style={[styles.label, { color: colors.muted }]}>On the other phone</Text>
-                </View>
-              )}
+        <>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.strip}
+          >
+            {mine.map((photo) => (
+              <Pressable
+                key={photo.id}
+                onPress={() => setOpen(open === photo.id ? null : photo.id)}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: open === photo.id }}
+                accessibilityLabel={`Photo of ${what}, ${taken(photo)}. Tap to open it.`}
+                testID={`photo-${photo.id}`}
+                style={({ pressed }) => [styles.item, { opacity: pressed ? 0.7 : 1 }]}
+              >
+                {hasBytes(photo.id) ? (
+                  <Image
+                    source={{ uri: photoUri(photo.id) }}
+                    style={[
+                      styles.shot,
+                      { borderColor: open === photo.id ? colors.lanternInk : colors.border },
+                    ]}
+                  />
+                ) : (
+                  /* Said rather than shown as a grey square, which reads as a
+                     bug. The record travelled; the image has not, yet. */
+                  <View
+                    style={[
+                      styles.missing,
+                      { borderColor: open === photo.id ? colors.lanternInk : colors.border },
+                    ]}
+                  >
+                    <Icon name="offline" size={24} color={colors.muted} />
+                    <Text style={[styles.label, { color: colors.muted }]}>On the other phone</Text>
+                  </View>
+                )}
+              </Pressable>
+            ))}
+          </ScrollView>
 
-              <Confirm
-                label="Remove"
-                armedLabel="Tap again"
-                onConfirm={() => remove(photo)}
-              />
-            </View>
-          ))}
-        </ScrollView>
+          {mine
+            .filter((photo) => photo.id === open)
+            .map((photo) => (
+              <View key={photo.id} style={styles.opened} testID={`photo-open-${photo.id}`}>
+                {hasBytes(photo.id) ? (
+                  /* Full width and square-ish: a receipt at 128px is not a
+                     receipt, it is a thumbnail of one. `contain` because these
+                     are documents as often as they are pictures, and cropping
+                     a receipt loses the total. */
+                  <Image
+                    source={{ uri: photoUri(photo.id) }}
+                    resizeMode="contain"
+                    style={[styles.large, { borderColor: colors.border }]}
+                    accessibilityLabel={`Photo of ${what}, ${taken(photo)}`}
+                  />
+                ) : (
+                  <Body>
+                    Taken on another phone. The record is here and the picture is still coming —
+                    it arrives the next time this phone has signal and a moment spare.
+                  </Body>
+                )}
+
+                <Text style={[styles.label, { color: colors.muted }]}>{taken(photo)}</Text>
+
+                <Confirm
+                  label="Remove"
+                  armedLabel="Tap again"
+                  testID={`photo-remove-${photo.id}`}
+                  onConfirm={() => remove(photo)}
+                />
+              </View>
+            ))}
+        </>
       )}
 
       <Failure message={problem} />
@@ -166,8 +242,23 @@ export function Photos({
   );
 }
 
+/** "4 August", which is all anybody wants from a photo's date. */
+function taken(photo: Photo): string {
+  return new Date(photo.capturedAt).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'long',
+  });
+}
+
 const styles = StyleSheet.create({
   strip: { gap: SPACE.md, paddingVertical: SPACE.xs },
+  opened: { gap: SPACE.sm, marginTop: SPACE.sm },
+  large: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: RADII.softHead,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
   item: { gap: SPACE.xs, width: 128 },
   shot: { width: 128, height: 128, borderRadius: RADII.softHead, borderWidth: StyleSheet.hairlineWidth },
   missing: {

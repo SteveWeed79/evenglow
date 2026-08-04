@@ -1,8 +1,10 @@
 import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import {
+  formatMoney,
   INVENTORY_KINDS,
   INVENTORY_UNITS,
+  minorPer,
   newId,
   SPECIES_TRAITS,
   type Species,
@@ -14,6 +16,7 @@ import {
   Choice,
   Failure,
   Field,
+  NumberField,
   Primary,
   Stepper,
   TextField,
@@ -25,6 +28,7 @@ import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
 import { useNav } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
+import { useCurrency } from '../hooks/useUnits';
 import type { ScreenProps } from '../navigation/Root';
 import { SPACE } from '../theme/tokens';
 
@@ -35,6 +39,19 @@ import { SPACE } from '../theme/tokens';
  * one is a count somebody wanted to keep, and nagging about it would teach
  * them to stop keeping it. The threshold is what turns tracking into warning,
  * and it should be asked for rather than assumed.
+ *
+ * ## What it cost, asked the way it is known
+ *
+ * A farm knows what it paid for the sack. It does not know, and should not
+ * have to work out in a feed store, what one pound of that sack costs. So the
+ * field asks for the total and the app divides — the stored rate is per unit,
+ * because `quantity` draws down as the sack empties and a total paid would
+ * have to be re-divided every time to stay meaningful.
+ *
+ * Optional, like the threshold and for the same reason. A farm that never
+ * answers keeps a shelf that works; it simply gets no cost-per-egg, and the
+ * screen that would show one says why rather than showing a figure built from
+ * half the feedings.
  */
 
 const KIND_LABELS = {
@@ -72,6 +89,23 @@ export function AddItemScreen({ route }: ScreenProps<'AddItem'>): React.ReactEle
   const [reorderBelow, setReorderBelow] = useState(1);
   const [equipmentId, setEquipmentId] = useState<string | null>(route.params.equipmentId ?? null);
   const [species, setSpecies] = useState<Species[]>([]);
+  /** What the whole lot cost, as typed. Divided by `quantity` before storing. */
+  const [paid, setPaid] = useState('');
+
+  const currency = useCurrency();
+
+  /**
+   * The per-unit rate, or null when there is nothing honest to store.
+   *
+   * A price with no quantity to divide by is not a rate, and rounding to the
+   * nearest minor unit is deliberate — a tenth of a cent per pound is below
+   * what anybody typed and pretending to it would be false precision.
+   */
+  const costCents = useMemo(() => {
+    const total = Number(paid);
+    if (!Number.isFinite(total) || total <= 0 || quantity <= 0) return null;
+    return Math.round((total * minorPer(currency)) / quantity);
+  }, [paid, quantity, currency]);
 
   /**
    * Only the species this farm actually keeps.
@@ -106,10 +140,11 @@ export function AddItemScreen({ route }: ScreenProps<'AddItem'>): React.ReactEle
           // Only meaningful on a part: linking a bale of straw to the tractor
           // would put it in the "can this service be done" question wrongly.
           ...(kind === 'part' && equipmentId !== null ? { equipmentId } : {}),
+          ...(costCents === null ? {} : { costCents }),
         },
       });
     });
-  }, [save, log, name, kind, unit, quantity, warns, reorderBelow, equipmentId, species]);
+  }, [save, log, name, kind, unit, quantity, warns, reorderBelow, equipmentId, species, costCents]);
 
   const iron = machines ?? [];
 
@@ -134,14 +169,43 @@ export function AddItemScreen({ route }: ScreenProps<'AddItem'>): React.ReactEle
       </Field>
 
       <Field label="How many now?">
-        <Stepper value={quantity} onChange={setQuantity} steps={[1, 5]} suffix={unit} />
+        <Stepper
+          value={quantity}
+          onChange={setQuantity}
+          steps={[1, 5]}
+          suffix={unit}
+          testID="item-quantity"
+        />
+      </Field>
+
+      <Field
+        label="What did the lot cost? (optional)"
+        hint={
+          costCents === null
+            ? 'What you paid for all of it. Feed priced here is what makes cost per egg possible.'
+            : `${formatMoney(costCents, currency)} per ${unit}.`
+        }
+      >
+        <NumberField
+          value={paid}
+          onChangeText={setPaid}
+          placeholder="22.50"
+          accessibilityLabel="What the lot cost"
+          testID="item-paid"
+        />
       </Field>
 
       <Toggle label="Tell me when it runs low" value={warns} onChange={setWarns} />
 
       {warns ? (
         <Field label="Low is">
-          <Stepper value={reorderBelow} onChange={setReorderBelow} steps={[1, 5]} suffix={unit} />
+          <Stepper
+            value={reorderBelow}
+            onChange={setReorderBelow}
+            steps={[1, 5]}
+            suffix={unit}
+            testID="item-reorder"
+          />
         </Field>
       ) : null}
 

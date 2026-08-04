@@ -12,6 +12,7 @@ import { migrateEnvelope } from './migrate';
 import { nextRecordValue } from './project';
 import type {
   CachedForecast,
+  CachedAlerts,
   CachedObservation,
   EnqueueRequest,
   IntegrityReport,
@@ -708,6 +709,22 @@ export async function openSqliteStore(
       );
     },
 
+    async readAlerts(): Promise<CachedAlerts | null> {
+      const row = await driver.get<{ fetchedAt: number; value: string }>(
+        'SELECT fetchedAt, value FROM alerts WHERE id = 1',
+      );
+      return row ?? null;
+    },
+
+    async writeAlerts(entry): Promise<void> {
+      await driver.run(
+        `INSERT INTO alerts (id, fetchedAt, value) VALUES (1, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET fetchedAt = excluded.fetchedAt,
+                                       value = excluded.value`,
+        [entry.fetchedAt, entry.value],
+      );
+    },
+
     async quarantineCount(): Promise<number> {
       const row = await driver.get<{ n: number }>('SELECT COUNT(*) AS n FROM quarantine');
       return row?.n ?? 0;
@@ -739,7 +756,25 @@ export async function openSqliteStore(
      */
     async wipe(): Promise<void> {
       await driver.transaction(async (tx) => {
-        for (const table of ['outbox', 'records', 'meta', 'quarantine']) {
+        /**
+         * The weather tables belong on this list and were missing from it.
+         *
+         * They arrived after the wipe was written and nobody added them, so a
+         * sign-out left the forecast, the station reading and now the alerts
+         * behind. That is not a stale-data annoyance: a cached forecast is
+         * *for a position*, and the position is the farm's own — the thing
+         * `roundPosition` exists to be careful with. Leaving it for whoever
+         * signs in next is the exact failure C5 is about.
+         */
+        for (const table of [
+          'outbox',
+          'records',
+          'meta',
+          'quarantine',
+          'forecast',
+          'observation',
+          'alerts',
+        ]) {
           await tx.run(`DELETE FROM ${table}`);
         }
       });

@@ -130,6 +130,40 @@ const BY_SPECIES: Partial<Record<Species, Intervals>> = {
   llama: { 'hoof-trim': 90, mineral: 60, worming: 90, 'health-check': null, dental: 365 },
 };
 
+/**
+ * Jobs that are about an animal's **body**, and therefore genuinely do not
+ * exist for some of them.
+ *
+ * This is the distinction `null` was quietly doing two jobs for. A default of
+ * `null` means "not on a schedule", and that covers two completely different
+ * situations:
+ *
+ *  - **Off by default, but real.** `health-check` on any animal, `vaccination`
+ *    on a ratite, `mineral` on poultry — grit and oyster shell are a thing a
+ *    layer flock genuinely needs. A farm can sensibly turn any of these on.
+ *  - **Does not exist.** A chicken has no hooves and no teeth that need doing.
+ *    Offering seven interval chips for a chicken's teeth is not a setting, it
+ *    is a category error taking up a screen.
+ *
+ * Only anatomy makes a job impossible. Worming, parasites, vaccination and a
+ * look-over apply to anything with a pulse; minerals apply to anything that
+ * eats. Hooves and teeth do not.
+ */
+const ANATOMICAL: readonly CareKind[] = ['hoof-trim', 'dental'];
+
+/**
+ * Whether this job could ever apply to this kind of animal.
+ *
+ * Distinct from `careIntervalDays` returning null, which only says it is not
+ * on a schedule by default. A screen offering to change intervals asks this
+ * one: a farm should be able to switch on a look-over for a group it rarely
+ * visits, and should never be asked how often to do a chicken's teeth.
+ */
+export function careApplies(species: Species, kind: CareKind): boolean {
+  if (!ANATOMICAL.includes(kind)) return true;
+  return careIntervalDays(species, kind) !== null;
+}
+
 /** How often a job comes round for this species, or null if it does not apply. */
 export function careIntervalDays(species: Species, kind: CareKind): number | null {
   const specific = BY_SPECIES[species]?.[kind];

@@ -10,6 +10,7 @@ import {
   partsDue,
   processingDue,
   serviceDue,
+  shearingDues,
   taskDues,
   todayList,
   withdrawalDue,
@@ -17,7 +18,7 @@ import {
 import { listAnimals } from '@steading/core/read/animals';
 import { listBreedings, listIncubations } from '@steading/core/read/breeding';
 import { lastCareBySubject, listCareLogs } from '@steading/core/read/care';
-import { listGroups } from '@steading/core/read/groups';
+import { lastShornByGroup, listGroups } from '@steading/core/read/groups';
 import { listBeds, listPlantings, listVarieties } from '@steading/core/read/growing';
 import { listInventory, listMachines, listServices } from '@steading/core/read/iron';
 import { listTasks } from '@steading/core/read/tasks';
@@ -103,6 +104,11 @@ export function useDues(): DuesView {
       groups.map((g) => g.id),
     );
     const lastCare = lastCareBySubject(careLogs);
+    // A clip on a named animal counts for its group — a farm shears the whole
+    // paddock in one afternoon and records whichever subject was to hand.
+    const lastShorn = await lastShornByGroup(
+      new Map(animals.map((animal) => [animal.id, animal.flockId])),
+    );
 
     for (const group of groups) {
       for (const active of withdrawals.get(group.id) ?? []) {
@@ -155,6 +161,26 @@ export function useDues(): DuesView {
           : { processAtWeeks: group.processAtWeeks }),
       });
       if (processing) rows.push(processing);
+
+      /**
+       * The clip. Silent unless the group is kept for fibre AND its breed
+       * carries an interval — a hair sheep sheds its own coat and must never
+       * be asked about, which is why the library leaves that one blank.
+       */
+      rows.push(
+        ...shearingDues(
+          {
+            id: group.id,
+            name: group.name,
+            species: group.species,
+            breedId: group.breedId,
+            purposes: group.purposes,
+            lastShornAt: lastShorn.get(group.id),
+            since: group.since,
+          },
+          now,
+        ),
+      );
     }
 
     // ── birthing and hatching ────────────────────────────────────────────────

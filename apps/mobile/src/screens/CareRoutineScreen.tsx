@@ -4,6 +4,7 @@ import {
   CARE_KINDS,
   type CareIntervals,
   type CareKind,
+  careApplies,
   careIntervalDays,
 } from '@steading/contracts';
 import { type Group, listGroups } from '@steading/core/read/groups';
@@ -46,14 +47,24 @@ import { FONTS, SPACE, TYPE } from '../theme/tokens';
  * the default moves, and a stored copy would freeze it at whatever the app
  * shipped with the day they opened this screen.
  *
- * ## Every job is listed, including the ones this species does not do
+ * ## Only the jobs this animal could ever have
  *
- * A chicken has no hooves and the default for `hoof-trim` is "not for this
- * kind of animal" — but it is shown, greyed to Never, because hiding it would
- * make the capability invisible rather than absent. The clearest case is
- * `health-check`: it is off by default everywhere now, and the farm with a
- * group in a rented field two valleys over is exactly who should be able to
- * switch it back on.
+ * This listed all seven, on the argument that hiding one makes a capability
+ * invisible rather than absent. That is right about a job which is off by
+ * default and wrong about one that cannot exist: *"If the farm doesn't have
+ * the animal associated with the routine task, does it need to be on the
+ * list?"* — no. A chicken has no teeth that need doing, and seven interval
+ * chips under "Teeth" is not a setting, it is a category error taking up a
+ * screen.
+ *
+ * The distinction was being hidden by `null` doing two jobs at once. Off by
+ * default and real — a look-over on any animal, minerals for a layer flock
+ * that needs grit — is a row worth showing, because the farm with a group in a
+ * rented field two valleys over is exactly who should be able to switch it on.
+ * Anatomy is different, and `careApplies` is where that line now lives.
+ *
+ * A kind the farm has already set is shown whatever the answer, so a stored
+ * value can never be stranded behind a rule that arrived after it.
  */
 
 /** What the chips offer, in days. `null` is Never; `undefined` is Default. */
@@ -81,10 +92,10 @@ const TITLES: Record<CareKind, string> = {
 const NOTES: Record<CareKind, string> = {
   worming: 'A reminder to assess, not a schedule to dose on.',
   'hoof-trim': 'Overgrown feet go lame, and it happens slowly enough to miss.',
-  mineral: 'Buckets and licks, and whether they are being taken.',
+  mineral: 'Buckets and licks for stock; grit and oyster shell for a laying flock.',
   vaccination: 'Off, if your stock arrived vaccinated and you do not boost.',
   'parasite-check': 'A faecal count on a ruminant; red mite in the coop for birds.',
-  dental: 'Horses and camelids. Nothing else on the list has teeth that need doing.',
+  dental: 'Rasping. Only offered where the animal has teeth that need doing.',
   'health-check': 'Off by default — you see them daily. Turn it on for a group you do not.',
 };
 
@@ -158,7 +169,11 @@ function Routine({ group }: { group: Group }): React.ReactElement {
 
   const rows = useMemo(
     () =>
-      CARE_KINDS.map((kind) => ({
+      CARE_KINDS.filter(
+        // Anything this animal could have, plus anything the farm has already
+        // answered — a stored setting must never become unreachable.
+        (kind) => careApplies(group.species, kind) || draft[kind] !== undefined,
+      ).map((kind) => ({
         kind,
         /** What the app would do if the farm said nothing. */
         fallback: careIntervalDays(group.species, kind),
@@ -211,11 +226,18 @@ function Routine({ group }: { group: Group }): React.ReactElement {
   );
 }
 
-/** What is actually happening now, said in one line. */
+/**
+ * What is actually happening now, said in one line.
+ *
+ * A `null` default no longer reads as "not for this kind of animal", because
+ * the rows that were true of are not drawn at all. What is left is a job that
+ * is real and simply off unless asked for — minerals on a layer flock, a
+ * look-over on a group you see daily.
+ */
 function describe(chosen: number | null | undefined, fallback: number | null): string {
   if (chosen === null) return 'Never asks';
   if (chosen !== undefined) return `Every ${chosen} days`;
-  if (fallback === null) return 'Not for this kind of animal';
+  if (fallback === null) return 'Off unless you ask for it';
   return `Every ${fallback} days, by default`;
 }
 

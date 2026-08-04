@@ -53,6 +53,23 @@ export function useWarnings(): { warnings: Warning[]; loading: boolean } {
     [dues],
   );
 
+  /**
+   * Clips owed, off the same due list.
+   *
+   * Read from the engine rather than recomputed here for the reason every
+   * other consumer does: the due builder knows about hair sheep, about breeds
+   * with no interval, and about the grace a new group gets, and a second
+   * implementation on this screen would eventually disagree with the row on
+   * Today about whether a fleece is owed at all.
+   */
+  const shearings = useMemo(
+    () =>
+      dues
+        .filter((due) => due.kind === 'shearing' && due.at !== null)
+        .map((due) => ({ key: due.key, title: due.title, at: due.at ?? 0 })),
+    [dues],
+  );
+
   const loading = weatherLoading || groupsLoading || growingLoading || duesLoading;
 
   const warnings = useMemo(
@@ -70,10 +87,11 @@ export function useWarnings(): { warnings: Warning[]; loading: boolean } {
               })),
               uncoveredPlantings,
               births,
+              shearings,
             },
             Date.now(),
           ),
-    [loading, weather, groups, uncoveredPlantings, births],
+    [loading, weather, groups, uncoveredPlantings, births, shearings],
   );
 
   return { warnings, loading };

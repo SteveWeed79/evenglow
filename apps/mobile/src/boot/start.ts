@@ -1,6 +1,8 @@
 import { startSync, stopSync } from '@steading/core/sync/engine';
+import { setPhotoBytes } from '@steading/core/sync/photos';
 import { setStorageBacking } from '@steading/core/sync/storage';
 import { type CachedClaims, refreshSession } from '../auth/session';
+import { deviceBytes } from '../photos/bytes';
 import { openLocalStore } from '../db/store';
 import { startTriggers, type TriggerHandles } from '../sync/triggers';
 import { reportEngineError } from '@steading/core/sync/report';
@@ -78,6 +80,20 @@ export async function start(raw?: string): Promise<Started> {
 
   await openLocalStore(claims.orgId);
   setStorageBacking('device');
+
+  /**
+   * Where photo bytes live, told rather than detected.
+   *
+   * `packages/core` compiles for a server as well as a handset and cannot
+   * import expo-file-system, so the transfer states the shape it needs and
+   * this hands one in — the same pattern as `setApiBase`, `setAccessToken`
+   * and the SQL driver.
+   *
+   * After the store opens, because the files are per-farm in the same sense
+   * the database is, and before the loop starts, because the loop is what
+   * moves them.
+   */
+  setPhotoBytes(deviceBytes);
 
   /**
    * Signed in, with nowhere to send anything.

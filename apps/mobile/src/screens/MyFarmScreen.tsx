@@ -1,10 +1,20 @@
 import { useCallback, useState } from 'react';
-import { ENTERPRISES, type Enterprise, newId } from '@steading/contracts';
+import {
+  type Currency,
+  DEFAULT_CURRENCY,
+  DEFAULT_UNIT_SYSTEM,
+  ENTERPRISES,
+  type Enterprise,
+  formatMoney,
+  newId,
+  UNIT_SYSTEMS,
+  type UnitSystem,
+} from '@steading/contracts';
 import { listGroups } from '@steading/core/read/groups';
 import { readSiteOrBlank } from '@steading/core/read/growing';
 import { listBeds, listPlantings } from '@steading/core/read/growing';
 import { listMachines } from '@steading/core/read/iron';
-import { Failure, Field, Primary, Toggle, useSaver } from '../components/Form';
+import { Choice as Picker, Failure, Field, Primary, Toggle, useSaver } from '../components/Form';
 import { Loading } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
@@ -41,6 +51,14 @@ import { useLog } from '../hooks/useSync';
  * The site already carries `units` and `rotationYears`, which are farm-wide
  * preferences rather than facts about a place, so this is the established home
  * for exactly this kind of answer.
+ *
+ * ## Units and currency, because nothing could set them
+ *
+ * `units` had been on the site record since the site record existed and no
+ * screen wrote it — a setting that could be read and never chosen, which is
+ * the same as no setting at all. Six screens now honour it, so it needs a
+ * switch. Currency arrives with cost tracking and belongs beside it: both are
+ * how the farm READS, as against what it runs.
  */
 
 interface Choice {
@@ -48,6 +66,21 @@ interface Choice {
   title: string;
   detail: string;
 }
+
+const UNIT_LABELS: Record<UnitSystem, string> = {
+  imperial: 'Pounds and °F',
+  metric: 'Kilos and °C',
+};
+
+/**
+ * The ones a smallholding is likely to keep books in.
+ *
+ * Short on purpose: a picker of the world's 180 currencies is a scroll nobody
+ * finishes, and this is a question asked once. The schema takes any three
+ * capital letters, so a farm outside this list is not locked out — it just has
+ * nowhere to say so yet, which is a smaller gap than a list that long.
+ */
+const CURRENCIES: readonly Currency[] = ['USD', 'CAD', 'GBP', 'EUR', 'AUD', 'NZD'];
 
 const CHOICES: readonly Choice[] = [
   {
@@ -87,11 +120,19 @@ export function MyFarmScreen(): React.ReactElement {
   const machines = useLive(listMachines, 'your machines');
 
   const [edits, setEdits] = useState<Enterprise[] | null>(null);
+  // Null is "not touched on this visit", so an unanswered setting keeps
+  // showing the farm's default rather than committing that default as a
+  // deliberate choice the moment somebody opens this screen for the beds.
+  const [units, setUnits] = useState<UnitSystem | null>(null);
+  const [currency, setCurrency] = useState<Currency | null>(null);
+
   const { saving, failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
 
   if (site === null) return <Loading title="My farm" />;
 
   const chosen = edits ?? site.enterprises;
+  const reads = units ?? site.units ?? DEFAULT_UNIT_SYSTEM;
+  const money = currency ?? site.currency ?? DEFAULT_CURRENCY;
 
   /** What is already recorded under each, so turning one off is informed. */
   const held: Record<Enterprise, number> = {
@@ -112,10 +153,15 @@ export function MyFarmScreen(): React.ReactElement {
         // record yet, and this is as good a moment to make one as any.
         op: site.id === '' ? 'create' : 'update',
         targetId: site.id === '' ? newId() : site.id,
-        payload:
-          site.id === ''
-            ? { name: 'My farm', enterprises: ordered(chosen) }
-            : { enterprises: ordered(chosen) },
+        payload: {
+          ...(site.id === '' ? { name: 'My farm' } : {}),
+          enterprises: ordered(chosen),
+          // Written every save, including when untouched: `reads` and `money`
+          // are what the screen was SHOWING, so saving records what somebody
+          // just looked at and agreed with rather than leaving it unsaid.
+          units: reads,
+          currency: money,
+        },
       });
     });
   };
@@ -149,6 +195,30 @@ export function MyFarmScreen(): React.ReactElement {
           />
         </Field>
       ))}
+
+      <Field
+        label="Weights and temperatures"
+        hint="Everything that shows a weight or a temperature reads in this — the scales, the forecast, the feed."
+      >
+        <Picker
+          options={UNIT_SYSTEMS}
+          value={reads}
+          onChange={setUnits}
+          labels={UNIT_LABELS}
+        />
+      </Field>
+
+      <Field
+        label="Money"
+        hint={`Prices show as ${formatMoney(2250, money)}. What a sack cost is how cost per egg gets worked out.`}
+      >
+        <Picker
+          options={CURRENCIES}
+          value={money}
+          onChange={setCurrency}
+          labels={Object.fromEntries(CURRENCIES.map((code) => [code, code]))}
+        />
+      </Field>
 
       {chosen.length === 0 ? (
         <Panel label="Everything is off">

@@ -1,4 +1,7 @@
 import {
+  type Alert,
+  alertSchema,
+  type AlertSeverity,
   type Condition,
   type Forecast,
   type ForecastHour,
@@ -508,5 +511,102 @@ export async function fetchForecast(grid: Grid, now: number = Date.now()): Promi
         : { condition: thisHour.condition, tempDeciC: thisHour.tempDeciC },
     days,
     hours,
+  });
+}
+
+// ── official alerts ──────────────────────────────────────────────────────────
+
+/**
+ * NWS severity words, lowercased into ours.
+ *
+ * Anything unrecognised becomes `unknown` rather than being dropped. A new
+ * severity word must not make an alert disappear — an alert this app cannot
+ * grade is still an alert a meteorologist issued.
+ */
+const SEVERITIES: Record<string, AlertSeverity> = {
+  extreme: 'extreme',
+  severe: 'severe',
+  moderate: 'moderate',
+  minor: 'minor',
+};
+
+const alertsSchema = z.object({
+  features: z.array(
+    z.object({
+      id: z.string().optional(),
+      properties: z.object({
+        id: z.string().optional(),
+        event: z.string().optional(),
+        severity: z.string().nullish(),
+        headline: z.string().nullish(),
+        description: z.string().nullish(),
+        instruction: z.string().nullish(),
+        onset: z.string().nullish(),
+        ends: z.string().nullish(),
+        expires: z.string().nullish(),
+        areaDesc: z.string().nullish(),
+      }),
+    }),
+  ),
+});
+
+/** A timestamp, or undefined — never NaN, which would sort as anything. */
+function moment(value: string | null | undefined): number | undefined {
+  if (value === null || value === undefined) return undefined;
+  const at = Date.parse(value);
+  return Number.isNaN(at) ? undefined : at;
+}
+
+/** Long text, kept whole up to the contract's ceiling rather than refused. */
+function text(value: string | null | undefined, max: number): string | undefined {
+  if (value === null || value === undefined || value === '') return undefined;
+  return value.slice(0, max);
+}
+
+/**
+ * Watches, warnings and advisories in force at a point.
+ *
+ * ## One request, and no grid
+ *
+ * Unlike the forecast, `/alerts/active` takes coordinates directly — there is
+ * no point lookup to cache and no station list to walk. It is the cheapest
+ * call in this file, which is what makes a fifteen-minute refresh reasonable.
+ *
+ * ## Dropping what will not parse, not the batch
+ *
+ * An alert missing an event name or an id is unusable, and one unusable
+ * feature must not take the tornado warning beside it down with it. Same rule
+ * the projections use, and it matters more here.
+ */
+export async function fetchAlerts(at: { lat: number; lon: number }): Promise<Alert[]> {
+  const { lat, lon } = roundPosition(at.lat, at.lon);
+  const body = await ask(`${BASE}/alerts/active?point=${lat},${lon}`, alertsSchema);
+
+  return body.features.flatMap((feature) => {
+    const said = feature.properties;
+    const id = said.id ?? feature.id;
+    if (id === undefined || said.event === undefined) return [];
+
+    const parsed = alertSchema.safeParse({
+      id: id.slice(0, 300),
+      event: said.event.slice(0, 120),
+      severity: SEVERITIES[(said.severity ?? '').toLowerCase()] ?? 'unknown',
+      ...(text(said.headline, 500) === undefined ? {} : { headline: text(said.headline, 500) }),
+      ...(text(said.description, 20_000) === undefined
+        ? {}
+        : { description: text(said.description, 20_000) }),
+      ...(text(said.instruction, 20_000) === undefined
+        ? {}
+        : { instruction: text(said.instruction, 20_000) }),
+      ...(moment(said.onset) === undefined ? {} : { onset: moment(said.onset) }),
+      // `ends` is the real expiry; `expires` is when the product itself goes
+      // out of date. Either is better than treating a lapsed alert as live.
+      ...(moment(said.ends ?? said.expires) === undefined
+        ? {}
+        : { endsAt: moment(said.ends ?? said.expires) }),
+      ...(text(said.areaDesc, 500) === undefined ? {} : { area: text(said.areaDesc, 500) }),
+    });
+
+    return parsed.success ? [parsed.data] : [];
   });
 }

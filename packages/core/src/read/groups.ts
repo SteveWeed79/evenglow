@@ -224,6 +224,45 @@ const storedFeedLog = z.object({
   feedType: z.string().optional(),
 });
 
+const storedShearing = z.object({
+  occurredAt: z.number().int(),
+  flockId: z.string().optional(),
+  animalId: z.string().optional(),
+});
+
+/**
+ * When each group was last shorn, which is what the shearing due counts from.
+ *
+ * A clip on a named animal counts for its group as well. A farm with four
+ * alpacas, two of them named, shears all four on the same afternoon and
+ * records what it recorded — and a due row that ignored the named ones would
+ * tell that farm it had never shorn anything.
+ */
+export async function lastShornByGroup(
+  animals: ReadonlyMap<string, string>,
+): Promise<Map<string, number>> {
+  const records = await localStore().readRecordsByEntity('shearing');
+  const latest = new Map<string, number>();
+
+  for (const record of records) {
+    if (record.deleted) continue;
+    const parsed = storedShearing.safeParse(record.value);
+    if (!parsed.success) continue;
+
+    const groupId =
+      parsed.data.flockId ??
+      (parsed.data.animalId === undefined ? undefined : animals.get(parsed.data.animalId));
+    if (groupId === undefined) continue;
+
+    const seen = latest.get(groupId);
+    if (seen === undefined || parsed.data.occurredAt > seen) {
+      latest.set(groupId, parsed.data.occurredAt);
+    }
+  }
+
+  return latest;
+}
+
 /** When each group was last fed, so a screen can say "fed this morning". */
 export async function lastFedByGroup(): Promise<Map<string, number>> {
   const records = await localStore().readRecordsByEntity('feedLog');

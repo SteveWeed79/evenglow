@@ -1,13 +1,19 @@
 import {
+  type Alert,
+  alertSchema,
+  ALERTS_STALE_MS,
   type Forecast,
   forecastSchema,
   isStale,
+  liveAlerts,
   type Observation,
   observationIsStale,
   observationSchema,
 } from '@steading/contracts';
+import { z } from 'zod';
 import { localStore } from '../db/store';
 import {
+  fetchAlerts,
   fetchForecast,
   fetchObservation,
   findGrid,
@@ -38,6 +44,7 @@ import {
  */
 
 export {
+  fetchAlerts,
   fetchObservation,
   findGrid,
   findPlace,
@@ -219,7 +226,7 @@ let known: { key: string; grid: Grid } | null = null;
  * about a forecast a day old, which is the exact lie this cache exists to
  * avoid.
  */
-const lastTried = { forecast: 0, observation: 0 };
+const lastTried = { forecast: 0, observation: 0, alerts: 0 };
 
 /** The later of "last heard" and "last asked", which is what a gap runs from. */
 function triedAt(cached: { fetchedAt: number } | null, tried: number): number | null {
@@ -323,8 +330,88 @@ export async function forgetWeather(): Promise<void> {
   known = null;
   lastTried.forecast = 0;
   lastTried.observation = 0;
+  lastTried.alerts = 0;
   await localStore().writeForecast({ issuedAt: 0, fetchedAt: 0, value: '{}' });
   await localStore().writeObservation({ observedAt: 0, fetchedAt: 0, value: '{}' });
+  await localStore().writeAlerts({ fetchedAt: 0, value: '[]' });
 }
 
 export type { Forecast, Observation };
+
+// ── official alerts ──────────────────────────────────────────────────────────
+
+/**
+ * How often to ask for alerts.
+ *
+ * Faster than the forecast's hour and faster than the observation's ten
+ * minutes would be tempting, but `/alerts/active` is still a network call and
+ * this app's promise is that it works with the radio off. Fifteen minutes is
+ * the compromise: an alert issued now is on the screen by the next app resume
+ * or the next quarter hour, whichever comes first.
+ *
+ * This is deliberately NOT a substitute for a weather radio, and the screen
+ * says so. An app that polls every fifteen minutes must not be the only thing
+ * standing between a farm and a tornado.
+ */
+export const ALERTS_GAP_MS = 15 * 60 * 1000;
+
+/** The live alerts, worst first. Empty when there are none or the set is old. */
+export async function readAlerts(now: number = Date.now()): Promise<Alert[]> {
+  const cached = await localStore().readAlerts();
+  if (cached === null) return [];
+
+  /**
+   * An old SET is dropped entirely rather than filtered.
+   *
+   * Every other cache in this file degrades by showing its age. This one
+   * cannot: the absence of an alert in a fresh response is how a cancellation
+   * arrives, so a set nobody has refreshed in an hour may contain a warning
+   * that was called off fifty minutes ago. Silence is survivable; a lapsed
+   * tornado warning presented as live is not.
+   */
+  if (now - cached.fetchedAt >= ALERTS_STALE_MS) return [];
+
+  const parsed = z.array(alertSchema).safeParse(JSON.parse(cached.value));
+  if (!parsed.success) return [];
+
+  return liveAlerts(parsed.data, now);
+}
+
+/** Whether a refresh would actually ask. The alerts' own gap. */
+export function wouldFetchAlerts(cached: { fetchedAt: number } | null, now: number): boolean {
+  const asked = triedAt(cached, lastTried.alerts);
+  return asked === null || now - asked >= ALERTS_GAP_MS;
+}
+
+/**
+ * Fetches the active set if the quarter hour is up, and writes what it got.
+ *
+ * Same rules as the other two refreshes: never throws, never blocks a screen.
+ * **An empty response is written**, unlike a failed one — "no alerts in force"
+ * is a real answer and the most common one, and treating it as a failure would
+ * leave yesterday's warning on screen on a clear day.
+ */
+export async function refreshAlerts(
+  at: Position,
+  options: RefreshOptions = {},
+): Promise<Alert[]> {
+  const now = options.now ?? Date.now();
+  const cached = await localStore().readAlerts();
+
+  const asked = triedAt(cached, lastTried.alerts);
+  if (options.force !== true && asked !== null && now - asked < ALERTS_GAP_MS) {
+    return readAlerts(now);
+  }
+
+  lastTried.alerts = now;
+
+  try {
+    const alerts = await fetchAlerts(at);
+    await localStore().writeAlerts({ fetchedAt: now, value: JSON.stringify(alerts) });
+    return readAlerts(now);
+  } catch {
+    // Offline, or outside coverage. The last set stands until it goes stale,
+    // at which point `readAlerts` stops returning it rather than ageing it.
+    return readAlerts(now);
+  }
+}

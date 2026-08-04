@@ -16,6 +16,7 @@ import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
 import { useNav } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
+import { useUnits } from '../hooks/useUnits';
 import type { ScreenProps } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, SPACE, TYPE } from '../theme/tokens';
@@ -40,6 +41,7 @@ export function PlantingScreen({ route }: ScreenProps<'Planting'>): React.ReactE
   const nav = useNav();
   const log = useLog();
   const { colors } = useTheme();
+  const units = useUnits();
 
   const plantings = useLive(listPlantings);
   const varieties = useLive(listVarieties);
@@ -125,7 +127,7 @@ export function PlantingScreen({ route }: ScreenProps<'Planting'>): React.ReactE
         <Panel label="Picked so far">
           <Body>
             {[
-              totals.massUg > 0 ? formatMass(totals.massUg, 'imperial') : null,
+              totals.massUg > 0 ? formatMass(totals.massUg, units) : null,
               totals.count > 0 ? `${totals.count} picked` : null,
             ]
               .filter((part): part is string => part !== null)

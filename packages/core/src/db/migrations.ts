@@ -158,6 +158,39 @@ export const MIGRATIONS: readonly Migration[] = [
        )`,
     ],
   },
+
+  {
+    version: 4,
+    statements: [
+      /**
+       * Official watches and warnings, whole.
+       *
+       * A third table for a third rate. The forecast is regenerated hourly and
+       * lives two days; a station reading is worthless within the hour; an
+       * alert is issued and cancelled on a scale of minutes. Sharing a row
+       * with either would let the slower govern the fastest, and this is the
+       * one where showing a lapsed value is dangerous rather than merely
+       * wrong — a tornado warning still on screen an hour after it expired
+       * teaches a farm that the row does not mean anything.
+       *
+       * The whole active SET in one blob, rather than a row per alert. That is
+       * what the service answers with: a cancelled alert is simply absent from
+       * the next response, and rows kept individually would need a
+       * reconciliation pass to notice its absence. Replacing the blob cannot
+       * leave one behind.
+       *
+       * No `issuedAt` column beside `fetchedAt`, unlike `observation`. A set
+       * has no single issue time — the alerts in it were issued at different
+       * moments and each carries its own — so a column here would be a number
+       * with no honest value to put in it.
+       */
+      `CREATE TABLE IF NOT EXISTS alerts (
+         id        INTEGER PRIMARY KEY CHECK (id = 1),
+         fetchedAt INTEGER NOT NULL,
+         value     TEXT NOT NULL
+       )`,
+    ],
+  },
 ];
 
 /** The version a fresh database is brought to. */
