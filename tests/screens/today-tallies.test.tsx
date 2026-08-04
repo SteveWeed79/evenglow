@@ -135,15 +135,65 @@ describe('how much room it takes', () => {
 });
 
 describe('logging through the collapsed row', () => {
+  /**
+   * The steppers count in the farm's own unit and the schema still gets
+   * millilitres. An imperial farm — the default — taps out a quart.
+   *
+   * The bug: Today hardcoded `ml`, so a farm reading °F on the weather row
+   * four lines above was asked for milk in units nobody in the country
+   * measures in, and shown its morning as "100 ML".
+   */
   it('writes milk as a productionLog, not an egg', async () => {
     const id = await aGroup('Milk Goats', 'goat', ['milk']);
     const screen = await mount(<TodayScreen />);
 
+    await screen.press('tally-plus-32');
+    await screen.press('tally-commit');
+
+    // A US quart, stored as the millilitres it is.
+    expect((await produceToday()).get(`${id}:milk`)).toMatchObject({ amount: 946, unit: 'ml' });
+    expect(await localStore().readRecordsByEntity('eggLog')).toHaveLength(0);
+  });
+
+  /**
+   * The screenshot this came from: ten goats, a morning's milk, and a row
+   * reading "100 ML" on a farm whose weather row four lines above said 95°F.
+   *
+   * Millilitres are not a unit anybody says a herd's morning in, and on an
+   * imperial farm they were not even the right system.
+   */
+  it('reads a herd morning in the unit the farm uses', async () => {
+    const id = await aGroup('Milk Goats', 'goat', ['milk']);
+    await enqueue({
+      entity: 'productionLog',
+      op: 'create',
+      payload: { occurredAt: Date.now(), flockId: id, kind: 'milk', amount: 20_000, unit: 'ml' },
+    });
+
+    const screen = await mount(<TodayScreen />);
+
+    expect(screen.get(`tally-open-${id}:milk`).props.accessibilityLabel).toContain(
+      '5.3 gal so far today',
+    );
+  });
+
+  it('counts in millilitres once the farm says metric', async () => {
+    const id = await aGroup('Milk Goats', 'goat', ['milk']);
+    await enqueue({
+      entity: 'site',
+      op: 'create',
+      targetId: newId(),
+      payload: { name: 'My farm', units: 'metric', currency: 'USD' },
+    });
+
+    const screen = await mount(<TodayScreen />);
+
+    // The imperial steps are gone; this is the switch reaching Today.
+    expect(screen.has('tally-plus-32')).toBe(false);
     await screen.press('tally-plus-500');
     await screen.press('tally-commit');
 
     expect((await produceToday()).get(`${id}:milk`)).toMatchObject({ amount: 500, unit: 'ml' });
-    expect(await localStore().readRecordsByEntity('eggLog')).toHaveLength(0);
   });
 });
 

@@ -7,6 +7,9 @@ import {
   formatTemperature,
   formatVolume,
   gramsToUg,
+  enteredToStored,
+  entryUnit,
+  mlToUl,
   inchesToUm,
   ouncesToUg,
   poundsToUg,
@@ -98,5 +101,112 @@ describe('display', () => {
     expect(formatLength(inchesToUm(48), 'imperial')).toBe('4 ft');
     expect(formatMass(ouncesToUg(8), 'imperial')).toBe('8 oz');
     expect(formatMass(poundsToUg(1), 'imperial')).toBe('1 lb');
+  });
+});
+
+/**
+ * Volume, and the entry half.
+ *
+ * The defect behind these: `formatVolume` stopped at fluid ounces and had no
+ * callers, so milk was hardcoded to millilitres on three screens. A US farm
+ * read 95°F four rows above "100 ML" on the same screen, and the steppers on
+ * the way in moved fifty millilitres at a time.
+ */
+describe('volume scales to the quantity', () => {
+  it('climbs from fluid ounces through quarts to gallons', () => {
+    expect(formatVolume(fluidOuncesToUl(8), 'imperial')).toBe('8 fl oz');
+    // A quart is where a milking pail starts being the unit somebody says.
+    expect(formatVolume(fluidOuncesToUl(32), 'imperial')).toBe('1 qt');
+    expect(formatVolume(fluidOuncesToUl(48), 'imperial')).toBe('1.5 qt');
+    expect(formatVolume(fluidOuncesToUl(128), 'imperial')).toBe('1 gal');
+    expect(formatVolume(fluidOuncesToUl(640), 'imperial')).toBe('5 gal');
+  });
+
+  it('climbs from millilitres to litres', () => {
+    expect(formatVolume(mlToUl(500), 'metric')).toBe('500 mL');
+    expect(formatVolume(mlToUl(2400), 'metric')).toBe('2.4 L');
+  });
+
+  /**
+   * The screenshot that started this. Ten goats is gallons, not millilitres,
+   * and the old imperial branch would have said "676 fl oz".
+   */
+  it('reads a herd morning as a number somebody would say', () => {
+    const tenGoats = mlToUl(20_000);
+    expect(formatVolume(tenGoats, 'imperial')).toBe('5.3 gal');
+    expect(formatVolume(tenGoats, 'metric')).toBe('20 L');
+  });
+});
+
+describe('entry', () => {
+  it('counts in the fine unit of whichever system is set', () => {
+    expect(entryUnit('ml', 'metric')).toBe('ml');
+    expect(entryUnit('ml', 'imperial')).toBe('fl oz');
+    expect(entryUnit('g', 'metric')).toBe('g');
+    expect(entryUnit('g', 'imperial')).toBe('oz');
+  });
+
+  it('stores what was typed, in the unit the schema takes', () => {
+    // Metric is already the stored unit, so nothing is done to it.
+    expect(enteredToStored(500, 'ml', 'metric')).toBe(500);
+    expect(enteredToStored(250, 'g', 'metric')).toBe(250);
+
+    // A cup, a pint, a quart.
+    expect(enteredToStored(8, 'ml', 'imperial')).toBe(237);
+    expect(enteredToStored(16, 'ml', 'imperial')).toBe(473);
+    expect(enteredToStored(32, 'ml', 'imperial')).toBe(946);
+
+    expect(enteredToStored(16, 'g', 'imperial')).toBe(454);
+  });
+
+  /** The schema is `z.number().int()`; a fraction is a 400, not a rounding. */
+  it('always stores an integer', () => {
+    for (const entered of [1, 3, 7, 8, 13, 32, 100]) {
+      for (const stored of ['ml', 'g'] as const) {
+        const value = enteredToStored(entered, stored, 'imperial');
+        expect(Number.isInteger(value)).toBe(true);
+      }
+    }
+  });
+
+  /**
+   * Entry and display are separate halves and have to agree, or a farm taps
+   * out a quart and is told it logged something else.
+   */
+  it('reads back what was tapped in', () => {
+    const quart = enteredToStored(32, 'ml', 'imperial');
+    expect(formatVolume(mlToUl(quart), 'imperial')).toBe('1 qt');
+
+    const pound = enteredToStored(16, 'g', 'imperial');
+    expect(formatMass(gramsToUg(pound), 'imperial')).toBe('1 lb');
+
+    const cup = enteredToStored(8, 'ml', 'imperial');
+    expect(formatVolume(mlToUl(cup), 'imperial')).toBe('8 fl oz');
+  });
+});
+
+/**
+ * The slack on the unit thresholds.
+ *
+ * It exists so a stored value that lost a fraction on the way in still reads
+ * as the thing that was typed. It must not do anything else.
+ */
+describe('threshold slack', () => {
+  it('does not promote a value that is genuinely short', () => {
+    // Half a fluid ounce below a quart is not a quart by any reading.
+    expect(formatVolume(fluidOuncesToUl(31.5), 'imperial')).toBe('31.5 fl oz');
+    expect(formatVolume(mlToUl(900), 'metric')).toBe('900 mL');
+    expect(formatMass(gramsToUg(900), 'metric')).toBe('900 g');
+  });
+
+  it('only reaches as far as one stored unit of rounding', () => {
+    // 946 mL is the stored quart. A millilitre further out is not, and stays
+    // in fluid ounces rather than being promoted to a unit nobody typed.
+    //
+    // It still *renders* as "32 fl oz", because the display rounds to a
+    // tenth — which is a separate question from which unit was chosen, and
+    // the point here is that the unit did not change.
+    expect(formatVolume(mlToUl(946), 'imperial')).toBe('1 qt');
+    expect(formatVolume(mlToUl(945), 'imperial')).toBe('32 fl oz');
   });
 });

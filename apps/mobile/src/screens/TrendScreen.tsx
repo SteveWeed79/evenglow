@@ -6,7 +6,11 @@ import {
   formatMass,
   formatMoney,
   formatRate,
+  formatVolume,
+  gramsToUg,
+  mlToUl,
   type Product,
+  type UnitSystem,
 } from '@steading/contracts';
 import { feedCostPerEgg, feedSpend, type PerEgg } from '@steading/core/read/cost';
 import { listGroups } from '@steading/core/read/groups';
@@ -63,7 +67,22 @@ import { FONTS, TYPE } from '../theme/tokens';
 const GRAIN_LABELS: Record<Grain, string> = { week: '12 weeks', month: '12 months' };
 
 const PRODUCT_LABELS: Record<Product, string> = { eggs: 'Eggs', milk: 'Milk', fibre: 'Fibre' };
-const PRODUCT_UNITS: Record<Product, string> = { eggs: 'eggs', milk: 'ml', fibre: 'g' };
+/**
+ * Eggs are counted, so the unit is a word on the axis. Milk and fibre are
+ * measured, so they take a formatter that scales — the same reason the feed
+ * chart below has one.
+ */
+const PRODUCT_UNITS: Record<Product, string> = { eggs: 'eggs', milk: '', fibre: '' };
+
+function productFormat(
+  product: Product,
+  units: UnitSystem,
+): ((amount: number) => string) | undefined {
+  if (product === 'eggs') return undefined;
+  return product === 'milk'
+    ? (ml) => formatVolume(mlToUl(ml), units)
+    : (grams) => formatMass(gramsToUg(grams), units);
+}
 
 export function TrendScreen({ route }: ScreenProps<'Trend'>): React.ReactElement {
   const { groupId } = route.params;
@@ -139,6 +158,10 @@ export function TrendScreen({ route }: ScreenProps<'Trend'>): React.ReactElement
             title={PRODUCT_LABELS[product]}
             unit={PRODUCT_UNITS[product]}
             points={points}
+            {...(() => {
+              const format = productFormat(product, units);
+              return format === undefined ? {} : { format };
+            })()}
             testID={`trend-${product}`}
           />
         ))
@@ -151,7 +174,7 @@ export function TrendScreen({ route }: ScreenProps<'Trend'>): React.ReactElement
           points={data.feed}
           // Stored in grams; `formatMass` speaks micrograms, and the farm
           // reads whichever system it set.
-          format={(grams) => formatMass(grams * 1_000_000, units)}
+          format={(grams) => formatMass(gramsToUg(grams), units)}
           testID="trend-feed"
         />
       )}

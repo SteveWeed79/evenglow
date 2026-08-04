@@ -5,8 +5,11 @@ import {
   eggLogCreateSchema,
   feedLogCreateSchema,
   formatMass,
+  formatVolume,
+  gramsToUg,
   harvestCreateSchema,
   hourReadingCreateSchema,
+  mlToUl,
   mortalityCreateSchema,
   predatorCreateSchema,
   productionLogCreateSchema,
@@ -199,7 +202,7 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
         entity: 'feedLog',
         at: v.occurredAt,
         title: `Fed ${named(groupName, v.flockId, 'a group')}`,
-        detail: `${formatMass(v.amountGrams * 1_000_000, system)}${
+        detail: `${formatMass(gramsToUg(v.amountGrams), system)}${
           v.feedType === undefined ? '' : ` · ${v.feedType}`
         }`,
         tally: { key: 'feeds', amount: 1, unit: 'feed' },
@@ -314,7 +317,7 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
     ])
   ).flat();
 
-  return intoDays(all);
+  return intoDays(all, system);
 }
 
 /**
@@ -323,7 +326,10 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
  * Exported for the tests, which are about the summarising rather than about
  * the ten readers above.
  */
-export function intoDays(events: readonly HistoryEvent[]): HistoryDay[] {
+export function intoDays(
+  events: readonly HistoryEvent[],
+  system: UnitSystem = 'metric',
+): HistoryDay[] {
   const byDay = new Map<number, HistoryEvent[]>();
 
   for (const event of events) {
@@ -340,7 +346,7 @@ export function intoDays(events: readonly HistoryEvent[]): HistoryDay[] {
       // list that reorders itself between renders looks, on a phone, exactly
       // like something changed.
       const ordered = [...list].sort((a, b) => b.at - a.at || (a.id < b.id ? -1 : 1));
-      return { day, events: ordered, summary: summarise(ordered) };
+      return { day, events: ordered, summary: summarise(ordered, system) };
     });
 }
 
@@ -350,7 +356,7 @@ export function intoDays(events: readonly HistoryEvent[]): HistoryDay[] {
  * Insertion-ordered by the tally key's first appearance, so the same day
  * always reads the same way rather than reordering as records arrive.
  */
-function summarise(events: readonly HistoryEvent[]): string {
+function summarise(events: readonly HistoryEvent[], system: UnitSystem): string {
   const totals = new Map<string, { amount: number; unit: string }>();
 
   for (const event of events) {
@@ -363,10 +369,13 @@ function summarise(events: readonly HistoryEvent[]): string {
     }
   }
 
-  const parts = [...totals.values()].map(({ amount, unit }) =>
-    // Units that are already a unit ("ml", "g") do not take a plural; words do.
-    unit === 'ml' || unit === 'g' ? `${amount} ${unit}` : plural(amount, unit),
-  );
+  const parts = [...totals.values()].map(({ amount, unit }) => {
+    // A stored measure is scaled into the farm's own system; a counted thing
+    // ("egg", "bale") is a word and takes a plural instead.
+    if (unit === 'ml') return formatVolume(mlToUl(amount), system);
+    if (unit === 'g') return formatMass(gramsToUg(amount), system);
+    return plural(amount, unit);
+  });
 
   // A day whose events all decline to tally — a weighing, a sighting — still
   // happened, and saying how many beats saying nothing.

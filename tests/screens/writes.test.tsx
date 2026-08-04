@@ -197,15 +197,17 @@ describe('what comes off them', () => {
     expect(weight?.sampled).toBe(true);
   });
 
+  /** A quart and a cup, on the default imperial farm, stored as millilitres. */
   it('logs milk through the tally', async () => {
     await aGroup({ species: 'goat', purposes: ['milk'] });
     const screen = await mount(<ProduceScreen {...routeProps({ groupId: GROUP })} />);
 
-    await screen.press('tally-plus-500');
-    await screen.press('tally-plus-100');
+    await screen.press('tally-plus-32');
+    await screen.press('tally-plus-8');
     await screen.press('tally-commit');
 
-    expect((await produceToday()).get(`${GROUP}:milk`)).toMatchObject({ amount: 600, unit: 'ml' });
+    // 40 fl oz. Rounded to whole millilitres because the schema takes an int.
+    expect((await produceToday()).get(`${GROUP}:milk`)).toMatchObject({ amount: 1183, unit: 'ml' });
   });
 
   it('logs a feed in scoops and stores grams', async () => {
