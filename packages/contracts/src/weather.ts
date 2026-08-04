@@ -50,6 +50,22 @@ export const forecastDaySchema = z
     rainChance: z.number().int().min(0).max(100),
     /** Micrometres of rain expected, so it charts in the same unit as depth. */
     rainUm: z.number().int().nonnegative(),
+    /**
+     * Relative humidity, per cent. **Optional, and the optionality is load-
+     * bearing.**
+     *
+     * Heat stress in a ruminant is a function of temperature AND humidity —
+     * 32°C at 30% is a warm day and 32°C at 80% is dangerous — so the THI
+     * warning cannot be computed without it. But it arrived after the cache
+     * table did, and a required field would make every forecast written by an
+     * older build fail to parse: a farm updating the app would lose the
+     * forecast it had until the next fetch, for a field only one warning uses.
+     *
+     * Absent means the THI warning stays silent. Silence is the right failure
+     * for a warning: inventing a humidity would produce a confident number
+     * nobody measured.
+     */
+    humidity: z.number().int().min(0).max(100).optional(),
   })
   .strict();
 

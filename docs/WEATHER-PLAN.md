@@ -20,10 +20,26 @@ an honest "outside the forecast area" and an unaffected rest-of-app. It also
 publishes about fourteen half-day periods and no more, so seven days is the
 ceiling at any price, and it carries a chance of rain and no quantity.
 
-**What has not been built:** the warnings in §3 — freezing water, poultry heat
-stress, ruminant THI, a cold snap on an imminent birth, a wet day blocking
-shearing, and frost. Those are the half of this document that makes the forecast
-Steading's rather than the phone's, and they are next.
+**The warnings in §3 are built — five of the six.** Frost against uncovered
+beds, water freezing, poultry heat, ruminant THI and camelid heat index, and a
+cold night on an imminent birth. Each threshold and its source is in
+`packages/contracts/src/warnings.ts`; the strip is silent on an ordinary day,
+and a stale forecast raises nothing at all.
+
+Two corrections this document did not anticipate:
+
+- **Camelids needed their own rule.** §3 listed "ruminant heat stress (THI)" as
+  one warning. Alpacas and llamas are ruminants in `SPECIES_TRAITS` and are far
+  worse at shedding heat than sheep — they are wearing a fleece — so putting
+  them on the sheep threshold would have stayed quiet through the conditions
+  that actually kill them. They get the field rule their keepers use: degrees
+  Fahrenheit plus relative humidity, watch at 120 and emergency at 150.
+- **The sixth warning is blocked, not skipped.** *A wet day blocking shearing*
+  needs the app to know a clip is **planned**, and it does not: there is a
+  `shearing` record of one that happened and no `shearing` due kind. Warning
+  every fibre keeper about every wet day is noise. `library/types.ts` already
+  carries `shearMonths` per breed, so the due kind is buildable — it is just a
+  different piece of work, and the warning is one line once it exists.
 
 ---
 

@@ -205,11 +205,49 @@ tallies and a pushed screen behind it. No fifth tab, no UX-SPEC amendment.
 about seven days and no more, and gives a chance of rain rather than an amount.
 The screen says the first of those honestly rather than showing an empty box.
 
+6. **The warnings** — five of the six. This is the half that makes the forecast
+   Steading's rather than the phone's: a seven-day table is a thing every phone
+   already has, better, and what this app can say is what the weather means for
+   the animals and beds *this* farm has.
+
+   | | fires when | why that number |
+   | --- | --- | --- |
+   | **frost** | low ≤ 2°C **and** something is in an uncovered bed | NWS advises at 33–36°F: on a still clear night the ground reaches freezing while the thermometer does not |
+   | **water freezing** | low ≤ 0°C **and** there is stock | no judgement in this one |
+   | **poultry heat** | high ≥ 29°C, escalating at 35°C | birds have no sweat glands; 29°C is where intake drops and 35°C is where heavy breeds die |
+   | **ruminant heat** | THI ≥ 72 cattle, ≥ 79 sheep and goats | temperature alone lies — 32°C at 30% is a warm day and at 80% it is dangerous |
+   | **camelid heat** | °F + humidity ≥ 120, emergency at 150 | the rule alpaca keepers use; running them through THI puts them alongside sheep, which is the mistake that kills alpacas |
+   | **cold birth** | a `birth` due within 7 days **and** low ≤ 0°C | a newborn is wet and cannot keep itself warm |
+
+   **Silent on an ordinary day, and that is the design.** A strip that appears
+   every morning is one nobody reads by the second week — and then it is not
+   read on the morning it matters.
+
+   **A stale forecast raises no warning.** Handled in exactly one place, which
+   is why these are not `Due` rows: the due engine's second property is that it
+   recomputes with the radio off, and a warning cannot. Making these dues would
+   push staleness into every consumer of the engine.
+
+   **Humidity** was added to the forecast as an **optional** field. THI needs
+   it; it arrived after the cache table did, so requiring it would make every
+   forecast written by an older build fail to parse. Absent means the THI
+   warning stays silent, which is the right failure — inventing a humidity
+   produces a confident number nobody measured.
+
 **Still to do.**
 
-6. **The warnings** — water freezing, poultry heat stress, ruminant THI, a cold
-   snap on an imminent birth, a wet day blocking shearing, **and frost**. This
-   is the half that makes the forecast Steading's rather than the phone's.
+7. **A wet day blocking shearing** — the sixth warning, and it is **blocked on
+   something else**. The app has no idea a clip is planned: there is no
+   `shearing` due kind, only the `shearing` record of one that happened.
+   Warning every fibre keeper about every wet day is noise, so it is not built.
+
+   The data for the missing half exists — `library/types.ts` carries
+   `shearMonths` per breed and the last `shearing` record gives the interval a
+   starting point — so this is a due kind first, then a one-line warning
+   hanging off it.
+
+8. **Cold floors for the 55 annual varieties**, which buy a *better* frost row
+   (*"your tomatoes will not survive this"*) rather than the only one.
 
 **Frost was on this list as not-buildable, and that was wrong.** The objection
 — only 15 of 70 library varieties carry a cold floor, all perennials — is only

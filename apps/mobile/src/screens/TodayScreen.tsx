@@ -17,6 +17,7 @@ import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { Tally } from '../components/Tally';
 import { WeatherRow } from '../components/WeatherRow';
+import { WeatherWarnings } from '../components/WeatherWarnings';
 import { WithdrawalBanner } from '../components/WithdrawalBanner';
 import { useDues } from '../hooks/useDues';
 import { useGroups } from '../hooks/useGroups';
@@ -174,9 +175,11 @@ export function TodayScreen(): React.ReactElement {
 
   return (
     <Screen title="Today">
-      {/* Above the tallies, and it is one line — see WeatherRow. Weather read
-          after the eggs are logged is weather read after the decision it was
-          meant to inform. */}
+      {/* What the weather MEANS comes before what it is, and both come before
+          the tallies. Warnings are silent on an ordinary day, so this costs
+          nothing on the mornings it has nothing to say — see WeatherWarnings.
+          The row below it is one line, so neither displaces a tally. */}
+      <WeatherWarnings />
       <WeatherRow />
 
       {groups.length === 0 ? (

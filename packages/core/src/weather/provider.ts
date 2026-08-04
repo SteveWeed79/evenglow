@@ -113,6 +113,10 @@ const forecastResponseSchema = z.object({
         probabilityOfPrecipitation: z
           .object({ value: z.number().nullable() })
           .optional(),
+        // Added to the forecast periods by NWS after the rest of this shape
+        // was written, and optional here because a grid that omits it must
+        // still forecast. See `humidity` in the contract for what it costs.
+        relativeHumidity: z.object({ value: z.number().nullable() }).optional(),
         shortForecast: z.string(),
       }),
     ),
@@ -315,7 +319,7 @@ export async function fetchForecast(grid: Grid, now: number = Date.now()): Promi
 
   const byDay = new Map<
     number,
-    { high?: number; low?: number; condition?: Condition; chance: number }
+    { high?: number; low?: number; condition?: Condition; chance: number; humidity?: number }
   >();
 
   for (const period of periods) {
@@ -328,6 +332,16 @@ export async function fetchForecast(grid: Grid, now: number = Date.now()): Promi
       // The daytime sky is what a day is called. "Cloudy" from a night period
       // describes hours nobody was working in.
       entry.condition = conditionOf(period.shortForecast);
+      /**
+       * The DAYTIME humidity, and only that.
+       *
+       * Heat stress is a daytime problem, and overnight humidity is
+       * mechanically higher — air cools towards its dewpoint — so folding both
+       * halves together, or letting the night win, would raise a THI warning
+       * about hours when nothing was hot. Taken with the high it pairs with.
+       */
+      const said = period.relativeHumidity?.value;
+      if (said !== null && said !== undefined) entry.humidity = Math.round(said);
     } else {
       entry.low = deciC;
       // A night with no daytime beside it still needs a name — the evening
@@ -355,6 +369,7 @@ export async function fetchForecast(grid: Grid, now: number = Date.now()): Promi
       highDeciC: entry.high ?? entry.low ?? 0,
       lowDeciC: entry.low ?? entry.high ?? 0,
       rainChance: Math.round(entry.chance),
+      ...(entry.humidity === undefined ? {} : { humidity: entry.humidity }),
       /**
        * Always zero, and it is honest rather than missing.
        *
