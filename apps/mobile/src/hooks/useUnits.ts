@@ -1,5 +1,5 @@
-import type { UnitSystem } from '@steading/contracts';
-import { DEFAULT_UNIT_SYSTEM } from '@steading/contracts';
+import type { Currency, UnitSystem } from '@steading/contracts';
+import { DEFAULT_CURRENCY, DEFAULT_UNIT_SYSTEM } from '@steading/contracts';
 import { readSiteOrBlank } from '@steading/core/read/growing';
 import { useLive } from './useLive';
 
@@ -30,4 +30,20 @@ import { useLive } from './useLive';
 export function useUnits(): UnitSystem {
   const site = useLive(readSiteOrBlank, 'your units');
   return site?.units ?? DEFAULT_UNIT_SYSTEM;
+}
+
+/**
+ * What the farm keeps its books in.
+ *
+ * Same shape and same reasoning as {@link useUnits}: a farm-wide reading
+ * preference off the site record, with a default rather than a null, because
+ * every screen that shows a price can show one before a disk read lands.
+ *
+ * A currency belongs to the farm and never to a record. A sack priced in
+ * dollars and one in pounds cannot be added, and a shelf total across them
+ * would be a lie told confidently.
+ */
+export function useCurrency(): Currency {
+  const site = useLive(readSiteOrBlank, 'your currency');
+  return site?.currency ?? DEFAULT_CURRENCY;
 }

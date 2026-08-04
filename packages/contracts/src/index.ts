@@ -15,6 +15,7 @@ export * from './entities';
 export * from './ulid';
 export * from './withdrawal';
 export * from './units';
+export * from './money';
 export * from './growing/frost';
 export * from './growing/zone';
 export * from './growing/schedule';

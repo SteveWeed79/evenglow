@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { minorSchema } from '../money';
 import { careIntervalsSchema } from './care';
 
 /**
@@ -396,6 +397,21 @@ export const feedLogCreateSchema = z
     /** Grams. Integer units avoid float drift accumulating over a season. */
     amountGrams: z.number().int().positive(),
     feedType: z.string().max(80).optional(),
+    /**
+     * What this feeding cost, stamped from the sack's rate at the moment it
+     * was logged.
+     *
+     * **Recorded here rather than looked up later**, which is the whole reason
+     * an append-only log is append-only: feed prices move across a season, and
+     * a chart of what a flock cost to keep in April must use April's price. A
+     * read that multiplied last spring's tonnage by today's sack would show a
+     * farm a cost it never paid and call it history.
+     *
+     * Absent whenever the sack's price is unknown or the amount is a guess —
+     * see `drawnFrom` on the feed screen. Silence is the honest answer; a zero
+     * would be counted as free.
+     */
+    costCents: minorSchema.max(100_000_000).optional(),
   })
   .strict();
 

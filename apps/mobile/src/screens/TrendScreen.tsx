@@ -1,6 +1,14 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
-import { dailyProductsOf, formatMass, type Product } from '@steading/contracts';
+import {
+  type Currency,
+  dailyProductsOf,
+  formatMass,
+  formatMoney,
+  formatRate,
+  type Product,
+} from '@steading/contracts';
+import { feedCostPerEgg, feedSpend, type PerEgg } from '@steading/core/read/cost';
 import { listGroups } from '@steading/core/read/groups';
 import {
   direction,
@@ -16,7 +24,7 @@ import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { Trend } from '../components/Trend';
 import { useLive } from '../hooks/useLive';
-import { useUnits } from '../hooks/useUnits';
+import { useCurrency, useUnits } from '../hooks/useUnits';
 import type { ScreenProps } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, TYPE } from '../theme/tokens';
@@ -61,6 +69,7 @@ export function TrendScreen({ route }: ScreenProps<'Trend'>): React.ReactElement
   const { groupId } = route.params;
   const [grain, setGrain] = useState<Grain>('week');
   const units = useUnits();
+  const currency = useCurrency();
 
   const groups = useLive(listGroups);
   const group = groups?.find((one) => one.id === groupId) ?? null;
@@ -91,7 +100,15 @@ export function TrendScreen({ route }: ScreenProps<'Trend'>): React.ReactElement
       })),
     );
 
-    return { series, feed: await feedTrend(groupId, grain, 12) };
+    const [feed, spend, perEgg] = await Promise.all([
+      feedTrend(groupId, grain, 12),
+      feedSpend(groupId, grain, 12),
+      // The window the rate is over matches the chart above it, so the two
+      // are answers to the same question rather than to two different ones.
+      feedCostPerEgg(groupId, grain === 'week' ? 84 : 365),
+    ]);
+
+    return { series, feed, spend, perEgg };
   }, [products, groupId, grain]);
 
   const data = useLive(read, 'the numbers');
@@ -138,7 +155,93 @@ export function TrendScreen({ route }: ScreenProps<'Trend'>): React.ReactElement
           testID="trend-feed"
         />
       )}
+
+      {data === null || data.spend.every((point) => point.amount === 0) ? null : (
+        <Chart
+          title="What the feed cost"
+          unit=""
+          points={data.spend}
+          format={(minor) => formatMoney(minor, currency)}
+          testID="trend-spend"
+        />
+      )}
+
+      {data === null ? null : <PerEggPanel per={data.perEgg} grain={grain} currency={currency} />}
     </Screen>
+  );
+}
+
+/**
+ * Cost per egg — the number this whole feature exists for.
+ *
+ * A smallholding cannot get it out of a spreadsheet without an afternoon's
+ * work, so everybody has an opinion about it and nobody has evidence.
+ *
+ * **It says "in feed", always.** Feed is between sixty and seventy-five per
+ * cent of what a laying flock costs, which is what makes a feed-only figure
+ * worth having and also what makes an unqualified one false. A screen that
+ * said "3.4¢ an egg" would have quietly told a farm something untrue.
+ *
+ * **It refuses rather than guesses.** A window where only half the feedings
+ * carried a price divides a half-sized cost by a full-sized egg count and
+ * reports half the real figure — which is worse than saying nothing, because
+ * it looks like an answer. Under four fifths priced, this says what is missing
+ * and how to fix it instead.
+ */
+function PerEggPanel({
+  per,
+  grain,
+  currency,
+}: {
+  per: PerEgg;
+  grain: Grain;
+  currency: Currency;
+}): React.ReactElement | null {
+  const { colors } = useTheme();
+
+  // Nothing bought and nothing fed is a farm that has not started, not a farm
+  // with a problem. Silence rather than an explanation nobody asked for.
+  if (per.feedings === 0) return null;
+
+  const window = grain === 'week' ? 'twelve weeks' : 'year';
+  const priced = per.feedings === 0 ? 0 : per.costed / per.feedings;
+
+  if (per.costed === 0) {
+    return (
+      <Panel label="Cost per egg">
+        <Body>
+          None of the feed logged in the last {window} has a price on it. Put what a sack cost on
+          the shelf entry and this fills in by itself — no extra thing to remember at feeding
+          time.
+        </Body>
+      </Panel>
+    );
+  }
+
+  if (priced < 0.8 || per.minorPerEgg === null) {
+    return (
+      <Panel label="Cost per egg">
+        <Body>
+          {per.costed} of the last {per.feedings} feeds have a price on them
+          {per.eggs === 0 ? ', and no eggs are logged for this window' : ''}. A figure built from
+          part of the feed would read low and look right, so it is not shown until most of it is
+          priced.
+        </Body>
+      </Panel>
+    );
+  }
+
+  return (
+    <Panel label="Cost per egg">
+      <Text style={[styles.figure, { color: colors.ink }]} testID="cost-per-egg">
+        {formatRate(per.minorPerEgg, currency)}
+      </Text>
+      <Body>
+        In feed, over the last {window} — {formatMoney(per.spent, currency)} across {per.eggs}{' '}
+        eggs. Feed is most of what a flock costs but not all of it, so the true figure is a little
+        higher.
+      </Body>
+    </Panel>
   );
 }
 
@@ -207,4 +310,6 @@ function say(
 
 const styles = StyleSheet.create({
   said: { fontFamily: FONTS.body, fontSize: TYPE.body, lineHeight: TYPE.body * 1.35 },
+  // Large, because it is the one figure on this screen somebody came for.
+  figure: { fontFamily: FONTS.data, fontSize: TYPE.hero, letterSpacing: 0.5 },
 });

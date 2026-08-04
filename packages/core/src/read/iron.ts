@@ -186,6 +186,8 @@ export interface StockItem {
   reorderBelow?: number;
   /** What this sack's scoop holds, in grams, when the farm has said. */
   scoopGrams?: number;
+  /** What one `unit` costs, in minor units. Absent means never told. */
+  costCents?: number;
   equipmentId?: string;
   supplier?: string;
   note?: string;

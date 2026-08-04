@@ -225,12 +225,21 @@ export function Stepper({
   min = 0,
   suffix,
   negative = false,
+  testID = 'step',
 }: {
   value: number;
   onChange: (next: number) => void;
   steps?: readonly number[];
   min?: number;
   suffix?: string;
+  /**
+   * Prefix for this stepper's chips, so two on one form can be told apart.
+   *
+   * The shelf form has a quantity and a reorder threshold, both stepped, and
+   * with one shared prefix a test could only ever reach whichever rendered
+   * last — which is the threshold, not the one anybody cares about.
+   */
+  testID?: string;
   /**
    * Whether a step reads as taking away.
    *
@@ -263,7 +272,7 @@ export function Stepper({
           key={step}
           label={`${negative ? '−' : '+'}${step}`}
           selected={false}
-          testID={`step-${negative ? 'minus' : 'plus'}-${step}`}
+          testID={`${testID}-${negative ? 'minus' : 'plus'}-${step}`}
           onPress={() => bump(step)}
         />
       ))}
@@ -271,7 +280,7 @@ export function Stepper({
         label={negative ? '+' : '−'}
         selected={false}
         disabled={value <= min}
-        testID="step-correct"
+        testID={`${testID}-correct`}
         onPress={() => bump(-1)}
       />
       <Text style={[styles.stepperValue, { color: colors.ink }]}>

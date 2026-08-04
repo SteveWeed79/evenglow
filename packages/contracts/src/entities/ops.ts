@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { minorSchema } from '../money';
 import { speciesSchema } from './livestock';
 
 // ── task (mutable) ───────────────────────────────────────────────────────────
@@ -95,6 +96,20 @@ const inventoryShape = {
    * left alone. Nothing is lost by never answering.
    */
   scoopGrams: z.number().int().positive().max(100_000).optional(),
+  /**
+   * What ONE `unit` costs, in the farm's minor units.
+   *
+   * Per unit rather than per purchase, because `quantity` draws down as the
+   * sack empties and a total paid would have to be re-divided every time to
+   * stay meaningful. A rate is stable: half a bale still costs half a bale's
+   * worth. The form asks what the farm paid and does the division, so nobody
+   * works out 22 ÷ 50 standing in a feed store.
+   *
+   * Absent means never told, and everything costed stays silent rather than
+   * counting it as free — a cost-per-egg with half the feed missing is worse
+   * than no figure at all, because it looks like an answer.
+   */
+  costCents: minorSchema.max(100_000_000).optional(),
   /** Links a part to the machine it services, so W5 can warn before the window. */
   equipmentId: z.string().length(26).optional(),
   supplier: z.string().max(120).optional(),

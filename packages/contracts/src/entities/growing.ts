@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { currencySchema } from '../money';
 import { frostDatesSchema } from '../growing/frost';
 import { zoneSchema } from '../growing/zone';
 import { deciCelsiusSchema, microgramsSchema, micrometresSchema, unitSystemSchema } from '../units';
@@ -86,6 +87,15 @@ const siteShape = {
   /** What the farm called the place, so the screen can say it back. */
   placeName: z.string().max(120).optional(),
   units: unitSystemSchema.optional(),
+  /**
+   * What the farm keeps its books in.
+   *
+   * A property of the farm and never of a record: a sack priced in dollars and
+   * one in pounds cannot be added, and a total across them would be a lie told
+   * confidently. Absent means the default, which is how every existing farm
+   * keeps working without answering.
+   */
+  currency: currencySchema.optional(),
   /**
    * Years before the same plant family may return to a bed. Three is the
    * common smallholding figure; a farm with four beds physically cannot manage

@@ -231,6 +231,31 @@ export function FeedScreen({ route }: ScreenProps<'Feed'>): React.ReactElement {
       await save(async () => {
         const grams = Math.round(count * gramsPer());
 
+        /**
+         * How much of the sack this is, in the sack's own units — which is
+         * both what comes off the shelf and what the cost is a rate of.
+         *
+         * Null when the amount is a guess, and the cost is null with it. See
+         * `drawnFrom`: an unpriceable feeding must contribute nothing rather
+         * than contribute zero, because zero is counted as free.
+         */
+        const taken =
+          drawnFrom === null ? null : grams / GRAMS[drawnFrom.unit === 'kg' ? 'kg' : 'lb'];
+
+        /**
+         * Stamped at log time from the sack's rate, not looked up later.
+         *
+         * That is the whole reason an append-only log is append-only: feed
+         * prices move across a season, and a chart of what a flock cost to
+         * keep in April must use April's price. A read that multiplied last
+         * spring's tonnage by today's sack would show a farm a cost it never
+         * paid and call it history.
+         */
+        const costCents =
+          taken === null || drawnFrom?.costCents === undefined
+            ? null
+            : Math.round(taken * drawnFrom.costCents);
+
         await log({
           entity: 'feedLog',
           op: 'create',
@@ -239,10 +264,11 @@ export function FeedScreen({ route }: ScreenProps<'Feed'>): React.ReactElement {
             flockId: groupId,
             amountGrams: grams,
             ...(feedType.trim() === '' ? {} : { feedType: feedType.trim() }),
+            ...(costCents === null ? {} : { costCents }),
           },
         });
 
-        if (drawnFrom === null) return;
+        if (drawnFrom === null || taken === null) return;
 
         /**
          * The record is written first and the shelf second, on purpose.
@@ -251,7 +277,6 @@ export function FeedScreen({ route }: ScreenProps<'Feed'>): React.ReactElement {
          * derived from it. If only one of the two survives — a crash between
          * them, a rejected mutation — the one worth keeping is the feed.
          */
-        const taken = grams / GRAMS[drawnFrom.unit === 'kg' ? 'kg' : 'lb'];
         // Two decimals, and clamped: `quantity` is non-negative in the
         // contract, and a sack fed past empty says empty rather than refusing
         // the write. Rounding keeps 50 − 3 at exactly 47 instead of 46.999…
