@@ -1,6 +1,13 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
-import { formatMass, newId, ouncesToUg, poundsToUg } from '@steading/contracts';
+import {
+  formatMass,
+  gramsToUg,
+  newId,
+  ouncesToUg,
+  poundsToUg,
+  type UnitSystem,
+} from '@steading/contracts';
 import { listAnimals } from '@steading/core/read/animals';
 import { latestWeightBySubject, listWeights } from '@steading/core/read/breeding';
 import { listGroups } from '@steading/core/read/groups';
@@ -20,6 +27,7 @@ import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
 import { useNav } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
+import { useUnits } from '../hooks/useUnits';
 import type { ScreenProps } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, TYPE } from '../theme/tokens';
@@ -41,15 +49,40 @@ import { FONTS, TYPE } from '../theme/tokens';
  * metric later reads the same records back exactly rather than approximately.
  */
 
-type Unit = 'lb' | 'oz';
+type Unit = 'lb' | 'oz' | 'kg' | 'g';
 
-const UNIT_LABELS: Record<Unit, string> = { lb: 'Pounds', oz: 'Ounces' };
+const UNIT_LABELS: Record<Unit, string> = {
+  lb: 'Pounds',
+  oz: 'Ounces',
+  kg: 'Kilos',
+  g: 'Grams',
+};
+
+/**
+ * The two a farm is offered, and which of them it starts on.
+ *
+ * A metric farm being asked for pounds is the setting failing out loud. The
+ * heavier unit leads because it is the answer nine weighings in ten — ounces
+ * and grams are for chicks and for fibre off one animal.
+ */
+const UNIT_CHOICES: Record<UnitSystem, readonly [Unit, Unit]> = {
+  imperial: ['lb', 'oz'],
+  metric: ['kg', 'g'],
+};
+
+const TO_UG: Record<Unit, (value: number) => number> = {
+  lb: poundsToUg,
+  oz: ouncesToUg,
+  kg: (value) => gramsToUg(value * 1000),
+  g: gramsToUg,
+};
 
 export function WeighScreen({ route }: ScreenProps<'Weigh'>): React.ReactElement {
   const { groupId } = route.params;
   const nav = useNav();
   const log = useLog();
   const { colors } = useTheme();
+  const units = useUnits();
 
   const groups = useLive(listGroups);
   const animals = useLive(listAnimals);
@@ -57,17 +90,27 @@ export function WeighScreen({ route }: ScreenProps<'Weigh'>): React.ReactElement
   const group = groups?.find((g) => g.id === groupId) ?? null;
 
   const [amount, setAmount] = useState('');
-  const [unit, setUnit] = useState<Unit>('lb');
+  /**
+   * `null` is "hasn't chosen", which is what lets the picker follow the farm's
+   * setting without overriding a deliberate tap. The site read lands a frame
+   * after mount, so a stored default would be imperial on a metric farm.
+   */
+  const [chosen, setChosen] = useState<Unit | null>(null);
   const [animalId, setAnimalId] = useState<string | null>(null);
   const [sampled, setSampled] = useState(true);
   const [note, setNote] = useState('');
 
   const { saving, failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
 
+  const choices = UNIT_CHOICES[units];
+  // A tap made before the site read landed could name a unit the farm's system
+  // does not offer. Falls back to the heavier of the two rather than showing a
+  // picker with nothing selected.
+  const unit: Unit = chosen !== null && choices.includes(chosen) ? chosen : choices[0];
+
   const value = Number(amount);
-  const massUg = Number.isFinite(value) && value > 0
-    ? Math.round(unit === 'lb' ? poundsToUg(value) : ouncesToUg(value))
-    : null;
+  const massUg =
+    Number.isFinite(value) && value > 0 ? Math.round(TO_UG[unit](value)) : null;
 
   const commit = useCallback(() => {
     if (massUg === null) return;
@@ -128,7 +171,7 @@ export function WeighScreen({ route }: ScreenProps<'Weigh'>): React.ReactElement
       </Field>
 
       <Field label="In">
-        <Choice options={['lb', 'oz'] as const} value={unit} onChange={setUnit} labels={UNIT_LABELS} />
+        <Choice options={choices} value={unit} onChange={setChosen} labels={UNIT_LABELS} />
       </Field>
 
       {animalId === null ? (
@@ -142,12 +185,12 @@ export function WeighScreen({ route }: ScreenProps<'Weigh'>): React.ReactElement
       {previous ? (
         <Panel label="Last time">
           <Body>
-            {formatMass(previous.massUg, 'imperial')} on{' '}
+            {formatMass(previous.massUg, units)} on{' '}
             {new Date(previous.occurredAt).toLocaleDateString(undefined, {
               day: 'numeric',
               month: 'long',
             })}
-            {massUg === null ? '.' : ` — ${describeChange(previous.massUg, massUg)}`}
+            {massUg === null ? '.' : ` — ${describeChange(previous.massUg, massUg, units)}`}
           </Body>
         </Panel>
       ) : null}
@@ -159,7 +202,7 @@ export function WeighScreen({ route }: ScreenProps<'Weigh'>): React.ReactElement
       <Failure message={failure} />
 
       <Primary
-        label={massUg === null ? 'Weigh' : `Log ${formatMass(massUg, 'imperial')}`}
+        label={massUg === null ? 'Weigh' : `Log ${formatMass(massUg, units)}`}
         disabled={saving || massUg === null}
         onPress={commit}
         testID="save-weight"
@@ -169,11 +212,11 @@ export function WeighScreen({ route }: ScreenProps<'Weigh'>): React.ReactElement
 }
 
 /** Up, down or level — the only part of the number anyone reads twice. */
-function describeChange(before: number, now: number): string {
+function describeChange(before: number, now: number, units: UnitSystem): string {
   const delta = now - before;
   if (delta === 0) return 'no change';
   const direction = delta > 0 ? 'up' : 'down';
-  return `${direction} ${formatMass(Math.abs(delta), 'imperial')}`;
+  return `${direction} ${formatMass(Math.abs(delta), units)}`;
 }
 
 const styles = StyleSheet.create({

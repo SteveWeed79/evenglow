@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { type HistoryDay, listHistory } from '@steading/core/read/history';
 import { Icon } from '../components/Icon';
@@ -6,6 +6,7 @@ import { Loading } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
+import { useUnits } from '../hooks/useUnits';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
 
@@ -43,20 +44,15 @@ import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
  * weeks of looking back, which covers the question people actually ask.
  */
 
-/**
- * Imperial, matching every other screen in the app that formats a mass.
- *
- * The site carries a `units` preference and nothing reads it yet — see
- * `WeighScreen`, `AnimalsScreen`, `GroupScreen`, all hard-coded the same way.
- * Wiring it is one change in one place when somebody wants it, and doing it
- * here alone would make this screen disagree with the group screen about what
- * the same weight is.
- */
-const readHistory = (): Promise<HistoryDay[]> => listHistory('imperial');
-
 const VISIBLE_DAYS = 30;
 
 export function HistoryScreen(): React.ReactElement {
+  const units = useUnits();
+  // Wrapped rather than module-level because it now closes over the farm's
+  // units — `useLive` resubscribes on an unstable read, so an inline arrow
+  // would re-read on every frame.
+  const readHistory = useCallback((): Promise<HistoryDay[]> => listHistory(units), [units]);
+
   const days = useLive(readHistory, 'what you have logged');
   const { colors } = useTheme();
 

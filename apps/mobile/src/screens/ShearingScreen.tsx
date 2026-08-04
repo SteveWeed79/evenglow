@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
-import { formatMass, newId, poundsToUg } from '@steading/contracts';
+import { formatMass, gramsToUg, newId, poundsToUg } from '@steading/contracts';
 import { listAnimals } from '@steading/core/read/animals';
 import { listGroups } from '@steading/core/read/groups';
 import {
@@ -19,6 +19,7 @@ import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
 import { useNav } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
+import { useUnits } from '../hooks/useUnits';
 import type { ScreenProps } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, TYPE } from '../theme/tokens';
@@ -40,11 +41,12 @@ import { FONTS, TYPE } from '../theme/tokens';
  * way. The screen names it rather than letting somebody guess, because a
  * skirted figure entered here once makes the whole series a lie.
  *
- * ## Pounds only
+ * ## One unit, whichever the farm reads in
  *
- * The weigh screen offers ounces because a chick is weighed in them. A fleece
- * is not, and the second unit would be a choice nobody uses standing in a shed
- * with a scale and a bag.
+ * The weigh screen offers a second, smaller unit because a chick is weighed in
+ * ounces. A fleece is not, and the choice would be one nobody uses standing in
+ * a shed with a scale and a bag — so this takes pounds or kilos off the farm's
+ * setting and never asks.
  */
 
 export function ShearingScreen({ route }: ScreenProps<'Shearing'>): React.ReactElement {
@@ -52,6 +54,7 @@ export function ShearingScreen({ route }: ScreenProps<'Shearing'>): React.ReactE
   const nav = useNav();
   const log = useLog();
   const { colors } = useTheme();
+  const units = useUnits();
 
   const groups = useLive(listGroups);
   const animals = useLive(listAnimals);
@@ -64,9 +67,13 @@ export function ShearingScreen({ route }: ScreenProps<'Shearing'>): React.ReactE
 
   const { saving, failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
 
+  const heavy = units === 'metric' ? 'kg' : 'lb';
+
   const value = Number(amount);
   const massUg =
-    Number.isFinite(value) && value > 0 ? Math.round(poundsToUg(value)) : null;
+    Number.isFinite(value) && value > 0
+      ? Math.round(units === 'metric' ? gramsToUg(value * 1000) : poundsToUg(value))
+      : null;
 
   const commit = useCallback(() => {
     if (massUg === null) return;
@@ -97,7 +104,7 @@ export function ShearingScreen({ route }: ScreenProps<'Shearing'>): React.ReactE
   /** Per-animal average, which is the figure a fleece is actually judged on. */
   const each =
     massUg !== null && animalId === null && animalsShorn > 0
-      ? formatMass(Math.round(massUg / animalsShorn), 'imperial')
+      ? formatMass(Math.round(massUg / animalsShorn), units)
       : null;
 
   return (
@@ -126,7 +133,7 @@ export function ShearingScreen({ route }: ScreenProps<'Shearing'>): React.ReactE
           value={amount}
           onChangeText={setAmount}
           placeholder="7.5"
-          suffix="lb"
+          suffix={heavy}
           accessibilityLabel="Fleece weight in pounds"
           testID="clip-amount"
         />
@@ -159,7 +166,7 @@ export function ShearingScreen({ route }: ScreenProps<'Shearing'>): React.ReactE
       <Failure message={failure} />
 
       <Primary
-        label={massUg === null ? 'Record it' : `Log ${formatMass(massUg, 'imperial')}`}
+        label={massUg === null ? 'Record it' : `Log ${formatMass(massUg, units)}`}
         disabled={saving || massUg === null}
         onPress={commit}
         testID="save-clip"
