@@ -184,6 +184,8 @@ export interface StockItem {
   unit: string;
   quantity: number;
   reorderBelow?: number;
+  /** What this sack's scoop holds, in grams, when the farm has said. */
+  scoopGrams?: number;
   equipmentId?: string;
   supplier?: string;
   note?: string;

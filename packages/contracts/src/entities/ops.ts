@@ -77,6 +77,24 @@ const inventoryShape = {
    * A shelf that argued with them would be one they stopped filling in.
    */
   species: z.array(speciesSchema).min(1).optional(),
+  /**
+   * What this sack's scoop holds, in grams.
+   *
+   * **The scoop is the unit a farm actually uses**, twice a day, with a glove
+   * on — so removing it would be the app being pedantic about the one measure
+   * that gets used. What was wrong was not the scoop, it was that the app
+   * guessed at it: a hardcoded 907 g went into every record, and because it was
+   * a guess the shelf could not honestly be drawn down for it.
+   *
+   * Told rather than guessed, and told **per sack**, because that is where a
+   * scoop lives: the one in the chick crumb is not the one in the goat mix.
+   * Once a farm has said, a scoop is exact — the record is right and the sack
+   * comes down by the same amount as pounds would.
+   *
+   * Absent keeps the old behaviour: the log uses the estimate and the shelf is
+   * left alone. Nothing is lost by never answering.
+   */
+  scoopGrams: z.number().int().positive().max(100_000).optional(),
   /** Links a part to the machine it services, so W5 can warn before the window. */
   equipmentId: z.string().length(26).optional(),
   supplier: z.string().max(120).optional(),

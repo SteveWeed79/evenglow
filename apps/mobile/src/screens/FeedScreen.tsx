@@ -2,7 +2,15 @@ import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { lastFedByGroup, listGroups } from '@steading/core/read/groups';
 import { listInventory } from '@steading/core/read/iron';
-import { Choice, Failure, Field, TextField, useSaver } from '../components/Form';
+import {
+  Choice,
+  Failure,
+  Field,
+  NumberField,
+  Secondary,
+  TextField,
+  useSaver,
+} from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
@@ -43,11 +51,37 @@ import { FONTS, TYPE } from '../theme/tokens';
  * the front for those animals — and stays offered to the rest. See the note on
  * `fromShelf`: the shelf sorts and never argues.
  *
- * **The shelf is not decremented.** That is a deliberate hold, not an
- * oversight: how much of a 50 lb sack a scoop represents is a guess, and a
- * quantity that drifts away from what is on the floor is worse than one nobody
- * touched — the same reasoning the Loss screen gives for leaving head count
- * alone. Drawing it down wants its own decision.
+ * ## The shelf is drawn down when the sum is not a guess
+ *
+ * "When I log a feeding for 3 lb of layer pellets the shelf's numbers do not
+ * reduce. Layer pellets should be 47 after the feeding."
+ *
+ * This screen used to hold the shelf still on purpose, and the reasoning was:
+ * *how much of a 50 lb sack a scoop represents is a guess, and a quantity that
+ * drifts away from what is on the floor is worse than one nobody touched.*
+ *
+ * That is right about scoops and wrong about pounds. A sack measured in `lb`,
+ * picked off the shelf, fed in `lb` — fifty minus three is forty-seven, and
+ * there is nothing to guess. The hold was correct for the ambiguous case and
+ * was applied to the unambiguous one, which left the shelf saying 50 lb after
+ * a farm had watched three of them go into a trough.
+ *
+ * So it draws down **only where both sides are a weight**: the item is counted
+ * in lb or kg and the feed was measured in lb or kg. `pick` already treats
+ * those as the same question — it copies the sack's unit into the measure — so
+ * this is the condition that was already being relied on, now acted on.
+ *
+ * **Scoops still change nothing**, and the screen says so rather than leaving
+ * somebody to notice. A scoop is a real unit on a real farm and an imprecise
+ * one everywhere else; the record keeps its 907 g approximation because that
+ * is what was fed, and the shelf keeps the number the farm can check against a
+ * bag on the floor.
+ *
+ * **Last write wins**, as it does for every mutable field here. Two people
+ * feeding from the same sack on two phones will both compute from fifty and
+ * both write forty-seven. The envelope carries values rather than deltas, and
+ * fixing that properly is a contract change rather than a screen one — the
+ * shelf's own steppers are how a farm reconciles in the meantime.
  */
 
 type Measure = 'scoop' | 'lb' | 'kg';
@@ -123,24 +157,115 @@ export function FeedScreen({ route }: ScreenProps<'Feed'>): React.ReactElement {
     [shelf],
   );
 
+  /**
+   * The sack this feed comes out of, when the sum is not a guess.
+   *
+   * Null unless the name matches something on the shelf AND both sides are a
+   * weight. Two sacks of the same feed is an ordinary thing to own, so this
+   * takes the one with the least left — you finish the open bag before
+   * starting the next, which is what a farm actually does.
+   */
+  const sack = useMemo(() => {
+    const matches = (shelf ?? []).filter(
+      (item) => item.kind === 'feed' && item.name === feedType.trim(),
+    );
+    if (matches.length === 0) return null;
+
+    const open = matches.filter((item) => item.quantity > 0);
+    const from = open.length > 0 ? open : matches;
+    return from.reduce((least, item) => (item.quantity < least.quantity ? item : least));
+  }, [shelf, feedType]);
+
+  /**
+   * Whether this feed can be taken off the shelf, and it turns on one question:
+   * is the amount known in the same terms the sack is counted in?
+   *
+   * - **lb or kg both sides** — arithmetic, nothing to guess.
+   * - **scoops, and the farm has said what its scoop holds** — also arithmetic.
+   *   That is the whole reason `scoopGrams` exists: the scoop was never the
+   *   problem, the app guessing at it was.
+   * - **scoops with no weight given, or a sack counted in bags or bales** —
+   *   left alone, and the screen says why rather than leaving it to be noticed.
+   */
+  const drawnFrom = useMemo(() => {
+    if (sack === null) return null;
+    if (sack.unit !== 'lb' && sack.unit !== 'kg') return null;
+    if (measure === 'scoop' && sack.scoopGrams === undefined) return null;
+    return sack;
+  }, [sack, measure]);
+
+  /** Grams in one of whatever is being counted, using the sack's own scoop. */
+  const gramsPer = useCallback(
+    (): number => (measure === 'scoop' ? (sack?.scoopGrams ?? GRAMS.scoop) : GRAMS[measure]),
+    [measure, sack],
+  );
+
+  const [scoop, setScoop] = useState('');
+
+  /**
+   * Records what this farm's scoop holds, on the sack it belongs to.
+   *
+   * Asked here rather than on the shelf because here is where somebody is
+   * holding the scoop and wondering why the number did not move. One answer,
+   * remembered, and from then on scoops are exact.
+   */
+  const learnScoop = useCallback(async () => {
+    const said = Number(scoop);
+    if (sack === null || scoop.trim() === '' || !Number.isFinite(said) || said <= 0) return;
+
+    await log({
+      entity: 'inventory',
+      op: 'update',
+      targetId: sack.id,
+      payload: {
+        scoopGrams: Math.round(said * (sack.unit === 'kg' ? GRAMS.kg : GRAMS.lb)),
+      },
+    });
+    setScoop('');
+  }, [log, sack, scoop]);
+
   const { failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
 
   const commit = useCallback(
     async (count: number) => {
       await save(async () => {
+        const grams = Math.round(count * gramsPer());
+
         await log({
           entity: 'feedLog',
           op: 'create',
           payload: {
             occurredAt: Date.now(),
             flockId: groupId,
-            amountGrams: Math.round(count * GRAMS[measure]),
+            amountGrams: grams,
             ...(feedType.trim() === '' ? {} : { feedType: feedType.trim() }),
           },
         });
+
+        if (drawnFrom === null) return;
+
+        /**
+         * The record is written first and the shelf second, on purpose.
+         *
+         * What was fed is the fact; what is left on the shelf is bookkeeping
+         * derived from it. If only one of the two survives — a crash between
+         * them, a rejected mutation — the one worth keeping is the feed.
+         */
+        const taken = grams / GRAMS[drawnFrom.unit === 'kg' ? 'kg' : 'lb'];
+        // Two decimals, and clamped: `quantity` is non-negative in the
+        // contract, and a sack fed past empty says empty rather than refusing
+        // the write. Rounding keeps 50 − 3 at exactly 47 instead of 46.999…
+        const left = Math.max(0, Math.round((drawnFrom.quantity - taken) * 100) / 100);
+
+        await log({
+          entity: 'inventory',
+          op: 'update',
+          targetId: drawnFrom.id,
+          payload: { quantity: left },
+        });
       });
     },
-    [save, log, groupId, measure, feedType],
+    [save, log, groupId, feedType, drawnFrom, gramsPer],
   );
 
   if (groups === null) return <Loading title="Feed" />;
@@ -189,6 +314,46 @@ export function FeedScreen({ route }: ScreenProps<'Feed'>): React.ReactElement {
         <Choice options={['scoop', 'lb', 'kg'] as const} value={measure} onChange={setMeasure} labels={LABELS} />
       </Field>
 
+      {/**
+        * What this will do to the shelf, said before it does it.
+        *
+        * Both branches matter. A quantity that changes without warning is a
+        * number a farm stops trusting; a quantity that does NOT change when
+        * somebody expected it to is the report that led here. Saying which is
+        * about to happen costs one line and removes both surprises.
+        */}
+      {drawnFrom !== null ? (
+        <Text style={[styles.note, { color: colors.muted }]} testID="feed-shelf-note">
+          Comes off the shelf — {drawnFrom.name} has {drawnFrom.quantity} {drawnFrom.unit} left.
+        </Text>
+      ) : sack !== null && measure === 'scoop' && (sack.unit === 'lb' || sack.unit === 'kg') ? (
+        /* Only worth asking where the answer would change something. Knowing
+           what a scoop holds cannot draw down a sack counted in bags. */
+        <Field
+          label="How much does your scoop hold?"
+          hint="Say once and it is remembered for this sack. Until then a scoop is an estimate, so the log keeps it and the shelf is left alone."
+        >
+          <NumberField
+            value={scoop}
+            onChangeText={setScoop}
+            placeholder="2"
+            suffix={sack.unit === 'kg' ? 'kg' : 'lb'}
+            accessibilityLabel="What one scoop holds"
+            testID="feed-scoop-size"
+          />
+          <Secondary
+            label="That is my scoop"
+            testID="feed-scoop-save"
+            onPress={() => void learnScoop()}
+          />
+        </Field>
+      ) : sack !== null ? (
+        <Text style={[styles.note, { color: colors.muted }]} testID="feed-shelf-note">
+          {sack.name} is counted in {sack.unit}, which says nothing about what goes in a
+          trough — so the shelf stays as it is.
+        </Text>
+      ) : null}
+
       <Tally
         label={`Feed for ${group.name}`}
         unit={measure === 'scoop' ? 'scoops' : measure}
@@ -202,6 +367,7 @@ export function FeedScreen({ route }: ScreenProps<'Feed'>): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
+  note: { fontFamily: FONTS.body, fontSize: TYPE.body - 1, lineHeight: TYPE.body * 1.3 },
   label: {
     fontFamily: FONTS.data,
     fontSize: TYPE.label,
