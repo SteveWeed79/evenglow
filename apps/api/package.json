@@ -9,6 +9,7 @@
   "scripts": {
     "db:indexes": "tsx --env-file-if-exists=../../.env.local src/db/apply-indexes.mts",
     "db:seed": "tsx --env-file-if-exists=../../.env.local src/db/seed.mts",
+    "db:usage": "tsx --env-file-if-exists=../../.env.local src/db/usage.mts",
     "db:verify": "tsx --env-file-if-exists=../../.env.local src/db/verify.mts",
     "dev": "tsx watch --env-file-if-exists=../../.env.local src/server.ts",
     "start": "tsx --env-file-if-exists=../../.env.local src/server.ts",
