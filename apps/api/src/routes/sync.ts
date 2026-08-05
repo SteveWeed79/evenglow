@@ -39,15 +39,31 @@ export async function syncRoutes(app: FastifyInstance, env: Env): Promise<void> 
      * nothing reaches the rejected inbox. That distinction is the load-bearing
      * one: a rejection is something a person must look at, and there is
      * nothing here for anybody to look at.
+     *
+     * ## A server that takes no payments does not charge for anything
+     *
+     * **Without this, a self-hosted Steading is a server nobody can ever sync
+     * to.** There is no Play Console behind somebody's own box, so no farm on
+     * it can subscribe, so the gate would refuse every flush forever — and
+     * `ACCESS-AND-BILLING.md` is built around exactly that box. The billing
+     * routes already answer 501 when unconfigured; this is the same fact read
+     * from the other end.
+     *
+     * It is also the honest reading of D13. The subscription pays for *this
+     * project* to hold a farm's records. A farm holding its own records on its
+     * own hardware owes nobody anything, and a gate that charged it would be
+     * charging for someone else's electricity.
      */
-    const entitlement = entitlementOf((await findOrgById(claims.orgId))?.subscription, Date.now());
-    if (!entitlement.syncing && entitlement.refusal !== null) {
-      // The reason travels beside the sentence so the client can persist which
-      // state it is in without parsing prose. The sentence is for a person;
-      // the code is for the chip.
-      return reply
-        .status(402)
-        .send({ error: syncRefusalMessage(entitlement.refusal), refusal: entitlement.refusal });
+    if (env.playConfig !== null) {
+      const entitlement = entitlementOf((await findOrgById(claims.orgId))?.subscription, Date.now());
+      if (!entitlement.syncing && entitlement.refusal !== null) {
+        // The reason travels beside the sentence so the client can persist
+        // which state it is in without parsing prose. The sentence is for a
+        // person; the code is for the chip.
+        return reply
+          .status(402)
+          .send({ error: syncRefusalMessage(entitlement.refusal), refusal: entitlement.refusal });
+      }
     }
 
     const scope = await scoped(claims.orgId);
