@@ -165,6 +165,17 @@ describeDb('claiming the farm a device already has', () => {
    */
   it('refuses a farm that already has members, even to a caller who knows its id', async () => {
     const app = await server();
+    const users = harness!.db.collection('users');
+
+    /**
+     * Counted before rather than asserted as a literal.
+     *
+     * This read `.toBe(2)` and broke the moment the fixture grew an admin,
+     * which is a test coupled to something it is not about. What it means is
+     * that the refused claim added nobody — so it says that, and it keeps
+     * saying it whatever else the fixture holds.
+     */
+    const before = await users.countDocuments({ orgId: ORG_A });
 
     const res = await app.inject({
       method: 'POST',
@@ -177,7 +188,7 @@ describeDb('claiming the farm a device already has', () => {
     // Nothing about the existing farm moved, and no second owner appeared.
     const org = await harness!.db.collection('orgs').findOne({ _id: ORG_A as never });
     expect(org?.name).toBe('Hollow Farm');
-    expect(await harness!.db.collection('users').countDocuments({ orgId: ORG_A })).toBe(2);
+    expect(await users.countDocuments({ orgId: ORG_A })).toBe(before);
     await app.close();
   });
 
