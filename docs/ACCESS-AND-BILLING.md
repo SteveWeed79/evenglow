@@ -467,37 +467,77 @@ breaks that assumption is the one that makes this decision worth revisiting.
 
 ---
 
-## 5. Open Question — D-number needed before A2.2 is built
+## 5. Answered — D15
 
 **Does signup adopting a client-minted `orgId` sit inside D2's intent?**
+**Yes, and it is now D15 in the masterplan.**
 
 Invariant 2 is that `orgId` is never read from a request payload; it comes from
 the verified token. Adoption means the *signup* request carries a proposed
-orgId.
+orgId — and the invariant is not reached, because it governs **authorizing an
+operation against an existing tenant**. That is the failure it exists to
+prevent: a payload-supplied org letting a caller act inside somebody else's
+farm. Signup creates the tenant. At the moment the route runs there is nothing
+to reach into, and every request afterwards derives the org from the token
+exactly as before.
 
-The argument that it is fine: signup is the moment the binding is established
-rather than a mutation being authorized, and every request afterwards derives
-the org from the token exactly as now. The defences are a unique index on
-`orgs._id` — so a double claim is a hard database failure rather than a silent
-merge, the same guarantee that turned out to be protecting the photo route —
-and a ULID that cannot be guessed.
+**What settled it was that the defence is structural rather than remembered.**
+The argument for adoption was originally written around a unique index on
+`orgs._id`, which is weaker than it needed to be: an index is a thing somebody
+can forget to create on a new deployment. In fact `insertOrg` puts the ULID in
+the document `_id`, and `_id` uniqueness in MongoDB is not an index at all — it
+is the collection, it cannot be dropped, and it exists before anyone runs
+`pnpm db:indexes`. A second claim on the same id is a hard duplicate-key
+failure on any database this app could ever be pointed at. **Two farms cannot
+silently merge into one**, which was the whole worry.
 
-The argument that it is not: it is a new door into the tenancy boundary, which
-is the app's hardest invariant, and D2 exists precisely because "every query
-must include orgId" is unenforceable by review.
+A ULID also carries 80 bits of randomness, so the id of a farm somebody has
+never seen cannot be guessed.
 
-**This needs an answer before A2.2 is built, not during.** Everything else in
-this document is unaffected either way.
+The counter-argument — a new door into the app's hardest invariant — is
+answered by bounding the door rather than by trusting review. Exactly one route
+reads an org from a payload, it is rate limited with sign-in, it refuses an id
+that is not a ULID, and `tests/isolation/claim.test.ts` asserts that a caller
+who *knows* another farm's id is refused.
+
+**One case was found while building it and is worth recording.** Creating a
+farm is two inserts — the org, then its owner — with no transaction to wrap
+them in, because the test harness runs a standalone mongod and requiring a
+replica set to make an account would be a worse trade. A crash between them
+leaves an org with no members. Such an org is **unclaimed by definition**: no
+user means no token can carry its id, so nothing can ever have been written
+inside it. The route therefore finishes a claim it finds in that state, because
+the alternative is telling a farm its own id is taken and stranding every
+record on the handset behind an id it can never claim.
 
 ---
 
 ## 6. Also Open
 
-- **Claim collision handling.** What a farm sees when adoption is refused. It
-  should be near-impossible; it must still have a screen.
-- **What a local-only farm is told about recovery**, and where. It must be
-  honest without being a nag.
+- ~~**Claim collision handling.**~~ **Answered.** The server refuses with *"That
+  farm has already been claimed. Sign in to it instead."* and the account
+  screen shows the server's sentence verbatim. It stays near-impossible — an
+  80-bit id — and it now has words rather than a stack trace.
+- ~~**What a local-only farm is told about recovery**, and where.~~
+  **Answered, and the wording is the feature.** The Settings row reads *"Keep
+  these records safe — everything is on this phone only"* rather than "Your
+  account", and the panel behind it leads with the water trough. Not a nag: it
+  is a row on a screen nobody opens during chores, and nothing pops up.
 - **First flush at volume.** A month of offline mutations landing at once
   against a newly-claimed org. The batch cap is 100 and flush is sequential, so
   it should hold — but it has never been exercised at that size and wants a
-  test before it meets a real farm.
+  test before it meets a real farm. **More pressing now than when it was
+  written**: before A2.1 a device could only accumulate a queue after signing
+  in, and now the ordinary first-claim case is a farm handing over everything
+  it has ever logged.
+- **A hand's own farm, when they join one.** Joining leaves the org the handset
+  minted unreachable, and the screen says so before the code is typed. The
+  honest fix is a membership model where a user can belong to more than one
+  farm, which is a schema change rather than a screen, and inventing one to
+  make a warning go away would be the wrong place to decide it.
+- **Losing the local org id.** Android clears secure storage when app data is
+  cleared, and an unclaimed farm's id goes with it — the records are still in
+  the database file and nothing knows which file. This is exactly what the
+  account is sold on, so it is honest rather than hidden, but a device with a
+  visible orphaned database and no way to open it is a support conversation
+  waiting to happen.
