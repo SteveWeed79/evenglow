@@ -47,8 +47,8 @@ Superseded, kept for the reasoning rather than the conclusion:
 [`MIGRATION-PLAN.md`](docs/MIGRATION-PLAN.md) and
 [`PHASE-1-SPEC.md`](docs/PHASE-1-SPEC.md) describe a route already taken.
 
-There is one rubric, and it is version 3.0. The v2.x masterplan has been
-removed rather than kept alongside it.
+There is one rubric. The v2.x masterplan has been removed rather than kept
+alongside it.
 
 ---
 

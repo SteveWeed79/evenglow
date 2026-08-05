@@ -49,9 +49,9 @@ Access and billing take D13 and D14 rather than clobbering them.
 
 ### 0.1 Migration Status
 
-This document is **version 3.0 and the only rubric**. The v2.x plan it replaced
-has been removed rather than kept alongside it, because two live rubrics means
-neither is authoritative and every review argues about which one applies.
+This document is **the only rubric**. The v2.x plan it replaced has been removed
+rather than kept alongside it, because two live rubrics means neither is
+authoritative and every review argues about which one applies.
 
 **The migration this section used to describe is done.** `main` carries
 `apps/mobile` (React Native over Expo SDK 57) and `apps/api` (Fastify); the
