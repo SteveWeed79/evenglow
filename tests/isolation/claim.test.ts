@@ -32,6 +32,7 @@ const PASSWORD = 'a properly long passphrase';
 
 const ORG_A = ulid();
 const OWNER_A = ulid();
+const ADMIN_A = ulid();
 const HAND_A = ulid();
 
 const describeDb = harness ? describe : describe.skip;
@@ -83,6 +84,27 @@ beforeEach(async () => {
       name: 'Owner A',
       orgId: ORG_A,
       role: 'owner',
+      createdAt: new Date(),
+    },
+    /**
+     * A real admin, not just a token claiming to be one.
+     *
+     * This test file originally minted an admin token for a ULID with no user
+     * document, and the route answered 401 rather than the 403 the test
+     * wanted. **The route was right and the test was wrong**, which is worth
+     * recording: `requireMutationClaims` re-derives the actor from the
+     * database on every write path (D4, invariant 8), so a signed token for
+     * somebody who does not exist is not an admin — it is nobody. Asserting
+     * the escalation refusal needs an admin who genuinely exists, or it
+     * asserts the wrong mechanism and passes for the wrong reason.
+     */
+    {
+      _id: ADMIN_A,
+      email: `admin-${ADMIN_A}@example.test`.toLowerCase(),
+      passwordHash: hash,
+      name: 'Admin A',
+      orgId: ORG_A,
+      role: 'admin',
       createdAt: new Date(),
     },
     {
@@ -270,14 +292,44 @@ describeDb('join codes', () => {
 
     // Privilege escalation with extra steps: an admin who could mint an owner
     // code could mint one for themselves.
-    const ADMIN = ulid();
     const escalation = await app.inject({
       method: 'POST',
       url: '/join-codes',
-      headers: { authorization: await tokenFor(ADMIN, ORG_A, 'admin') },
+      headers: { authorization: await tokenFor(ADMIN_A, ORG_A, 'admin') },
       payload: { role: 'owner' },
     });
     expect(escalation.statusCode).toBe(403);
+
+    // The same admin may still mint what they are allowed to, so the refusal
+    // above is about the role rather than about the person.
+    const allowed = await app.inject({
+      method: 'POST',
+      url: '/join-codes',
+      headers: { authorization: await tokenFor(ADMIN_A, ORG_A, 'admin') },
+      payload: { role: 'hand' },
+    });
+    expect(allowed.statusCode).toBe(201);
+    await app.close();
+  });
+
+  /**
+   * A token for somebody who is not there.
+   *
+   * Signed correctly, carrying `role: 'owner'`, and refused — because the
+   * write path re-derives the actor from the database rather than believing
+   * the claim. 401 and not 403: there is no actor to forbid.
+   */
+  it('refuses a correctly signed token for a user who does not exist', async () => {
+    const app = await server();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/join-codes',
+      headers: { authorization: await tokenFor(ulid(), ORG_A, 'owner') },
+      payload: { role: 'hand' },
+    });
+
+    expect(res.statusCode).toBe(401);
     await app.close();
   });
 
