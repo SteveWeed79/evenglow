@@ -8,6 +8,7 @@ import {
   syncRefusalMessage,
   type Subscription,
 } from '@steading/contracts';
+import { readPlayConfig, subscriptionFrom } from '@steading/api/billing/play';
 
 /**
  * What a subscription buys, and what happens when it stops (D13).
@@ -190,5 +191,131 @@ describe('the stored shape', () => {
     // One rail today. The field exists so a second is additive rather than a
     // migration.
     expect(subscriptionSchema.safeParse(sub({ source: 'stripe' as never })).success).toBe(false);
+  });
+});
+
+/**
+ * Google's states, mapped down to the four a farm needs.
+ *
+ * Tested against every state Google documents, because **none of them can be
+ * produced on demand in a store sandbox.** A card that expires in March, a
+ * hold that lifts a week later, a plan change mid-period — the mapping is
+ * where the judgement about each of those lives, and this is the only place it
+ * can be checked before a real farm meets it.
+ */
+describe('what Google says, and what it means', () => {
+  const purchase = (state: string, expiry?: string) => ({
+    subscriptionState: state,
+    lineItems: [{ productId: 'steading.year', ...(expiry === undefined ? {} : { expiryTime: expiry }) }],
+  });
+
+  it('treats an active subscription as active', () => {
+    expect(subscriptionFrom(purchase('SUBSCRIPTION_STATE_ACTIVE'), NOW).state).toBe('active');
+  });
+
+  /**
+   * The one that looks wrong and is not.
+   *
+   * A farm that turns off auto-renew in October has paid through to its expiry
+   * and is owed the service until then — and Google reports it as canceled for
+   * that whole period. Treating it as lapsed would cut a farm off from
+   * something it has already paid for, which is the most indefensible bug this
+   * mapping could have.
+   */
+  it('keeps a cancelled subscription entitled until it expires', () => {
+    const cancelled = subscriptionFrom(
+      purchase('SUBSCRIPTION_STATE_CANCELED', new Date(NOW + 60 * DAY).toISOString()),
+      NOW,
+    );
+
+    expect(cancelled.state).toBe('active');
+    expect(entitlementOf(cancelled, NOW).syncing).toBe(true);
+    // And it does stop, on the day it was paid up to.
+    expect(entitlementOf(cancelled, NOW + 61 * DAY).syncing).toBe(false);
+  });
+
+  it('separates grace from hold, because they are entitled differently', () => {
+    // Grace is Google retrying the payment; hold is what happens after the
+    // retries fail.
+    expect(subscriptionFrom(purchase('SUBSCRIPTION_STATE_IN_GRACE_PERIOD'), NOW).state).toBe('grace');
+    expect(subscriptionFrom(purchase('SUBSCRIPTION_STATE_ON_HOLD'), NOW).state).toBe('lapsed');
+  });
+
+  it('treats paused, expired and pending as not entitled', () => {
+    for (const state of ['PAUSED', 'EXPIRED', 'PENDING', 'UNSPECIFIED']) {
+      expect(subscriptionFrom(purchase(`SUBSCRIPTION_STATE_${state}`), NOW).state).toBe('lapsed');
+    }
+  });
+
+  /**
+   * Google adds states. A default of `active` would mean a state nobody has
+   * read about yet silently granting service; a default of `lapsed` means it
+   * silently withholds it. The second is visible — a farm complains — and the
+   * first is not.
+   */
+  it('treats a state it has never heard of as not entitled', () => {
+    expect(subscriptionFrom(purchase('SUBSCRIPTION_STATE_SOMETHING_NEW'), NOW).state).toBe('lapsed');
+    expect(subscriptionFrom({ nonsense: true }, NOW).state).toBe('lapsed');
+    expect(subscriptionFrom(null, NOW).state).toBe('lapsed');
+  });
+
+  it('takes the furthest expiry when a plan change shows two', () => {
+    const soon = new Date(NOW + 5 * DAY).toISOString();
+    const later = new Date(NOW + 40 * DAY).toISOString();
+
+    const changed = subscriptionFrom(
+      {
+        subscriptionState: 'SUBSCRIPTION_STATE_ACTIVE',
+        lineItems: [{ expiryTime: soon }, { expiryTime: later }],
+      },
+      NOW,
+    );
+
+    // Cutting a farm off at the earlier of the two would end service it has
+    // paid for.
+    expect(changed.expiresAt).toBe(Date.parse(later));
+  });
+
+  it('records the rail, so a second one is additive rather than a migration', () => {
+    expect(subscriptionFrom(purchase('SUBSCRIPTION_STATE_ACTIVE'), NOW)).toMatchObject({
+      source: 'play',
+      productId: 'steading.year',
+      updatedAt: NOW,
+    });
+  });
+});
+
+describe('reading the Play credentials', () => {
+  const key = '-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----\n';
+
+  it('is absent rather than broken when the server takes no payments', () => {
+    // A supported state: the billing routes answer 501 and every farm stays on
+    // the free tier, which is what the app does today.
+    expect(readPlayConfig(undefined, 'com.steading.app')).toBeNull();
+    expect(readPlayConfig(JSON.stringify({ client_email: 'a@b.test', private_key: key }), undefined)).toBeNull();
+  });
+
+  it('unescapes a key pasted through a shell', () => {
+    const config = readPlayConfig(
+      JSON.stringify({ client_email: 'a@b.test', private_key: key.replace(/\n/g, '\\n') }),
+      'com.steading.app',
+    );
+    expect(config?.privateKey).toContain('\n');
+    expect(config?.privateKey).not.toContain('\\n');
+  });
+
+  it('names the field and never the value when it is malformed', () => {
+    // This object holds a private key. An error message that quoted it would
+    // put it in a log.
+    expect(() => readPlayConfig('{"client_email":"a@b.test"}', 'com.steading.app')).toThrow(
+      /client_email and private_key/,
+    );
+    expect(() => readPlayConfig('not json', 'com.steading.app')).toThrow(/valid JSON/);
+
+    try {
+      readPlayConfig('{"private_key":"SECRETVALUE"}', 'com.steading.app');
+    } catch (error) {
+      expect((error as Error).message).not.toContain('SECRETVALUE');
+    }
   });
 });

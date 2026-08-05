@@ -52,6 +52,19 @@ export interface OrgDoc {
    * subscription as `unsubscribed` rather than as a fault.
    */
   subscription?: Subscription;
+  /**
+   * The Play purchase token this farm's subscription came from.
+   *
+   * **Server-side only and deliberately not part of `Subscription`.** That
+   * shape is shared with the client through the contracts package; this is
+   * storage. Keeping it out means there is no route that could accidentally
+   * serialise it into a response.
+   *
+   * Stored rather than hashed, because it is not a credential to be checked —
+   * it is the handle this server presents to Google when asking what the
+   * purchase is worth now, and a hash cannot be presented.
+   */
+  playPurchaseToken?: string;
 }
 
 async function users(): Promise<Collection<UserDoc>> {
@@ -130,8 +143,28 @@ export async function insertOrg(org: OrgDoc): Promise<void> {
  * a previous notification survive underneath a fresh one — which is exactly
  * how a farm ends up entitled by a value nobody remembers writing.
  */
-export async function setSubscription(orgId: string, subscription: Subscription): Promise<void> {
-  await (await orgs()).updateOne({ _id: orgId }, { $set: { subscription } });
+export async function setSubscription(
+  orgId: string,
+  subscription: Subscription,
+  playPurchaseToken?: string,
+): Promise<void> {
+  await (await orgs()).updateOne(
+    { _id: orgId },
+    { $set: { subscription, ...(playPurchaseToken === undefined ? {} : { playPurchaseToken }) } },
+  );
+}
+
+/**
+ * Which farm a purchase belongs to.
+ *
+ * A store notification names the purchase, never the customer — so the token
+ * has to be matched back to the farm that submitted it. A token nobody has
+ * submitted belongs to a purchase this server has never seen, which is either
+ * a forgery or a signup that never finished, and both are nothing to act on.
+ */
+export async function findOrgIdByPurchaseToken(purchaseToken: string): Promise<string | null> {
+  const org = await (await orgs()).findOne({ playPurchaseToken: purchaseToken }, { projection: { _id: 1 } });
+  return org?._id ?? null;
 }
 
 /**
