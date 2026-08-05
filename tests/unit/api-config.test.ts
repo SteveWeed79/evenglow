@@ -124,8 +124,13 @@ const stopSync = vi.fn();
 const startTriggers = vi.fn(() => ({ stop: vi.fn() }));
 const setStorageBacking = vi.fn();
 
+const ensureLocalOrgId = vi.fn(async () => 'localOrg');
+
 vi.mock('@steading/mobile/auth/session', () => ({
   refreshSession: () => refreshSession(),
+}));
+vi.mock('@steading/mobile/auth/local-org', () => ({
+  ensureLocalOrgId: () => ensureLocalOrgId(),
 }));
 vi.mock('@steading/mobile/db/store', () => ({
   openLocalStore: (orgId: string) => openLocalStore(orgId),
@@ -180,14 +185,72 @@ describe('booting with no server address', () => {
     expect(started.fault).toEqual({ kind: 'missing' });
   });
 
-  it('is still fatal when nobody is signed in, because signing in needs a server', async () => {
+  /**
+   * **This used to be the one fatal case, and it is now the ordinary one.**
+   *
+   * The old reasoning was sound for the app it described: no cached claims
+   * meant no orgId, so no database and no offline answer to give. A2.1
+   * removed the premise. A device with no account has an org it minted itself,
+   * so it has a database, so there is nothing a missing server address can
+   * take away from it.
+   *
+   * A first launch with no `.env` — which is every fresh clone, since `.env`
+   * is gitignored — now opens a working farm.
+   */
+  it('opens the farm the device minted, with no session and no server', async () => {
     const { start } = await import('@steading/mobile/boot/start');
     refreshSession.mockResolvedValue(null);
 
-    // No cached claims means no orgId, so there is no database to open and no
-    // offline answer to give. Saying so beats a sign-in form that fails on
-    // every tap with a network error.
-    await expect(start('')).rejects.toThrow(/EXPO_PUBLIC_API_URL/);
+    const started = await start('');
+
+    expect(started.claims).toBeNull();
+    expect(started.orgId).toBe('localOrg');
+    expect(openLocalStore).toHaveBeenCalledWith('localOrg');
+    expect(setStorageBacking).toHaveBeenCalledWith('device');
+    expect(started.fault).toEqual({ kind: 'missing' });
+  });
+});
+
+describe('booting without an account', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetApiFault();
+    resetApiBase();
+    refreshSession.mockResolvedValue(null);
+  });
+
+  it('opens the minted farm and leaves the loop alone', async () => {
+    const { start } = await import('@steading/mobile/boot/start');
+
+    const started = await start('http://10.0.2.2:3001');
+
+    expect(openLocalStore).toHaveBeenCalledWith('localOrg');
+
+    /**
+     * Configured server, no token — and still nothing starts.
+     *
+     * Every batch would 401, and the engine reads that as "stay queued, do
+     * not burn an attempt", which is right and is also a queue that silently
+     * never sends behind a chip claiming to be trying. Nothing is lost: the
+     * mutations are durable in SQLite, and claiming the farm is what turns
+     * them loose.
+     */
+    expect(startSync).not.toHaveBeenCalled();
+    expect(startTriggers).not.toHaveBeenCalled();
+    expect(started.fault).toBeNull();
+  });
+
+  it('carries the minted id forward rather than minting a second one', async () => {
+    const { start } = await import('@steading/mobile/boot/start');
+
+    await start('http://10.0.2.2:3001');
+    await start('http://10.0.2.2:3001');
+
+    // A second mint would orphan a database full of records: the file is
+    // named for this value.
+    expect(ensureLocalOrgId).toHaveBeenCalledTimes(2);
+    expect(openLocalStore).toHaveBeenNthCalledWith(1, 'localOrg');
+    expect(openLocalStore).toHaveBeenNthCalledWith(2, 'localOrg');
   });
 });
 

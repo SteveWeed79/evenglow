@@ -49,20 +49,55 @@ Ship these or the app reads as a toy. Ordered by how visible their absence is.
 | # | Capability | Set by | Status in our plan |
 |---|---|---|---|
 | P1 | Per-bird profiles with photo, breed, hatch date, traits | Flockstar, ChookBook | **ADD** — plan had flocks, not birds |
-| P2 | Daily egg logging by flock **and** by individual bird | Flockstar | **ADD** — individual-level was missing |
+| P2 | Daily egg logging by flock **and** by individual bird | Flockstar | **REFUSED** — see §2.1 |
 | P3 | Cost per egg / cost per bird | Flockstar | **ADD** — no financial tracking in plan |
 | P4 | Production graphs: week / month / quarter / year | ChookBook, Flockstar | **ADD** |
 | P5 | Maintenance intervals by hours **or** date, whichever first | All CMMS | Already in v2 plan |
-| P6 | Attach receipts, photos, and PDF manuals to equipment | Farmbrite, LookOver | **ADD** — PDF manuals not planned |
+| P6 | Attach receipts, photos, and PDF manuals to equipment | Farmbrite, LookOver | **Built for photos; PDF manuals REFUSED** — see §2.1 |
 | P7 | Full maintenance history export when selling a machine | LookOver | Covered by general export |
 | P8 | Parts inventory with low-stock alerts tied to upcoming service | UpKeep | Partially planned — needs the service linkage |
-| P9 | CSV import **and** export | Flockstar | Export planned; **import ADD** |
+| P9 | CSV import **and** export | Flockstar | Export built; **import REFUSED** — see §2.1 |
 | P10 | Multi-species (chickens, ducks, quail, turkeys, geese) | FarmKeep | **ADD** — plan assumed chickens |
 | P11 | Multiple users, scoped roles, no per-seat fee | Farmbrite | Planned |
 | P12 | Offline logging with automatic sync | Everyone now | Planned (and our core strength) |
 | P13 | Archive a bird without deleting its history | Flockstar | **ADD** — soft-archive semantics |
 | P14 | Incubation / hatch runs with fertility rates | Flockstar, FarmKeep | **ADD as v2** — defer, but don't design it out |
 | P15 | Per-equipment inspection checklists | SimplyFleet | **ADD** |
+
+### 2.1 — Three of these are refused, and the reasons are the farm's own
+
+A refusal nobody wrote down becomes a thing somebody rebuilds. These were on
+the parity floor, were reachable, and were turned down after the app existed —
+which is the only point at which you can tell whether a competitor's feature is
+a real want or a screenshot.
+
+**P2 — egg logging per individual bird.** Refused, and the argument is one
+sentence from the farm: *"I have 5 laying hens currently, they all use the same
+roost."* Nobody can attribute an egg to a hen without trap-nesting, so a
+per-bird tally is either a guess recorded as a fact or a chore that produces
+one. `eggLog` keeps `birdId` in the contract — it costs nothing, the server
+applies it, and a farm that genuinely traps nests could use it — but no screen
+writes one, and that is deliberate rather than unfinished.
+
+This is the same refusal as P1's, one level along. Per-bird identity matters at
+the pet-chicken end of the market, which is Flockstar's and not the
+masterplan's.
+
+**P6 — PDF manuals on equipment.** The photo half is built and is the half that
+was worth having: a receipt cannot be reconstructed later, and LookOver's
+headline is the history you hand over with the machine. The manual half is
+refused because *"it won't work on most phones"* — a service manual is a
+hundred pages of 8pt type, and the honest reading experience on a handset in a
+barn is that nobody reads it there. `photoShape` stays images-only, so there is
+no half-supported document type sitting in the contract inviting an attempt.
+
+**P9 — CSV import.** Refused as a liability, and that is the right word. Import
+means merging rows somebody edited in a spreadsheet against records that
+already exist and already sync: it needs conflict rules, an id strategy for
+rows that have none, and a preview nobody will read — and every one of those is
+a way to quietly corrupt a farm's history. **Export is the half that matters**,
+because it is what stops the app being a trap, and it is built. Getting data
+*out* has no failure mode worse than a bad spreadsheet; getting it *in* does.
 
 ---
 

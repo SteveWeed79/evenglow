@@ -79,8 +79,14 @@ Or `pnpm farm`, which does all of the above from nothing — see below.
 `MONGODB_URI` defaults to a local mongod — `docker run -d -p 27017:27017
 mongo:8` is enough if you do not have one installed.
 
-There is no invite flow yet (D7 is single-farm-first), so the first org and
-owner are created by `db:seed`.
+`db:seed` makes a farm from the command line, which is the quickest way to get
+a server-side account for development. It is no longer the only way in: the app
+opens on an org it mints itself and claims it at signup (D14, D15), and a
+second person joins with a six-character code or an invite link.
+
+`pnpm db:usage` reports what each farm is holding, in bytes. Read-only and safe
+against a live database — it is for capacity and for knowing when photo bytes
+should leave the database for S3, not for pricing, which is settled.
 
 ## Commands
 
@@ -174,12 +180,13 @@ Emulator hosts are `10.0.2.2`, never `localhost` — a physical handset needs
 this machine's LAN address instead. The Windows scripts in `scripts/windows/`
 create the `.env` for you and the phone one fills in the LAN address itself.
 
-`.env` is gitignored, so a fresh clone has none. **That does not stop the app.**
-Without `EXPO_PUBLIC_API_URL` it opens, reads and records normally — the screen
-renders a local SQLite file — but the sync loop is never started and the chip
-reads *Not set up* rather than reporting the ordinary offline story. The one
-case that is fatal is a device with nobody signed in, because signing in is a
-server round trip. See `apps/mobile/src/boot/config.ts`.
+`.env` is gitignored, so a fresh clone has none. **That does not stop the app,
+and there is no longer any case where it does.** Without `EXPO_PUBLIC_API_URL`
+it opens, reads and records normally — the screen renders a local SQLite file —
+but the sync loop is never started and the chip reads *Not set up* rather than
+reporting the ordinary offline story. A device with nobody signed in used to be
+the one fatal case; it now opens the farm it minted itself (D14). See
+`apps/mobile/src/boot/config.ts`.
 
 ## Android
 

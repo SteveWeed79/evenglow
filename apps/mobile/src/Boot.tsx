@@ -7,7 +7,6 @@ import { reportTrouble } from './hooks/useTrouble';
 import { start, type Started } from './boot/start';
 import { openLocalStore } from './db/store';
 import { useAppFonts } from './theme/fonts';
-import { SignInScreen } from './screens/SignInScreen';
 import type { CachedClaims } from './auth/session';
 import { useTheme } from './theme/ThemeProvider';
 import { FONTS, SPACE, TYPE } from './theme/tokens';
@@ -29,17 +28,37 @@ import { FONTS, SPACE, TYPE } from './theme/tokens';
  * dangerous thing this app could tell someone.
  */
 
+/**
+ * **There is no signed-out state any more, and that is the change.**
+ *
+ * This used to hold a `signed-out` branch that rendered the sign-in screen
+ * instead of the app — the wall §1 of `ACCESS-AND-BILLING.md` is about. A farm
+ * now opens the org its device minted and works from the first launch (A2.1),
+ * so the only question left is whether a database is open, which is the same
+ * question for a claimed farm and an unclaimed one.
+ *
+ * Signing in is still reachable, from My Farm, at the three moments in A2.3
+ * where an account actually buys something.
+ */
 type State =
   | { kind: 'opening' }
-  | { kind: 'signed-out' }
   | { kind: 'ready' }
   | { kind: 'failed'; message: string };
 
 export function Boot({
   render,
 }: {
-  /** Given a callback the app calls when the session ends. */
-  render: (onSignedOut: () => void) => React.ReactNode;
+  /**
+   * Given the two callbacks that move the app between sessions.
+   *
+   * Both, rather than only the sign-out one, because signing in is no longer
+   * something that happens in front of the app — it happens inside it, from My
+   * Farm, on a device that has been logging for weeks.
+   */
+  render: (session: {
+    onSignedIn: (claims: CachedClaims) => void;
+    onSignedOut: () => void;
+  }) => React.ReactNode;
 }): React.ReactElement {
   const [state, setState] = useState<State>({ kind: 'opening' });
   const { colors } = useTheme();
@@ -78,7 +97,7 @@ export function Boot({
         // Torn down already: stop what we just started rather than leaving a
         // flush loop running against a screen that is gone.
         if (!live) handles.stop();
-        else setState({ kind: handles.claims === null ? 'signed-out' : 'ready' });
+        else setState({ kind: 'ready' });
       },
       (error: unknown) => {
         if (live) {
@@ -97,10 +116,16 @@ export function Boot({
   }, []);
 
   /**
-   * Signing in finishes the boot the session could not.
+   * A session arriving mid-run: claiming this farm, or signing in to another.
    *
-   * `start()` stops early when nobody is signed in, because the database is
-   * per farm and there was no orgId to open one with. Now there is.
+   * **Claiming is the cheap case and it is the common one.** The org the
+   * server just adopted is the org already open, so `openLocalStore` finds its
+   * memoised handle and returns the same database — no reopen, no migration,
+   * no window where a screen reads one file while the queue writes another.
+   * That is what A2.2 bought by refusing to let the server assign a new id.
+   *
+   * Signing in to a *different* farm — a hand joining, a second phone — really
+   * does open another file, which is the one case that needs the wait.
    */
   const onSignedIn = useCallback((claims: CachedClaims) => {
     setState({ kind: 'opening' });
@@ -119,14 +144,18 @@ export function Boot({
   }, []);
 
   /**
-   * Signing out drops back to the door rather than unmounting the app.
+   * Signing out no longer drops to a door, because there is not one.
+   *
+   * The farm's records are on this device and the app still works — that is
+   * the whole premise, and it is now true after a sign-out as well as before a
+   * sign-in. The tokens are gone, so the engine will defer every batch as
+   * unauthenticated, which is the state it already handles.
    *
    * The engine is left running deliberately: the queue is per farm and still
    * on disk, so stopping it would only delay the next flush without protecting
-   * anything. It has no token, so it will defer as unauthenticated until
-   * somebody signs in — which is exactly the state the engine already handles.
+   * anything.
    */
-  const onSignedOut = useCallback(() => setState({ kind: 'signed-out' }), []);
+  const onSignedOut = useCallback(() => setState({ kind: 'ready' }), []);
 
   // Both gates, and the font one never turns into a failure branch.
   if (!fonts.ready) {
@@ -137,8 +166,7 @@ export function Boot({
     );
   }
 
-  if (state.kind === 'ready') return <>{render(onSignedOut)}</>;
-  if (state.kind === 'signed-out') return <SignInScreen onSignedIn={onSignedIn} />;
+  if (state.kind === 'ready') return <>{render({ onSignedIn, onSignedOut })}</>;
 
   return (
     <View style={[styles.centre, { backgroundColor: colors.ground }]}>

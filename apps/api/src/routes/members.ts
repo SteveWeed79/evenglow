@@ -4,7 +4,11 @@ import {
   inviteAcceptSchema,
   inviteCreateSchema,
   INVITE_TTL_DAYS,
+  joinCodeCreateSchema,
+  joinCodeRedeemSchema,
+  JOIN_CODE_TTL_MINUTES,
   newId,
+  normalizeJoinCode,
   refusalMessage,
   refuseRemoval,
   refuseRoleChange,
@@ -37,6 +41,14 @@ import {
   mintInviteToken,
   revokeInvite,
 } from '../db/invites';
+import {
+  findJoinCode,
+  hashJoinCode,
+  liveJoinCodeExpiry,
+  mintJoinCode,
+  redeemJoinCode,
+  replaceJoinCode,
+} from '../db/join-codes';
 import type { Env } from '../env';
 import { errorBody, HttpError } from '../http';
 
@@ -167,6 +179,78 @@ export async function memberRoutes(app: FastifyInstance, env: Env): Promise<void
 
       return reply.status(201).send({ ...tokens, user: { id: userId, name, role: invite.role } });
     });
+
+    /**
+     * Redeeming a six-character code (A2.5).
+     *
+     * Inside the same rate-limited scope as `/invites/accept`, and that is not
+     * incidental: a short code is only safe because the number of attempts is
+     * bounded, so this route existing outside the throttle would undo the
+     * whole argument in `db/join-codes.ts`.
+     *
+     * The shape mirrors accepting an invite — one answer for every failure, an
+     * existing account refused for the same reason, signed in on success —
+     * with one difference: there is no email to check the redeemer against,
+     * because a code has no addressee. The code *is* the credential, and the
+     * owner handed it over in person.
+     */
+    scope.post('/join-codes/redeem', async (request, reply) => {
+      const parsed = joinCodeRedeemSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: 'Check the details and try again.' });
+      }
+
+      const { code, email, password, name } = parsed.data;
+      const invalid = { error: 'That code is not valid. Ask for a fresh one.' };
+
+      const normalised = normalizeJoinCode(code);
+      const joinCode = await findJoinCode(hashJoinCode(normalised));
+
+      // One answer for missing, spent and expired. Distinguishing them tells a
+      // guesser which codes exist, which is most of what a guesser wants.
+      const now = new Date();
+      if (!joinCode || joinCode.redeemedAt || joinCode.expiresAt <= now) {
+        return reply.status(404).send(invalid);
+      }
+
+      /**
+       * An existing account cannot join a farm, for the reason
+       * `/invites/accept` gives at length: a user belongs to exactly one org,
+       * so joining would MOVE them and strand every record they wrote behind a
+       * tenancy boundary their account no longer sits inside.
+       */
+      if (await findUserByEmail(email)) {
+        return reply.status(409).send({
+          error: 'That email already has a Steading account. Sign in with it instead.',
+        });
+      }
+
+      const userId = newId();
+
+      // Spent before the user is created, so a crash cannot leave a code that
+      // still works. The filter is the guard: exactly one of two simultaneous
+      // redemptions gets past this line.
+      if (!(await redeemJoinCode(joinCode._id, userId, now))) {
+        return reply.status(404).send(invalid);
+      }
+
+      await insertUser({
+        _id: userId,
+        email: normalizeEmail(email),
+        passwordHash: await hashPassword(password),
+        name,
+        orgId: joinCode.orgId,
+        role: joinCode.role,
+        createdAt: now,
+      });
+
+      const tokens = await startSession(
+        { userId, orgId: joinCode.orgId, role: joinCode.role },
+        env.AUTH_SECRET,
+      );
+
+      return reply.status(201).send({ ...tokens, user: { id: userId, name, role: joinCode.role } });
+    });
   });
 
   // ── the farm side, all authenticated ──────────────────────────────────────
@@ -207,6 +291,67 @@ export async function memberRoutes(app: FastifyInstance, env: Env): Promise<void
       }));
 
       return reply.send({ invites });
+    } catch (error) {
+      const { status, body } = errorBody(error);
+      return reply.status(status).send(body);
+    }
+  });
+
+  /**
+   * Minting the code the owner holds out (A2.5).
+   *
+   * The same authority as sending an invite, and re-derived from the database
+   * rather than the token, because it grants access to a farm. An admin still
+   * cannot mint an owner.
+   *
+   * **The code comes back once, in this response, and is never readable
+   * again** — only its hash is stored. An owner who loses the screen presses
+   * the button again, which replaces the old one rather than adding to it.
+   */
+  app.post('/join-codes', async (request, reply) => {
+    try {
+      const claims = await requireMutationClaims(request.headers.authorization, env.AUTH_SECRET);
+      if (!canInvite(claims.role)) throw new HttpError(403, refusalMessage('not-permitted'));
+
+      const parsed = joinCodeCreateSchema.safeParse(request.body ?? {});
+      if (!parsed.success) throw new HttpError(400, 'Check the role.');
+
+      if (!canAssign(claims.role, parsed.data.role)) {
+        throw new HttpError(403, refusalMessage('cannot-assign-that-role'));
+      }
+
+      const code = mintJoinCode();
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + JOIN_CODE_TTL_MINUTES * 60_000);
+
+      await replaceJoinCode({
+        _id: hashJoinCode(code),
+        orgId: claims.orgId,
+        role: parsed.data.role,
+        createdByUserId: claims.userId,
+        createdAt: now,
+        expiresAt,
+      });
+
+      return reply.status(201).send({ code, role: parsed.data.role, expiresAt: expiresAt.getTime() });
+    } catch (error) {
+      const { status, body } = errorBody(error);
+      return reply.status(status).send(body);
+    }
+  });
+
+  /**
+   * Whether a code is currently live, for a screen returning to itself.
+   *
+   * The expiry only — the code is not recoverable, by design. A farm that
+   * comes back to this screen sees "a code is live for another four minutes"
+   * and can replace it; it cannot be shown the characters again.
+   */
+  app.get('/join-codes', async (request, reply) => {
+    try {
+      const claims = await requireClaims(request.headers.authorization, env.AUTH_SECRET);
+      const expiresAt = await liveJoinCodeExpiry(claims.orgId, new Date());
+      return reply.send({ expiresAt: expiresAt?.getTime() ?? null });
     } catch (error) {
       const { status, body } = errorBody(error);
       return reply.status(status).send(body);

@@ -37,6 +37,16 @@ export async function authorizeCredentials(raw: unknown): Promise<AuthorizedUser
   const user = await findUserByEmail(parsed.data.email);
   if (!user || user.disabledAt) return null;
 
+  /**
+   * An account with no password cannot be entered with one.
+   *
+   * A Google-only account (A2.4) never set one, and there is nothing here to
+   * compare against — so this is a refusal rather than a comparison against
+   * undefined. It returns null like every other failure on this path, so it
+   * does not become a way to ask which addresses use Google.
+   */
+  if (user.passwordHash === undefined) return null;
+
   if (!(await verifyPassword(user.passwordHash, parsed.data.password))) return null;
 
   // orgId and role come off the user document. Anything the caller sent

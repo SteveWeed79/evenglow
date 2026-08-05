@@ -27,6 +27,7 @@ export * from './due/livestock';
 export * from './due/growout';
 export * from './due/fibre';
 export * from './due/care';
+export * from './due/feed';
 export * from './due/parts';
 export * from './due/tasks';
 export * from './weather';

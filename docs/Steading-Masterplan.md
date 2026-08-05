@@ -1,7 +1,7 @@
 # Steading — Master Development Plan & Security Rubric
 
 **Version:** 3.1 — native client, access and billing
-**Status:** D1–D10 implemented; D13 and D14 (access and billing) decided and unbuilt. See §0.1.
+**Status:** D1–D10 implemented; D14 and D15 (local-first access) implemented; D13 (billing) decided and unbuilt. See §0.1.
 **Name:** Steading — the farmhouse and its working buildings taken together. Stock, iron, and chores under one roofline.
 
 **What it is.** One app for everything a small mixed farm does: the animals, the
@@ -40,12 +40,13 @@ Settled before code, because retrofitting any of them is a rewrite.
 | **D10** | **The client is an app bundle; the server is a separate Fastify service.** No SSR, no server components, no framework API routes. | The client has no runtime server of its own — under Capacitor it was static files in a WebView, under React Native it is a Metro bundle. Either way Next.js would be paying framework cost for benefits that do not exist here. |
 | **D13** | **Free on one device; paid when the server holds the data.** The free tier is the whole app, not a crippled one. **$39/year**, one tier, per farm, unlimited people. | Sync is simultaneously the only thing that costs money to provide and the only thing worth charging for. The number is set by the competitive anchors, not by cost — storage does not bind it. Settles the billing half of D7. See `ACCESS-AND-BILLING.md`. |
 | **D14** | **The app opens before it authenticates.** First launch mints an org ULID on device and works offline; an account is asked for when it buys something. | D1 applied one level out. An offline-first app that cannot be opened offline is only offline-first from the second morning, and the first is where people are lost. |
+| **D15** | **Signup adopts the client's `orgId`; it is never assigned.** The one route in the system that reads an org from a payload, and it is bounded to that one route. | Invariant 2 governs *authorizing against an existing tenant*; signup creates the tenant, so there is nothing to reach into. The defence is structural rather than remembered: `insertOrg` puts the ULID in `_id`, and `_id` uniqueness in MongoDB is the collection rather than an index somebody can forget to create — two farms cannot silently merge. The alternative, a rename at claim time, is two writes that must both survive a crash, which is the divergence invariant 5 exists to prevent. Answers the open question in `ACCESS-AND-BILLING.md` §5. |
 
 **D11 and D12 are reserved by [`BREED-AND-PURPOSE.md`](BREED-AND-PURPOSE.md)**,
 which proposed them first: D11 (a flock has a set of purposes, not a type) is
 implemented — `productsOf` and `purposesFor` are live — and D12 (aggregated
 breed data, opt-in and anonymous) is still open with five questions unanswered.
-Access and billing take D13 and D14 rather than clobbering them.
+Access and billing take D13, D14 and D15 rather than clobbering them.
 
 ### 0.1 Migration Status
 
@@ -64,13 +65,20 @@ WebView and shipped as React Native. The decision itself — a native shell
 rather than a PWA — never moved, and `REACT-NATIVE-PLAN.md` is the live plan.
 `NATIVE-PIVOT.md` argued for Capacitor and is superseded.
 
-**D13 and D14 are decided and not yet built.** They are the access and billing
-shape, and the gap is:
+**D14 and D15 are now built.** The first launch opens the org the device
+minted, an account is asked for at the three moments in `ACCESS-AND-BILLING.md`
+A2.3 and nowhere else, and signup adopts the id the handset already has. Google
+sign-in is built and inert until a client id is configured; email and password
+remain the fallback A2.4 always intended.
+
+**D13 is decided and not yet built.** It is the billing shape, and it is now
+the only part of the access story still on paper:
 
 | Area | Decided (this document) | On `main` today |
 |---|---|---|
-| First run | Opens offline on a device-minted org (D14) | Login required before the store opens |
-| Sign-in | Google, with email as fallback | Email and password only |
+| First run | Opens offline on a device-minted org (D14) | **Built** |
+| Claiming | Signup adopts the device's org (D15) | **Built** |
+| Sign-in | Google, with email as fallback | **Built**, pending a Google client id |
 | Billing | Free on one device, $39/year to sync (D13) | None |
 
 **What this means for the exit gates.** Phase 2's gate has been re-earned on

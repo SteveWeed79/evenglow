@@ -159,6 +159,21 @@ const IDENTITY_INDEXES: Record<string, IndexDescription[]> = {
      */
     { key: { expiresAt: 1 }, expireAfterSeconds: 0 },
   ],
+  joinCodes: [
+    // Minting replaces the farm's live code, and this is the lookup it does.
+    { key: { orgId: 1, expiresAt: -1 } },
+    /**
+     * A spent or expired code deletes itself after a day.
+     *
+     * Not immediately: the row is the record of who was let onto the farm and
+     * when, and an owner asking "who did I give a code to on Tuesday" is a
+     * reasonable question. A day is long enough to answer it and short enough
+     * that a six-character secret's hash is not sitting in the database for a
+     * season. `expiresAt` is set at creation and redemption does not extend
+     * it, so both states age out on the same clock.
+     */
+    { key: { expiresAt: 1 }, expireAfterSeconds: 86_400 },
+  ],
 };
 
 /** The first key of an index description, or undefined if it has none. */

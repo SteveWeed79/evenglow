@@ -5,6 +5,7 @@ import {
   assignableRoles,
   canInvite,
   INVITE_TTL_DAYS,
+  JOIN_CODE_TTL_MINUTES,
   type PendingInvite,
   type Role,
   roleSchema,
@@ -82,6 +83,12 @@ const invitesSchema = z.object({
   ),
 });
 const mintedSchema = z.object({ token: z.string(), expiresAt: z.number() });
+const joinCodeSchema = z.object({
+  code: z.string(),
+  role: roleSchema,
+  expiresAt: z.number(),
+});
+type JoinCode = z.infer<typeof joinCodeSchema>;
 
 async function call(
   path: string,
@@ -156,6 +163,7 @@ export function MembersScreen(): React.ReactElement {
   const [email, setEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<Role>('hand');
   const [minted, setMinted] = useState<{ token: string; expiresAt: number } | null>(null);
+  const [code, setCode] = useState<JoinCode | null>(null);
 
   const refresh = useCallback(async () => {
     setProblem(null);
@@ -199,6 +207,25 @@ export function MembersScreen(): React.ReactElement {
       await refresh();
     });
   }, [invited, email, inviteRole, refresh]);
+
+  const coded = useSaver(useCallback(() => undefined, []));
+
+  /**
+   * Minting replaces whatever was live, so a farm never has two working codes.
+   *
+   * The characters come back once, in this response, and are never readable
+   * again — the server keeps only a hash, for the reason `join-codes.ts`
+   * gives. An owner who loses the screen presses the button again.
+   */
+  const mintCode = useCallback(() => {
+    void coded.save(async () => {
+      setCode(
+        joinCodeSchema.parse(
+          await call('/join-codes', { method: 'POST', body: { role: inviteRole } }),
+        ),
+      );
+    });
+  }, [coded, inviteRole]);
 
   const act = useCallback(
     async (run: () => Promise<unknown>) => {
@@ -319,8 +346,56 @@ export function MembersScreen(): React.ReactElement {
         </Panel>
       )}
 
+      {/**
+        * The code, on the screen the owner is holding out (A2.5).
+        *
+        * Above the invite form deliberately: both people are standing at the
+        * same gate, which is the ordinary case on a farm, and an email
+        * invitation is the exception rather than the default it used to be.
+        */}
       {mayInvite ? (
-        <Panel label="Add someone">
+        <Panel label="Somebody standing next to you">
+          <Body>
+            Six characters they type into their own phone. It lasts{' '}
+            {JOIN_CODE_TTL_MINUTES} minutes, works once, and needs no email at all.
+          </Body>
+
+          {code === null ? null : (
+            <>
+              {/* Wide-tracked and large: this is read off one screen and typed
+                  into another, at arm's length, outdoors. */}
+              <Text style={[styles.code, { color: colors.ink }]} selectable>
+                {code.code}
+              </Text>
+              <Body>
+                They will join as {ROLE_LABELS[code.role].toLowerCase()}. It stops working once
+                somebody uses it.
+              </Body>
+            </>
+          )}
+
+          <Field label="What may they do?" hint={ROLE_NOTES[inviteRole]}>
+            <Choice
+              options={grantable}
+              value={inviteRole}
+              onChange={setInviteRole}
+              labels={ROLE_LABELS}
+            />
+          </Field>
+
+          <Failure message={coded.failure} />
+
+          <Secondary
+            label={code === null ? 'Show a join code' : 'Show a fresh one'}
+            icon="sync"
+            onPress={mintCode}
+            testID="mint-join-code"
+          />
+        </Panel>
+      ) : null}
+
+      {mayInvite ? (
+        <Panel label="Somebody who is not here">
           <Field label="Their email">
             <TextField
               value={email}
@@ -373,4 +448,15 @@ const styles = StyleSheet.create({
   name: { fontFamily: FONTS.display, fontSize: TYPE.title },
   detail: { fontFamily: FONTS.data, fontSize: TYPE.label, letterSpacing: 0.4 },
   token: { fontFamily: FONTS.data, fontSize: TYPE.body },
+  /**
+   * Read off one screen at arm's length and typed into another, so it is set
+   * like a number rather than like prose: monospaced, large, and tracked wide
+   * enough that two characters cannot be taken for one.
+   */
+  code: {
+    fontFamily: FONTS.data,
+    fontSize: TYPE.hero,
+    letterSpacing: 6,
+    textAlign: 'center',
+  },
 });

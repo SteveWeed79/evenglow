@@ -1,5 +1,6 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { CachedClaims } from '../auth/session';
 import { AddAnimalScreen } from '../screens/AddAnimalScreen';
 import { AddBedScreen } from '../screens/AddBedScreen';
 import { AddGroupScreen } from '../screens/AddGroupScreen';
@@ -12,6 +13,7 @@ import { CareLogScreen } from '../screens/CareLogScreen';
 import { CareRoutineScreen } from '../screens/CareRoutineScreen';
 import { DiagnosticsScreen } from '../screens/DiagnosticsScreen';
 import { EditGroupScreen } from '../screens/EditGroupScreen';
+import { FeedPlanScreen } from '../screens/FeedPlanScreen';
 import { FeedScreen } from '../screens/FeedScreen';
 import { GroupScreen } from '../screens/GroupScreen';
 import { HarvestScreen } from '../screens/HarvestScreen';
@@ -26,6 +28,7 @@ import { InboxScreen } from '../screens/InboxScreen';
 import { IncubationScreen } from '../screens/IncubationScreen';
 import { IncubationsScreen } from '../screens/IncubationsScreen';
 import { InventoryScreen } from '../screens/InventoryScreen';
+import { AccountScreen } from '../screens/AccountScreen';
 import { LicencesScreen } from '../screens/LicencesScreen';
 import { LogHoursScreen } from '../screens/LogHoursScreen';
 import { LossScreen } from '../screens/LossScreen';
@@ -97,6 +100,14 @@ export type RootParamList = {
   Diagnostics: undefined;
   Members: undefined;
   Licences: undefined;
+  /**
+   * Where an account is asked for, and the only place it is.
+   *
+   * Pushed from My Farm rather than standing in front of the app: the first
+   * launch works without one (A2.1), so this is reached when somebody wants
+   * what an account buys, not before.
+   */
+  Account: undefined;
 
   // Stock
   AddGroup: undefined;
@@ -115,6 +126,8 @@ export type RootParamList = {
   Shearing: { groupId: string };
   Produce: { groupId: string };
   Feed: { groupId: string };
+  /** What a group *should* be fed, as distinct from what it was. */
+  FeedPlan: { groupId: string };
   Loss: { groupId: string };
   Breeding: { groupId: string };
   Incubations: undefined;
@@ -143,7 +156,13 @@ export type ScreenProps<K extends keyof RootParamList> = NativeStackScreenProps<
 
 const Stack = createNativeStackNavigator<RootParamList>();
 
-export function Root({ onSignedOut }: { onSignedOut: () => void }): React.ReactElement {
+export function Root({
+  onSignedIn,
+  onSignedOut,
+}: {
+  onSignedIn: (claims: CachedClaims) => void;
+  onSignedOut: () => void;
+}): React.ReactElement {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Tabs" component={Tabs} />
@@ -163,6 +182,7 @@ export function Root({ onSignedOut }: { onSignedOut: () => void }): React.ReactE
       <Stack.Screen name="Diagnostics" component={DiagnosticsScreen} />
       <Stack.Screen name="Members" component={MembersScreen} />
       <Stack.Screen name="Licences" component={LicencesScreen} />
+      <Stack.Screen name="Account">{() => <AccountScreen onSignedIn={onSignedIn} />}</Stack.Screen>
 
       <Stack.Screen name="AddGroup" component={AddGroupScreen} />
       <Stack.Screen name="Group" component={GroupScreen} />
@@ -177,6 +197,7 @@ export function Root({ onSignedOut }: { onSignedOut: () => void }): React.ReactE
       <Stack.Screen name="Shearing" component={ShearingScreen} />
       <Stack.Screen name="Produce" component={ProduceScreen} />
       <Stack.Screen name="Feed" component={FeedScreen} />
+      <Stack.Screen name="FeedPlan" component={FeedPlanScreen} />
       <Stack.Screen name="Loss" component={LossScreen} />
       <Stack.Screen name="Breeding" component={BreedingScreen} />
       <Stack.Screen name="Incubations" component={IncubationsScreen} />

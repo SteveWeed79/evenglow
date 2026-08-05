@@ -65,10 +65,10 @@ conflicts against records that already exist and wants its own design.
 
 ---
 
-## 2 — The four entities no screen can write
+## 2 — The four entities no screen can write — **all four now can**
 
-`task`, `photo`, `shearing`, `feedPlan` are in `ENTITIES`, have payload schemas,
-sync, and apply on the server. Nothing in the app can create one.
+`task`, `photo`, `shearing`, `feedPlan` were in `ENTITIES`, had payload schemas,
+sync, and applied on the server, and nothing in the app could create one.
 
 **Cost of skipping it:** the schema claims the app does things it cannot do,
 and two of the four are visible holes a keeper will find.
@@ -142,10 +142,32 @@ tallies with it. Bytes live in GridFS behind `db/blobs.ts`, which mirrors
 **Still open:** the copy that upload made false, and a two-device transfer.
 Both are in §6.
 
-### 2d. `feedPlan`
+### 2d. `feedPlan` — **done, and it was not a refinement after all**
 
-Rations. Lowest of the four: the feed *log* works, and a plan is a refinement of
-something already recorded rather than a hole.
+Rations. This was ranked lowest of the four on the argument that the feed *log*
+works and a plan is a refinement of something already recorded. That was half
+right and it missed the payoff: **`feedNeededUg` has been sitting in
+`due/growout.ts` since it was written, tested, and called by nothing**, because
+ration times head times days needs a ration.
+
+So the plan is not the feature. The row is: *"Order Goat mix for The goats"*,
+dated a week before the bin empties rather than on the morning it does.
+`feedPlanShape` promised exactly that — *"a bag running out is discovered
+rather than predicted"* — and it is the fourth builder to turn out to be
+finished code waiting on a screen.
+
+**Per animal per day, not per group**, because head count changes and the
+ration does not: birds are sold, a doe kids, a fox visits. A per-group figure
+would go silently wrong on every one of those days.
+
+**Superseding rather than editing.** A new ration ends the old one, so a cost
+read over last spring uses last spring's figure — the same reason `feedLog`
+stamps its own cost at log time.
+
+**It refuses more than it reports**, like cost-per-egg before it: no row for a
+group with no ration, and no row for a sack the shelf counts in bales, because
+nothing in this app knows what a bale weighs. That is the same condition
+`FeedScreen` already uses before it will draw the shelf down.
 
 ---
 
@@ -351,38 +373,83 @@ waiting.**
 
 ---
 
-## 7 — Getting in without an account
+## 7 — Getting in without an account — **built, except the billing**
 
-**Decided as D13 and D14; see `ACCESS-AND-BILLING.md`. Nothing built.**
+**Decided as D13, D14 and D15; see `ACCESS-AND-BILLING.md`.**
 
-**Cost of skipping it:** the wedge is offline-first and the first launch is a
-login wall, which is indistinguishable from a cloud app on the morning that
-decides whether somebody keeps the app. The market research is that nobody
+**Cost of skipping it (as it was):** the wedge is offline-first and the first
+launch was a login wall, which is indistinguishable from a cloud app on the
+morning that decides whether somebody keeps the app. The market research is that nobody
 ships full capability with nothing to sign up for — the hole is open and it is
 the same hole §1 of the competitive analysis found in features.
 
-Ordered by cost, cheapest first:
+Ordered by cost, cheapest first, and all four are now done:
 
-1. **Session lifetime and Google sign-in.** No architecture change. An app
-   opened at 5am every day should never ask twice, and a farm should not type
-   a password with a glove on.
-2. **Local-first first run.** The large one. Blocked on the D2 question in
-   `ACCESS-AND-BILLING.md` §5 — whether signup may adopt a client-minted
-   `orgId`. That answer is wanted before the work starts, not during.
-3. **Join by code**, so a hand is added by six characters at the gate rather
-   than an email invitation built for distributed teams.
-4. **Instrument per-org storage and bandwidth.** Not for pricing — that is
-   settled at $39/year, and a farm costs under a dime a year to serve. It is
-   for capacity, for the outlier who uploads video, and for knowing when photo
-   bytes should leave the database for S3. `ACCESS-AND-BILLING.md` §4.1c
-   and §4A.
+1. ~~**Session lifetime and Google sign-in.**~~ **Done, and the first half was
+   already true.** Refresh tokens have been ninety days and rotating since they
+   were written, re-derived from the database on every rotation and refreshed
+   at boot, on resume and on network regain — a farm opening the app daily was
+   never going to be asked twice. What was missing was the second half.
+
+   **Google sign-in and signup are one route**, because the device cannot know
+   which it is doing: whether an address already has an account is exactly the
+   question a sign-in screen must not be able to ask. A known Google account
+   signs in, a known email has the Google identity bound to it, and neither
+   claims the farm the device is holding.
+
+   **The audience check is the part that carries the weight.** A valid Google
+   ID token issued to somebody else's application is still a valid Google ID
+   token, so a server checking only the signature would sign that person in as
+   an owner. `email_verified` is required for the same class of reason: the
+   linking path matches an existing account *by email*.
+
+   **Inert until configured.** With no `GOOGLE_CLIENT_IDS` the route answers
+   501 and the button is not drawn, so a farm running its own box without a
+   Google project sees email and password and nothing broken.
+2. ~~**Local-first first run.**~~ **Done, and it was the large one.** First
+   launch mints an org ULID, opens `steading-{that}.db`, and the whole app
+   works — with no server address configured at all, which is every fresh
+   clone. `Boot` no longer has a signed-out state, because there is nothing to
+   be signed out *of*.
+
+   **The D2 question is answered as D15**: signup adopts the id. What settled
+   it was that the defence is structural rather than remembered — `_id`
+   uniqueness in MongoDB is the collection, not an index somebody can forget
+   to create — so two farms cannot silently merge. §5 has the reasoning and
+   the one crash case it turned up.
+
+   **Nothing moves when a farm claims itself**, which is the whole point:
+   `openLocalStore` finds its memoised handle and returns the same database.
+3. ~~**Join by code.**~~ **Done.** Six Crockford characters, ten minutes, one
+   use, one live code per farm, and the redeem route inside the same throttle
+   as accepting an invite.
+
+   **`invites.ts` says flatly that no rate limit makes a guessable invite
+   safe, and it is right about what it describes** — a link that sits in a
+   phone for a week. Every property that makes a join code a different object
+   is enforced rather than hoped for, and asserted in `tests/unit/membership`.
+   The long invite token stays for anyone who would rather send a link.
+4. ~~**Instrument per-org storage and bandwidth.**~~ **Done, as `pnpm
+   db:usage`** — an operator script, not a request path. Per-farm records and
+   photo bytes counted separately, because the only ratio worth looking at is
+   which of the two is growing; the outlier who uploads video gets a sentence
+   rather than a number to notice; and the 10 GB signal from §4A.3 says when
+   photo bytes should leave the database for S3.
+
+   Bandwidth is a **proxy and is labelled as one**: recent photo bytes, which
+   dominate everything else this app sends by two orders of magnitude. Real
+   accounting would mean counting bytes on the hot path to answer a question
+   asked once a quarter.
 
    **The number worth holding is break-even: three or four paying farms**, on
    the Oracle Always Free box that already exists. Free farms never touch the
    server, so they never move it. §4.1b.
 
-   **Before the first real farm syncs: a nightly `mongodump` to S3.**
-   Self-hosting makes backups ours, and a farm's records are the product.
+   ~~**Before the first real farm syncs: a nightly `mongodump` to S3.**~~
+   Done — `scripts/backup-mongo.sh`.
+
+**What is left in §7 is D13, the billing itself**, and nothing above depends on
+it: the free tier is the whole app and always was.
 
 ---
 
@@ -483,7 +550,18 @@ Small, named so they stop being remembered at the wrong moment.
 
 - **A weather tab.** Answered by the Farm hub.
 - **Humidity targets for incubation.** The farmer's call.
-- **CSV import.** Wants its own design; see item 1.
+- **CSV import.** **Refused, not deferred** — see `COMPETITIVE-ANALYSIS.md`
+  §2.1. Merging spreadsheet rows against records that already exist and already
+  sync needs conflict rules, an id strategy for rows that have none, and a
+  preview nobody reads. Every one of those is a way to quietly corrupt a farm's
+  history. Export is the half that stops the app being a trap, and it is built.
+- **Egg logging per individual bird** (P2). Refused: five hens share one roost,
+  so a per-bird tally is a guess recorded as a fact. `eggLog.birdId` stays in
+  the contract for a farm that genuinely traps nests; no screen writes one.
+- **PDF manuals on equipment** (the second half of P6). Refused: a service
+  manual is a hundred pages of 8pt type and nobody reads it on a handset in a
+  barn. Photos and receipts — the half that cannot be reconstructed later — are
+  built.
 - **Google Drive backup or sync.** Raised and parked deliberately. Worth
   saying what it would and would not be: the farm's records already sync
   between devices through the Steading server, so Drive would be a *third*

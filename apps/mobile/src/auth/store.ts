@@ -29,6 +29,7 @@ import { roleSchema } from '@steading/contracts';
 
 const REFRESH_KEY = 'steading.refreshToken';
 const CLAIMS_KEY = 'steading.claims';
+const LOCAL_ORG_KEY = 'steading.localOrg';
 
 /**
  * Parsed on read, never trusted (invariant 11).
@@ -82,6 +83,36 @@ export async function writeCachedClaims(claims: CachedClaims): Promise<void> {
   await SecureStore.setItemAsync(CLAIMS_KEY, JSON.stringify(claims), {
     keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK,
   });
+}
+
+/**
+ * The farm id a device holds before it has an account (A2.1).
+ *
+ * Not a credential, and it is here anyway — because invariant 6 permits
+ * exactly two stores on a handset, SQLite and this one, and this value is the
+ * **key to which SQLite file to open**. It cannot live in the database it
+ * names. This module is also the only file the lint guard lets name secure
+ * storage, so the raw read and write belong here and the policy on top of them
+ * lives in `local-org.ts`.
+ *
+ * Deliberately NOT cleared by `clearCredentials`: signing out of a farm must
+ * leave its records reachable, and the id is how they are reached.
+ */
+export async function readLocalOrgRaw(): Promise<string | null> {
+  return SecureStore.getItemAsync(LOCAL_ORG_KEY);
+}
+
+export async function writeLocalOrg(orgId: string): Promise<void> {
+  await SecureStore.setItemAsync(LOCAL_ORG_KEY, orgId, {
+    // The same reasoning as the refresh token: the sync loop runs on resume
+    // and on network regain, and a value the app cannot read with the screen
+    // off would make a background flush open the wrong database — or none.
+    keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK,
+  });
+}
+
+export async function clearLocalOrg(): Promise<void> {
+  await SecureStore.deleteItemAsync(LOCAL_ORG_KEY).catch(() => undefined);
 }
 
 /**

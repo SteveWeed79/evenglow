@@ -1,9 +1,15 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId } from '@steading/contracts';
+import { newId, poundsToUg } from '@steading/contracts';
 import { listAnimals } from '@steading/core/read/animals';
 import { listBreedings, listIncubations, listWeights } from '@steading/core/read/breeding';
 import { listCareLogs } from '@steading/core/read/care';
-import { lastFedByGroup, listGroups, lossesByGroup, produceToday } from '@steading/core/read/groups';
+import {
+  currentFeedPlans,
+  lastFedByGroup,
+  listGroups,
+  lossesByGroup,
+  produceToday,
+} from '@steading/core/read/groups';
 import { listBeds, listHarvests, listPlantings, listVarieties, readSite } from '@steading/core/read/growing';
 import { listInventory, listMachines, listServices } from '@steading/core/read/iron';
 import { listTasks } from '@steading/core/read/tasks';
@@ -25,6 +31,7 @@ import { CareLogScreen } from '../../apps/mobile/src/screens/CareLogScreen';
 import { EditGroupScreen } from '../../apps/mobile/src/screens/EditGroupScreen';
 import { FarmScreen } from '../../apps/mobile/src/screens/FarmScreen';
 import { GroupScreen } from '../../apps/mobile/src/screens/GroupScreen';
+import { FeedPlanScreen } from '../../apps/mobile/src/screens/FeedPlanScreen';
 import { FeedScreen } from '../../apps/mobile/src/screens/FeedScreen';
 import { HarvestScreen } from '../../apps/mobile/src/screens/HarvestScreen';
 import { IncubationScreen } from '../../apps/mobile/src/screens/IncubationScreen';
@@ -283,6 +290,42 @@ describe('what comes off them', () => {
 
     const [fed] = await localStore().readRecordsByEntity('feedLog');
     expect(fed?.value).toMatchObject({ amountGrams: 60 * 454 });
+  });
+
+  /**
+   * The ration — the last of the four entities that had a schema, a sync path
+   * and a server applier and nothing that could write one.
+   */
+  it('sets a ration, then supersedes it rather than rewriting it', async () => {
+    await aGroup({ species: 'goat', count: 4, purposes: ['milk'] });
+    const first = await mount(<FeedPlanScreen {...routeProps({ groupId: GROUP })} />);
+
+    await first.type('plan-feed', 'Goat mix');
+    // Ounces on the default imperial farm.
+    await first.type('plan-amount', '16');
+    await first.press('save-plan');
+    first.unmount();
+
+    const plans = await currentFeedPlans();
+    expect(plans.get(GROUP)).toMatchObject({ feedName: 'Goat mix' });
+    // A pound each, in micrograms.
+    expect(plans.get(GROUP)?.perAnimalPerDayUg).toBe(poundsToUg(1));
+
+    const second = await mount(<FeedPlanScreen {...routeProps({ groupId: GROUP })} />);
+    await second.type('plan-feed', 'Winter mix');
+    await second.type('plan-amount', '24');
+    await second.press('save-plan');
+    second.unmount();
+
+    /**
+     * One ration in force, not two — and the old row is still on disk, ended.
+     * A cost read over last season has to use last season's figure, which is
+     * the same reason `feedLog` stamps its own cost at log time.
+     */
+    const after = await currentFeedPlans();
+    expect(after.size).toBe(1);
+    expect(after.get(GROUP)).toMatchObject({ feedName: 'Winter mix' });
+    expect(await localStore().readRecordsByEntity('feedPlan')).toHaveLength(2);
   });
 
   it('records a loss and its predator as two facts', async () => {

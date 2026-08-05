@@ -158,6 +158,110 @@ export const inviteAcceptSchema = z
 
 export type InviteAccept = z.infer<typeof inviteAcceptSchema>;
 
+/**
+ * Claiming a farm that already exists on a device (A2.2).
+ *
+ * **`orgId` is sent by the client, and it is the only route in this system
+ * where that is true.** Invariant 2 forbids reading an orgId from a payload,
+ * and this does not breach it: the invariant governs *authorizing an
+ * operation against an existing tenant*, where a payload-supplied org would
+ * let a caller act inside somebody else's farm. Signup creates the tenant. At
+ * the moment this route runs there is no tenant to reach into, and every
+ * request afterwards derives the org from the verified token exactly as now.
+ *
+ * The defence is structural rather than a check somebody has to remember.
+ * `insertOrg` uses the ULID as the document `_id`, and `_id` uniqueness in
+ * MongoDB is not an index that can be dropped or forgotten to be created — it
+ * is the collection. A second claim on the same id is a hard duplicate-key
+ * failure, so two farms can never silently merge into one. That is the same
+ * guarantee that turned out to be protecting the photo route.
+ *
+ * A ULID also carries 80 bits of randomness, so an id cannot be guessed by
+ * somebody hoping to claim a farm they have never seen.
+ *
+ * The alternative — the server assigning an id and the device renaming its
+ * database at claim time — was rejected in A2.2: a rename plus a token write
+ * is two operations that must both survive a crash, and a half-claimed org is
+ * exactly the divergence invariant 5 exists to prevent.
+ */
+export const signupSchema = z
+  .object({
+    orgId: z.string().length(26),
+    orgName: z.string().min(1).max(120),
+    email: z.string().email().max(254),
+    password: z.string().min(12).max(200),
+    name: z.string().min(1).max(80),
+  })
+  .strict();
+
+export type Signup = z.infer<typeof signupSchema>;
+
+/**
+ * Join codes (A2.5) — six characters, shown by the owner and typed by the hand
+ * standing next to them.
+ *
+ * **Crockford's alphabet, which is the whole reason six characters is
+ * enough to be usable.** No I, L, O or U: nothing in a code can be misread as
+ * a one or a zero across a yard, and nothing spells a word by accident. The
+ * server normalises on the way in, so a hand who types `l` for `1` is
+ * understood rather than told they are wrong.
+ */
+export const JOIN_CODE_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+export const JOIN_CODE_LENGTH = 6;
+
+/**
+ * Ten minutes.
+ *
+ * `invites.ts` says flatly that no rate limit makes a guessable invite safe,
+ * and that is right about a link that sits in a phone for a week. This is a
+ * different object: it exists only while the owner is holding their phone out,
+ * it is single use, and it dies on its own. 32^6 is a billion, the window is
+ * ten minutes, and the redeem route is rate limited — so the expected number
+ * of successful guesses is far below one even if somebody spends the whole
+ * window guessing. The long invite token stays for anyone who wants to send a
+ * link instead.
+ */
+export const JOIN_CODE_TTL_MINUTES = 10;
+
+/** Uppercased, with the characters Crockford treats as the same letter folded. */
+export function normalizeJoinCode(raw: string): string {
+  return raw
+    .trim()
+    .toUpperCase()
+    .replace(/[IL]/g, '1')
+    .replace(/O/g, '0')
+    .replace(/U/g, 'V')
+    .replace(/[^0-9A-Z]/g, '');
+}
+
+/**
+ * Minting one.
+ *
+ * The role is chosen when the code is made rather than when it is redeemed,
+ * because the person choosing is the one with the authority to grant it — and
+ * a code that let the holder pick their own role would be a code that made
+ * everybody an owner.
+ *
+ * Defaults to `hand`, which is what an owner standing in a yard with a
+ * seasonal worker almost always means.
+ */
+export const joinCodeCreateSchema = z
+  .object({ role: roleSchema.default('hand') })
+  .strict();
+
+export type JoinCodeCreate = z.infer<typeof joinCodeCreateSchema>;
+
+export const joinCodeRedeemSchema = z
+  .object({
+    code: z.string().min(1).max(20),
+    email: z.string().email().max(254),
+    password: z.string().min(12).max(200),
+    name: z.string().min(1).max(80),
+  })
+  .strict();
+
+export type JoinCodeRedeem = z.infer<typeof joinCodeRedeemSchema>;
+
 /** What a pending invite looks like to the farm that sent it. */
 export interface PendingInvite {
   id: string;
@@ -175,3 +279,27 @@ export interface InvitePreview {
   email: string;
   expiresAt: number;
 }
+
+/**
+ * Signing in with Google (A2.4).
+ *
+ * The org fields are optional and travel together: a device holding an
+ * unclaimed farm sends them so that a first-time Google sign-in claims that
+ * farm rather than starting an empty one, and a device that is merely signing
+ * in on a second phone sends neither. The server decides which case it is,
+ * because whether an address already has an account is precisely the question
+ * a sign-in screen must not be able to ask.
+ *
+ * `name` is a fallback only. Google supplies one on almost every account; this
+ * covers the ones where the profile scope returns nothing.
+ */
+export const googleSignInSchema = z
+  .object({
+    idToken: z.string().min(1).max(8192),
+    orgId: z.string().length(26).optional(),
+    orgName: z.string().min(1).max(120).optional(),
+    name: z.string().min(1).max(80).optional(),
+  })
+  .strict();
+
+export type GoogleSignIn = z.infer<typeof googleSignInSchema>;

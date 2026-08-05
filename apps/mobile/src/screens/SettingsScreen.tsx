@@ -1,11 +1,11 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { readSite } from '@steading/core/read/growing';
 import { Row } from '../components/Form';
 import { Icon } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
-import { signOut } from '../auth/session';
+import { type CachedClaims, readCachedClaims, signOut } from '../auth/session';
 import { useLive } from '../hooks/useLive';
 import { useNav } from '../hooks/useNav';
 import { useTheme } from '../theme/ThemeProvider';
@@ -29,6 +29,19 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
 
   const [armed, setArmed] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  /**
+   * Whether this device has an account, read from the claims cache.
+   *
+   * UX only, which is all a cached claim may ever be (invariant 8) — it
+   * decides which of two sentences a row shows and nothing else. A device
+   * that guessed wrong would offer somebody an account they already have,
+   * which is a wasted tap rather than a security question.
+   */
+  const [account, setAccount] = useState<CachedClaims | null>(null);
+  useEffect(() => {
+    void readCachedClaims().then(setAccount);
+  }, []);
 
   /**
    * Two taps, and the second one says what it will do.
@@ -58,6 +71,24 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
           icon="stock"
           testID="go-my-farm"
           onPress={() => nav.navigate('MyFarm')}
+        />
+        {/**
+          * Second, and it says what it buys rather than what it is.
+          *
+          * "Your account" is a chore nobody opens. What a farm running without
+          * one actually needs to know is that its records are on this handset
+          * and nowhere else — the third moment in A2.3, and the honest one.
+          */}
+        <Row
+          title={account === null ? 'Keep these records safe' : 'Your account'}
+          detail={
+            account === null
+              ? 'Everything is on this phone only — an account keeps a copy'
+              : `Signed in${account.name === undefined ? '' : ` as ${account.name}`}`
+          }
+          icon="sync"
+          testID="go-account"
+          onPress={() => nav.navigate('Account')}
         />
         <Row
           title="Who is on this farm"

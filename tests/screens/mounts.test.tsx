@@ -39,7 +39,6 @@ import { ProduceScreen } from '../../apps/mobile/src/screens/ProduceScreen';
 import { ServiceDoneScreen } from '../../apps/mobile/src/screens/ServiceDoneScreen';
 import { SetEggsScreen } from '../../apps/mobile/src/screens/SetEggsScreen';
 import { SettingsScreen } from '../../apps/mobile/src/screens/SettingsScreen';
-import { SignInScreen } from '../../apps/mobile/src/screens/SignInScreen';
 import { SiteSetupScreen } from '../../apps/mobile/src/screens/SiteSetupScreen';
 import { ShearingScreen } from '../../apps/mobile/src/screens/ShearingScreen';
 import { StockScreen } from '../../apps/mobile/src/screens/StockScreen';
@@ -170,7 +169,6 @@ const SCREENS: [string, () => React.ReactElement][] = [
   ['Growing', () => <GrowingScreen />],
   ['Iron', () => <IronScreen />],
   ['Settings', () => <SettingsScreen onSignedOut={() => undefined} />],
-  ['SignIn', () => <SignInScreen onSignedIn={() => undefined} />],
   ['Inbox', () => <InboxScreen />],
   ['Diagnostics', () => <DiagnosticsScreen />],
   ['Members', () => <MembersScreen />],

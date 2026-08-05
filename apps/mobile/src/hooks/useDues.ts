@@ -4,10 +4,13 @@ import {
   careDues,
   type Due,
   growOutWindow,
+  feedOrderDue,
+  gramsToUg,
   growingDues,
   incubationDues,
   layOnsetWindow,
   partsDue,
+  poundsToUg,
   processingDue,
   serviceDue,
   shearingDues,
@@ -18,7 +21,7 @@ import {
 import { listAnimals } from '@steading/core/read/animals';
 import { listBreedings, listIncubations } from '@steading/core/read/breeding';
 import { lastCareBySubject, listCareLogs } from '@steading/core/read/care';
-import { lastShornByGroup, listGroups } from '@steading/core/read/groups';
+import { currentFeedPlans, lastShornByGroup, listGroups } from '@steading/core/read/groups';
 import { listBeds, listPlantings, listVarieties } from '@steading/core/read/growing';
 import { listInventory, listMachines, listServices } from '@steading/core/read/iron';
 import { listTasks } from '@steading/core/read/tasks';
@@ -71,6 +74,7 @@ export function useDues(): DuesView {
       services,
       inventory,
       tasks,
+      feedPlans,
     ] = await Promise.all([
       listGroups(),
       listAnimals(),
@@ -84,6 +88,7 @@ export function useDues(): DuesView {
       listServices(),
       listInventory(),
       listTasks(),
+      currentFeedPlans(),
     ]);
 
     const rows: Due[] = [];
@@ -110,9 +115,55 @@ export function useDues(): DuesView {
       new Map(animals.map((animal) => [animal.id, animal.flockId])),
     );
 
+    /**
+     * What the shelf holds of each feed, in micrograms.
+     *
+     * **Only where the sack is counted by weight**, which is the same
+     * condition `FeedScreen` uses before it will draw the shelf down. A farm
+     * that keeps hay in bales gets no row rather than a date computed from an
+     * invented idea of what a bale weighs. Summed by name, because two open
+     * sacks of layers pellets is one supply.
+     */
+    const feedOnHandUg = new Map<string, number | null>();
+    for (const item of inventory) {
+      if (item.kind !== 'feed') continue;
+
+      const ug =
+        item.unit === 'lb'
+          ? poundsToUg(item.quantity)
+          : item.unit === 'kg'
+            ? gramsToUg(item.quantity * 1000)
+            : null;
+
+      // Null is sticky: one bale-counted sack makes the total unknowable
+      // rather than merely smaller, and a partial total would read as a
+      // shortage that is not there.
+      const seen = feedOnHandUg.get(item.name);
+      feedOnHandUg.set(item.name, ug === null || seen === null ? null : (seen ?? 0) + ug);
+    }
+
     for (const group of groups) {
       for (const active of withdrawals.get(group.id) ?? []) {
         rows.push(withdrawalDue(active, group.name));
+      }
+
+      /**
+       * When the sack runs out — the row `feedPlan` exists to raise.
+       *
+       * Silent for a group with no ration, which is most groups on most
+       * farms, and silent for a feed the shelf counts in bales.
+       */
+      const plan = feedPlans.get(group.id);
+      if (plan !== undefined) {
+        const order = feedOrderDue(
+          group.id,
+          group.name,
+          plan.perAnimalPerDayUg,
+          group.count,
+          { feedName: plan.feedName, onHandUg: feedOnHandUg.get(plan.feedName) ?? null },
+          now,
+        );
+        if (order) rows.push(order);
       }
 
       /**
