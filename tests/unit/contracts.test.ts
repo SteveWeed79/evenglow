@@ -106,6 +106,22 @@ describe('entity payloads', () => {
     expect(maintenanceCreateSchema.safeParse({ ...base, intervalDays: 180 }).success).toBe(true);
   });
 
+  /**
+   * The inspection checklist (P15) is bounded at both ends: a list longer than
+   * a walkaround gets skipped wholesale, and a blank line is a row somebody
+   * would stand in front of a machine trying to interpret.
+   */
+  it('bounds a schedule checklist', () => {
+    const base = { equipmentId: newId(), title: 'Engine oil', intervalHours: 250 };
+
+    expect(maintenanceCreateSchema.safeParse({ ...base, checks: ['Drain plug'] }).success).toBe(true);
+    expect(maintenanceCreateSchema.safeParse({ ...base, checks: [] }).success).toBe(true);
+    expect(maintenanceCreateSchema.safeParse({ ...base, checks: [''] }).success).toBe(false);
+    expect(
+      maintenanceCreateSchema.safeParse({ ...base, checks: Array(21).fill('Grease') }).success,
+    ).toBe(false);
+  });
+
   it('rejects unknown payload fields', () => {
     const payload = { occurredAt: 1, count: 18, flockId: newId(), nope: 1 };
     expect(eggLogCreateSchema.safeParse(payload).success).toBe(false);

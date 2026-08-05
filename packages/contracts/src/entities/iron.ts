@@ -52,6 +52,22 @@ const maintenanceShape = {
   lastDoneAtDate: z.number().int().optional(),
   /** Links a service to the parts it consumes, so low stock can warn early (P8). */
   partIds: z.array(z.string().length(26)).max(50).optional(),
+  /**
+   * What to look at while doing it — P15, the inspection checklist.
+   *
+   * On the schedule rather than on the machine, because the list is different
+   * per job: a greasing walks the nipples and an oil change looks at the plug
+   * and the filter seal. A single list per machine would be the union of every
+   * job's, which is a list nobody reads to the end of.
+   *
+   * Plain strings, and in the order the machine is walked. Not entities: a
+   * check has no history of its own worth keeping — what is worth keeping is
+   * the job that comes out of one, and that is a `task`.
+   *
+   * Twenty is the cap because a checklist longer than a walkaround is one that
+   * gets skipped wholesale, and a skipped list is worse than no list.
+   */
+  checks: z.array(z.string().min(1).max(80)).max(20).optional(),
   note: z.string().max(500).optional(),
 };
 

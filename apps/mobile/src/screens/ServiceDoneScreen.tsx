@@ -1,8 +1,8 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { listInventory, listMachines, listServices } from '@steading/core/read/iron';
-import { partsNote } from '@steading/contracts';
-import { Confirm, Failure, Field, NumberField, Primary, useSaver } from '../components/Form';
+import { newId, partsNote } from '@steading/contracts';
+import { Confirm, Failure, Field, NumberField, Primary, Toggle, useSaver } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
@@ -41,6 +41,18 @@ export function ServiceDoneScreen({ route }: ScreenProps<'ServiceDone'>): React.
 
   const [atHours, setAtHours] = useState('');
 
+  /**
+   * The checks that were **not** right, which is the short list on any
+   * ordinary day.
+   *
+   * Ticking what passed would be eight taps to say nothing happened, every
+   * time, and a control that costs eight taps to report "fine" is one people
+   * stop using and then stop reading. The record that the walkaround happened
+   * at all is the service itself — `lastDoneAtDate` — so nothing here needs
+   * to prove a clean pass.
+   */
+  const [wrong, setWrong] = useState<string[]>([]);
+
   const { saving, failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
   const removed = useSaver(useCallback(() => nav.goBack(), [nav]));
 
@@ -60,8 +72,37 @@ export function ServiceDoneScreen({ route }: ScreenProps<'ServiceDone'>): React.
             : {}),
         },
       });
+
+      /**
+       * A failed check becomes a job, and that is the whole point of the list.
+       *
+       * A checklist that only ticked boxes would be a printed card with extra
+       * steps. What a keeper actually needs is for "hydraulic hose weeping" —
+       * noticed at eight in the morning with the tractor running and both
+       * hands dirty — to still exist at four in the afternoon. `task` is the
+       * one authored due kind and this is exactly what it is for.
+       *
+       * Written after the service, in the order that survives a partial
+       * failure best: the service being recorded is the fact, and a job raised
+       * against a service that was never marked done would sit on Today
+       * pointing at nothing. No date, so they land on the Jobs list and never
+       * nag; `subjectId` ties each one to the machine it was found on.
+       */
+      for (const line of wrong) {
+        await log({
+          entity: 'task',
+          op: 'create',
+          targetId: newId(),
+          payload: {
+            title: `${line} — ${machine?.name ?? service.title}`,
+            recurrence: 'none',
+            ...(machine === null ? {} : { subjectId: machine.id }),
+            note: `Found while doing ${service.title}.`,
+          },
+        });
+      }
     });
-  }, [save, log, service, atHours]);
+  }, [save, log, service, atHours, wrong, machine]);
 
   const drop = useCallback(() => {
     if (service === null) return;
@@ -84,6 +125,7 @@ export function ServiceDoneScreen({ route }: ScreenProps<'ServiceDone'>): React.
     return item === undefined ? [] : [{ id, name: item.name, quantity: item.quantity }];
   });
   const short = partsNote(parts);
+  const checks = service.checks ?? [];
 
   return (
     <Screen title={service.title} back>
@@ -117,6 +159,31 @@ export function ServiceDoneScreen({ route }: ScreenProps<'ServiceDone'>): React.
         <Panel label="Parts">
           <Body>{short}</Body>
         </Panel>
+      )}
+
+      {/**
+        * The walkaround (P15), and it is a list of toggles rather than a list
+        * of text because the answer is nearly always "all fine" — which
+        * should cost no taps at all.
+        */}
+      {checks.length === 0 ? null : (
+        <Field
+          label="Have a look at these"
+          hint="Tick anything that is not right. Each one becomes a job on the farm list; leave the rest alone."
+        >
+          {checks.map((line) => (
+            <Toggle
+              key={line}
+              label={line}
+              value={wrong.includes(line)}
+              onChange={(on) =>
+                setWrong((current) =>
+                  on ? [...current, line] : current.filter((c) => c !== line),
+                )
+              }
+            />
+          ))}
+        </Field>
       )}
 
       {service.intervalHours === undefined ? null : (

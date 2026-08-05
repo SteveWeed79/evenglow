@@ -6,6 +6,7 @@ import { listCareLogs } from '@steading/core/read/care';
 import { lastFedByGroup, listGroups, lossesByGroup, produceToday } from '@steading/core/read/groups';
 import { listBeds, listHarvests, listPlantings, listVarieties, readSite } from '@steading/core/read/growing';
 import { listInventory, listMachines, listServices } from '@steading/core/read/iron';
+import { listTasks } from '@steading/core/read/tasks';
 import { enqueue } from '@steading/core/sync/queue';
 import { localStore } from '@steading/core/db/store';
 import { freshStore } from '../support/store';
@@ -425,6 +426,75 @@ describe('iron', () => {
 
     const [closed] = await listServices();
     expect(closed).toMatchObject({ title: 'Oil and filter', intervalHours: 100, lastDoneAtHours: 100 });
+  });
+
+  /**
+   * P15, both halves: the preset arrives with a walkaround attached, and the
+   * one thing that was not right survives the morning as a job.
+   */
+  it('carries a checklist onto the schedule and turns a failed check into a job', async () => {
+    const add = await mount(<AddMachineScreen />);
+    await add.type('machine-name', 'The tractor');
+    await add.press('save-machine');
+    const [machine] = await listMachines();
+
+    const service = await mount(<AddServiceScreen {...routeProps({ machineId: machine!.id })} />);
+    await service.pressLabel('Oil and filter');
+
+    // The farm's own line, added to the preset's rather than instead of them.
+    await service.type('service-check', 'Hydraulic hoses');
+    await service.press('add-check');
+    await service.press('save-service');
+
+    const [schedule] = await listServices();
+    expect(schedule?.checks).toEqual([
+      'Drain plug and washer',
+      'Filter seal seated',
+      'Level on the dipstick',
+      'Leaks underneath',
+      'Hydraulic hoses',
+    ]);
+
+    const done = await mount(<ServiceDoneScreen {...routeProps({ serviceId: schedule!.id })} />);
+    expect(done.text()).toContain('Filter seal seated');
+
+    await done.pressLabel('Hydraulic hoses');
+    await done.type('service-hours', '100');
+    await done.press('save-done');
+
+    // The service is closed, so the interval counts from today.
+    expect((await listServices())[0]?.lastDoneAtDate).toBeDefined();
+
+    /**
+     * One job, for the one check that failed — not five for the five that
+     * were looked at. Undated, so it waits on the Jobs list rather than
+     * nagging from Today, and tied to the machine it was found on.
+     */
+    const jobs = await listTasks();
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      title: 'Hydraulic hoses — The tractor',
+      subjectId: machine!.id,
+    });
+    expect(jobs[0]?.dueAtDate).toBeUndefined();
+  });
+
+  it('raises nothing when the whole walkaround was fine', async () => {
+    const add = await mount(<AddMachineScreen />);
+    await add.type('machine-name', 'The tractor');
+    await add.press('save-machine');
+    const [machine] = await listMachines();
+
+    const service = await mount(<AddServiceScreen {...routeProps({ machineId: machine!.id })} />);
+    await service.pressLabel('Grease it');
+    await service.press('save-service');
+
+    const [schedule] = await listServices();
+    const done = await mount(<ServiceDoneScreen {...routeProps({ serviceId: schedule!.id })} />);
+    await done.press('save-done');
+
+    // An ordinary morning costs no taps and leaves no jobs behind.
+    expect(await listTasks()).toHaveLength(0);
   });
 
   it('refuses a schedule with nothing to come round on', async () => {

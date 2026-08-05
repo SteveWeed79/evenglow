@@ -138,6 +138,8 @@ export interface Service {
   lastDoneAtHours?: number;
   lastDoneAtDate?: number;
   partIds?: string[];
+  /** P15 — what to look at while doing it, in the order the machine is walked. */
+  checks?: string[];
   note?: string;
 }
 
@@ -154,13 +156,14 @@ export async function listServices(): Promise<Service[]> {
         return [];
       }
 
-      const { equipmentId, title, partIds, ...rest } = parsed.data;
+      const { equipmentId, title, partIds, checks, ...rest } = parsed.data;
       return [
         {
           id: record.targetId,
           equipmentId,
           title,
           ...(partIds === undefined ? {} : { partIds: [...partIds] }),
+          ...(checks === undefined ? {} : { checks: [...checks] }),
           ...Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined)),
         } satisfies Service,
       ];
