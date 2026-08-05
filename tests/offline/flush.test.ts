@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { discardRejected, listRejected, retryRejected } from '@steading/core/sync/inbox';
-import { diagnostics } from '@steading/core/sync/engine';
+import { diagnostics, subscribe, type SyncState } from '@steading/core/sync/engine';
 import { flushOnce, MAX_ATTEMPTS, type SyncTransport } from '@steading/core/sync/flush';
 import { checkIntegrity, enqueue, queueDepth } from '@steading/core/sync/queue';
 import { MAX_BATCH_SIZE, newId, type Mutation, type MutationStatus } from '@steading/contracts';
+import { localStore } from '@steading/core/db/store';
 import { freshStore, readOutboxBySeq } from '../support/store';
 
 function eggLog() {
@@ -284,5 +285,121 @@ describe('rejected inbox', () => {
     await discardRejected(queued.id);
 
     expect(await queueDepth()).toBe(1);
+  });
+});
+
+/**
+ * What the chip is allowed to say, which is a correctness question rather than
+ * a cosmetic one.
+ *
+ * "Waiting" promises something is in flight. On a free-tier farm nothing is —
+ * the batch is at rest — and a chip that says otherwise every morning for a
+ * year teaches somebody that the app lies about sync. That is the exact
+ * credibility the rejected state depends on.
+ */
+describe('what the device believes about being held', () => {
+  beforeEach(freshStore);
+
+  const held: SyncTransport = () =>
+    Promise.resolve({ status: 402, body: { error: 'Kept on this phone.', refusal: 'unsubscribed' } });
+
+  it('survives a cold start, so the first frame is not a lie', async () => {
+    await enqueue(eggLog());
+    await flushOnce(held);
+
+    // Persisted rather than held in memory. In memory, a free-tier farm would
+    // read "340 waiting" every morning until the first flush corrected it.
+    expect(await localStore().getSyncHeld()).toBe('unsubscribed');
+  });
+
+  /** The state the engine publishes right now. `subscribe` emits on attach. */
+  const stateNow = (): Promise<SyncState> =>
+    new Promise((resolve) => {
+      const off = subscribe((s) => {
+        off();
+        resolve(s);
+      });
+    });
+
+  it('outranks queued, so the chip stops saying waiting', async () => {
+    await enqueue(eggLog());
+
+    // Before the server has answered, work genuinely is waiting.
+    expect((await stateNow()).kind).toBe('queued');
+
+    await flushOnce(held);
+
+    // After, it is at rest and the chip must say so.
+    const state = await stateNow();
+    expect(state.kind).toBe('held');
+    if (state.kind === 'held') {
+      expect(state.count).toBe(1);
+      expect(state.refusal).toBe('unsubscribed');
+    }
+  });
+
+  /**
+   * Something the server refused still needs a person, and no amount of
+   * subscribing fixes it — so it keeps the top of the ranking even while the
+   * farm is held.
+   */
+  it('is outranked by something that needs a look', async () => {
+    await enqueue(eggLog());
+    await flushOnce(held);
+    expect((await stateNow()).kind).toBe('held');
+
+    await enqueue(eggLog());
+    await flushOnce((mutations) =>
+      Promise.resolve({
+        status: 200,
+        body: {
+          results: mutations.map((m) => ({ id: m.id, status: 'rejected' as const, reason: 'no' })),
+        },
+      }),
+    );
+
+    // A rejected mutation is a person's problem; being held is not.
+    const state = await stateNow();
+    expect(state.kind).toBe('rejected');
+  });
+
+  it('is cleared by a batch getting through, not by anything else', async () => {
+    await enqueue(eggLog());
+    await flushOnce(held);
+    expect(await localStore().getSyncHeld()).toBe('unsubscribed');
+
+    /**
+     * The app is never told a payment succeeded — it finds out by being
+     * allowed to write again. A farm that subscribes and then walks into a
+     * barn stays "on this phone" until a flush actually lands, which is
+     * correct: nothing has reached the server yet.
+     */
+    await flushOnce((mutations) =>
+      Promise.resolve({
+        status: 200,
+        body: { results: mutations.map((m) => ({ id: m.id, status: 'applied' as const })) },
+      }),
+    );
+
+    expect(await localStore().getSyncHeld()).toBeNull();
+  });
+
+  it('records which of the two states it is, without parsing prose', async () => {
+    await enqueue(eggLog());
+    await flushOnce(() =>
+      Promise.resolve({ status: 402, body: { error: 'anything', refusal: 'lapsed' } }),
+    );
+
+    expect(await localStore().getSyncHeld()).toBe('lapsed');
+  });
+
+  it('falls back to the gentler state when the server does not say', async () => {
+    await enqueue(eggLog());
+    await flushOnce(() => Promise.resolve({ status: 402, body: {} }));
+
+    // Telling a farm its subscription ended when it never had one, and telling
+    // a lapsed farm it never subscribed, are the same size of confusion.
+    // Neither is worth a branch that could be wrong in a third way.
+    expect(await localStore().getSyncHeld()).toBe('unsubscribed');
   });
 });

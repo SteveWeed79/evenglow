@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { mutationSchema } from '@steading/contracts';
+import { mutationSchema, SYNC_REFUSALS } from '@steading/contracts';
 
 /**
  * The shapes the offline engine stores, independent of what stores them.
@@ -88,6 +88,7 @@ export const META = {
   pulledThroughId: 'pulledThroughId',
   lastError: 'lastError',
   persistGranted: 'persistGranted',
+  syncHeld: 'syncHeld',
 } as const;
 
 export const metaSchemas = {
@@ -103,6 +104,18 @@ export const metaSchemas = {
   pulledThroughId: z.string().length(26),
   lastError: z.string(),
   persistGranted: z.boolean(),
+  /**
+   * Why the server is not taking this farm's work, when it is not (D13).
+   *
+   * Persisted rather than held in memory so the chip is right on the first
+   * frame after a cold start. An in-memory flag would leave a free-tier farm
+   * reading "340 waiting" every morning until the first flush corrected it —
+   * and "waiting" is precisely the lie this state exists to stop telling.
+   *
+   * A `meta` key rather than a column, because it is one small fact about the
+   * device's relationship with the server, which is what `meta` is for.
+   */
+  syncHeld: z.enum(SYNC_REFUSALS),
 } as const;
 
 /**

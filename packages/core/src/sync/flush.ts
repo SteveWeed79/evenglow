@@ -2,6 +2,7 @@ import {
   MAX_BATCH_SIZE,
   type Mutation,
   type MutationResult,
+  type SyncRefusal,
   type SyncResponse,
 } from '@steading/contracts';
 import { apiUrl, syncHeaders } from '../api';
@@ -148,6 +149,7 @@ async function runFlush(transport: SyncTransport): Promise<FlushOutcome> {
    */
   if (response.status === 402) {
     await setLastError(heldMessage(response.body));
+    await localStore().setSyncHeld(refusalIn(response.body));
     return { ...outcome, deferred: 'unsubscribed' };
   }
 
@@ -175,6 +177,17 @@ async function applyResults(
   // describe different things.
   await localStore().resolveBatch(batch, results);
   await localStore().markSynced(Date.now());
+
+  /**
+   * A batch got through, so whatever was holding this farm is over.
+   *
+   * Cleared here rather than on subscribing, because this is the only place
+   * that *knows* — the app is never told a payment succeeded, it finds out by
+   * being allowed to write again. A farm that resubscribes and then goes into
+   * a barn stays "on this phone" until the first flush lands, which is
+   * correct: nothing has reached the server yet.
+   */
+  await localStore().setSyncHeld(null);
 
   /**
    * Answered, but without mentioning these.
@@ -214,6 +227,19 @@ async function applyResults(
  * screen — so a malformed body falls back to a sentence that is true in both
  * states rather than rendering whatever arrived.
  */
+/**
+ * Which of the two states the server is in, if it said.
+ *
+ * Falls back to `unsubscribed`, the gentler of the two: telling a farm its
+ * subscription ended when it never had one is a small confusion, and telling a
+ * lapsed farm it never subscribed is the same. Neither is worth a branch that
+ * could be wrong in a third way.
+ */
+function refusalIn(body: unknown): SyncRefusal {
+  const said = (body as { refusal?: unknown } | null)?.refusal;
+  return said === 'lapsed' ? 'lapsed' : 'unsubscribed';
+}
+
 function heldMessage(body: unknown): string {
   const said = (body as { error?: unknown } | null)?.error;
   return typeof said === 'string' && said.length > 0 && said.length <= 200

@@ -42,7 +42,12 @@ export async function syncRoutes(app: FastifyInstance, env: Env): Promise<void> 
      */
     const entitlement = entitlementOf((await findOrgById(claims.orgId))?.subscription, Date.now());
     if (!entitlement.syncing && entitlement.refusal !== null) {
-      return reply.status(402).send({ error: syncRefusalMessage(entitlement.refusal) });
+      // The reason travels beside the sentence so the client can persist which
+      // state it is in without parsing prose. The sentence is for a person;
+      // the code is for the chip.
+      return reply
+        .status(402)
+        .send({ error: syncRefusalMessage(entitlement.refusal), refusal: entitlement.refusal });
     }
 
     const scope = await scoped(claims.orgId);
