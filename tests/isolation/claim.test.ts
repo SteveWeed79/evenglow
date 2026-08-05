@@ -1,6 +1,7 @@
 import { ulid } from 'ulid';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import type { UserDoc } from '@steading/api/db/identity';
+import { makeMutation } from '../support/fixtures';
 import { startTestDb } from '../support/mongo';
 
 /**
@@ -478,16 +479,23 @@ describeDb('what a server without a payment rail charges for', () => {
     const created = await app.inject({ method: 'POST', url: '/auth/signup', payload });
     expect(created.statusCode).toBe(201);
 
-    // A brand-new farm with no subscription at all, on a server with no Play
-    // credentials configured — which is every server this repo can build today.
+    /**
+     * A brand-new farm with no subscription at all, on a server with no Play
+     * credentials — which is every server this repo can build today.
+     *
+     * A real mutation rather than an empty batch: an empty one is refused as
+     * malformed, which would make this pass for the wrong reason on the day
+     * the gate came back.
+     */
     const flush = await app.inject({
       method: 'POST',
       url: '/sync',
       headers: { authorization: `Bearer ${created.json().accessToken}` },
-      payload: { mutations: [] },
+      payload: { mutations: [makeMutation()] },
     });
 
     expect(flush.statusCode).toBe(200);
+    expect(flush.json().results[0].status).toBe('applied');
     await app.close();
   });
 

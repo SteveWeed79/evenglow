@@ -12,6 +12,7 @@ export * from './mutation';
 export * from './roles';
 export * from './billing';
 export * from './membership';
+export * from './support';
 export * from './entities';
 export * from './ulid';
 export * from './withdrawal';
