@@ -1,3 +1,4 @@
+import type { SyncRefusal } from '@steading/contracts';
 import { localStore } from '../db/store';
 import { reportEngineError } from './report';
 import { backoffDelay, flushOnce, type SyncTransport } from './flush';
@@ -17,7 +18,16 @@ export type SyncState =
   | { kind: 'synced'; at: Date | null }
   | { kind: 'queued'; count: number }
   | { kind: 'syncing'; count: number }
-  | { kind: 'rejected'; count: number };
+  | { kind: 'rejected'; count: number }
+  /**
+   * The server is not taking this farm's work, and never will until it
+   * subscribes (D13).
+   *
+   * Its own state rather than a flavour of `queued`, because `queued` means
+   * *in the process of being sent* and this is not: the batch is at rest.
+   * Every consumer that says "waiting" would be lying.
+   */
+  | { kind: 'held'; count: number; refusal: SyncRefusal };
 
 type Listener = (state: SyncState) => void;
 
@@ -72,10 +82,24 @@ export function subscribe(listener: Listener): () => void {
  * more than they need to know work is pending.
  */
 async function currentState(): Promise<SyncState> {
-  const [queued, rejected] = await Promise.all([queueDepth(), rejectedCount()]);
+  const [queued, rejected, held] = await Promise.all([
+    queueDepth(),
+    rejectedCount(),
+    localStore().getSyncHeld(),
+  ]);
 
   if (rejected > 0) return { kind: 'rejected', count: rejected };
   if (syncing) return { kind: 'syncing', count: queued };
+
+  /**
+   * Held outranks queued and is outranked by rejected.
+   *
+   * Below rejected because something refused still needs a person, and no
+   * amount of subscribing fixes it. Above queued because saying "waiting" of
+   * work that is not going anywhere is the one thing this state exists to
+   * stop.
+   */
+  if (held !== null && queued > 0) return { kind: 'held', count: queued, refusal: held };
   if (queued > 0) return { kind: 'queued', count: queued };
 
   // Through the port, like everything else. Read directly from IndexedDB this

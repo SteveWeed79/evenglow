@@ -4,6 +4,7 @@ import {
   mutationSchema,
   newId,
   type PulledMutation,
+  type SyncRefusal,
 } from '@steading/contracts';
 import type { SqlDriver, SqlOps, SqlValue } from './driver';
 import { InvalidMutationError, StorageFullError } from './errors';
@@ -656,6 +657,24 @@ export async function openSqliteStore(
 
     async setLastError(message): Promise<void> {
       await writeMeta(driver, META.lastError, message);
+    },
+
+    async getSyncHeld(): Promise<SyncRefusal | null> {
+      return parseMeta('syncHeld', await readMeta(driver, 'syncHeld')) ?? null;
+    },
+
+    async setSyncHeld(refusal): Promise<void> {
+      /**
+       * Cleared by deletion rather than by writing a sentinel, so "no row"
+       * and "not held" are the same fact. A device that has never been held
+       * and one that was released look identical, which is correct — neither
+       * is being held now.
+       */
+      if (refusal === null) {
+        await driver.run('DELETE FROM meta WHERE key = ?', [META.syncHeld]);
+        return;
+      }
+      await writeMeta(driver, META.syncHeld, refusal);
     },
 
     async getDeviceId(): Promise<string | null> {

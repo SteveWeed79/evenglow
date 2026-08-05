@@ -1,7 +1,7 @@
 # Steading — Master Development Plan & Security Rubric
 
 **Version:** 3.1 — native client, access and billing
-**Status:** D1–D10 implemented; D14 and D15 (local-first access) implemented; D13 (billing) decided and unbuilt. See §0.1.
+**Status:** D1–D10 implemented; D13–D15 implemented, D13 pending a Play Console. See §0.1.
 **Name:** Steading — the farmhouse and its working buildings taken together. Stock, iron, and chores under one roofline.
 
 **What it is.** One app for everything a small mixed farm does: the animals, the
@@ -71,15 +71,20 @@ A2.3 and nowhere else, and signup adopts the id the handset already has. Google
 sign-in is built and inert until a client id is configured; email and password
 remain the fallback A2.4 always intended.
 
-**D13 is decided and not yet built.** It is the billing shape, and it is now
-the only part of the access story still on paper:
+**D13 is built to the edge of the store.** The entitlement rules, the sync
+gate, the Play state mapping and the honest copy are all in and tested; what
+is left needs a Play Console, which is configuration rather than code:
 
 | Area | Decided (this document) | On `main` today |
 |---|---|---|
 | First run | Opens offline on a device-minted org (D14) | **Built** |
 | Claiming | Signup adopts the device's org (D15) | **Built** |
 | Sign-in | Google, with email as fallback | **Built**, pending a Google client id |
-| Billing | Free on one device, $39/year to sync (D13) | None |
+| Billing | Free on one device, $39/year to sync (D13) | **Built**, pending a Play Console and the purchase flow |
+
+**Writing is the paid thing, and it is the only gate.** Reading a snapshot back
+is deliberately not gated: a lapsed subscription must never be the reason a
+farm cannot recover its own records.
 
 **What this means for the exit gates.** Phase 2's gate has been re-earned on
 native SQLite and is no longer carried over from IndexedDB. D14 changes *when*

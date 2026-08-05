@@ -1,4 +1,4 @@
-import { apiBase, setAccessToken } from '@steading/core/api';
+import { apiBase, setAccessToken, syncHeaders } from '@steading/core/api';
 import { z } from 'zod';
 import { roleSchema } from '@steading/contracts';
 import { forgetLocalOrgId } from './local-org';
@@ -400,3 +400,34 @@ export async function signOut(): Promise<void> {
 
 export { readCachedClaims };
 export type { CachedClaims };
+
+/**
+ * What this farm has paid for (D13).
+ *
+ * Parsed, never trusted — an API response is external data (invariant 11), and
+ * this one decides which of two quite different sentences a screen shows.
+ */
+const billingSchema = z
+  .object({
+    state: z.string().max(40),
+    expiresAt: z.number().int().nullable(),
+    syncing: z.boolean(),
+    message: z.string().max(200).nullable(),
+  })
+  .passthrough();
+
+export type BillingState = z.infer<typeof billingSchema>;
+
+/**
+ * Asked of the server rather than derived from the sync chip.
+ *
+ * The chip knows this device was refused; only the server knows what the farm
+ * has paid for and until when. Online-only, and the one caller treats a
+ * failure as "say nothing" rather than as an error — a barn must not turn a
+ * settings screen into a stack trace.
+ */
+export async function readBilling(): Promise<BillingState> {
+  const res = await fetch(url('/billing'), { headers: syncHeaders({}) });
+  if (!res.ok) throw new SignInError('Could not reach the farm.');
+  return billingSchema.parse(await res.json());
+}

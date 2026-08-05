@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text } from 'react-native';
+import { heldLabel } from '@steading/contracts';
 import type { SyncState } from '@steading/core/sync/engine';
 import { apiFault } from '../boot/config';
 import { Icon, type IconName } from './Icon';
@@ -21,11 +22,18 @@ import { useTheme } from '../theme/ThemeProvider';
  * the ordinary offline story forever, which is the failure the old boot-time
  * throw existed to prevent — the throw was the wrong remedy, but the worry
  * behind it was right, and this is where it is answered instead.
+ *
+ * **A farm on the free tier gets neither colour**, and that is the whole
+ * design of the D13 nag: it is not a fault, so it is not alarming, and it is
+ * not in flight, so it is not damson. It states where the records are and how
+ * many, and the number grows on its own — which is A2.3's third moment
+ * arriving on its own schedule rather than on a timer. No banner, no badge, no
+ * modal. If a farm never taps this, it uses the whole app free forever.
  */
 
 function describe(
   state: SyncState,
-  colors: { leaf: string; damson: string; rowan: string },
+  colors: { leaf: string; damson: string; rowan: string; muted: string },
 ): { label: string; icon: IconName; tint: string } {
   switch (state.kind) {
     case 'synced':
@@ -36,6 +44,19 @@ function describe(
       return { label: `Sending ${state.count}`, icon: 'sending', tint: colors.damson };
     case 'rejected':
       return { label: `${state.count} need a look`, icon: 'needs-a-look', tint: colors.rowan };
+    /**
+     * The free tier, and it is **not** rowan.
+     *
+     * "Not set up" is red because a misconfigured build is broken. A farm on
+     * the free tier is not broken — it is the product working exactly as D13
+     * designed it, and painting it red would be the app calling its own free
+     * tier a fault. That is the nag.
+     *
+     * Muted rather than damson too: damson is the colour of work in flight,
+     * and nothing here is in flight.
+     */
+    case 'held':
+      return { label: heldLabel(state.count), icon: 'saved', tint: colors.muted };
   }
 }
 

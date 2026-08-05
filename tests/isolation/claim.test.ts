@@ -1,6 +1,7 @@
 import { ulid } from 'ulid';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import type { UserDoc } from '@steading/api/db/identity';
+import { makeMutation } from '../support/fixtures';
 import { startTestDb } from '../support/mongo';
 
 /**
@@ -453,6 +454,85 @@ describeDb('join codes', () => {
     });
 
     expect(joined.statusCode).toBe(201);
+    await app.close();
+  });
+});
+
+/**
+ * Who the gate applies to (D13).
+ *
+ * CI found this rather than review did, and it was a real flaw rather than a
+ * broken fixture: **a self-hosted Steading has no Play Console, so no farm on
+ * it can ever subscribe** — and a gate that ignored that would refuse every
+ * flush on somebody's own box, forever, with no way out. The whole of
+ * `ACCESS-AND-BILLING.md` is built around exactly that box.
+ *
+ * It is also the honest reading of D13: the subscription pays for *this
+ * project* to hold a farm's records. A farm holding its own records on its own
+ * hardware owes nobody anything.
+ */
+describeDb('what a server without a payment rail charges for', () => {
+  it('charges for nothing, so a self-hosted farm can sync', async () => {
+    const app = await server();
+    const payload = claim();
+
+    const created = await app.inject({ method: 'POST', url: '/auth/signup', payload });
+    expect(created.statusCode).toBe(201);
+
+    /**
+     * A brand-new farm with no subscription at all, on a server with no Play
+     * credentials — which is every server this repo can build today.
+     *
+     * A real mutation rather than an empty batch: an empty one is refused as
+     * malformed, which would make this pass for the wrong reason on the day
+     * the gate came back.
+     */
+    const flush = await app.inject({
+      method: 'POST',
+      url: '/sync',
+      headers: { authorization: `Bearer ${created.json().accessToken}` },
+      payload: { mutations: [makeMutation()] },
+    });
+
+    expect(flush.statusCode).toBe(200);
+    expect(flush.json().results[0].status).toBe('applied');
+    await app.close();
+  });
+
+  it('answers 501 on the billing routes rather than pretending to sell', async () => {
+    const app = await server();
+    const created = await app.inject({ method: 'POST', url: '/auth/signup', payload: claim() });
+
+    const bought = await app.inject({
+      method: 'POST',
+      url: '/billing/play',
+      headers: { authorization: `Bearer ${created.json().accessToken}` },
+      payload: { purchaseToken: 'anything' },
+    });
+
+    // Named plainly, so an operator can act on it — the same shape as Google
+    // sign-in without a client id.
+    expect(bought.statusCode).toBe(501);
+    expect(bought.json().error).toMatch(/not set up to take payments/);
+    await app.close();
+  });
+
+  /**
+   * And the farm is told it is syncing rather than being told nothing, because
+   * the account screen reads this and has to say one of two quite different
+   * things.
+   */
+  it('reports a self-hosted farm as syncing', async () => {
+    const app = await server();
+    const created = await app.inject({ method: 'POST', url: '/auth/signup', payload: claim() });
+
+    const billing = await app.inject({
+      method: 'GET',
+      url: '/billing',
+      headers: { authorization: `Bearer ${created.json().accessToken}` },
+    });
+
+    expect(billing.statusCode).toBe(200);
     await app.close();
   });
 });

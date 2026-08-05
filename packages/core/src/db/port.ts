@@ -1,3 +1,4 @@
+import type { SyncRefusal } from '@steading/contracts';
 import type { Entity, MutationResult, Op, PulledMutation } from '@steading/contracts';
 import type { LocalRecord, Quarantined, QueuedMutation } from './records';
 
@@ -200,6 +201,17 @@ export interface LocalStore {
   getLastError(): Promise<string | null>;
   setLastError(message: string): Promise<void>;
   getDeviceId(): Promise<string | null>;
+
+  /**
+   * Why the server is holding this farm's work, or null when it is not (D13).
+   *
+   * Persisted so the chip is right on the first frame after a cold start.
+   * Held in memory it would leave a free-tier farm reading "340 waiting" every
+   * morning until the first flush corrected it — and `waiting` is the exact
+   * lie this state exists to stop telling.
+   */
+  getSyncHeld(): Promise<SyncRefusal | null>;
+  setSyncHeld(refusal: SyncRefusal | null): Promise<void>;
 
   // ── Forecast cache ────────────────────────────────────────────────────────
 

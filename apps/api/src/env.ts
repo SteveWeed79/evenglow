@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { type PlayConfig, readPlayConfig } from './billing/play';
 
 /**
  * Server configuration, parsed once at the boundary.
@@ -40,11 +41,25 @@ const envSchema = z.object({
    * which is what a farm running its own box gets until it makes a project.
    */
   GOOGLE_CLIENT_IDS: z.string().default(''),
+  /**
+   * The Play service-account JSON, verbatim (D13).
+   *
+   * **The one real secret in this file besides `AUTH_SECRET`.** Unlike an
+   * OAuth client id, this holds a private key — server-side only, never in a
+   * bundle, never in a log line. Absent is a supported state: the billing
+   * routes answer 501 and every farm stays on the free tier, which is exactly
+   * what the app does today.
+   */
+  GOOGLE_PLAY_SERVICE_ACCOUNT: z.string().default(''),
+  /** The package the purchase must belong to. `com.steading.app`. */
+  GOOGLE_PLAY_PACKAGE: z.string().default(''),
 });
 
 export type Env = z.infer<typeof envSchema> & {
   corsOrigins: string[];
   googleClientIds: string[];
+  /** Null when this server takes no payments, which is a supported state. */
+  playConfig: PlayConfig | null;
 };
 
 /**
@@ -70,5 +85,9 @@ export function readEnv(source: Record<string, string | undefined> = process.env
     googleClientIds: parsed.data.GOOGLE_CLIENT_IDS.split(',')
       .map((id) => id.trim())
       .filter(Boolean),
+    playConfig: readPlayConfig(
+      parsed.data.GOOGLE_PLAY_SERVICE_ACCOUNT || undefined,
+      parsed.data.GOOGLE_PLAY_PACKAGE || undefined,
+    ),
   };
 }

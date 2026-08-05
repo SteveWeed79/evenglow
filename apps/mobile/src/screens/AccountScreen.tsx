@@ -6,10 +6,12 @@ import { Screen } from '../components/Screen';
 import { useGoogleSignIn } from '../auth/google';
 import { ensureLocalOrgId } from '../auth/local-org';
 import {
+  type BillingState,
   type CachedClaims,
   claimFarm,
   googleSignIn,
   joinFarm,
+  readBilling,
   readCachedClaims,
   signIn,
   SignInError,
@@ -65,6 +67,7 @@ export function AccountScreen({
 
   const [claims, setClaims] = useState<CachedClaims | null>(null);
   const [known, setKnown] = useState(false);
+  const [billing, setBilling] = useState<BillingState | null>(null);
 
   const [mode, setMode] = useState<Mode>('claim');
   const [farmName, setFarmName] = useState('');
@@ -77,6 +80,15 @@ export function AccountScreen({
     void readCachedClaims().then((found) => {
       setClaims(found);
       setKnown(true);
+      /**
+       * Asked of the server rather than derived from the chip.
+       *
+       * The chip knows the device was refused; only the server knows what the
+       * farm has actually paid for and until when. A screen somebody opened to
+       * find out should ask the thing that knows — and it fails soft, because
+       * this screen has to work in a barn even though the answer cannot.
+       */
+      if (found !== null) void readBilling().then(setBilling, () => setBilling(null));
     });
   }, []);
 
@@ -170,12 +182,47 @@ export function AccountScreen({
       <Screen title="Your account" back>
         <Panel label="Signed in">
           <Body>
-            This device is signed in{claims.name === undefined ? '' : ` as ${claims.name}`}, so
-            everything logged here reaches the farm's other phones and is recoverable if this one
-            is lost.
+            This device is signed in{claims.name === undefined ? '' : ` as ${claims.name}`}.
           </Body>
           <Body>Adding somebody else to the farm is under Members.</Body>
         </Panel>
+
+        {/**
+          * What the farm has paid for, and what that changes (D13).
+          *
+          * **The claim above used to promise sync unconditionally** — "so
+          * everything logged here reaches the farm's other phones" — which was
+          * true when an account was the only gate and became a lie the moment
+          * one existed. Signing in is now free; the copy says which of the two
+          * a farm is in rather than assuming.
+          */}
+        {billing === null ? null : billing.syncing ? (
+          <Panel label="Syncing">
+            <Body>
+              Everything logged on this phone reaches the farm's other phones, and is recoverable
+              if this one is lost.
+              {billing.expiresAt === null
+                ? ''
+                : ` Paid up to ${new Date(billing.expiresAt).toLocaleDateString(undefined, {
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric',
+                  })}.`}
+            </Body>
+          </Panel>
+        ) : (
+          <Panel label="Kept on this phone">
+            {/* The server's own sentence, so this screen and the sync chip
+                cannot come to disagree about what is happening. */}
+            <Body>{billing.message ?? 'Nothing is being sent anywhere.'}</Body>
+            <Body>
+              Everything works exactly as it does now — the whole app, on this handset, for as
+              long as you like. What a subscription adds is a copy on the farm's server: a second
+              phone sees the same records, a farm hand can log work, and a phone in a water
+              trough costs you a phone rather than a season.
+            </Body>
+          </Panel>
+        )}
       </Screen>
     );
   }

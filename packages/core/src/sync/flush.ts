@@ -2,6 +2,7 @@ import {
   MAX_BATCH_SIZE,
   type Mutation,
   type MutationResult,
+  type SyncRefusal,
   type SyncResponse,
 } from '@steading/contracts';
 import { apiUrl, syncHeaders } from '../api';
@@ -127,6 +128,31 @@ async function runFlush(transport: SyncTransport): Promise<FlushOutcome> {
     return { ...outcome, deferred: 'unauthenticated' };
   }
 
+  /**
+   * 402 — the farm is on the free tier, or its subscription ended (D13).
+   *
+   * **Not a rejection, and the distinction is the most important one in this
+   * function.** A rejected mutation goes to the inbox as something a person
+   * must look at; there is nothing here for anybody to look at, and routing a
+   * farm's entire history there over a payment state would be the app turning
+   * on its own user.
+   *
+   * So it takes the 401 shape exactly: no `recordAttempt`, because attempts
+   * are what ripen into `rejectExhausted`, and a farm running free for a year
+   * would otherwise cross the ceiling and have its records swept into the
+   * inbox six flushes in. Nothing is dropped, nothing is counted, everything
+   * stays queued — and the day the farm subscribes, it all goes up.
+   *
+   * The message comes from the server rather than being written here, because
+   * the server knows which of the two states it is and the two say different
+   * things. See `syncRefusalMessage`.
+   */
+  if (response.status === 402) {
+    await setLastError(heldMessage(response.body));
+    await localStore().setSyncHeld(refusalIn(response.body));
+    return { ...outcome, deferred: 'unsubscribed' };
+  }
+
   if (!isSyncResponse(response.body)) {
     // A 4xx with no per-mutation results (a malformed batch) is not retryable
     // in any useful sense, but it must not loop forever either.
@@ -151,6 +177,17 @@ async function applyResults(
   // describe different things.
   await localStore().resolveBatch(batch, results);
   await localStore().markSynced(Date.now());
+
+  /**
+   * A batch got through, so whatever was holding this farm is over.
+   *
+   * Cleared here rather than on subscribing, because this is the only place
+   * that *knows* — the app is never told a payment succeeded, it finds out by
+   * being allowed to write again. A farm that resubscribes and then goes into
+   * a barn stays "on this phone" until the first flush lands, which is
+   * correct: nothing has reached the server yet.
+   */
+  await localStore().setSyncHeld(null);
 
   /**
    * Answered, but without mentioning these.
@@ -181,6 +218,33 @@ async function applyResults(
   }
 
   return next;
+}
+
+/**
+ * The server's own sentence about why it is holding, parsed not trusted.
+ *
+ * An API response is external data (invariant 11), and this one reaches a
+ * screen — so a malformed body falls back to a sentence that is true in both
+ * states rather than rendering whatever arrived.
+ */
+/**
+ * Which of the two states the server is in, if it said.
+ *
+ * Falls back to `unsubscribed`, the gentler of the two: telling a farm its
+ * subscription ended when it never had one is a small confusion, and telling a
+ * lapsed farm it never subscribed is the same. Neither is worth a branch that
+ * could be wrong in a third way.
+ */
+function refusalIn(body: unknown): SyncRefusal {
+  const said = (body as { refusal?: unknown } | null)?.refusal;
+  return said === 'lapsed' ? 'lapsed' : 'unsubscribed';
+}
+
+function heldMessage(body: unknown): string {
+  const said = (body as { error?: unknown } | null)?.error;
+  return typeof said === 'string' && said.length > 0 && said.length <= 200
+    ? said
+    : 'Kept on this phone. Nothing has been lost.';
 }
 
 async function recordAttempt(batch: QueuedMutation[], error: string): Promise<void> {
