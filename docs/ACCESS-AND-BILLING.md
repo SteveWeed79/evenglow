@@ -130,11 +130,17 @@ that mostly does not land.
 **$39 a year, one tier, per farm, unlimited people.** $4.99 a month alongside
 it if a monthly option is wanted, priced so annual obviously wins.
 
-An earlier draft of this section said the price could not be set until the cost
-floor was measured. That was wrong, and the reason it was wrong is the useful
-part: **the cost floor does not bind.**
+An earlier draft said the price could not be set until per-farm cost was
+measured. That was wrong twice over, and both errors are worth keeping because
+they are the kind a cost-plus instinct produces:
 
-### 4.1 — The cost floor, which turns out not to matter
+1. **The cost floor does not bind.** A farm costs under a dime a year to serve
+   against $39 of revenue. The price is set by what a smallholder will pay.
+2. **Costs here are fixed, not marginal.** Reasoning per-farm at all was the
+   mistake. What matters is a flat hosting bill and how many farms clear it —
+   **break-even, at roughly fifteen to forty.**
+
+### 4.1 — What one farm costs, and what the whole thing costs
 
 The measurement this section used to demand had already been half done, in the
 roadmap:
@@ -144,26 +150,61 @@ roadmap:
 >
 > A photo compressed for the purpose is **200–400 KB**.
 
-So a synced farm is roughly **1 MB of records and ~30 MB of photos a year** at a
-hundred photos. A thousand paying farms is about **31 GB a year** — on S3 that
-is roughly **$0.70 a month for all of them**. §4A.4 covers why that is S3
-rather than the marginally cheaper R2.
+So a synced farm accumulates roughly **1 MB of records and ~30 MB of photos a
+year** at a hundred photos. On S3 that is about **half a cent a year** for a
+farm in its first year, and — because storage accrues rather than resets —
+somewhere near **four cents a year for a farm a decade old**. Requests and
+egress round to nothing beside it: one upload per photo, and roughly one
+download per photo per additional device, because each device caches locally
+after the first fetch.
 
-**Storage is not a constraint at any scale this reaches.** The 25 MB ceiling is
-a ceiling, not a typical, and the app already shrinks photos for the purpose.
+**The marginal cost of a paying farm is under a dime a year.** Against $39 of
+revenue, that is a quarter of one percent, and it stays there at any scale
+this reaches. The 25 MB ceiling is a ceiling rather than a typical, and the
+app already shrinks photos for the purpose.
 
-That changes what the instrumentation is for. Per-org bytes are still worth
-measuring — for capacity planning, for spotting the farm that uploads video,
-and for knowing when photos should leave the database — but **not for setting a
-price.** This is priced on what a smallholder will pay, not on cost-plus, and
-the two are three orders of magnitude apart.
+### 4.1a — The costs are fixed, not marginal, and that is the whole shape
 
-### 4.1a — What the paid tier actually costs to serve
+Everything that actually costs money is a flat bill that does not care how
+many farms there are:
 
-Roughly nothing, per farm, which is the point. The real costs are fixed rather
-than marginal: an API host, a MongoDB, and whoever answers the mail. Those are
-covered by a few hundred paying farms at any sane price, and are not reached
-faster by charging more per farm than the market bears.
+| | Rough annual |
+|---|---|
+| API host | $250–500 |
+| MongoDB — same box, or managed | $0–700 |
+| Apple Developer | $99 |
+| Domain, Play Store (one-off $25), sundries | ~$50 |
+
+**Call it $500–1,500 a year**, dominated entirely by the hosting choice — which
+is why *"same box as your other services, or a managed host?"* is still the
+only cost decision in the masterplan's Open Questions that matters. It is
+roughly 99% of the cost structure. Storage is the rounding error.
+
+### 4.1b — Break-even, which is the number worth holding
+
+At $39 a year, fixed costs of $500–1,500 are covered by **roughly fifteen to
+forty paying farms.** Under fifty either way.
+
+That is the number to plan against, and it is deliberately not a market
+forecast. For scale: `COMPETITIVE-ANALYSIS.md` records Farmbrite — the
+category leader, established and marketed — at **~5,000+ customers**. Any
+figure in the hundreds would already be a real business here, and a thousand
+would be a fifth of the leader's size. Conversion on this model runs on an
+*event* rather than a deadline, so a paying farm implies a good many free ones
+behind it.
+
+**None of which has to work for the project to survive**, and that is the
+point of the free tier rather than a consolation. Free farms never touch the
+server, so they never move the line above. The break-even is small enough to
+be reached by one well-received forum thread, and everything past it is real.
+
+### 4.1c — So what is the instrumentation for?
+
+Not pricing. Per-org bytes are still worth measuring, for three things:
+capacity planning, spotting the one farm that starts uploading video, and
+knowing when photo bytes should leave the database for object storage (§4A).
+The price is set by what a smallholder will pay — see §4.2 — and the two
+numbers are three orders of magnitude apart.
 
 ### 4.2 — The competitive anchors, which are what actually decide it
 
@@ -313,9 +354,10 @@ line item.
 ### 4A.4 — S3, not R2, and the reason is not price
 
 R2 is cheaper — roughly $0.015/GB against $0.023, and no egress charge against
-about $0.09/GB. At the volumes in §4.1 that is a difference of **around ten
-dollars a year at a thousand paying farms**, against some $39,000 of revenue.
-Three hundredths of one percent.
+about $0.09/GB. At the per-farm volumes in §4.1 that is a saving of **a
+fraction of a cent per farm per year**, on a marginal cost already under a
+dime. It stays smaller than the domain renewal until the farms number in the
+tens of thousands.
 
 **Familiarity is worth more than that.** The cost of a storage layer is not its
 invoice, it is the evening spent debugging an access policy on a platform
