@@ -7,6 +7,7 @@ import { authRoutes } from './routes/auth';
 import { billingRoutes } from './routes/billing';
 import { memberRoutes } from './routes/members';
 import { photoRoutes } from './routes/photos';
+import { supportRoutes } from './routes/support';
 import { syncRoutes } from './routes/sync';
 
 /**
@@ -49,6 +50,7 @@ export async function buildServer(env: Env = readEnv()): Promise<FastifyInstance
   await authRoutes(app, env);
   await billingRoutes(app, env);
   await memberRoutes(app, env);
+  await supportRoutes(app, env);
   await syncRoutes(app, env);
   await photoRoutes(app, env);
 
