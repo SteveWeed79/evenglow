@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   type CareIntervals,
+  feedPlanCreateSchema,
   flockCreateSchema,
   idMintedAt,
   type Species,
@@ -280,4 +281,80 @@ export async function lastFedByGroup(): Promise<Map<string, number>> {
   }
 
   return latest;
+}
+
+// ── feed plans ───────────────────────────────────────────────────────────────
+
+/**
+ * What a group *should* be fed, as distinct from what it was.
+ *
+ * `feedLog` records the second and has since the first schema; this is the
+ * first half — and without it `feedNeededUg` has been arithmetic with nothing
+ * to work on since the day it was written. A farm with no plan gets null
+ * rather than an estimate built on a guess about how much a goat eats.
+ */
+export interface FeedPlan {
+  id: string;
+  flockId: string;
+  feedName: string;
+  /** Per animal per day. Multiplied by head count to predict the bag. */
+  perAnimalPerDayUg: number;
+  startedAt: number;
+  /** Absent means current. Set when the ration is superseded. */
+  endedAt?: number;
+  note?: string;
+}
+
+const storedFeedPlan = z.object(feedPlanCreateSchema.shape).partial();
+
+/**
+ * The ration in force for each group, newest first.
+ *
+ * **Superseding rather than editing** is how a ration changes: a plan ends and
+ * another begins, so a cost read over last spring uses last spring's ration
+ * rather than today's. That is the same reason `feedLog` stamps its own cost
+ * at log time — a season's history rewritten by a price change is history the
+ * farm cannot check.
+ *
+ * A group with several plans open is a farm mid-change rather than a defect,
+ * so this takes the one that started most recently rather than refusing.
+ */
+export async function currentFeedPlans(): Promise<Map<string, FeedPlan>> {
+  const records = await localStore().readRecordsByEntity('feedPlan');
+
+  const live = records
+    .filter((record) => !record.deleted)
+    .flatMap((record) => {
+      const parsed = storedFeedPlan.safeParse(record.value);
+      if (
+        !parsed.success ||
+        parsed.data.flockId === undefined ||
+        parsed.data.feedName === undefined ||
+        parsed.data.perAnimalPerDayUg === undefined ||
+        parsed.data.startedAt === undefined
+      ) {
+        return [];
+      }
+
+      const { flockId, feedName, perAnimalPerDayUg, startedAt, endedAt, note } = parsed.data;
+      // Ended plans are history, not the ration. They stay on disk because
+      // nothing here deletes a record, and they are simply not in force.
+      if (endedAt !== undefined) return [];
+
+      return [
+        {
+          id: record.targetId,
+          flockId,
+          feedName,
+          perAnimalPerDayUg,
+          startedAt,
+          ...(note === undefined ? {} : { note }),
+        } satisfies FeedPlan,
+      ];
+    })
+    .sort((a, b) => b.startedAt - a.startedAt);
+
+  const byGroup = new Map<string, FeedPlan>();
+  for (const plan of live) if (!byGroup.has(plan.flockId)) byGroup.set(plan.flockId, plan);
+  return byGroup;
 }

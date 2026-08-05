@@ -13,6 +13,7 @@ import { CareLogScreen } from '../screens/CareLogScreen';
 import { CareRoutineScreen } from '../screens/CareRoutineScreen';
 import { DiagnosticsScreen } from '../screens/DiagnosticsScreen';
 import { EditGroupScreen } from '../screens/EditGroupScreen';
+import { FeedPlanScreen } from '../screens/FeedPlanScreen';
 import { FeedScreen } from '../screens/FeedScreen';
 import { GroupScreen } from '../screens/GroupScreen';
 import { HarvestScreen } from '../screens/HarvestScreen';
@@ -125,6 +126,8 @@ export type RootParamList = {
   Shearing: { groupId: string };
   Produce: { groupId: string };
   Feed: { groupId: string };
+  /** What a group *should* be fed, as distinct from what it was. */
+  FeedPlan: { groupId: string };
   Loss: { groupId: string };
   Breeding: { groupId: string };
   Incubations: undefined;
@@ -194,6 +197,7 @@ export function Root({
       <Stack.Screen name="Shearing" component={ShearingScreen} />
       <Stack.Screen name="Produce" component={ProduceScreen} />
       <Stack.Screen name="Feed" component={FeedScreen} />
+      <Stack.Screen name="FeedPlan" component={FeedPlanScreen} />
       <Stack.Screen name="Loss" component={LossScreen} />
       <Stack.Screen name="Breeding" component={BreedingScreen} />
       <Stack.Screen name="Incubations" component={IncubationsScreen} />

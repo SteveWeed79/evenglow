@@ -230,6 +230,16 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
             testID="go-weigh"
             onPress={() => nav.navigate('Weigh', { groupId })}
           />
+          {/* Under More rather than beside "Log a feed", and the difference is
+              cadence: what they were fed is twice a day, what they should be
+              fed is once a season. */}
+          <Row
+            title="What they should get"
+            detail="A ration, so the app can say when the sack runs out"
+            icon="feed"
+            testID="go-feed-plan"
+            onPress={() => nav.navigate('FeedPlan', { groupId })}
+          />
           {/* Only where the keeper said fibre. A clip on a flock of layers is
               not a thing, and offering it would be the same mistake the egg
               tally made before `productsOf` — a row nobody will ever fill in,

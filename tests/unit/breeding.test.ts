@@ -3,7 +3,9 @@ import {
   birthDue,
   breedingCreateSchema,
   feedNeededUg,
+  feedOrderDue,
   feedPlanCreateSchema,
+  gramsToUg,
   growOutWindow,
   incubationCreateSchema,
   incubationDues,
@@ -317,5 +319,87 @@ describe('birth', () => {
     const bred = { id: 'br1', species: 'goat', damId: 'A'.repeat(26), bredAt: NOW };
     expect((birthDue(bred, 'Willow') as Due).at).toBe(NOW + 150 * DAY);
     expect(birthDue({ ...bred, bornAt: NOW + 149 * DAY }, 'Willow')).toBeNull();
+  });
+});
+
+/**
+ * When the sack runs out (§2d).
+ *
+ * `feedPlanShape` has promised this row since it was written, and until a
+ * screen could write a ration there was nothing to predict from. The
+ * arithmetic is deliberately the plainest in the app; what is worth testing is
+ * everything it *refuses* to answer, because a confident date from a guessed
+ * conversion is worse than no row.
+ */
+describe('ordering feed before the bin is empty', () => {
+  const NOW = 1_700_000_000_000;
+  const DAILY = gramsToUg(500); // half a kilo each, per day
+
+  const due = (over: Partial<{ ration: number | null; head: number; onHandUg: number | null }> = {}) =>
+    feedOrderDue(
+      'F'.repeat(26),
+      'The goats',
+      over.ration === undefined ? DAILY : over.ration,
+      over.head ?? 4,
+      { feedName: 'Goat mix', onHandUg: over.onHandUg === undefined ? gramsToUg(40_000) : over.onHandUg },
+      NOW,
+    );
+
+  it('dates the row when ordering becomes necessary, not when the bin empties', () => {
+    // 40 kg, four goats at half a kilo each: two kilos a day, twenty days left.
+    const row = due();
+    expect(row).not.toBeNull();
+
+    const daysOut = Math.round((row!.at! - NOW) / DAY);
+    // Twenty days of feed, minus the week it takes to get to the store and
+    // back with a sack. Dating it at empty would raise the row on the morning
+    // it is already too late, which is the surprise this replaces.
+    expect(daysOut).toBe(13);
+  });
+
+  it('names the feed and the group, because a farm runs more than one', () => {
+    expect(due()!.title).toBe('Order Goat mix for The goats');
+    // The authored kind, like ordering a part: a new DueKind would mean a new
+    // mark and a new branch in every consumer to say what `task` already says.
+    expect(due()!.kind).toBe('task');
+    expect(due()!.subject).toEqual({ entity: 'flock', id: 'F'.repeat(26) });
+  });
+
+  it('comes round sooner as the herd grows', () => {
+    const four = due({ head: 4 })!.at!;
+    const eight = due({ head: 8 })!.at!;
+    // Twice the mouths, half the days. The ration is stored per animal for
+    // exactly this reason — head count changes and the ration does not.
+    expect(eight).toBeLessThan(four);
+  });
+
+  /**
+   * The refusals, which are the point.
+   */
+  it('says nothing about a sack counted in bales', () => {
+    // The shelf knows it has three bales; it does not know what a bale weighs,
+    // and neither does this app.
+    expect(due({ onHandUg: null })).toBeNull();
+  });
+
+  it('says nothing about a group with no ration', () => {
+    // Most groups on most farms. Null, not a guess about how much a goat eats.
+    expect(due({ ration: null })).toBeNull();
+  });
+
+  it('says nothing when there is nothing to divide by', () => {
+    expect(due({ ration: 0 })).toBeNull();
+    expect(due({ head: 0 })).toBeNull();
+  });
+
+  /**
+   * An empty bin is not an error — it is the most urgent version of the row,
+   * and it must still appear rather than being filtered out for being in the
+   * past.
+   */
+  it('still raises a row when the feed has already run out', () => {
+    const row = due({ onHandUg: 0 });
+    expect(row).not.toBeNull();
+    expect(row!.at!).toBeLessThan(NOW);
   });
 });

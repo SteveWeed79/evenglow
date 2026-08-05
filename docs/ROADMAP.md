@@ -65,10 +65,10 @@ conflicts against records that already exist and wants its own design.
 
 ---
 
-## 2 — The four entities no screen can write
+## 2 — The four entities no screen can write — **all four now can**
 
-`task`, `photo`, `shearing`, `feedPlan` are in `ENTITIES`, have payload schemas,
-sync, and apply on the server. Nothing in the app can create one.
+`task`, `photo`, `shearing`, `feedPlan` were in `ENTITIES`, had payload schemas,
+sync, and applied on the server, and nothing in the app could create one.
 
 **Cost of skipping it:** the schema claims the app does things it cannot do,
 and two of the four are visible holes a keeper will find.
@@ -142,10 +142,32 @@ tallies with it. Bytes live in GridFS behind `db/blobs.ts`, which mirrors
 **Still open:** the copy that upload made false, and a two-device transfer.
 Both are in §6.
 
-### 2d. `feedPlan`
+### 2d. `feedPlan` — **done, and it was not a refinement after all**
 
-Rations. Lowest of the four: the feed *log* works, and a plan is a refinement of
-something already recorded rather than a hole.
+Rations. This was ranked lowest of the four on the argument that the feed *log*
+works and a plan is a refinement of something already recorded. That was half
+right and it missed the payoff: **`feedNeededUg` has been sitting in
+`due/growout.ts` since it was written, tested, and called by nothing**, because
+ration times head times days needs a ration.
+
+So the plan is not the feature. The row is: *"Order Goat mix for The goats"*,
+dated a week before the bin empties rather than on the morning it does.
+`feedPlanShape` promised exactly that — *"a bag running out is discovered
+rather than predicted"* — and it is the fourth builder to turn out to be
+finished code waiting on a screen.
+
+**Per animal per day, not per group**, because head count changes and the
+ration does not: birds are sold, a doe kids, a fox visits. A per-group figure
+would go silently wrong on every one of those days.
+
+**Superseding rather than editing.** A new ration ends the old one, so a cost
+read over last spring uses last spring's figure — the same reason `feedLog`
+stamps its own cost at log time.
+
+**It refuses more than it reports**, like cost-per-egg before it: no row for a
+group with no ration, and no row for a sack the shelf counts in bales, because
+nothing in this app knows what a bale weighs. That is the same condition
+`FeedScreen` already uses before it will draw the shelf down.
 
 ---
 
@@ -528,7 +550,18 @@ Small, named so they stop being remembered at the wrong moment.
 
 - **A weather tab.** Answered by the Farm hub.
 - **Humidity targets for incubation.** The farmer's call.
-- **CSV import.** Wants its own design; see item 1.
+- **CSV import.** **Refused, not deferred** — see `COMPETITIVE-ANALYSIS.md`
+  §2.1. Merging spreadsheet rows against records that already exist and already
+  sync needs conflict rules, an id strategy for rows that have none, and a
+  preview nobody reads. Every one of those is a way to quietly corrupt a farm's
+  history. Export is the half that stops the app being a trap, and it is built.
+- **Egg logging per individual bird** (P2). Refused: five hens share one roost,
+  so a per-bird tally is a guess recorded as a fact. `eggLog.birdId` stays in
+  the contract for a farm that genuinely traps nests; no screen writes one.
+- **PDF manuals on equipment** (the second half of P6). Refused: a service
+  manual is a hundred pages of 8pt type and nobody reads it on a handset in a
+  barn. Photos and receipts — the half that cannot be reconstructed later — are
+  built.
 - **Google Drive backup or sync.** Raised and parked deliberately. Worth
   saying what it would and would not be: the farm's records already sync
   between devices through the Steading server, so Drive would be a *third*
