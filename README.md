@@ -101,6 +101,7 @@ owner are created by `db:seed`.
 | `pnpm check:secrets` | Fail if a secret reached the client bundle |
 | `pnpm check:no-db-disables` | Fail on inline disables of the db guard |
 | `pnpm verify:alerts` | Run the alert parser over every warning live in the US — see below |
+| `scripts/backup-mongo.sh` | Encrypted nightly dump to S3, and the restore — runs on the server |
 | `pnpm bench:store` | Store benchmarks |
 
 ### `pnpm verify:alerts`

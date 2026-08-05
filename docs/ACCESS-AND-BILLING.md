@@ -229,10 +229,29 @@ Twenty-four gigabytes of RAM is absurd overkill for this. What Atlas's $96 a
 year would actually buy is **automated backups, point-in-time restore, and
 somebody else's patching** — and self-hosting means owning all three.
 
-**Self-host, and treat a backup as a condition of the first real farm.** S3 is
-in the picture anyway, so a nightly `mongodump` to a bucket with a lifecycle
-rule is a cron line. A farm's records are the entire product; that is not a
-lesson worth learning once.
+**Self-host, and treat a backup as a condition of the first real farm.**
+`scripts/backup-mongo.sh` is that job: dump, encrypt, upload, and a restore
+beside it. Rotation is an S3 lifecycle rule on the prefix rather than logic in
+the script, because a bucket setting cannot silently stop working.
+
+**It encrypts to a public key, so the private half never exists on the
+server.** The box can write backups it cannot read, and a compromise of the
+machine is therefore not a compromise of its history. S3's own encryption is
+worth enabling too, but it guards against AWS-side access — not against the two
+failures that actually happen, a leaked access key and a bad bucket policy.
+
+**Nothing is redacted, deliberately.** A dump with `users` stripped restores a
+farm nobody can log into; that is a partial export wearing a backup's name.
+What the dump holds is emails, farm names and coordinates — real PII, but no
+usable credentials, since passwords are argon2 hashes and refresh tokens are
+stored as a sha256 of the token. Sensitivity is handled by encryption, which is
+reversible exactly when it needs to be.
+
+**The backup is also the migration path.** `mongodump` out, `mongorestore` into
+Atlas, change `MONGODB_URI`, restart — `apps/api/src/db/client.ts` takes the
+connection entirely from the environment and is the only module permitted to
+import `MongoClient`. A tested restore is a rehearsed migration, so there is no
+separate plan to keep current.
 
 Two things soften the single-box risk, and both are the architecture working:
 
