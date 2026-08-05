@@ -489,6 +489,17 @@ function ProductTally({
             label={`${heading} from ${group.name}`}
             unit={product === 'eggs' ? 'eggs' : entryUnit(STORED[product], units)}
             steps={STEPS[product][units]}
+            /**
+             * Everything but eggs, and the exception is the whole point.
+             *
+             * A basket is a dozen or two and R5 is written for it: steppers,
+             * through a glove, three taps. A herd's milking on the same
+             * screen is five gallons, which the steps cannot reach — and this
+             * is the tally a farm actually opens, so leaving the door on the
+             * Produce screen alone would have fixed it everywhere except
+             * where it is used.
+             */
+            typed={product !== 'eggs'}
             requireConfirm={withdrawal !== null}
             {...(product === 'eggs' ? { confirm: basketConfirmation } : {})}
             onCommit={commit}

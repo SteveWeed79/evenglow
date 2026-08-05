@@ -8,6 +8,7 @@ import {
   Field,
   NumberField,
   Primary,
+  Secondary,
   TextField,
   Toggle,
   useSaver,
@@ -39,12 +40,40 @@ import { FONTS, SPACE, TYPE } from '../theme/tokens';
  * so the order lands before the deadline rather than on it.
  */
 
+/**
+ * The common jobs, and what somebody standing at the machine looks at while
+ * doing each one (P15).
+ *
+ * The checks come with the preset for the same reason the intervals do: the
+ * John Deere lesson in the competitive analysis is that a maintenance plan
+ * nobody had to type in is a maintenance plan that gets used. A farm can add
+ * its own lines below and take any of these off; what it should not have to do
+ * is remember, from nothing, that an oil change is also when you look at the
+ * plug washer.
+ *
+ * Short lines, in the order the machine is walked. These are prompts for
+ * somebody who already knows the job, not instructions for somebody who does
+ * not — an app that explained how to change oil would be read once and
+ * resented twice.
+ */
 const PRESETS = [
-  { title: 'Oil and filter', hours: 100 },
-  { title: 'Air filter', hours: 250 },
-  { title: 'Grease it', hours: 50 },
-  { title: 'Blades sharpened', days: 60 },
-  { title: 'Winterise', days: 365 },
+  {
+    title: 'Oil and filter',
+    hours: 100,
+    checks: ['Drain plug and washer', 'Filter seal seated', 'Level on the dipstick', 'Leaks underneath'],
+  },
+  { title: 'Air filter', hours: 250, checks: ['Element for holes', 'Housing seal', 'Dust valve clear'] },
+  { title: 'Grease it', hours: 50, checks: ['Every nipple takes grease', 'Boots and seals intact'] },
+  {
+    title: 'Blades sharpened',
+    days: 60,
+    checks: ['Blade bolts torqued', 'Cracks at the mount', 'Balance after grinding', 'Deck clear underneath'],
+  },
+  {
+    title: 'Winterise',
+    days: 365,
+    checks: ['Fuel stabilised or drained', 'Coolant strength', 'Battery off and charged', 'Grease bare metal'],
+  },
 ] as const;
 
 export function AddServiceScreen({ route }: ScreenProps<'AddService'>): React.ReactElement {
@@ -63,6 +92,16 @@ export function AddServiceScreen({ route }: ScreenProps<'AddService'>): React.Re
   const [byDays, setByDays] = useState(false);
   const [days, setDays] = useState('365');
   const [partIds, setPartIds] = useState<string[]>([]);
+  const [checks, setChecks] = useState<string[]>([]);
+  const [check, setCheck] = useState('');
+
+  /** Twenty is the contract's cap; the control stops offering rather than failing at save. */
+  const addCheck = useCallback(() => {
+    const said = check.trim();
+    if (said === '' || checks.length >= 20 || checks.includes(said)) return;
+    setChecks((current) => [...current, said]);
+    setCheck('');
+  }, [check, checks]);
 
   const { saving, failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
 
@@ -94,10 +133,11 @@ export function AddServiceScreen({ route }: ScreenProps<'AddService'>): React.Re
           ...(intervalHours === undefined ? {} : { intervalHours }),
           ...(intervalDays === undefined ? {} : { intervalDays }),
           ...(partIds.length === 0 ? {} : { partIds }),
+          ...(checks.length === 0 ? {} : { checks }),
         },
       });
     });
-  }, [save, log, machineId, title, intervalHours, intervalDays, partIds]);
+  }, [save, log, machineId, title, intervalHours, intervalDays, partIds, checks]);
 
   if (machines === null) return <Loading title="Service" />;
   if (machine === null) return <Missing title="Service" what="That machine" />;
@@ -120,6 +160,9 @@ export function AddServiceScreen({ route }: ScreenProps<'AddService'>): React.Re
               selected={title === preset.title}
               onPress={() => {
                 setTitle(preset.title);
+                // Replaces rather than appends: two presets tapped in a row
+                // is somebody changing their mind, not building a longer list.
+                setChecks([...preset.checks]);
                 if ('hours' in preset) {
                   setByHours(true);
                   setHours(String(preset.hours));
@@ -193,6 +236,43 @@ export function AddServiceScreen({ route }: ScreenProps<'AddService'>): React.Re
           </View>
         </Field>
       ) : null}
+
+      {/**
+        * The walkaround (P15).
+        *
+        * Tapping a line removes it, which is why they are chips rather than
+        * rows: the list arrives from the preset nearly right, and the work is
+        * taking off the two that do not apply to this machine.
+        */}
+      <Field
+        label="What do you look at?"
+        hint="Shown as a list when you record the job. Anything not right becomes a job of its own."
+      >
+        {checks.length === 0 ? null : (
+          <View style={styles.chips}>
+            {checks.map((line) => (
+              <Chip
+                key={line}
+                label={line}
+                selected
+                onPress={() => setChecks((current) => current.filter((c) => c !== line))}
+              />
+            ))}
+          </View>
+        )}
+        {checks.length >= 20 ? null : (
+          <>
+            <TextField
+              value={check}
+              onChangeText={setCheck}
+              placeholder="Coolant level"
+              maxLength={80}
+              testID="service-check"
+            />
+            <Secondary label="Add that check" onPress={addCheck} testID="add-check" />
+          </>
+        )}
+      </Field>
 
       {noTrigger ? (
         <Panel>

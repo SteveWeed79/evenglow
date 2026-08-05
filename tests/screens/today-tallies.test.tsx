@@ -69,6 +69,27 @@ describe('what a group is asked for', () => {
     expect(screen.text()).toContain('Milk');
   });
 
+  /**
+   * R5 holds where it was written for, and bends where it says it may.
+   *
+   * The rule is "steppers, never a keyboard, unless the value can exceed 99".
+   * A basket is a dozen; a herd's milking is five gallons. Both tallies are on
+   * this screen, so the difference has to be per-product rather than
+   * per-screen — and the egg one is the control this app is judged on.
+   */
+  it('offers no keyboard on the egg tally and one on the milk tally', async () => {
+    const eggers = await aGroup('Eggers', 'chicken', ['eggs']);
+    const goats = await aGroup('Milk Goats', 'goat', ['milk']);
+
+    const screen = await mount(<TodayScreen />);
+
+    await screen.press(`tally-open-${eggers}:eggs`);
+    expect(screen.has('tally-type')).toBe(false);
+
+    await screen.press(`tally-open-${goats}:milk`);
+    expect(screen.has('tally-type')).toBe(true);
+  });
+
   it('keeps the annual jobs off it', async () => {
     // A fleece is once a year; a wool tally would be wrong every other morning.
     const id = await aGroup('The Sheep', 'sheep', ['fibre']);

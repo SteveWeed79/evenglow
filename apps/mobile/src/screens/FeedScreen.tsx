@@ -383,6 +383,9 @@ export function FeedScreen({ route }: ScreenProps<'Feed'>): React.ReactElement {
         label={`Feed for ${group.name}`}
         unit={measure === 'scoop' ? 'scoops' : measure}
         steps={[1, 2, 5]}
+        // Sixty pounds of hay is twelve taps of the largest step. The steps
+        // are right for a scoop and cannot reach a round bale; see `typed`.
+        typed
         onCommit={(value) => void commit(value)}
       />
 

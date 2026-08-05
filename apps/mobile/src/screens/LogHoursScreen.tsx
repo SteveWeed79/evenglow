@@ -57,6 +57,14 @@ export function LogHoursScreen({ route }: ScreenProps<'LogHours'>): React.ReactE
         // Tens and hundreds: a meter reads 1,247, and starting from zero in
         // single taps would be absurd. The 100 step is what makes this usable.
         steps={[1, 10, 100]}
+        /**
+         * Not on the roadmap's list and fixed with it, because the panel
+         * above has said "type what the meter says" since this screen was
+         * written and there was nothing here to type into. 1,247 hours is
+         * twenty-three taps; the copy was describing the control this should
+         * always have offered.
+         */
+        typed
         onCommit={(value) => commit(value)}
       />
     </Screen>

@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { incubationStage } from '@steading/contracts';
 import { listIncubations } from '@steading/core/read/breeding';
 import { Primary, Row } from '../components/Form';
 import { Icon } from '../components/Icon';
@@ -55,11 +56,22 @@ export function IncubationsScreen(): React.ReactElement {
       {running.map((incubation) => (
         <Row
           key={incubation.id}
+          /**
+           * The day count leads, because it is the question.
+           *
+           * The set date is what a keeper has to do the arithmetic *from*;
+           * "day 18 of 21" is the answer they were doing it for. The date
+           * stays where the app knows no term for the bird — see
+           * `incubationStage`, which refuses to guess one.
+           */
           title={incubation.label}
-          detail={`${incubation.eggsSet} eggs · set ${new Date(incubation.setAt).toLocaleDateString(
-            undefined,
-            { day: 'numeric', month: 'short' },
-          )}${incubation.candledAt === undefined ? '' : ' · candled'}`}
+          detail={`${incubation.eggsSet} eggs · ${
+            incubationStage(incubation.species, incubation.setAt, Date.now())?.title ??
+            `set ${new Date(incubation.setAt).toLocaleDateString(undefined, {
+              day: 'numeric',
+              month: 'short',
+            })}`
+          }${incubation.candledAt === undefined ? '' : ' · candled'}`}
           icon="egg"
           onPress={() => nav.navigate('Incubation', { incubationId: incubation.id })}
         />

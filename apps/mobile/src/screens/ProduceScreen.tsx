@@ -160,6 +160,9 @@ export function ProduceScreen({ route }: ScreenProps<'Produce'>): React.ReactEle
         label={`${LABELS[kind]} from ${group.name}`}
         unit={entryUnit(UNITS[kind], units)}
         steps={STEPS[kind][units]}
+        // A herd's morning is five gallons — twenty taps of +32, and worse in
+        // millilitres. One goat still uses the steps; see `typed`.
+        typed
         requireConfirm={withdrawal !== null}
         onCommit={(value, acknowledged) => void commit(value, acknowledged)}
       />

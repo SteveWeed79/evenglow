@@ -13,6 +13,12 @@ where the money is. This says what has not been done yet.
 per egg, shearing, alerts, photo upload and the units switch — so rule 3 has
 been quietly unobserved for six features, which is what §6 is for.
 
+**§1 and three of §9 are now done as well**, and §1 is worth a word: it was
+written as the plan and built in the same commit, and then sat here for a
+month saying "nothing exists" about a screen that was in the app. A roadmap
+that lies in the safe direction is still a roadmap somebody has to check the
+code against before trusting.
+
 Every item names what it costs if it is skipped, because that is the only
 honest way to order a list nobody has time to finish.
 
@@ -32,14 +38,15 @@ Three rules, applied in this order:
 
 ---
 
-## 1 — Export
+## 1 — Export — **done**
 
-**Parity floor P7 and P9. Nothing exists.**
+**Parity floor P7 and P9 (the export half).**
 
-The app now shows two years of records and has no way to hand any of them to an
-accountant, a vet, or somebody buying a tractor. `COMPETITIVE-ANALYSIS.md` lists
-it twice, the masterplan mentions a Schedule F export, and LookOver pitches
-"full maintenance history when you sell the machine" as its headline.
+The app shows two years of records, and until this landed it had no way to hand
+any of them to an accountant, a vet, or somebody buying a tractor.
+`COMPETITIVE-ANALYSIS.md` lists it twice, the masterplan mentions a Schedule F
+export, and LookOver pitches "full maintenance history when you sell the
+machine" as its headline.
 
 **Cost of skipping it:** a farm that cannot get its data out is a farm that
 cannot leave, and every review of every competitor says so.
@@ -51,8 +58,7 @@ cannot leave, and every review of every competitor says so.
   fails in a barn.
 - A date range, because "everything" is the wrong default at year three.
 
-**Depends on:** nothing. `read/history.ts` already gathers every append-only
-entity with names resolved.
+Built in `packages/core/src/export/csv.ts` and `ExportScreen`.
 
 **Not in scope here:** CSV *import* (P9's other half). Import means merge
 conflicts against records that already exist and wants its own design.
@@ -415,12 +421,38 @@ Small, named so they stop being remembered at the wrong moment.
   the weather row four lines above read °F — the defect a screenshot caught.
   Both display and entry now read the setting, and `formatVolume` grew the
   quart and gallon scale that had made it uncallable.
-- **Steppers past 99** on Feed and Produce — a farm milking a herd cannot reach
-  its total by tapping. **Unchanged by the units work and still the right
-  complaint:** an imperial farm's five-gallon morning is twenty taps of the
-  largest step. The fix is a larger step or a different control, not a
-  different unit.
-- **P15, per-equipment inspection checklists** — never started.
+- ~~**Steppers past 99** on Feed and Produce.~~ **Done, as a typed door rather
+  than a bigger step.** A bigger step only moves the ceiling, and the farm that
+  has to reach past it is always the one with the most animals. R5 already
+  carried the exception — "steppers, never a keyboard, *unless the value can
+  exceed 99*" — so the Tally now takes an optional typed entry and the steps
+  stay on screen beside it, because a typed total that then needs one more pull
+  should be a tap rather than a retype.
+
+  **Off by default, and that matters more than the feature.** The egg tally is
+  the control this app is judged on and a basket is three taps. Today offers
+  the keyboard for milk and fibre and withholds it for eggs, on the same
+  screen — which is where it had to be, since Today is the tally a farm
+  actually opens.
+
+  **Log Hours got it too**, unlisted: that panel had said "type what the meter
+  says" since it was written, with nothing to type into, and 1,247 hours is
+  twenty-three taps.
+- ~~**P15, per-equipment inspection checklists.**~~ **Done.** A checklist is a
+  list of things to look at carried on the **schedule** rather than on the
+  machine — a greasing walks the nipples and an oil change looks at the plug
+  and the filter seal, so one list per machine would be the union of every
+  job's, which is a list nobody reads to the end of.
+
+  **The preset brings its own**, which is the John Deere lesson in the
+  competitive analysis: a maintenance plan nobody had to type in is one that
+  gets used. A farm adds its own lines and takes off the ones that do not apply.
+
+  **A failed check becomes a job, and that is what makes it more than a printed
+  card.** Recording the service shows the list as toggles, ticking marks what
+  was *wrong* rather than what passed — an ordinary morning costs no taps —
+  and each ticked line writes a `task` against the machine. "Hydraulic hose
+  weeping", noticed at eight with both hands dirty, still exists at four.
 - **TypeScript 6.** Expo SDK 57 expects `~6.0.3`; this repo is on 5.9.3 and
   stays there for now. A major TypeScript across a strict codebase with
   `exactOptionalPropertyTypes` is its own piece of work with its own risk, not
@@ -428,10 +460,22 @@ Small, named so they stop being remembered at the wrong moment.
   reporting it, which is correct — it is drift, deliberately held.
 - **PR #2** — 134 commits behind, would resurrect the deleted web client, and a
   simulated merge produces 88 conflicts. Close it.
-- **Incubation stage guidance** — the date half only. The app knows the species'
-  incubation length and the set date, so "day 18 of 21, lockdown" is derivable.
-  Deliberately carries **no humidity figure**: there are several schools and the
-  farm's own judgement beats a number this app invents.
+- ~~**Incubation stage guidance** — the date half only.~~ **Done.**
+  `incubationStage` derives "day 18 of 21, lockdown" from the set date and the
+  species, and the list of sets leads with the day count rather than the date a
+  keeper was doing arithmetic *from*. Lockdown is `days - 3` rather than a
+  second table: the three days are the constant across every bird in
+  `INCUBATION_DAYS`, which is why a duck's is day 25 and a quail's is day 15.
+
+  **Not a `Due`, deliberately** — candling and the hatch are the two rows worth
+  interrupting a morning for and both already exist; a third saying "still
+  incubating" every day for three weeks is how a list stops being read.
+
+  **And no humidity figure**, which the tests assert rather than trust: the
+  schools genuinely disagree, by more than this app could measure. Saying what
+  the lockdown days are *for* is honest; naming a number to hold them at is not.
+  It returns null for a bird it knows no term for, because a confident stage
+  derived from a guessed term is worse than no stage.
 
 ---
 
