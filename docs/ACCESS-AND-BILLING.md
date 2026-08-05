@@ -138,7 +138,7 @@ they are the kind a cost-plus instinct produces:
    against $39 of revenue. The price is set by what a smallholder will pay.
 2. **Costs here are fixed, not marginal.** Reasoning per-farm at all was the
    mistake. What matters is a flat hosting bill and how many farms clear it —
-   **break-even, at roughly six to twelve.**
+   **break-even, at three or four**, on a box that is already rented.
 
 ### 4.1 — What one farm costs, and what the whole thing costs
 
@@ -170,23 +170,36 @@ many farms there are:
 
 | | Annual |
 |---|---|
-| MongoDB Atlas Flex | ~$96 |
-| API host | $0–250, see below |
+| API host and MongoDB — Oracle Always Free ARM | **$0** |
 | Apple Developer | $99 |
 | Domain, Play Store (one-off $25), S3 | ~$25 |
 
-**Roughly $220–470 a year**, and the only line with real variance is the host.
-That is why *"same box as your other services, or a managed host?"* remains the
-only cost decision in the masterplan's Open Questions that matters — it is most
-of what is left once storage turns out to be a rounding error.
+**Roughly $125 a year.** The masterplan's *"same box as your other services, or
+a managed host?"* has an answer: **the box, and it is already rented.**
 
-The candidates, at this scale:
+An Oracle Cloud Always Free Ampere A1 allocation is 4 ARM cores, 24 GB of RAM,
+200 GB of block storage and 10 TB a month of egress — more machine than this
+workload will ever notice, and on a pay-as-you-go account it is not subject to
+the idle reclamation that affects trial accounts. Fastify and MongoDB both run
+there, and it is what D10 describes: one long-running process with a stable
+connection pool.
+
+**ARM is not a blocker, and this was checked rather than assumed.** The only
+native dependency in `apps/api` is `@node-rs/argon2`, and
+`@node-rs/argon2-linux-arm64-gnu` is already in the lockfile as an optional
+dependency, so the right binary installs and nothing compiles. Everything else
+— Fastify, the Mongo driver, `jose`, `zod`, `ulid` — is pure JavaScript.
+MongoDB ships official ARM64 builds; **run Ubuntu on the instance** rather than
+Oracle Linux, which is the better-supported path for them.
+
+The alternatives, kept because the answer could change:
 
 | | ~Monthly | Note |
 |---|---|---|
-| **Vercel Pro** | $0 marginal | Already paid for another project. Serverless — see the payload note below |
-| Lightsail / EC2 `t4g.micro` | $5–7 | Long-running process, which is what D10 describes. Free tier covers year one |
-| AWS App Runner | $5–25 | Container, always-on, no box to patch |
+| **Oracle Always Free ARM** | **$0** | Current answer. API and MongoDB on one box |
+| MongoDB Atlas Flex | $8 | What it really buys is backups — see below |
+| Vercel Pro | $0 marginal | Already paid for another project. Serverless — see the payload note |
+| Lightsail / EC2 `t4g.micro` | $5–7 | Same shape as the Oracle box, for money |
 | ECS Fargate | $25+ | **Avoid at this scale** — the ALB alone is ~$16–18 whether used or not |
 | Lambda + API Gateway | ~$1 | Cheap, but inherits serverless friction with no edge over Vercel |
 
@@ -203,17 +216,39 @@ worth having** — lower the contract ceiling to match reality so an oversized
 photo is refused at the boundary with a sentence, and move to presigned S3
 (§4A) so the bytes never touch the API at all.
 
-**Co-locating the API on AWS buys one real thing**: S3 through an attached IAM
-role rather than an access key in environment variables. A credential that does
-not exist cannot leak. Not urgent, and not an invariant-12 matter since nothing
-here ships in the bundle — but strictly better, and free if the API is on EC2
-anyway.
+**Co-locating the API on AWS would buy one real thing**: S3 through an attached
+IAM role rather than an access key in environment variables, since a credential
+that does not exist cannot leak. On the Oracle box that is not available, so an
+S3 key lives in the server's environment. Not an invariant-12 matter — nothing
+here ships in the bundle — but it is a credential to rotate and keep out of
+logs, and it is the one thing the free box costs.
+
+### 4.1a-i — The trade is backups, not compute
+
+Twenty-four gigabytes of RAM is absurd overkill for this. What Atlas's $96 a
+year would actually buy is **automated backups, point-in-time restore, and
+somebody else's patching** — and self-hosting means owning all three.
+
+**Self-host, and treat a backup as a condition of the first real farm.** S3 is
+in the picture anyway, so a nightly `mongodump` to a bucket with a lifecycle
+rule is a cron line. A farm's records are the entire product; that is not a
+lesson worth learning once.
+
+Two things soften the single-box risk, and both are the architecture working:
+
+- **Downtime is nearly free.** If the box goes, farms keep logging — mutations
+  queue and flush later. The only thing that actually breaks is signing in on a
+  new device, which is the one flow that needs the server (A2.5).
+- **The server is not the only copy.** Every device holds a complete SQLite
+  copy of its farm. A total server loss is *in principle* recoverable by
+  devices re-syncing — except no mechanism exists for it, because `/snapshot`
+  runs server-to-client only. A latent property rather than a safety net, but
+  the cheapest disaster insurance this design could ever grow.
 
 ### 4.1b — Break-even, which is the number worth holding
 
-At $39 a year, fixed costs of $220–470 are covered by **roughly six to twelve
-paying farms** — six on a host already paid for, twelve on a dedicated one.
-Under fifteen either way.
+At $39 a year, fixed costs of about $125 are covered by **three or four paying
+farms.** Under a dozen even if the host later has to be paid for.
 
 That is the number to plan against, and it is deliberately not a market
 forecast. For scale: `COMPETITIVE-ANALYSIS.md` records Farmbrite — the
