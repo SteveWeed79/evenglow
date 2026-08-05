@@ -2,17 +2,17 @@
 
 Offline-first farm operations — stock, iron, and chores under one roofline.
 
-Next.js (App Router) · TypeScript strict · MongoDB · Auth.js (JWT) · IndexedDB · Vercel
+React Native (Expo SDK 57, Android first) · TypeScript strict · SQLite on device · Fastify + MongoDB on the server
 
-**Status: Phase 3 — Core Domain, in progress.** Phase 2's exit gate passes:
-mutations logged in airplane mode survive a hard browser restart and sync
+**Status: Phase 3 — Core Domain, in progress.** Phase 2's exit gate passes on
+native SQLite: mutations logged in airplane mode survive process death and sync
 exactly once. See [Phase status](#phase-status).
 
-> **The stack line above describes this tree, not the destination.** The
-> masterplan has settled on a Capacitor + SQLite + Fastify architecture
-> (D8–D10) and that migration is in flight on a separate branch. The commands
-> in this README are the ones that work today; the gap between the two is set
-> out in [`docs/Steading-Masterplan.md` §0.1](docs/Steading-Masterplan.md).
+> **The migration is done.** This tree is React Native over Expo — the
+> Capacitor/Vite client and the Next app are retired and deleted, and the
+> framework-agnostic half of the old client is `packages/core`. There is no
+> PWA and no Next.js; a suggestion that assumes SSR, server components, or
+> framework API routes is aimed at a different project.
 
 Steading covers **everything a small mixed farm does** — the animals, the
 growing, and the machinery that serves both.
@@ -32,17 +32,23 @@ Planning docs, which are the source of truth:
 
 | Doc | What it settles |
 |---|---|
-| [`docs/Steading-Masterplan.md`](docs/Steading-Masterplan.md) | Decisions D1–D10, phases, security rubric, migration status |
+| [`docs/Steading-Masterplan.md`](docs/Steading-Masterplan.md) | Decisions D1–D14, phases, security rubric |
 | [`docs/UX-SPEC.md`](docs/UX-SPEC.md) | Rules R1–R10, tokens, voice |
-| [`docs/COMPETITIVE-ANALYSIS.md`](docs/COMPETITIVE-ANALYSIS.md) | Why each feature exists |
-| [`docs/PHASE-1-SPEC.md`](docs/PHASE-1-SPEC.md) | The task list, rewritten for the D8–D10 target |
-| [`docs/MIGRATION-PLAN.md`](docs/MIGRATION-PLAN.md) | How this tree becomes that one, stage by stage |
-| [`docs/NATIVE-PIVOT.md`](docs/NATIVE-PIVOT.md) | Why Capacitor rather than React Native |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | What is left, in the order it should be built |
+| [`docs/COMPETITIVE-ANALYSIS.md`](docs/COMPETITIVE-ANALYSIS.md) | Why each feature exists, and what a farm must do before it sees one |
+| [`docs/ACCESS-AND-BILLING.md`](docs/ACCESS-AND-BILLING.md) | How a farm gets in, and where the money is |
+| [`docs/REACT-NATIVE-PLAN.md`](docs/REACT-NATIVE-PLAN.md) | The live client plan |
+| [`docs/WEATHER-PLAN.md`](docs/WEATHER-PLAN.md) | Forecast, warnings, and the licence cliff |
 | [`docs/BREED-AND-PURPOSE.md`](docs/BREED-AND-PURPOSE.md) | Proposal: what a flock is *for*, breed data, and crowdsourcing |
 | [`CLAUDE.md`](CLAUDE.md) | Hard invariants |
 
-There is one rubric, and it is version 3.0. The v2.x masterplan has been
-removed rather than kept alongside it.
+Superseded, kept for the reasoning rather than the conclusion:
+[`NATIVE-PIVOT.md`](docs/NATIVE-PIVOT.md) argued for Capacitor;
+[`MIGRATION-PLAN.md`](docs/MIGRATION-PLAN.md) and
+[`PHASE-1-SPEC.md`](docs/PHASE-1-SPEC.md) describe a route already taken.
+
+There is one rubric. The v2.x masterplan has been removed rather than kept
+alongside it.
 
 ---
 
@@ -64,8 +70,10 @@ pnpm install
 cp .env.example .env.local     # fill in MONGODB_URI and AUTH_SECRET
 pnpm db:indexes                # apply orgId-leading indexes
 pnpm db:seed "Hollow Farm" you@example.com 'a long passphrase'
-pnpm dev
+pnpm dev:api
 ```
+
+Or `pnpm farm`, which does all of the above from nothing — see below.
 
 `AUTH_SECRET` ships blank. Generate one with `openssl rand -base64 32`.
 `MONGODB_URI` defaults to a local mongod — `docker run -d -p 27017:27017
@@ -78,28 +86,40 @@ owner are created by `db:seed`.
 
 | Command | Does |
 |---|---|
-| `pnpm dev` | Development server |
-| `pnpm build` | Production build |
-| `pnpm test` | Vitest — unit, offline, isolation, and sync suites |
-| `pnpm e2e` | Playwright — the Phase 2 exit gate (needs `pnpm build` first) |
-| `pnpm typecheck` | `tsc --noEmit` |
+| `pnpm farm` | Dev back end from nothing: database, first account, API |
+| `pnpm dev:api` | Fastify with watch |
+| `pnpm mobile` | Expo dev server |
+| `pnpm mobile:android` | Prebuild, compile, deploy to a device or emulator |
+| `pnpm mobile:export` | Metro bundle — the quickest check that resolution is sound |
+| `pnpm test` | Vitest — unit, screens, offline, isolation, and sync suites |
+| `pnpm typecheck` | Both programs: root, and `apps/mobile` |
 | `pnpm lint` | ESLint, including the database guard |
 | `pnpm db:indexes` | Apply index definitions |
 | `pnpm db:seed` | Create the first org and owner |
+| `pnpm db:verify` | Exercise the server data path end to end |
+| `pnpm check:icons` | The icon set against its manifest |
 | `pnpm check:secrets` | Fail if a secret reached the client bundle |
 | `pnpm check:no-db-disables` | Fail on inline disables of the db guard |
-| `pnpm check:chunks` | Fail if the native build lost its sqlite driver |
-| `pnpm build:app` | Vite build of the Capacitor client → `apps/app/dist` |
-| `pnpm cap:sync` | Build, then copy the bundle into the native project |
-| `pnpm cap:run:android` | Build, sync, and deploy to a device or emulator |
-| `pnpm cap:open:android` | Open the native project in Android Studio |
-| `pnpm dev:api` | Fastify with watch — what the native build talks to |
+| `pnpm verify:alerts` | Run the alert parser over every warning live in the US — see below |
+| `pnpm bench:store` | Store benchmarks |
 
-## React Native (`apps/mobile`)
+### `pnpm verify:alerts`
 
-Where the app is going. Expo SDK 57, React Navigation, `expo-sqlite` under the
-same `LocalStore` the web client uses — see `docs/REACT-NATIVE-PLAN.md` for the
-staging and what it costs.
+Not in CI, and deliberately: it depends on live weather and on
+`api.weather.gov` being reachable, and a red build because a government service
+was slow teaches people to ignore red builds.
+
+Run it before shipping anything that touches alerts. `fetchAlerts` drops what
+it cannot parse — one unusable feature must not take the tornado warning beside
+it down — which means **a schema mismatch is silent**, and an alert the app
+cannot read looks exactly like an alert nobody issued. This asks for every
+alert in force in the United States, runs the real parse over all of them, and
+says what fell out. Exit code 1 if the contract refused a live warning.
+
+## The client (`apps/mobile`)
+
+Expo SDK 57, React Navigation, `expo-sqlite` under the `LocalStore` port in
+`packages/core` — see `docs/REACT-NATIVE-PLAN.md` for what the move cost.
 
 ```bash
 pnpm farm                                      # server + database + first account
@@ -133,7 +153,10 @@ pnpm mobile:android                            # build and deploy to a device
 
 **You need the server running to sign in**, and only to sign in. Once a device
 has a session it works entirely offline — that is the point of the thing. A
-device that has never signed in has no orgId, so it has no database to open.
+device that has never signed in has no orgId, so it has no database to open —
+**which is the thing D14 changes**, and why it is on the roadmap: an
+offline-first app that cannot be opened offline is only offline-first from the
+second morning.
 
 | Command | What it does |
 | --- | --- |
@@ -143,8 +166,8 @@ device that has never signed in has no orgId, so it has no database to open.
 | `pnpm typecheck:mobile` | Typecheck against `expo/tsconfig.base`, which has no DOM in it |
 
 `apps/mobile/android` is **not** committed: it is generated from `app.json` by
-`expo prebuild`, and nothing in it is hand-edited. That is the opposite of the
-Capacitor project below, where the native files are reviewed.
+`expo prebuild`, and nothing in it is hand-edited. A committed copy drifts from
+`app.json` until the two disagree about what the app is.
 
 Emulator hosts are `10.0.2.2`, never `localhost` — a physical handset needs
 this machine's LAN address instead. The Windows scripts in `scripts/windows/`
@@ -157,60 +180,45 @@ reads *Not set up* rather than reporting the ordinary offline story. The one
 case that is fatal is a device with nobody signed in, because signing in is a
 server round trip. See `apps/mobile/src/boot/config.ts`.
 
-## Android (Capacitor — the previous client)
+## Android
 
-The APK is the target (D8); the browser is the fast development loop. Everything
-above the storage layer is identical between them — the one branch is in
-`apps/app/src/platform.ts`, which decides between SQLite on device and IndexedDB
-in a browser.
-
-You need Android Studio, and either a handset with USB debugging on or an
-emulator image. Then:
+The APK is the target (D8). You need Android Studio, and either a handset with
+USB debugging on or an emulator image:
 
 ```bash
-pnpm cap:run:android
+pnpm mobile:android
 ```
 
-That builds the web bundle, copies it into `apps/app/android`, and deploys.
-`cap:sync` always builds first on purpose — syncing a stale `dist` puts the last
-build in the APK and the change you are testing simply is not there.
+`android/` is generated by `expo prebuild` and is **not committed** — it is
+build output, and a committed copy drifts from `app.json` until the two
+disagree about what the app is.
 
 ### Reaching the API from a device
 
-The APK serves the app from its own origin, so a relative `/sync` resolves to
-the bundle rather than to a server. The native build needs an absolute one:
+The app is not served from a web origin, so the API base must be absolute:
 
 ```bash
-cp apps/app/.env.example apps/app/.env.local   # then edit VITE_API_BASE_URL
-pnpm dev:api                                   # Fastify, port 3001
+pnpm farm        # database, first account, API, from nothing
 ```
 
 - **Emulator** — the host machine is `10.0.2.2`, never `localhost`.
 - **Handset** — your machine's LAN address, e.g. `http://192.168.1.20:3001`.
 
 Set it wrong and the app refuses to start rather than starting and never
-syncing: a device that queues all morning and only admits it when someone
-checks the sync chip is much the worse failure.
-
-The API's `CORS_ORIGINS` must include the WebView's origin, which is
-`https://localhost` — a different origin from the Vite dev server, so add it
-alongside rather than replacing it.
-
-
-The native project is committed, so Gradle files and manifest edits are
-reviewable. The copied bundle and the generated Capacitor config are not: the
-template's `.gitignore` excludes them, because they are build output.
+syncing: a device that queues all morning and only admits it when somebody
+checks the sync chip is much the worse failure. See
+`apps/mobile/src/boot/config.ts`.
 
 **Verify on a device before calling any storage, camera, haptics or sync task
-done.** A WebView over native SQLite does not behave like a browser over
-IndexedDB, and the durability characteristics that D9 changed are exactly the
-ones a dev server cannot show you.
+done.** The bundler is not a handset, and an emulator is not one either — it
+reaches neither haptics, nor the camera, nor signal loss and regain, nor doze.
+Every serious bug in this project so far has been one only a device could show.
 
 ## Architecture
 
 The parts that are load-bearing rather than incidental:
 
-**`src/server/db/scoped.ts`** is the only module that exposes a collection
+**`apps/api/src/db/scoped.ts`** is the only module that exposes a collection
 handle. Every filter is rewritten to carry `orgId` and every insert has it
 stamped. There is no escape hatch and no "unsafe" variant, because
 "remember to include `orgId`" is exactly what this layer exists to make
@@ -221,13 +229,13 @@ impossible (D2). ESLint blocks `.collection()` everywhere else, and
 entities (D3) have no `update` or `delete` schema at all, so rejecting an
 update to an egg log is a structural fact rather than a runtime check.
 
-**`src/server/sync/apply.ts`** applies batches sequentially in `clientSeq`
+**`apps/api/src/sync/apply.ts`** applies batches sequentially in `clientSeq`
 order, never in parallel, using `$setOnInsert` so a replayed batch is a no-op.
 Every mutation gets its own result — `applied`, `duplicate`, `rejected`, or
 `conflict` — because a batch can be partly applied and nothing may be
 silently dropped.
 
-**`src/client/sync/queue.ts`** enqueues in a single IndexedDB transaction:
+**`packages/core/src/sync/queue.ts`** enqueues in a single SQLite transaction:
 mint the sequence number, write the outbox entry, advance the counter, and
 update the local projection together. Assigning `clientSeq` outside the
 transaction is how you end up with two mutations sharing a sequence number
@@ -235,16 +243,16 @@ after a crash mid-write — at which point ordering is broken and nothing says
 so. If the counter is ever lost, the next sequence number is floored by the
 highest one still in the outbox rather than restarting at zero.
 
-**`src/client/sync/pull.ts`** is the read half of sync. Without it the app is
+**`packages/core/src/sync/pull.ts`** is the read half of sync. Without it the app is
 single-device: a reinstall or a second phone opens to an empty farm even
 though the server holds everything. It ships the *mutation log* rather than
 projected documents, because the client already knows how to turn a mutation
-into a local record — one projection path (`src/client/db/project.ts`) used by
+into a local record — one projection path (`packages/core/src/db/project.ts`) used by
 both enqueue and hydration, so the two cannot drift. A record with a pending
 local edit is skipped: a queued change visibly reverting is the most alarming
 thing an offline app can do.
 
-**`src/client/sync/flush.ts`** is single-flight: concurrent callers share the
+**`packages/core/src/sync/flush.ts`** is single-flight: concurrent callers share the
 in-flight promise instead of starting a second batch, which is what makes
 "never parallel" true when a timer, the `online` event, and a user action all
 fire at once. A mutation leaves the outbox only when the server says
@@ -315,26 +323,20 @@ cannot be met by a suite that quietly did not run.
 
 ### The Phase 2 exit gate
 
-```bash
-pnpm build && pnpm e2e
-```
-
-Real Chromium, a **persistent on-disk profile**, and a real process kill. The
-profile matters: a fresh Playwright `BrowserContext` carries cookies and
-localStorage but *not* IndexedDB, so restarting into one would be asserting
-against an empty database. The gate is verified to fail — pointing the restart
-at a different profile makes it report `Received: 0`.
-
-It stubs `/api/sync` at the network layer, so no MongoDB is involved.
+The gate is that mutations logged with the radio off survive **process death**
+and then sync exactly once. It was first earned under Chromium against
+IndexedDB; D9 changed the durability characteristics it was proving, so it was
+re-earned on device against native SQLite rather than carried over. A gate
+proved on a storage layer you no longer ship is not a gate.
 
 ## Phase status
 
 - [x] **Phase 1 — Foundation & tenancy.** Scoped data layer, indexes, lint
       guard, contracts, auth, isolation suite, design tokens.
-- [x] **Phase 2 — Offline engine.** IndexedDB stores, mutation log, Service
-      Worker, sequential flush, rejected-mutations inbox, storage persistence,
-      diagnostics sheet. **Exit gate passes**: airplane mode → 50 mutations →
-      hard restart → reconnect → zero loss, zero duplicates.
+- [x] **Phase 2 — Offline engine.** SQLite stores, mutation log, sequential
+      flush, rejected-mutations inbox, diagnostics sheet. **Exit gate passes on
+      device**: airplane mode → 50 mutations → process kill → reconnect → zero
+      loss, zero duplicates.
 - [ ] **Phase 3 — Core domain.** *In progress.* Done: mutation projection into
       domain collections, archive-not-delete, hour-meter monotonicity,
       conflict-on-deleted-target, the mixed-livestock model, groups and egg
@@ -346,5 +348,9 @@ It stubs `/api/sync` at the network layer, so no MongoDB is involved.
 - [ ] **Phase 4 — Hardening.** Rate limiting, origin/CSRF verification,
       envelope migration, quota UX, export, Core Web Vitals.
 
-Deploy (Phase 1 spec T9) is not done: it needs Vercel credentials and a
-MongoDB Atlas cluster.
+Deploy is not done: the API needs a host and a MongoDB. That is now also a
+pricing question — see `docs/ACCESS-AND-BILLING.md` §4.1, which cannot be
+answered until per-org storage is instrumented.
+
+**D13 and D14 — free on one device, and opening before authenticating — are
+decided and unbuilt.** They are §7 of the roadmap.

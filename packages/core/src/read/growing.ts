@@ -50,7 +50,8 @@ export interface Site {
    * Which units this farm reads in.
    *
    * Carried here rather than defaulted at each call site so there is one place
-   * to change when the rest of the app stops hardcoding `'imperial'`.
+   * that answers the question. Every screen that formats a measurement now
+   * reads it through `useUnits`; nothing hardcodes a system any more.
    */
   units?: UnitSystem;
   /** What the farm keeps its books in. Absent means the default. */

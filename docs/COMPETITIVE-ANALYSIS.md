@@ -1,6 +1,6 @@
 # Steading — Competitive Analysis
 
-Researched July 2026. Purpose: define the parity floor (what we must match to be taken seriously) and the wedge (what nobody does well).
+Researched July 2026; §6 added August 2026. Purpose: define the parity floor (what we must match to be taken seriously) and the wedge (what nobody does well).
 
 ---
 
@@ -130,3 +130,97 @@ Merged into the master plan:
 - Parts inventory linked to upcoming service intervals
 - CSV import as well as export
 - Deferred to v2, but not designed out: incubation and hatch runs, pedigree/lineage
+
+---
+
+## 6. Onboarding and Access
+
+Researched August 2026. **The first five sections are entirely about features
+and say nothing about what a farm has to do before it sees one.** That gap
+mattered: the wedge is offline-first, and an app that cannot be opened without
+a login is indistinguishable from a cloud app on the first morning.
+
+### A. Account and subscription before anything
+
+**Farmbrite** — 14-day trial, no credit card to begin, but a full account
+before any screen. No permanent free tier; the trial ends in a plan and a card.
+Paid tiers meter **active animals** — Lite 100, Rancher 250, Plus 1,250,
+Complete 2,500, with archived, sold and deceased not counting. Roughly
+**$29–109/month** depending on plan and source.
+
+**Flockstar** — requires an active subscription, 14-day trial across web, iOS
+and Android. **$29.99/year.** Cloud sync is the pitch: "automatically synced to
+the cloud and backed up securely."
+
+Neither lets a farm log one egg without an account.
+
+> **The pricing spread is the finding, not the wall.** Farmbrite is priced like
+> business software and Flockstar like a consumer app — an order of magnitude
+> apart. We sit between them in capability, and our buyer is unambiguously
+> Flockstar's buyer.
+
+### B. No account at all, advertised as the feature
+
+**FlockPlenty** — "No registration or login required," data on the device. Free.
+
+**Egg Inventory** — "stored locally on your device with no account required, no
+cloud sync, no data collection, works completely offline, and has no ads."
+
+**PoultryPal** — offline logging with **iCloud** sync. Worth noting on its own:
+sync with *zero app account*, because the platform already knows who you are.
+
+§1.B already observed that this camp "wins on speed of entry and nothing else,
+and they win a lot of users that way." That was read as a feature finding. It
+is also an onboarding one — there is nothing to sign up for — and the two are
+not separable.
+
+**These apps are free because they have no server.** Their marginal cost per
+user is zero. That is the whole explanation, and it is the one that decides our
+own pricing line.
+
+### C. The middle, which is one product
+
+**LookOver** — already named in §1.C as the closest philosophical sibling. Its
+access answers are the interesting ones:
+
+- **Sign in with Google or Apple.** No password. Advertised at "less than 60
+  seconds."
+- Fully offline; syncs on return.
+- **Free tier is one machine, forever, full features** — a scope limit, not a
+  countdown.
+
+That last is the strongest single finding in this section. A 14-day trial
+started in February expires before lambing; farm software is seasonal and a
+clock is hostile to it.
+
+### D. What nobody does
+
+**Full capability with nothing to sign up for.** Camp A has capability behind a
+wall; camp B has no wall and no capability. This is the same hole §1 found in
+features, in a different wall — and the app is already architecturally most of
+the way through it, because D1 has the client minting every id.
+
+The response is `ACCESS-AND-BILLING.md`.
+
+### E. One cautionary finding, pointing the other way
+
+A Flockstar reviewer reports **losing data after upgrading devices and logging
+in**. That is the cloud-account failure mode W1 claims to beat — and equally an
+argument that people need real accounts and real recovery. Camp B's "all local,
+no account" has no answer for a phone in a water trough.
+
+Recovery, not sync, is what an account is for. It should be sold that way.
+
+### Sources
+
+Farmbrite [pricing](https://www.farmbrite.com/pricing) ·
+[FAQ](https://www.farmbrite.com/faq.html) ·
+[animal counts](https://help.farmbrite.com/help/how-are-active-animals-counted-for-my-farmbrite-subscription-plan) ·
+[reviews](https://www.capterra.com/p/136765/Farmbrite/reviews/) ·
+Flockstar [pricing](https://www.flockstar.com/pricing) ·
+[Google Play](https://play.google.com/store/apps/details?id=com.flockstarpro&hl=en_US) ·
+[FlockPlenty](https://farmplenty.com/) ·
+[Egg Inventory](https://apps.apple.com/us/app/egg-inventory/id6753229803) ·
+[PoultryPal](https://apps.apple.com/us/app/poultrypal-chicken-egg-log/id6743654509) ·
+[LookOver](https://lookover.app/farm-equipment-maintenance-app/) ·
+[LookOver on Google Play](https://play.google.com/store/apps/details?id=com.lookoverpowersports.app)

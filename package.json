@@ -27,7 +27,8 @@
     "gen:plaster": "node scripts/make-plaster.mjs",
     "farm": "node scripts/dev-server.mjs",
     "db:password": "pnpm --filter @steading/api db:password",
-    "bench:store": "tsx scripts/bench-store.mts"
+    "bench:store": "tsx scripts/bench-store.mts",
+    "verify:alerts": "tsx scripts/verify-alerts.mts"
   },
   "dependencies": {
     "@steading/api": "workspace:*",

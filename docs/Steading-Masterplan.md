@@ -1,7 +1,7 @@
 # Steading — Master Development Plan & Security Rubric
 
-**Version:** 3.0 — Capacitor rewrite
-**Status:** Phases 1–3 implemented on the pre-D8 stack; the D8–D10 migration is in flight. See §0.1.
+**Version:** 3.1 — native client, access and billing
+**Status:** D1–D10 implemented; D13 and D14 (access and billing) decided and unbuilt. See §0.1.
 **Name:** Steading — the farmhouse and its working buildings taken together. Stock, iron, and chores under one roofline.
 
 **What it is.** One app for everything a small mixed farm does: the animals, the
@@ -14,11 +14,11 @@ should be able to read the screen at arm's length in direct sun with gloves on.
 Scope is set by what a smallholding *does*, not by what other products cover.
 
 **Stack**
-- **Client:** Capacitor 8 · Vite · React · TypeScript (strict) · SQLite (`@capacitor-community/sqlite`)
+- **Client:** React Native · Expo SDK 57 · TypeScript (strict) · SQLite (`expo-sqlite`)
 - **Server:** Fastify · MongoDB · JWT access + refresh tokens
 - **Target:** Android first. iOS is a build target, not a rewrite.
 
-**Companion docs:** `UX-SPEC.md` (interface and voice) · `COMPETITIVE-ANALYSIS.md` (why features exist) · `PHASE-1-SPEC.md` (what to build first) · `../CLAUDE.md` (invariants for Claude Code)
+**Companion docs:** `UX-SPEC.md` (interface and voice) · `ROADMAP.md` (what is left, in order) · `COMPETITIVE-ANALYSIS.md` (why features exist) · `ACCESS-AND-BILLING.md` (how a farm gets in, and the price) · `REACT-NATIVE-PLAN.md` (the client) · `../CLAUDE.md` (invariants for Claude Code)
 
 ---
 
@@ -35,51 +35,63 @@ Settled before code, because retrofitting any of them is a rewrite.
 | D5 | **ID guessability is not a security control.** Authorization is org + role scoping. | ULIDs and ObjectIDs are both timestamp-prefixed and semi-sequential. |
 | D6 | **Client clocks are recorded, never trusted.** Order by `clientSeq` per device and `serverTs` globally. | Device clocks drift badly across long offline periods. |
 | D7 | **Single-farm-first tenancy.** `orgId` and the scoped layer from day one; org invites, billing, and cross-org admin deferred. | Keeps the isolation shape with none of the multi-tenant product tax. |
-| **D8** | **Native shell, not a PWA.** Capacitor over a WebView, Android first. | The product's promise is that a log taken in the coop survives. Browser storage is a bucket the OS may evict; the app sandbox is not. Also unlocks haptics, the native camera, and resume-triggered flush. |
+| **D8** | **Native shell, not a PWA.** React Native (Expo), Android first. | The product's promise is that a log taken in the coop survives. Browser storage is a bucket the OS may evict; the app sandbox is not. Also unlocks haptics, the native camera, and resume-triggered flush. *Originally decided as Capacitor over a WebView; superseded by React Native, which keeps the decision and drops the WebView. See `REACT-NATIVE-PLAN.md`.* |
 | **D9** | **SQLite is the client database, and the UI reads nothing else.** Network results land in SQLite first, then render. | Real transactions mean the queue and the local view cannot diverge — the failure IndexedDB made hard to prevent. One rendering path online and offline. |
-| **D10** | **The client is a static bundle; the server is a separate Fastify service.** No SSR, no server components, no framework API routes. | A Capacitor app is static files in a WebView with no runtime server. Next.js would be paying framework cost for benefits that don't exist here. |
+| **D10** | **The client is an app bundle; the server is a separate Fastify service.** No SSR, no server components, no framework API routes. | The client has no runtime server of its own — under Capacitor it was static files in a WebView, under React Native it is a Metro bundle. Either way Next.js would be paying framework cost for benefits that do not exist here. |
+| **D13** | **Free on one device; paid when the server holds the data.** The free tier is the whole app, not a crippled one. **$39/year**, one tier, per farm, unlimited people. | Sync is simultaneously the only thing that costs money to provide and the only thing worth charging for. The number is set by the competitive anchors, not by cost — storage does not bind it. Settles the billing half of D7. See `ACCESS-AND-BILLING.md`. |
+| **D14** | **The app opens before it authenticates.** First launch mints an org ULID on device and works offline; an account is asked for when it buys something. | D1 applied one level out. An offline-first app that cannot be opened offline is only offline-first from the second morning, and the first is where people are lost. |
+
+**D11 and D12 are reserved by [`BREED-AND-PURPOSE.md`](BREED-AND-PURPOSE.md)**,
+which proposed them first: D11 (a flock has a set of purposes, not a type) is
+implemented — `productsOf` and `purposesFor` are live — and D12 (aggregated
+breed data, opt-in and anonymous) is still open with five questions unanswered.
+Access and billing take D13 and D14 rather than clobbering them.
 
 ### 0.1 Migration Status
 
-This document is **version 3.0 and the only rubric**. The v2.x plan it replaced
-has been removed rather than kept alongside it, because two live rubrics means
-neither is authoritative and every review argues about which one applies.
+This document is **the only rubric**. The v2.x plan it replaced has been removed
+rather than kept alongside it, because two live rubrics means neither is
+authoritative and every review argues about which one applies.
 
-D1–D7 are implemented and enforced. **D8, D9, and D10 are decided but not yet
-built.** The code on `main` is the pre-migration stack, and the gap is:
+**The migration this section used to describe is done.** `main` carries
+`apps/mobile` (React Native over Expo SDK 57) and `apps/api` (Fastify); the
+Capacitor/Vite client and the Next app are retired and deleted, and the
+framework-agnostic half of the old client is `packages/core`. D1–D10 are
+implemented and enforced.
+
+D8's mechanism changed on the way: the decision was taken as Capacitor over a
+WebView and shipped as React Native. The decision itself — a native shell
+rather than a PWA — never moved, and `REACT-NATIVE-PLAN.md` is the live plan.
+`NATIVE-PIVOT.md` argued for Capacitor and is superseded.
+
+**D13 and D14 are decided and not yet built.** They are the access and billing
+shape, and the gap is:
 
 | Area | Decided (this document) | On `main` today |
 |---|---|---|
-| Shell | Capacitor over a WebView (D8) | Next.js PWA with a service worker |
-| Client store | SQLite, one transaction per enqueue (D9) | IndexedDB, one transaction per enqueue |
-| Server | Standalone Fastify service (D10) | Next.js route handlers |
-| Auth | `jose` + rotating refresh | Auth.js, JWT strategy |
+| First run | Opens offline on a device-minted org (D14) | Login required before the store opens |
+| Sign-in | Google, with email as fallback | Email and password only |
+| Billing | Free on one device, $39/year to sync (D13) | None |
 
-Everything else — the contracts, the tenancy layer, the sync semantics, the
-role matrix, the withdrawal arithmetic, the domain projections — is already
-framework-agnostic and ports unchanged. That is most of the codebase.
+**What this means for the exit gates.** Phase 2's gate has been re-earned on
+native SQLite and is no longer carried over from IndexedDB. D14 changes *when*
+the store opens rather than what it guarantees, so the gate stands — but the
+first flush of a long-offline, newly-claimed org is a path nothing has
+exercised at volume, and it wants its own test before it meets a farm.
 
-**What this means for the exit gates.** Phase 2's gate has been met and
-machine-verified, but on IndexedDB under Chromium with a real process kill. D9
-changes the durability characteristics it was proving, so **the gate must be
-re-earned on device against native SQLite** before Phase 2 can be called done
-under this document. It is not transferable, and the migration is not finished
-until it passes again.
+**What this does not mean.** The offline engine is not deprecated. It is the
+reference implementation and the suite that proves any port correct — a storage
+layer is correct exactly when it passes it (see `packages/core/src/db/port.ts`,
+which exists for this reason).
 
-**What this does not mean.** The existing offline engine is not deprecated and
-must not be deleted to make room for the rewrite. It is the reference
-implementation and the test suite that proves the port is correct — a new
-storage layer is correct exactly when it passes the same suite (see
-`client/db/port.ts`, which exists for this reason).
-
-The route across the gap, stage by stage, is `MIGRATION-PLAN.md`.
+`MIGRATION-PLAN.md` records the route that was taken.
 
 ---
 
 ## 1. Development Plan
 
 ### Phase 1 — Foundation, Tenancy, and a Shell That Boots
-pnpm workspace with `apps/app`, `apps/api`, `packages/contracts`. Fastify with the `scoped()` data layer, `orgId`-leading indexes, the ESLint guard, and token auth (short access JWT + rotating refresh). Vite + React client that builds, wraps in Capacitor, and launches on an Android device showing an authenticated screen.
+pnpm workspace with `apps/mobile`, `apps/api`, `packages/contracts`, `packages/core`. Fastify with the `scoped()` data layer, `orgId`-leading indexes, the ESLint guard, and token auth (short access JWT + rotating refresh). A React Native client that builds and launches on an Android device showing an authenticated screen.
 
 **Exit gate:** the multi-tenant isolation suite passes, and a signed debug APK runs on real hardware. Both before the second feature exists.
 
@@ -263,8 +275,32 @@ at all. It proposes D11 and D12 and closes with five questions that need answers
 before any of it becomes code.
 
 
-- Photo storage target: S3/R2 vs. self-hosted. Affects Phase 3 upload.
-- API hosting: same box as your other services, or a managed host?
+**Does signup adopting a client-minted `orgId` sit inside D2's intent?**
+D12 has the device mint its own org before any account exists, so the signup
+request carries a proposed `orgId` — and D2 is that `orgId` never comes from a
+request payload. The argument each way, and the defences, are in
+`ACCESS-AND-BILLING.md` §5. **This needs an answer before D14 is built, not
+during.** Nothing else in that document depends on it.
+
+- ~~Photo storage target: S3/R2 vs. self-hosted.~~ **Answered, in two parts.**
+  GridFS on the existing Mongo today — no new dependency, nothing to provision,
+  no secret for a bundle — with **S3 as the decided successor**: Mongo
+  keeps the record, object storage takes the bytes, and the key is *derived*
+  from `{orgId}/{photoId}` rather than stored. `blobsFor(orgId)` is already the
+  seam and its isolation tests are already the conformance suite. **S3 rather
+  than the marginally cheaper R2** — the gap is about ten dollars a year at a
+  thousand farms, and operating a platform you know is worth more than that.
+  Build against the S3 SDK, which R2 also speaks, so the choice stays cheap to
+  revisit. Timing and reasoning in `ACCESS-AND-BILLING.md` §4A.
+- API hosting: same box as your other services, or a managed host? A fixed
+  cost rather than a per-farm one — see `ACCESS-AND-BILLING.md` §4.1a.
+- Per-org storage and bandwidth are still uninstrumented. Worth measuring for
+  capacity and for the outlier who uploads video — but **not for pricing**: at
+  ~1 MB of records and ~30 MB of photos per farm-year, storage does not bind
+  the number. `ACCESS-AND-BILLING.md` §4.1.
 - Does a Farm Hand write events (egg counts) while staying read-only on entities? Recommended: yes — it's the main reason a second user exists.
 - Retention for event collections: unbounded, or roll up after N years?
-- iOS: needs a Mac or cloud CI. Deferred, not designed out.
+- iOS: needs a Mac or cloud CI. Deferred, not designed out. **EAS Build
+  compiles iOS on hosted macOS workers and removes the Mac dependency
+  entirely** — likely the cheaper answer than maintaining a build machine.
+  Metro does not produce an Apple build; it only bundles the JavaScript.
