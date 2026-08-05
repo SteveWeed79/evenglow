@@ -146,8 +146,8 @@ roadmap:
 
 So a synced farm is roughly **1 MB of records and ~30 MB of photos a year** at a
 hundred photos. A thousand paying farms is about **31 GB a year** — on S3 that
-is roughly **$0.70 a month for all of them**, and on R2 less, with no egress
-charge.
+is roughly **$0.70 a month for all of them**. §4A.4 covers why that is S3
+rather than the marginally cheaper R2.
 
 **Storage is not a constraint at any scale this reaches.** The 25 MB ceiling is
 a ceiling, not a typical, and the app already shrinks photos for the purpose.
@@ -251,8 +251,8 @@ zero and reach compounds.
 
 ## 4A. Where The Photo Bytes Live
 
-**Mongo holds the record; S3 (or R2) holds the bytes.** GridFS today, and the
-successor is decided rather than open.
+**Mongo holds the record; S3 holds the bytes.** GridFS today, and the successor
+is decided rather than open.
 
 The record layer already works this way and always has — `photoShape` has said
 since it was written that it carries *"metadata only, the Blob is uploaded
@@ -271,7 +271,7 @@ both halves are already in hand at every call site. Storing one costs three
 things:
 
 - **Migration.** A URL bakes bucket, region and provider into every row, so
-  moving to R2 later becomes a data migration rather than a config change.
+  changing any of them becomes a data migration rather than a config change.
 - **Authorization.** A durable URL is a capability: anyone holding it reads
   that photo for ever with no token check, and the tenancy story quietly
   becomes "nobody shared the link". Presigned URLs minted per request keep the
@@ -308,7 +308,36 @@ streaming through Fastify.
 
 Switch when photo bytes become a serious fraction of the database's working set,
 or when backup and restore time becomes an operational problem rather than a
-line item. **R2 before S3** — zero egress is the right shape for serving images.
+line item.
+
+### 4A.4 — S3, not R2, and the reason is not price
+
+R2 is cheaper — roughly $0.015/GB against $0.023, and no egress charge against
+about $0.09/GB. At the volumes in §4.1 that is a difference of **around ten
+dollars a year at a thousand paying farms**, against some $39,000 of revenue.
+Three hundredths of one percent.
+
+**Familiarity is worth more than that.** The cost of a storage layer is not its
+invoice, it is the evening spent debugging an access policy on a platform
+nobody here has operated. S3 is the one we know, it did presigned URLs,
+block-public-access and lifecycle rules first, and R2 is API-compatible *with
+S3* rather than the other way round.
+
+**Build against the AWS S3 SDK regardless.** R2 speaks the same API, so if
+egress ever starts to matter the move is an endpoint and a credential — and
+because §4A.1 derives the key rather than storing it, there are no rows to
+rewrite either. Nothing here is a lock-in.
+
+**What would change the answer:** egress, at a scale this has not reached. A
+hundred thousand farms is roughly 4.5 TB of downloads a year — about $400 a
+month on S3 and nothing on R2, at which point a migration is worth a week.
+CloudFront in front of S3 is the other answer.
+
+The thing to watch for is any feature that turns a photo into *repeated* reads:
+web sharing, a public farm page, anything hotlinkable. Offline-first is the
+protection — a device caches locally after the first fetch, so egress is about
+one download per photo per device rather than one per view. A feature that
+breaks that assumption is the one that makes this decision worth revisiting.
 
 ---
 

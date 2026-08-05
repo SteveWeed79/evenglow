@@ -284,11 +284,14 @@ during.** Nothing else in that document depends on it.
 
 - ~~Photo storage target: S3/R2 vs. self-hosted.~~ **Answered, in two parts.**
   GridFS on the existing Mongo today — no new dependency, nothing to provision,
-  no secret for a bundle — with **S3 or R2 as the decided successor**: Mongo
+  no secret for a bundle — with **S3 as the decided successor**: Mongo
   keeps the record, object storage takes the bytes, and the key is *derived*
   from `{orgId}/{photoId}` rather than stored. `blobsFor(orgId)` is already the
-  seam and its isolation tests are already the conformance suite. Timing and
-  the reasoning are in `ACCESS-AND-BILLING.md` §4A.
+  seam and its isolation tests are already the conformance suite. **S3 rather
+  than the marginally cheaper R2** — the gap is about ten dollars a year at a
+  thousand farms, and operating a platform you know is worth more than that.
+  Build against the S3 SDK, which R2 also speaks, so the choice stays cheap to
+  revisit. Timing and reasoning in `ACCESS-AND-BILLING.md` §4A.
 - API hosting: same box as your other services, or a managed host? A fixed
   cost rather than a per-farm one — see `ACCESS-AND-BILLING.md` §4.1a.
 - Per-org storage and bandwidth are still uninstrumented. Worth measuring for
