@@ -133,6 +133,132 @@ export function incubationDues(incubation: IncubationRecord, label: string): Due
   return dues;
 }
 
+/**
+ * The day turning stops and the lid stays shut.
+ *
+ * Three days before the hatch, which is the rule for every bird in
+ * `INCUBATION_DAYS` — a chicken's day 18 of 21 is the one everybody knows, and
+ * it is the same three days for a duck's 28 and a quail's 18. The interval is
+ * the constant, not the day number, which is why this is arithmetic rather
+ * than a second table to keep in step with the first.
+ */
+export function lockdownDay(incubationDays: number): number {
+  return Math.max(1, incubationDays - 3);
+}
+
+export type IncubationPhase = 'ahead' | 'turning' | 'candling' | 'lockdown' | 'hatching' | 'late';
+
+export interface IncubationStage {
+  /** 1 on the day they went under. Zero or less means they are not under yet. */
+  day: number;
+  /** The species' full term. */
+  of: number;
+  phase: IncubationPhase;
+  /** "Day 18 of 21" — the line a keeper reads first. */
+  title: string;
+  /** One sentence of what to do about it. Never a humidity figure; see below. */
+  guidance: string;
+}
+
+/**
+ * Where a set of eggs has got to, derived from two things already recorded.
+ *
+ * The set date and the species are enough to say "day 18 of 21, lockdown", and
+ * a keeper counting on their fingers every morning is a keeper who will one
+ * day turn eggs on day nineteen. Nothing new is stored — this is a read over
+ * `setAt` and `INCUBATION_DAYS`, in the same file as the numbers it needs so
+ * the two cannot drift apart.
+ *
+ * **Not a `Due`, deliberately.** A due is a row that arrives on Today and
+ * leaves when its event is recorded; this is a description of a thing already
+ * on screen. Candling and the hatch are the two rows worth interrupting a
+ * morning for and `incubationDues` already produces both — a third row saying
+ * "still incubating" every day for three weeks is how a list stops being read.
+ *
+ * **No humidity, and that is a decision rather than an omission.** Dry
+ * incubation, 45%, 55%, run-it-by-weight-loss — the schools genuinely
+ * disagree, they disagree by more than the difference this app could measure,
+ * and a keeper with a hygrometer and a hatch behind them knows their own
+ * machine better than a constant compiled into a phone. Saying *what* the
+ * lockdown days are for is honest; naming a number to hold them at is not.
+ *
+ * Null when the species is not one this app knows a term for, because a stage
+ * derived from a guessed term is worse than no stage at all.
+ */
+export function incubationStage(
+  species: string,
+  setAt: number,
+  now: number,
+): IncubationStage | null {
+  const of = INCUBATION_DAYS[species];
+  if (of === undefined) return null;
+
+  // Day 1 is the day they went under, so the count is inclusive at both ends
+  // and reads the way a keeper says it out loud.
+  const day = Math.floor((now - setAt) / DAY_MS) + 1;
+  const candle = candlingDay(of);
+  const lockdown = lockdownDay(of);
+
+  // Days until they go under, for a set dated forward.
+  const away = 1 - day;
+  const title =
+    day >= 1 ? `Day ${day} of ${of}` : away === 1 ? 'Under from tomorrow' : `Under in ${away} days`;
+
+  const stage = (phase: IncubationPhase, guidance: string): IncubationStage => ({
+    day,
+    of,
+    phase,
+    title,
+    guidance,
+  });
+
+  if (day < 1) {
+    return stage('ahead', 'Set for a date still to come — nothing to do yet.');
+  }
+
+  if (day > of) {
+    /**
+     * Late, and said without a deadline this app has no business setting.
+     *
+     * A day or two past the date is ordinary — a cool incubator runs slow, and
+     * eggs set over an evening do not all start together. What a keeper needs
+     * here is permission to wait, not a number telling them when to give up on
+     * something that might still be alive.
+     */
+    const over = day - of;
+    return stage(
+      'late',
+      `${over === 1 ? 'A day' : `${over} days`} past the date. Late hatches are ordinary — a cool run adds days — so give them a while yet before deciding a set is done.`,
+    );
+  }
+
+  if (day === of) {
+    return stage(
+      'hatching',
+      'Hatch day. Leave them in until they are dry and fluffed up; a lid opened for a look costs the ones still working at the shell.',
+    );
+  }
+
+  if (day >= lockdown) {
+    return stage(
+      'lockdown',
+      `Lockdown — stop turning and keep the lid shut. The last ${of - lockdown + 1} days are when a chick moves into position and needs the air inside left alone.`,
+    );
+  }
+
+  if (day === candle) {
+    return stage(
+      'candling',
+      'Candling day. Hold each one to a light and take the clears out — the space is worth more than the hope.',
+    );
+  }
+
+  return stage(
+    'turning',
+    `Turning days, an odd number of times a day so they do not spend every night the same way up. Lockdown on day ${lockdown}.`,
+  );
+}
+
 export interface BreedingRecord {
   id: string;
   species: string;

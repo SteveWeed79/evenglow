@@ -1,6 +1,11 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
-import { candlingDay, INCUBATION_DAYS, libraryBreed } from '@steading/contracts';
+import {
+  candlingDay,
+  INCUBATION_DAYS,
+  incubationStage,
+  libraryBreed,
+} from '@steading/contracts';
 import {
   fertilityRate,
   hatchRate,
@@ -58,6 +63,19 @@ function Detail({ incubation }: { incubation: IncubationEntry }): React.ReactEle
 
   const days = INCUBATION_DAYS[incubation.species] ?? 21;
 
+  /**
+   * Read once per render off the clock, not held in state.
+   *
+   * A day count that ticked over on a timer would be a subscription to keep
+   * alive for three weeks to change one word. The screen is re-entered every
+   * morning by somebody who wants to know what today's job is, and re-entering
+   * it is the refresh.
+   */
+  const stage =
+    incubation.hatchedAt === undefined
+      ? incubationStage(incubation.species, incubation.setAt, Date.now())
+      : null;
+
   const recordCandling = useCallback(() => {
     void candled.save(async () => {
       await log({
@@ -103,6 +121,19 @@ function Detail({ incubation }: { incubation: IncubationEntry }): React.ReactEle
             certain what these are. */}
         {breedName === null ? '' : ` · ${breedName}`}
       </Text>
+
+      {/**
+        * Where this set has got to, and it is derived rather than recorded.
+        *
+        * Only while it is running: once the hatch is in, the day count is
+        * history and the panel below says what actually happened, which is
+        * the more interesting number.
+        */}
+      {stage === null ? null : (
+        <Panel label={stage.title}>
+          <Body>{stage.guidance}</Body>
+        </Panel>
+      )}
 
       {fertilityPct === null && hatchPct === null ? null : (
         <Panel label="How it went">

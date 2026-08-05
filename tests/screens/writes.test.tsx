@@ -329,6 +329,49 @@ describe('birthing and hatching', () => {
     expect(screen.text()).toContain('Not this kind of animal');
   });
 
+  /**
+   * The set date is what a keeper does arithmetic *from*; the day count is
+   * the answer they were doing it for, so the screen does the counting.
+   */
+  it('says which day a running set is on, and stops once it hatches', async () => {
+    const id = newId();
+    await enqueue({
+      entity: 'incubation',
+      op: 'create',
+      targetId: id,
+      payload: {
+        species: 'chicken',
+        label: 'The Sussex set',
+        // Under seventeen days ago, so today is day 18 — lockdown.
+        setAt: Date.now() - 17 * 86_400_000,
+        eggsSet: 12,
+        source: 'own',
+        method: 'incubator',
+      },
+    });
+
+    const running = await mount(<IncubationScreen {...routeProps({ incubationId: id })} />);
+    expect(running.text()).toContain('Day 18 of 21');
+    expect(running.text()).toContain('stop turning');
+    // The one figure it must never invent, on the day somebody would want it.
+    expect(running.text()).not.toMatch(/humidity/i);
+    running.unmount();
+
+    await enqueue({
+      entity: 'incubation',
+      op: 'update',
+      targetId: id,
+      payload: { hatchedAt: Date.now(), hatched: 10 },
+    });
+
+    // A day count is not history. What happened is, and the panel below says it.
+    const done = await mount(<IncubationScreen {...routeProps({ incubationId: id })} />);
+    expect(done.text()).not.toContain('Day 18 of 21');
+    // Loosely spaced: `text()` joins each rendered string, so the percent
+    // sign arrives as its own node.
+    expect(done.text()).toMatch(/83\s*%\s*hatched/);
+  });
+
   it('sets eggs, candles them, then hatches them', async () => {
     const setter = await mount(<SetEggsScreen />);
     await setter.type('incubation-label', 'The Sussex set');

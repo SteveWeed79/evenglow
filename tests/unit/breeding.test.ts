@@ -7,6 +7,7 @@ import {
   growOutWindow,
   incubationCreateSchema,
   incubationDues,
+  incubationStage,
   layOnsetWindow,
   poundsToUg,
   processingDue,
@@ -86,6 +87,68 @@ describe('incubation record', () => {
     const dues = incubationDues({ id: 'i1', species: 'chicken', setAt: NOW }, base.label);
     expect(dues.map((d) => d.kind)).toEqual(['candle', 'hatch']);
     expect(dues.find((d) => d.kind === 'hatch')?.at).toBe(NOW + 21 * DAY);
+  });
+});
+
+/**
+ * Where a set has got to, from the set date and the species alone.
+ *
+ * The arithmetic a keeper otherwise does on their fingers every morning, and
+ * gets wrong on the morning that matters — turning eggs on day nineteen is the
+ * mistake this exists to prevent.
+ */
+describe('incubation stage', () => {
+  const on = (day: number, species = 'chicken'): ReturnType<typeof incubationStage> =>
+    incubationStage(species, NOW, NOW + (day - 1) * DAY);
+
+  it('counts from one on the day they went under', () => {
+    expect(on(1)).toMatchObject({ day: 1, of: 21, phase: 'turning', title: 'Day 1 of 21' });
+  });
+
+  it('names the day everybody knows', () => {
+    expect(on(18)).toMatchObject({ day: 18, phase: 'lockdown', title: 'Day 18 of 21' });
+    expect(on(17)?.phase).toBe('turning');
+  });
+
+  /**
+   * The three days are the constant, not the day number. A duck's lockdown is
+   * day 25 and a quail's is day 15 for the same reason a chicken's is 18.
+   */
+  it('keeps lockdown three days out whatever the bird', () => {
+    expect(on(25, 'duck')).toMatchObject({ of: 28, phase: 'lockdown' });
+    expect(on(24, 'duck')?.phase).toBe('turning');
+    expect(on(15, 'quail')).toMatchObject({ of: 18, phase: 'lockdown' });
+  });
+
+  it('marks the candling day it already raises a due for', () => {
+    expect(on(7)?.phase).toBe('candling');
+  });
+
+  it('says hatch day, then says late without setting a deadline', () => {
+    expect(on(21)?.phase).toBe('hatching');
+    expect(on(22)).toMatchObject({ phase: 'late' });
+    expect(on(22)?.guidance).toContain('A day past');
+    expect(on(24)?.guidance).toContain('3 days past');
+  });
+
+  it('handles a set dated forward', () => {
+    expect(on(0)).toMatchObject({ phase: 'ahead', title: 'Under from tomorrow' });
+    expect(on(-2)?.title).toBe('Under in 3 days');
+  });
+
+  /**
+   * A stage derived from a guessed term is worse than no stage: it would put a
+   * confident "day 18 of 21, lockdown" on a bird nobody knows the term for.
+   */
+  it('refuses to guess a term it does not know', () => {
+    expect(on(5, 'peafowl')).toBeNull();
+  });
+
+  /** The one thing it will not say, and the reason is in the doc comment. */
+  it('names no humidity figure anywhere', () => {
+    for (const day of [1, 7, 18, 21, 23]) {
+      expect(on(day)?.guidance).not.toMatch(/%|humidity/i);
+    }
   });
 });
 
