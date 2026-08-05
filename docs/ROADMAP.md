@@ -448,8 +448,21 @@ Ordered by cost, cheapest first, and all four are now done:
    ~~**Before the first real farm syncs: a nightly `mongodump` to S3.**~~
    Done — `scripts/backup-mongo.sh`.
 
-**What is left in §7 is D13, the billing itself**, and nothing above depends on
-it: the free tier is the whole app and always was.
+**D13, the billing, is now built to the edge of the store.** The rules, the
+gate, the Play mapping and the copy are in; the purchase flow and a Play
+Console are what remain, and both are configuration rather than design.
+
+Three decisions in it are worth carrying forward:
+
+- **Writing is the paid thing.** Pulling a snapshot is not gated, because a
+  lapsed subscription must never be why a farm cannot get its records back.
+- **402 is not a rejection.** A refused mutation goes to the inbox as something
+  a person must look at, and there is nothing here for anybody to look at. A
+  farm on the free tier would otherwise cross `MAX_ATTEMPTS` and have its whole
+  history swept into the inbox as poison.
+- **Grace is entitled.** A card expires and the store retries for thirty days;
+  cutting sync on the first failed charge would be discovered as "the app is
+  broken", not as "my card bounced".
 
 ---
 
