@@ -1,7 +1,21 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { googleSignInSchema, isUlid, newId, signupSchema } from '@steading/contracts';
 import { authorizeCredentials } from '../auth/credentials';
+import { verifyGoogleIdToken } from '../auth/google';
+import { hashPassword } from '../auth/password';
 import { endSession, rotateSession, startSession } from '../auth/refresh';
+import {
+  deleteOrgIfEmpty,
+  findOrgById,
+  findUserByEmail,
+  findUserByGoogleSub,
+  insertOrg,
+  insertUser,
+  linkGoogleSub,
+  normalizeEmail,
+  orgHasMembers,
+} from '../db/identity';
 import type { Env } from '../env';
 import { errorBody, HttpError } from '../http';
 
@@ -59,6 +73,245 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
        * handed over once, here, and cached.
        */
       return reply.status(200).send({ ...pair, user: { id: user.id, name: user.name, role: user.role } });
+    });
+
+    /**
+     * Claiming a farm that already exists on a device (A2.1, A2.2).
+     *
+     * The device has been running since first launch with an org ULID it
+     * minted itself and a database full of records. This route is where that
+     * org becomes real on the server — **adoption, not assignment**: the same
+     * id, so the same database file, the same rows, the same entity ids, and
+     * the queue simply begins to flush. There is no rename, no migration, and
+     * no window where a device holds records under an id the server has never
+     * heard of.
+     *
+     * See `signupSchema` for why a client-supplied orgId does not breach
+     * invariant 2 and what makes a double claim structurally impossible.
+     *
+     * Rate limited with sign-in, and fails closed for the same reason: this is
+     * the other route where an unthrottled attacker gets free attempts.
+     */
+    scope.post('/auth/signup', async (request, reply) => {
+      const parsed = signupSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: 'Check the details and try again.' });
+      }
+
+      const { orgId, orgName, email, password, name } = parsed.data;
+
+      /**
+       * A 26-character string is not a ULID.
+       *
+       * The schema checks length because that is what the wire contract says;
+       * this checks the alphabet, because an id that is not a ULID is either a
+       * client bug or somebody trying a chosen value, and neither should
+       * become a farm.
+       */
+      if (!isUlid(orgId)) {
+        return reply.status(400).send({ error: 'That farm id is not one this app could have made.' });
+      }
+
+      /**
+       * Checked before the org is created, so the ordinary failure leaves
+       * nothing behind. The race is still handled below; this only keeps the
+       * common case clean.
+       *
+       * **This route can tell you an email is taken and there is no way round
+       * it.** Somebody creating an account has to be told why it did not work,
+       * and there is no email sender in this system to move the answer out of
+       * band (see `MembersScreen`). `/invites/accept` made the same trade and
+       * says the same sentence; sign-in, which does not need to, still says
+       * one thing for every failure.
+       */
+      if (await findUserByEmail(email)) {
+        return reply.status(409).send({
+          error: 'That email already has a Steading account. Sign in with it instead.',
+        });
+      }
+
+      const now = new Date();
+
+      try {
+        await insertOrg({ _id: orgId, name: orgName.trim(), createdAt: now });
+      } catch (error) {
+        /**
+         * The insert failed, and there are three reasons it could have.
+         *
+         * **The id belongs to a farm with members.** Somebody's farm. Refused,
+         * and this is the case `_id` uniqueness is guarding: two farms can
+         * never quietly become one.
+         *
+         * **The id belongs to an org with no members.** A previous attempt
+         * from this same device created the org and then failed to give it an
+         * owner. Nobody can hold a token for a memberless org, so nothing can
+         * have been written inside it — finishing the claim is safe, and
+         * refusing would strand a handset full of records behind an id it
+         * could never claim.
+         *
+         * **The database was unreachable.** The org does not exist at all, and
+         * carrying on would mint a user pointing at a farm that is not there.
+         * Rethrown, so it surfaces as a 500 rather than as a half-made
+         * account somebody has to be talked out of later.
+         */
+        const existing = await findOrgById(orgId);
+        if (existing === null) throw error;
+
+        if (await orgHasMembers(orgId)) {
+          return reply.status(409).send({
+            error: 'That farm has already been claimed. Sign in to it instead.',
+          });
+        }
+      }
+
+      const userId = newId();
+
+      try {
+        await insertUser({
+          _id: userId,
+          email: normalizeEmail(email),
+          passwordHash: await hashPassword(password),
+          name,
+          orgId,
+          // The person who claims the farm owns it. Everyone else arrives
+          // through an invite or a join code, which name their own role.
+          role: 'owner',
+          createdAt: now,
+        });
+      } catch {
+        // Lost the race on the email between the check above and here. Take
+        // the empty org back out rather than leaving the id spent.
+        await deleteOrgIfEmpty(orgId).catch(() => undefined);
+        return reply.status(409).send({
+          error: 'That email already has a Steading account. Sign in with it instead.',
+        });
+      }
+
+      const pair = await startSession({ userId, orgId, role: 'owner' }, env.AUTH_SECRET);
+
+      // Signed in immediately, for the reason `/invites/accept` gives: making
+      // somebody create an account and then find a sign-in screen is two
+      // chances to lose them and buys nothing.
+      return reply.status(201).send({ ...pair, user: { id: userId, name, role: 'owner' } });
+    });
+
+    /**
+     * Google sign-in, and Google signup, on one route (A2.4).
+     *
+     * One route because the device cannot know which it is doing: whether an
+     * address already has an account is exactly the question a sign-in screen
+     * must not be able to ask. The client sends the ID token and, if it is
+     * holding an unclaimed farm, the org it would claim — and the server picks.
+     *
+     * Three outcomes, in this order:
+     *
+     * 1. **Known Google account** → signed in.
+     * 2. **Known email, no Google linked** → the Google identity is bound to
+     *    the existing account and they are signed in. A farm that signed up
+     *    with a password and later taps the Google button is the same farm,
+     *    and telling them their own address is taken would be absurd.
+     * 3. **Neither** → the farm on the device is claimed, exactly as
+     *    `/auth/signup` does it, with Google as the credential and no password
+     *    ever set. Without an `orgId` there is nothing to claim, so it refuses.
+     */
+    scope.post('/auth/google', async (request, reply) => {
+      const parsed = googleSignInSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: 'Check the details and try again.' });
+      }
+
+      let identity;
+      try {
+        identity = await verifyGoogleIdToken(parsed.data.idToken, env.googleClientIds);
+      } catch (error) {
+        const { status, body } = errorBody(error);
+        return reply.status(status).send(body);
+      }
+
+      const now = new Date();
+
+      // 1. The ordinary case after the first time.
+      const byGoogle = await findUserByGoogleSub(identity.googleSub);
+      if (byGoogle) {
+        if (byGoogle.disabledAt) {
+          return reply.status(401).send({ error: 'That Google sign-in did not work. Try again.' });
+        }
+        const pair = await startSession(
+          { userId: byGoogle._id, orgId: byGoogle.orgId, role: byGoogle.role },
+          env.AUTH_SECRET,
+        );
+        return reply
+          .status(200)
+          .send({ ...pair, user: { id: byGoogle._id, name: byGoogle.name, role: byGoogle.role } });
+      }
+
+      // 2. Same person, arriving a different way. Safe because the token
+      //    carries `email_verified: true` — see `verifyGoogleIdToken`.
+      const byEmail = await findUserByEmail(identity.email);
+      if (byEmail) {
+        if (byEmail.disabledAt) {
+          return reply.status(401).send({ error: 'That Google sign-in did not work. Try again.' });
+        }
+        await linkGoogleSub(byEmail._id, identity.googleSub);
+        const pair = await startSession(
+          { userId: byEmail._id, orgId: byEmail.orgId, role: byEmail.role },
+          env.AUTH_SECRET,
+        );
+        return reply
+          .status(200)
+          .send({ ...pair, user: { id: byEmail._id, name: byEmail.name, role: byEmail.role } });
+      }
+
+      // 3. A farm claiming itself, with Google instead of a password.
+      const { orgId, orgName } = parsed.data;
+      if (orgId === undefined || orgName === undefined) {
+        return reply.status(404).send({
+          error: 'No Steading account uses that Google address yet.',
+        });
+      }
+
+      if (!isUlid(orgId)) {
+        return reply.status(400).send({ error: 'That farm id is not one this app could have made.' });
+      }
+
+      try {
+        await insertOrg({ _id: orgId, name: orgName.trim(), createdAt: now });
+      } catch (error) {
+        // The same three-way reading as `/auth/signup`; see the note there.
+        const existing = await findOrgById(orgId);
+        if (existing === null) throw error;
+
+        if (await orgHasMembers(orgId)) {
+          return reply.status(409).send({
+            error: 'That farm has already been claimed. Sign in to it instead.',
+          });
+        }
+      }
+
+      const userId = newId();
+
+      try {
+        await insertUser({
+          _id: userId,
+          email: normalizeEmail(identity.email),
+          googleSub: identity.googleSub,
+          // No passwordHash, deliberately. Nothing was set, so nothing can be
+          // guessed — see `authorizeCredentials`, which refuses the account
+          // rather than comparing against an absent digest.
+          name: identity.name ?? parsed.data.name ?? identity.email.split('@')[0] ?? 'Farmer',
+          orgId,
+          role: 'owner',
+          createdAt: now,
+        });
+      } catch (error) {
+        await deleteOrgIfEmpty(orgId).catch(() => undefined);
+        throw error;
+      }
+
+      const pair = await startSession({ userId, orgId, role: 'owner' }, env.AUTH_SECRET);
+      return reply
+        .status(201)
+        .send({ ...pair, user: { id: userId, name: identity.name ?? 'Farmer', role: 'owner' } });
     });
 
     scope.post('/auth/refresh', async (request, reply) => {

@@ -5,6 +5,11 @@ import {
   canInvite,
   inviteAcceptSchema,
   inviteCreateSchema,
+  joinCodeRedeemSchema,
+  JOIN_CODE_LENGTH,
+  JOIN_CODE_TTL_MINUTES,
+  normalizeJoinCode,
+  signupSchema,
   refusalMessage,
   refuseRemoval,
   refuseRoleChange,
@@ -240,5 +245,112 @@ describe('the invite token', () => {
     expect(emailMatches('sam@example.test', 'someone@else.test')).toBe(false);
     // Different lengths must not throw — timingSafeEqual does, on raw input.
     expect(() => emailMatches('a@b.co', 'a-much-longer-address@example.test')).not.toThrow();
+  });
+});
+
+/**
+ * Join codes (A2.5) — the properties that make six characters defensible.
+ *
+ * `invites.ts` says flatly that no rate limit makes a guessable invite safe,
+ * and it is right about a link that sits in a phone for a week. Every property
+ * that makes this a different object is asserted here rather than asserted in
+ * a comment: a short alphabet with no lookalikes, a short life, one use, and a
+ * hash rather than the code on disk.
+ */
+describe('join codes', () => {
+  it('draws from an alphabet with no character that can be misread', async () => {
+    const { mintJoinCode } = await import('@steading/api/db/join-codes');
+
+    for (let i = 0; i < 200; i += 1) {
+      const code = mintJoinCode();
+      expect(code).toHaveLength(JOIN_CODE_LENGTH);
+      // Crockford: no I, L, O or U. Nothing reads as a one or a zero across a
+      // yard, and nothing spells a word by accident.
+      expect(code).toMatch(/^[0-9A-HJKMNP-TV-Z]{6}$/);
+    }
+  });
+
+  it('reads a code the way somebody types it', () => {
+    // The three substitutions people actually make, and case is not
+    // information. A hand who types l for 1 is understood, not corrected.
+    expect(normalizeJoinCode(' k4m9pt ')).toBe('K4M9PT');
+    expect(normalizeJoinCode('O0IL1U')).toBe('00111V');
+    expect(normalizeJoinCode('K4-M9 PT')).toBe('K4M9PT');
+  });
+
+  it('mints something different every time', async () => {
+    const { mintJoinCode } = await import('@steading/api/db/join-codes');
+
+    const seen = new Set(Array.from({ length: 500 }, () => mintJoinCode()));
+    // Not a randomness test — a guard against a constant, which is the way
+    // this fails silently and catastrophically.
+    expect(seen.size).toBeGreaterThan(400);
+  });
+
+  it('stores a hash that cannot be turned back into the code', async () => {
+    const { hashJoinCode, mintJoinCode } = await import('@steading/api/db/join-codes');
+
+    const code = mintJoinCode();
+    const hash = hashJoinCode(code);
+
+    expect(hash).not.toBe(code);
+    expect(hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(hashJoinCode(code)).toBe(hash);
+  });
+
+  /**
+   * The window is the other half of the argument, so it is worth pinning: a
+   * code that lasted a day would need a much longer alphabet to be safe.
+   */
+  it('lives for minutes, not days', () => {
+    expect(JOIN_CODE_TTL_MINUTES).toBeLessThanOrEqual(15);
+    expect(JOIN_CODE_TTL_MINUTES).toBeGreaterThan(0);
+  });
+
+  it('takes a redemption that names everything a new account needs', () => {
+    const base = {
+      code: 'K4M9PT',
+      email: 'pat@example.test',
+      password: 'a properly long passphrase',
+      name: 'Pat',
+    };
+
+    expect(joinCodeRedeemSchema.safeParse(base).success).toBe(true);
+    // Short passwords are refused at the boundary, not at the database.
+    expect(joinCodeRedeemSchema.safeParse({ ...base, password: 'short' }).success).toBe(false);
+    // The redeemer does not get to name their own role.
+    expect(joinCodeRedeemSchema.safeParse({ ...base, role: 'owner' }).success).toBe(false);
+  });
+});
+
+/**
+ * Claiming a farm (A2.2) — the one payload in this system carrying an orgId.
+ */
+describe('signup', () => {
+  const base = {
+    orgId: 'A'.repeat(26),
+    orgName: 'Hollow Farm',
+    email: 'sam@example.test',
+    password: 'a properly long passphrase',
+    name: 'Sam',
+  };
+
+  it('takes the id the device minted', () => {
+    expect(signupSchema.safeParse(base).success).toBe(true);
+  });
+
+  it('refuses anything that is not a 26-character id', () => {
+    expect(signupSchema.safeParse({ ...base, orgId: 'nope' }).success).toBe(false);
+    expect(signupSchema.safeParse({ ...base, orgId: '' }).success).toBe(false);
+  });
+
+  /**
+   * `.strict()`, so a caller cannot smuggle a role in beside the org.
+   * The claimant is the owner because the route says so, not because the
+   * payload asked.
+   */
+  it('refuses a role, and refuses a farm with no name', () => {
+    expect(signupSchema.safeParse({ ...base, role: 'owner' }).success).toBe(false);
+    expect(signupSchema.safeParse({ ...base, orgName: '' }).success).toBe(false);
   });
 });

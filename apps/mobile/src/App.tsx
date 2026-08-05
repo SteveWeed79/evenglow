@@ -59,7 +59,7 @@ function Themed(): React.ReactElement {
       {/* Inverted, not matched: the bar sits on the ground colour, so its
           glyphs need the opposite of the wall behind them. */}
       <StatusBar style={theme === 'lamplight' ? 'light' : 'dark'} />
-      <Boot render={(onSignedOut) => <Root onSignedOut={onSignedOut} />} />
+      <Boot render={(session) => <Root {...session} />} />
     </NavigationContainer>
   );
 }

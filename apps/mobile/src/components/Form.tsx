@@ -52,6 +52,8 @@ export function TextField({
   maxLength = 120,
   multiline = false,
   keyboardType,
+  secret = false,
+  caps = false,
   accessibilityLabel,
   testID,
 }: {
@@ -61,6 +63,17 @@ export function TextField({
   maxLength?: number;
   multiline?: boolean;
   keyboardType?: 'default' | 'number-pad' | 'decimal-pad' | 'email-address';
+  /**
+   * A password. Masked, and every keyboard convenience that would corrupt one
+   * turned off.
+   *
+   * Here rather than in the account screen because a field that masks its
+   * contents but still autocorrects them is a bug nobody sees until somebody
+   * cannot sign in, and it should be impossible to build by forgetting a prop.
+   */
+  secret?: boolean;
+  /** A code read off somebody else's screen. Uppercase, never autocorrected. */
+  caps?: boolean;
   accessibilityLabel?: string;
   testID?: string;
 }): React.ReactElement {
@@ -75,8 +88,9 @@ export function TextField({
       maxLength={maxLength}
       multiline={multiline}
       {...(keyboardType === undefined ? {} : { keyboardType })}
-      {...(keyboardType === 'email-address'
-        ? { autoCapitalize: 'none' as const, autoCorrect: false }
+      {...(secret ? { secureTextEntry: true, textContentType: 'password' as const } : {})}
+      {...(secret || caps || keyboardType === 'email-address'
+        ? { autoCorrect: false, autoCapitalize: caps ? ('characters' as const) : ('none' as const) }
         : {})}
       {...(accessibilityLabel === undefined ? {} : { accessibilityLabel })}
       {...(testID === undefined ? {} : { testID })}
@@ -504,12 +518,21 @@ export function Secondary({
   icon,
   onPress,
   danger = false,
+  disabled = false,
   testID,
 }: {
   label: string;
   icon?: IconName;
   onPress: () => void;
   danger?: boolean;
+  /**
+   * Dimmed and inert, like `Primary`.
+   *
+   * Added for the Google button, which exists before the auth request it
+   * needs has finished being prepared — a button that silently does nothing
+   * for the first half-second is one people tap twice.
+   */
+  disabled?: boolean;
   testID?: string;
 }): React.ReactElement {
   const { colors } = useTheme();
@@ -517,14 +540,16 @@ export function Secondary({
   return (
     <Pressable
       onPress={onPress}
+      disabled={disabled}
       accessibilityRole="button"
+      accessibilityState={{ disabled }}
       {...(testID === undefined ? {} : { testID })}
       style={({ pressed }) => [
         styles.secondary,
         {
           backgroundColor: danger ? colors.rowan : colors.ground,
           borderColor: danger ? colors.rowan : colors.border,
-          opacity: pressed ? 0.75 : 1,
+          opacity: disabled ? 0.4 : pressed ? 0.75 : 1,
         },
       ]}
     >

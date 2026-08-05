@@ -25,9 +25,27 @@ const envSchema = z.object({
    * with credentials is the mistake this field exists to prevent.
    */
   CORS_ORIGINS: z.string().default('http://localhost:5173'),
+  /**
+   * Comma-separated Google OAuth client ids (A2.4) — the Android one, and the
+   * web one Expo's auth proxy uses in development.
+   *
+   * **Public by design**, so this is configuration rather than a secret;
+   * invariant 12 is about what ships in an APK, and a client id ships in every
+   * OAuth app there has ever been. What matters is that the list is *complete
+   * and exact*: it is the audience check that stops a Google token minted for
+   * somebody else's application being accepted as one of ours.
+   *
+   * Empty is a supported state. A server with no ids answers Google sign-in
+   * with a 501 naming this variable, and email and password keep working —
+   * which is what a farm running its own box gets until it makes a project.
+   */
+  GOOGLE_CLIENT_IDS: z.string().default(''),
 });
 
-export type Env = z.infer<typeof envSchema> & { corsOrigins: string[] };
+export type Env = z.infer<typeof envSchema> & {
+  corsOrigins: string[];
+  googleClientIds: string[];
+};
 
 /**
  * Takes a plain record rather than `NodeJS.ProcessEnv`, which additionally
@@ -48,6 +66,9 @@ export function readEnv(source: Record<string, string | undefined> = process.env
     ...parsed.data,
     corsOrigins: parsed.data.CORS_ORIGINS.split(',')
       .map((origin) => origin.trim())
+      .filter(Boolean),
+    googleClientIds: parsed.data.GOOGLE_CLIENT_IDS.split(',')
+      .map((id) => id.trim())
       .filter(Boolean),
   };
 }

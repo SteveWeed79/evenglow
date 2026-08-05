@@ -1,6 +1,7 @@
 import { apiBase, setAccessToken } from '@steading/core/api';
 import { z } from 'zod';
 import { roleSchema } from '@steading/contracts';
+import { forgetLocalOrgId } from './local-org';
 import {
   type CachedClaims,
   clearCredentials,
@@ -156,6 +157,42 @@ export function readClaims(accessToken: string): CachedClaims | null {
 
 export class SignInError extends Error {}
 
+/**
+ * Turns a token pair into a signed-in device.
+ *
+ * Shared by every route that ends in a session — sign-in, claiming a farm,
+ * redeeming a join code — because the *order* here is load-bearing and three
+ * copies of it would be three chances to get it wrong: the refresh token is
+ * durable before the access token is live, so a crash mid-way leaves a device
+ * that can recover a session rather than one holding a credential it cannot
+ * renew.
+ */
+async function establish(body: unknown): Promise<CachedClaims> {
+  const pair = pairSchema.parse(body);
+  const read = parseClaims(pair.accessToken);
+  if (!read.ok) {
+    throw new SignInError(`The server sent a session we could not read — ${read.problem}.`);
+  }
+
+  // The name is not in the token and is not authorization — it is the label a
+  // note carries so the other person's phone can say who wrote it offline.
+  const named: CachedClaims =
+    pair.user?.name === undefined ? read.claims : { ...read.claims, name: pair.user.name };
+
+  await writeRefreshToken(pair.refreshToken);
+  await writeCachedClaims(named);
+  setAccessToken(pair.accessToken);
+
+  return named;
+}
+
+/** The server's sentence, or a plain one about the network. Never invented. */
+async function refusal(res: Response, fallback: string): Promise<SignInError> {
+  const body: unknown = await res.json().catch(() => null);
+  const said = (body as { error?: unknown })?.error;
+  return new SignInError(typeof said === 'string' ? said : fallback);
+}
+
 export async function signIn(email: string, password: string): Promise<CachedClaims> {
   const res = await fetch(url('/auth/login'), {
     method: 'POST',
@@ -163,34 +200,102 @@ export async function signIn(email: string, password: string): Promise<CachedCla
     body: JSON.stringify({ email, password }),
   });
 
-  if (!res.ok) {
-    // The server answers one message for every failure so this route cannot be
-    // used to enumerate accounts. Passing it through verbatim keeps that true.
-    const body: unknown = await res.json().catch(() => null);
-    const message =
-      typeof (body as { error?: unknown })?.error === 'string'
-        ? (body as { error: string }).error
-        : 'That email or password is not right.';
-    throw new SignInError(message);
-  }
+  // The server answers one message for every failure so this route cannot be
+  // used to enumerate accounts. Passing it through verbatim keeps that true.
+  if (!res.ok) throw await refusal(res, 'That email or password is not right.');
 
-  const pair = pairSchema.parse(await res.json());
-  const read = parseClaims(pair.accessToken);
-  if (!read.ok) {
-    throw new SignInError(`The server sent a session we could not read — ${read.problem}.`);
-  }
-  const claims = read.claims;
+  return establish(await res.json());
+}
 
-  // The name is not in the token and is not authorization — it is the label a
-  // note carries so the other person's phone can say who wrote it offline.
-  const named: CachedClaims =
-    pair.user?.name === undefined ? claims : { ...claims, name: pair.user.name };
+/**
+ * Claims the farm this device has been keeping (A2.2).
+ *
+ * **The orgId goes up with the request, and it is the one this device already
+ * has.** The server adopts it rather than assigning one, so nothing local
+ * moves: same database file, same rows, same entity ids. The queue that has
+ * been accumulating since first launch simply starts to flush.
+ *
+ * Called with the id from `ensureLocalOrgId`, which is also the id the store
+ * is already open on — see `Boot.onSignedIn` for why that makes the reopen a
+ * no-op rather than a migration.
+ */
+export async function claimFarm(input: {
+  orgId: string;
+  orgName: string;
+  name: string;
+  email: string;
+  password: string;
+}): Promise<CachedClaims> {
+  const res = await fetch(url('/auth/signup'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  });
 
-  await writeRefreshToken(pair.refreshToken);
-  await writeCachedClaims(named);
-  setAccessToken(pair.accessToken);
+  if (!res.ok) throw await refusal(res, 'Could not set up the account. Try again.');
 
-  return named;
+  return establish(await res.json());
+}
+
+/**
+ * Signs in — or signs up — with a Google ID token (A2.4).
+ *
+ * **One call for both, because the device cannot know which it is doing.**
+ * Whether an address already has an account is exactly the question a sign-in
+ * screen must not be able to ask, so the server decides: a known Google
+ * account signs in, a known email gets the Google identity bound to it, and
+ * neither claims the farm this device is holding.
+ *
+ * The org is sent for the same reason `claimFarm` sends it — if this turns out
+ * to be a signup, it must adopt the records already on the handset rather than
+ * open an empty farm beside them.
+ */
+export async function googleSignIn(input: {
+  idToken: string;
+  orgId: string;
+  orgName: string;
+}): Promise<CachedClaims> {
+  const res = await fetch(url('/auth/google'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+
+  if (!res.ok) throw await refusal(res, 'That Google sign-in did not work. Try again.');
+
+  return establish(await res.json());
+}
+
+/**
+ * Joins somebody else's farm with a code they are holding out (A2.5).
+ *
+ * **This device's own farm is left behind, deliberately.** A hand joining an
+ * employer's farm gets that farm's database, and the org this handset minted
+ * on first launch — with whatever was logged before the code was typed — is
+ * no longer reachable. `forgetLocalOrgId` is what makes that final rather than
+ * something a later sign-out would silently reopen.
+ *
+ * The screen says so before the code is sent. It is the honest cost of a
+ * one-org-per-user model, and hiding it would mean somebody discovering it on
+ * the morning they went looking for last week's tallies.
+ */
+export async function joinFarm(input: {
+  code: string;
+  name: string;
+  email: string;
+  password: string;
+}): Promise<CachedClaims> {
+  const res = await fetch(url('/join-codes/redeem'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+
+  if (!res.ok) throw await refusal(res, 'That code did not work. Ask for a fresh one.');
+
+  const claims = await establish(await res.json());
+  await forgetLocalOrgId();
+  return claims;
 }
 
 /**
