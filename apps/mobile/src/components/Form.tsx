@@ -305,6 +305,7 @@ export function NumberField({
   suffix,
   accessibilityLabel,
   testID,
+  whole = false,
 }: {
   value: string;
   onChangeText: (next: string) => void;
@@ -312,6 +313,15 @@ export function NumberField({
   suffix?: string;
   accessibilityLabel?: string;
   testID?: string;
+  /**
+   * Digits only, and the number pad rather than the decimal one.
+   *
+   * For a field standing in for a stepper, where the value is a count of
+   * whole things — fluid ounces in a pail, pounds in a scoop, hours on a
+   * meter. Offering a decimal point there is offering a keystroke that can
+   * only produce a number the control it replaces could never have made.
+   */
+  whole?: boolean;
 }): React.ReactElement {
   const { colors } = useTheme();
 
@@ -321,9 +331,15 @@ export function NumberField({
         value={value}
         // One decimal point, digits only. Typing "1.2.3" into a weight field
         // and having it parse as NaN is a silent zero in a growth curve.
-        onChangeText={(text) => onChangeText(text.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1'))}
-        keyboardType="decimal-pad"
-        inputMode="decimal"
+        onChangeText={(text) =>
+          onChangeText(
+            whole
+              ? text.replace(/[^0-9]/g, '')
+              : text.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1'),
+          )
+        }
+        keyboardType={whole ? 'number-pad' : 'decimal-pad'}
+        inputMode={whole ? 'numeric' : 'decimal'}
         maxLength={12}
         {...(placeholder === undefined ? {} : { placeholder })}
         placeholderTextColor={colors.muted}

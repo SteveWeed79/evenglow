@@ -210,6 +210,57 @@ describe('what comes off them', () => {
     expect((await produceToday()).get(`${GROUP}:milk`)).toMatchObject({ amount: 1183, unit: 'ml' });
   });
 
+  /**
+   * The five-gallon morning, which is what the typed door exists for.
+   *
+   * Twenty taps of `+32` is the same record and nobody would ever produce it,
+   * so a herd's total simply never got logged. R5 allows the keyboard exactly
+   * here — "unless the value can exceed 99".
+   */
+  it('takes a herd-sized milking as a typed number', async () => {
+    await aGroup({ species: 'goat', purposes: ['milk'] });
+    const screen = await mount(<ProduceScreen {...routeProps({ groupId: GROUP })} />);
+
+    await screen.press('tally-type');
+    await screen.type('tally-typed', '640');
+    await screen.press('tally-commit');
+
+    // 640 fl oz — five US gallons — in millilitres.
+    expect((await produceToday()).get(`${GROUP}:milk`)).toMatchObject({ amount: 18_927, unit: 'ml' });
+  });
+
+  /**
+   * The steps do not leave when the field arrives, and this is the reason
+   * they do not: a typed total that then needs one more pull should be one
+   * tap, not a retype. Both controls move the same count.
+   */
+  it('lets the steps carry on from a typed number', async () => {
+    await aGroup({ species: 'goat', purposes: ['milk'] });
+    const screen = await mount(<ProduceScreen {...routeProps({ groupId: GROUP })} />);
+
+    await screen.press('tally-type');
+    await screen.type('tally-typed', '600');
+    await screen.press('tally-plus-32');
+
+    // The field shows what the tap did, rather than the two disagreeing.
+    expect(screen.shows('tally-typed')).toBe('632');
+  });
+
+  /**
+   * A slipped keystroke is forever in an append-only log, so the count sticks
+   * visibly at the cap rather than writing a farm six hundred thousand
+   * fluid ounces of milk.
+   */
+  it('refuses a fat-fingered number rather than recording it', async () => {
+    await aGroup({ species: 'goat', purposes: ['milk'] });
+    const screen = await mount(<ProduceScreen {...routeProps({ groupId: GROUP })} />);
+
+    await screen.press('tally-type');
+    await screen.type('tally-typed', '64000000');
+
+    expect(screen.shows('tally-typed')).toBe('999999');
+  });
+
   it('logs a feed in scoops and stores grams', async () => {
     await aGroup();
     const screen = await mount(<FeedScreen {...routeProps({ groupId: GROUP })} />);
@@ -218,6 +269,19 @@ describe('what comes off them', () => {
     await screen.press('tally-commit');
 
     expect((await lastFedByGroup()).get(GROUP)).toBeDefined();
+  });
+
+  it('takes a bale-sized feed as a typed number', async () => {
+    await aGroup();
+    const screen = await mount(<FeedScreen {...routeProps({ groupId: GROUP })} />);
+
+    await screen.pressLabel('Pounds');
+    await screen.press('tally-type');
+    await screen.type('tally-typed', '60');
+    await screen.press('tally-commit');
+
+    const [fed] = await localStore().readRecordsByEntity('feedLog');
+    expect(fed?.value).toMatchObject({ amountGrams: 60 * 454 });
   });
 
   it('records a loss and its predator as two facts', async () => {

@@ -4,6 +4,7 @@ import * as Haptics from 'expo-haptics';
 import { describeLogFailure } from '@steading/core/sync/failure';
 import { loggedConfirmation } from '@steading/core/voice';
 import { Arch } from './Arch';
+import { NumberField } from './Form';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
 
@@ -32,8 +33,38 @@ export interface TallyProps {
   requireConfirm?: boolean;
   /** The sentence shown after a successful log. Defaults to the plain one. */
   confirm?: (value: number) => string;
+  /**
+   * Offers a typed entry alongside the steps.
+   *
+   * **R5's own exception**, which reads "steppers, never a keyboard, *unless
+   * the value can exceed 99*". A herd's morning milking is five gallons and a
+   * hay feed is sixty pounds; both are twenty-odd taps of the largest step,
+   * and twenty taps is not a control, it is a toll. The fix is not a bigger
+   * step — a bigger step only moves the ceiling, and the farm that has to
+   * reach past it is always the one with the most animals.
+   *
+   * **Off by default, and that matters more than the feature.** The egg tally
+   * is the screen this app is judged on and a keyboard has no business on it:
+   * a basket is a dozen or two, reachable in three taps, and the steppers are
+   * what a glove can hit. This is a door for the number the steps cannot
+   * reach, not a replacement for them — they stay on screen and stay working
+   * with the field open, because someone who typed 600 and then drew another
+   * half pint should not have to retype the total.
+   */
+  typed?: boolean;
   onCommit: (value: number, acknowledged: boolean) => void | Promise<void>;
 }
+
+/**
+ * The ceiling on a typed count.
+ *
+ * Not a schema limit — a fat-finger one. The steps could never produce seven
+ * digits and neither can a farm; a slipped keystroke that turns sixty pounds
+ * into six hundred thousand writes a record no report can survive, and an
+ * append-only log does not forget it. Sticking visibly at the cap is how the
+ * control says so.
+ */
+const TYPED_MAX = 999_999;
 
 export function Tally({
   label,
@@ -41,6 +72,7 @@ export function Tally({
   steps = [1, 6, 12],
   requireConfirm = false,
   confirm,
+  typed = false,
   onCommit,
 }: TallyProps): React.ReactElement {
   const { colors } = useTheme();
@@ -50,6 +82,7 @@ export function Tally({
   const [confirmation, setConfirmation] = useState<string | null>(null);
   const [armed, setArmed] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  const [typing, setTyping] = useState(false);
 
   /**
    * The count is a fraction of the SHORTER edge, so it is the same size in
@@ -70,6 +103,22 @@ export function Tally({
      * merely argued for.
      */
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, []);
+
+  /**
+   * The typed count.
+   *
+   * The field renders the count itself rather than keeping a draft beside it,
+   * so the two controls can never disagree: a `+5` tapped with the keyboard
+   * open moves the field, and the clear on commit empties it. The price is the
+   * decimal point — a half-typed "2." would round-trip through the number and
+   * come back "2" — which is why the field is whole-numbers-only. A tally
+   * counts whole things anyway; the steps could not produce a fraction either.
+   */
+  const enter = useCallback((text: string) => {
+    const said = Number(text);
+    setCount(text === '' || !Number.isFinite(said) ? 0 : Math.min(TYPED_MAX, Math.trunc(said)));
+    setFailure(null);
   }, []);
 
   const commit = useCallback(async () => {
@@ -150,6 +199,27 @@ export function Tally({
           accessibilityLabel="Subtract one"
         />
       </View>
+
+      {/**
+        * The door stays open once it is opened, because closing it is a
+        * control nobody asked for: the steps never left, so there is nothing
+        * to go back to.
+        */}
+      {!typed ? null : typing ? (
+        <View style={styles.typed}>
+          <NumberField
+            value={count === 0 ? '' : String(count)}
+            onChangeText={enter}
+            placeholder="0"
+            suffix={unit}
+            whole
+            accessibilityLabel={`How many ${unit}`}
+            testID="tally-typed"
+          />
+        </View>
+      ) : (
+        <Step label="Type it" onPress={() => setTyping(true)} testID="tally-type" />
+      )}
 
       <Pressable
         onPress={() => void commit()}
@@ -255,6 +325,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.md,
   },
   stepLabel: { fontFamily: FONTS.data, fontSize: TYPE.lede },
+  typed: { alignSelf: 'stretch', marginTop: SPACE.md },
   commit: {
     minHeight: TAP.primary,
     alignSelf: 'stretch',
