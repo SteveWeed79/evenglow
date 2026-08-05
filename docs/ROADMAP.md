@@ -5,7 +5,13 @@ What is left, in the order it should be built, and why that order.
 Written after a day on a handset that found eight device-only defects and
 finished the record. It supersedes nothing: `Steading-Masterplan.md` still holds
 the settled decisions, `UX-SPEC.md` the binding rules, `COMPETITIVE-ANALYSIS.md`
-the reason each feature exists. This says what has not been done yet.
+the reason each feature exists, `ACCESS-AND-BILLING.md` how a farm gets in and
+where the money is. This says what has not been done yet.
+
+**Updated August 2026.** Sections 4, 5 and 2c now describe work that shipped;
+6, 7 and 8 are new. The device day named above happened *before* charts, cost
+per egg, shearing, alerts, photo upload and the units switch — so rule 3 has
+been quietly unobserved for six features, which is what §6 is for.
 
 Every item names what it costs if it is skipped, because that is the only
 honest way to order a list nobody has time to finish.
@@ -119,9 +125,16 @@ uploaded separately, which is why `uploadedAt` is optional"*. A second phone
 knows a photo exists and says which device has it, rather than showing a grey
 box that reads as a bug.
 
-**Still open:** the upload. Setting `uploadedAt` and fetching on a miss is
-additive to what is there now rather than a redesign — which is why the local
-half was worth building first.
+**The upload is now built** — `uploadedAt` is set on completion and a miss
+fetches. It runs on the idle tick rather than in the mutation batch: twenty-five
+megabytes in a JSON flush would blow the hundred-mutation cap into a request
+nothing can retry sensibly, and one failed photo would take a morning's egg
+tallies with it. Bytes live in GridFS behind `db/blobs.ts`, which mirrors
+`db/scoped.ts` exactly — one module opens the bucket, every write stamps
+`orgId`, every read filters on it, 404 and never 403 in both directions.
+
+**Still open:** the copy that upload made false, and a two-device transfer.
+Both are in §6.
 
 ### 2d. `feedPlan`
 
@@ -234,19 +247,25 @@ The screen says the first of those honestly rather than showing an empty box.
    warning stays silent, which is the right failure — inventing a humidity
    produces a confident number nobody measured.
 
-**Still to do.**
+7. ~~**A wet day blocking shearing**~~ — **built.** It was blocked on the app
+   having no idea a clip was planned, and that was the real gap:
+   `fibreIntervalMonths` had been in the breed library since it was written and
+   nothing read it. A shearing due kind came first, then the warning hangs off
+   it — so only a farm with a clip actually coming is told about the rain.
 
-7. **A wet day blocking shearing** — the sixth warning, and it is **blocked on
-   something else**. The app has no idea a clip is planned: there is no
-   `shearing` due kind, only the `shearing` record of one that happened.
-   Warning every fibre keeper about every wet day is noise, so it is not built.
+8. ~~**Official NWS alerts**~~ — **built**, and not on this list when it should
+   have been. `/alerts/active` was the last piece of `api.weather.gov` unused,
+   and a tornado warning outranks anything this app has an opinion about.
 
-   The data for the missing half exists — `library/types.ts` carries
-   `shearMonths` per breed and the last `shearing` record gives the interval a
-   starting point — so this is a due kind first, then a one-line warning
-   hanging off it.
+   **These do not degrade by showing their age**, unlike the forecast and the
+   station reading. A cancellation arrives as an *absence* from the next
+   response, so an hour-old set may still hold a warning called off fifty
+   minutes ago. Silence is survivable; a lapsed tornado warning shown as live
+   is not.
 
-8. **Cold floors for the 55 annual varieties**, which buy a *better* frost row
+   **Never checked against a live payload.** See §6 and `pnpm verify:alerts`.
+
+9. **Cold floors for the 55 annual varieties**, which buy a *better* frost row
    (*"your tomatoes will not survive this"*) rather than the only one.
 
 **Frost was on this list as not-buildable, and that was wrong.** The objection
@@ -266,34 +285,131 @@ not the only one.
 
 ---
 
-## 5 — Numbers a farm can look at
+## 5 — Numbers a farm can look at — **done**
 
-**Parity P3 and P4.** There is not one chart in the codebase, and no cost
-tracking of any kind.
+**Parity P3 and P4, both built.**
 
-- **P4, graphs** — a lay curve, feed against production, a season. The data is
-  all there; History proved the reads work.
-- **P3, cost per egg / per bed** — needs money on records that have none. A
-  larger change than it sounds, and worth doing after graphs so there is
-  somewhere to show the answer.
+- **P4, graphs** — production against feed over twelve weeks or twelve months,
+  with a sentence under each. The first charts in the app.
+- **P3, cost per egg** — a price on a sack, a cost stamped on each feeding,
+  spend charted, the figure. It **refuses more than it reports**: under four
+  fifths of a window's feedings priced, it says what is missing rather than
+  showing a number. Half-priced feed over all the eggs reports roughly half the
+  true cost — low, plausible, and the fastest way to make somebody stop
+  trusting the screen. It also always says *"in feed"*, because feed is 60–75%
+  of what a laying flock costs, and an unqualified figure would be a lie.
 
-**Cost of skipping it:** a farm has a season of records and cannot see a trend.
-This is the difference between a logbook and a tool, and it is the thing
-Flockstar is bought for.
+**Found on the way, and worth remembering:** `subscribe()` published to every
+listener, so a screen with five `useLive` hooks did twenty-five reads on mount.
+That was waste until a reader's dependencies came from another read's result —
+then it closed a cycle and the render loop never settled. The trend screen hung
+with no error and no failing assertion; the test run simply never finished.
+
+**Still owed:** none of it has been on a handset. See §6.
 
 ---
 
-## 6 — Loose ends
+## 6 — What only a device can prove, again
+
+**Cost of skipping it:** rule 3 above, ignored. A day on a handset found eight
+defects a thousand tests could not. Everything since has been merged on CI
+alone.
+
+Charts, cost-per-egg, shearing, official weather alerts, photo upload and the
+units switch all landed after the device day. They are exercised by mounted
+screens against a real SQLite store — which is what caught the units entry
+defect — but a mounted screen is not a phone.
+
+**Three of these cannot be closed at a desk, and one cannot be closed by
+waiting.**
+
+- **The photo copy.** The gallery used to say photos were "kept on this phone,
+  not sent anywhere". Upload made that false and it now says they are shared
+  with the farm's other phones. That is the app changing what it promises about
+  where a farm's photos go, and the sentence should be read on a handset by
+  somebody willing to stand behind it. **Needs one device, not two** — the
+  wording is readable today; only the transfer needs a second.
+- **Photo transfer between two devices.** One org, two devices signed into the
+  same account — a phone and the emulator will do. The scenario is a farm's
+  second phone, not a second farm.
+- **Weather alerts against live payloads.** Tested only against response bodies
+  we wrote. **Do not wait for local weather**: `pnpm verify:alerts` asks
+  `/alerts/active` for every alert in force in the United States and runs the
+  real parse over all of them. A few hundred live products across every event
+  type is far better evidence than one thunderstorm, and it finds the failure
+  that matters — a real warning dropped by a schema mismatch, which looks
+  exactly like a quiet day. Point the farm's coordinates at active weather
+  afterwards to see one render.
+- **The tallies, on a phone, with a glove.** Haptics, camera, signal loss and
+  regain, doze. An emulator reaches none of it.
+
+---
+
+## 7 — Getting in without an account
+
+**Decided as D11 and D12; see `ACCESS-AND-BILLING.md`. Nothing built.**
+
+**Cost of skipping it:** the wedge is offline-first and the first launch is a
+login wall, which is indistinguishable from a cloud app on the morning that
+decides whether somebody keeps the app. The market research is that nobody
+ships full capability with nothing to sign up for — the hole is open and it is
+the same hole §1 of the competitive analysis found in features.
+
+Ordered by cost, cheapest first:
+
+1. **Session lifetime and Google sign-in.** No architecture change. An app
+   opened at 5am every day should never ask twice, and a farm should not type
+   a password with a glove on.
+2. **Local-first first run.** The large one. Blocked on the D2 question in
+   `ACCESS-AND-BILLING.md` §5 — whether signup may adopt a client-minted
+   `orgId`. That answer is wanted before the work starts, not during.
+3. **Join by code**, so a hand is added by six characters at the gate rather
+   than an email invitation built for distributed teams.
+4. **Instrument per-org storage and bandwidth.** D11 cannot be priced until
+   this number exists, and it cannot be guessed. Photos dominate it.
+
+---
+
+## 8 — iOS
+
+**Deferred, not designed out — and the Mac is not the blocker it looks like.**
+
+**Cost of skipping it:** roughly half the US smartphone market, which is the
+hardest ceiling on the project's reach.
+
+Metro bundles JavaScript and produces no Apple build. What is actually needed
+is Xcode to compile the native shell, an Apple Developer account, and the
+platform behaviour that genuinely differs — **no hardware back button**, which
+the navigation assumes; safe areas; permission dialogs; and most importantly
+different background and foreground rules, which is where `sync/triggers.ts`
+should be expected to break first.
+
+**EAS Build compiles on hosted macOS workers and removes the Mac requirement
+entirely.** That is likely cheaper than maintaining a build machine, and it is
+the "or cloud CI" half of the masterplan's own open question.
+
+If existing hardware is used instead, two things to check before counting on
+it: whether the Mac can run an Xcode new enough for SDK 57, and whether the
+iPad is above its minimum deployment target. An iPad tests iOS but not the
+phone form factor, and the tally sizes itself off the shorter edge.
+
+---
+
+## 9 — Loose ends
 
 Small, named so they stop being remembered at the wrong moment.
 
-- **Units are hardcoded.** The site carries a `units` preference and every
-  screen that formats a mass ignores it — `WeighScreen`, `GroupScreen`,
-  `AnimalsScreen`, `HistoryScreen` all say `'imperial'` in the source. One
-  change in one place, and it has to be all of them at once or two screens
-  disagree about the same weight.
+- ~~**Units are hardcoded.**~~ **Done.** Fixed in two passes, and the second
+  was needed because the first only covered the screens being touched at the
+  time. Today, Trend, Produce and History were left reading millilitres while
+  the weather row four lines above read °F — the defect a screenshot caught.
+  Both display and entry now read the setting, and `formatVolume` grew the
+  quart and gallon scale that had made it uncallable.
 - **Steppers past 99** on Feed and Produce — a farm milking a herd cannot reach
-  its total by tapping.
+  its total by tapping. **Unchanged by the units work and still the right
+  complaint:** an imperial farm's five-gallon morning is twenty taps of the
+  largest step. The fix is a larger step or a different control, not a
+  different unit.
 - **P15, per-equipment inspection checklists** — never started.
 - **TypeScript 6.** Expo SDK 57 expects `~6.0.3`; this repo is on 5.9.3 and
   stays there for now. A major TypeScript across a strict codebase with

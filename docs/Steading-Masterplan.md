@@ -35,9 +35,11 @@ Settled before code, because retrofitting any of them is a rewrite.
 | D5 | **ID guessability is not a security control.** Authorization is org + role scoping. | ULIDs and ObjectIDs are both timestamp-prefixed and semi-sequential. |
 | D6 | **Client clocks are recorded, never trusted.** Order by `clientSeq` per device and `serverTs` globally. | Device clocks drift badly across long offline periods. |
 | D7 | **Single-farm-first tenancy.** `orgId` and the scoped layer from day one; org invites, billing, and cross-org admin deferred. | Keeps the isolation shape with none of the multi-tenant product tax. |
-| **D8** | **Native shell, not a PWA.** Capacitor over a WebView, Android first. | The product's promise is that a log taken in the coop survives. Browser storage is a bucket the OS may evict; the app sandbox is not. Also unlocks haptics, the native camera, and resume-triggered flush. |
+| **D8** | **Native shell, not a PWA.** React Native (Expo), Android first. | The product's promise is that a log taken in the coop survives. Browser storage is a bucket the OS may evict; the app sandbox is not. Also unlocks haptics, the native camera, and resume-triggered flush. *Originally decided as Capacitor over a WebView; superseded by React Native, which keeps the decision and drops the WebView. See `REACT-NATIVE-PLAN.md`.* |
 | **D9** | **SQLite is the client database, and the UI reads nothing else.** Network results land in SQLite first, then render. | Real transactions mean the queue and the local view cannot diverge — the failure IndexedDB made hard to prevent. One rendering path online and offline. |
-| **D10** | **The client is a static bundle; the server is a separate Fastify service.** No SSR, no server components, no framework API routes. | A Capacitor app is static files in a WebView with no runtime server. Next.js would be paying framework cost for benefits that don't exist here. |
+| **D10** | **The client is an app bundle; the server is a separate Fastify service.** No SSR, no server components, no framework API routes. | The client has no runtime server of its own — under Capacitor it was static files in a WebView, under React Native it is a Metro bundle. Either way Next.js would be paying framework cost for benefits that do not exist here. |
+| **D11** | **Free on one device; paid when the server holds the data.** The free tier is the whole app, not a crippled one. | Sync is simultaneously the only thing that costs money to provide and the only thing worth charging for. Settles the billing half of D7. See `ACCESS-AND-BILLING.md`. |
+| **D12** | **The app opens before it authenticates.** First launch mints an org ULID on device and works offline; an account is asked for when it buys something. | D1 applied one level out. An offline-first app that cannot be opened offline is only offline-first from the second morning, and the first is where people are lost. |
 
 ### 0.1 Migration Status
 
@@ -45,34 +47,38 @@ This document is **version 3.0 and the only rubric**. The v2.x plan it replaced
 has been removed rather than kept alongside it, because two live rubrics means
 neither is authoritative and every review argues about which one applies.
 
-D1–D7 are implemented and enforced. **D8, D9, and D10 are decided but not yet
-built.** The code on `main` is the pre-migration stack, and the gap is:
+**The migration this section used to describe is done.** `main` carries
+`apps/mobile` (React Native over Expo SDK 57) and `apps/api` (Fastify); the
+Capacitor/Vite client and the Next app are retired and deleted, and the
+framework-agnostic half of the old client is `packages/core`. D1–D10 are
+implemented and enforced.
+
+D8's mechanism changed on the way: the decision was taken as Capacitor over a
+WebView and shipped as React Native. The decision itself — a native shell
+rather than a PWA — never moved, and `REACT-NATIVE-PLAN.md` is the live plan.
+`NATIVE-PIVOT.md` argued for Capacitor and is superseded.
+
+**D11 and D12 are decided and not yet built.** They are the access and billing
+shape, and the gap is:
 
 | Area | Decided (this document) | On `main` today |
 |---|---|---|
-| Shell | Capacitor over a WebView (D8) | Next.js PWA with a service worker |
-| Client store | SQLite, one transaction per enqueue (D9) | IndexedDB, one transaction per enqueue |
-| Server | Standalone Fastify service (D10) | Next.js route handlers |
-| Auth | `jose` + rotating refresh | Auth.js, JWT strategy |
+| First run | Opens offline on a device-minted org (D12) | Login required before the store opens |
+| Sign-in | Google, with email as fallback | Email and password only |
+| Billing | Free on one device, paid to sync (D11) | None |
 
-Everything else — the contracts, the tenancy layer, the sync semantics, the
-role matrix, the withdrawal arithmetic, the domain projections — is already
-framework-agnostic and ports unchanged. That is most of the codebase.
+**What this means for the exit gates.** Phase 2's gate has been re-earned on
+native SQLite and is no longer carried over from IndexedDB. D12 changes *when*
+the store opens rather than what it guarantees, so the gate stands — but the
+first flush of a long-offline, newly-claimed org is a path nothing has
+exercised at volume, and it wants its own test before it meets a farm.
 
-**What this means for the exit gates.** Phase 2's gate has been met and
-machine-verified, but on IndexedDB under Chromium with a real process kill. D9
-changes the durability characteristics it was proving, so **the gate must be
-re-earned on device against native SQLite** before Phase 2 can be called done
-under this document. It is not transferable, and the migration is not finished
-until it passes again.
+**What this does not mean.** The offline engine is not deprecated. It is the
+reference implementation and the suite that proves any port correct — a storage
+layer is correct exactly when it passes it (see `packages/core/src/db/port.ts`,
+which exists for this reason).
 
-**What this does not mean.** The existing offline engine is not deprecated and
-must not be deleted to make room for the rewrite. It is the reference
-implementation and the test suite that proves the port is correct — a new
-storage layer is correct exactly when it passes the same suite (see
-`client/db/port.ts`, which exists for this reason).
-
-The route across the gap, stage by stage, is `MIGRATION-PLAN.md`.
+`MIGRATION-PLAN.md` records the route that was taken.
 
 ---
 
@@ -263,8 +269,24 @@ at all. It proposes D11 and D12 and closes with five questions that need answers
 before any of it becomes code.
 
 
-- Photo storage target: S3/R2 vs. self-hosted. Affects Phase 3 upload.
-- API hosting: same box as your other services, or a managed host?
+**Does signup adopting a client-minted `orgId` sit inside D2's intent?**
+D12 has the device mint its own org before any account exists, so the signup
+request carries a proposed `orgId` — and D2 is that `orgId` never comes from a
+request payload. The argument each way, and the defences, are in
+`ACCESS-AND-BILLING.md` §5. **This needs an answer before D12 is built, not
+during.** Nothing else in that document depends on it.
+
+- ~~Photo storage target: S3/R2 vs. self-hosted.~~ **Answered:** GridFS on the
+  existing Mongo. No new dependency, nothing to provision, no secret for a
+  bundle. Revisit only if per-org storage cost (below) says so.
+- API hosting: same box as your other services, or a managed host? Now also a
+  cost-floor question — see `ACCESS-AND-BILLING.md` §4.1.
+- **Per-org storage and bandwidth are not instrumented, and D11 cannot be
+  priced until they are.** Photos dominate. This is the one number that has to
+  be measured rather than reasoned about.
 - Does a Farm Hand write events (egg counts) while staying read-only on entities? Recommended: yes — it's the main reason a second user exists.
 - Retention for event collections: unbounded, or roll up after N years?
-- iOS: needs a Mac or cloud CI. Deferred, not designed out.
+- iOS: needs a Mac or cloud CI. Deferred, not designed out. **EAS Build
+  compiles iOS on hosted macOS workers and removes the Mac dependency
+  entirely** — likely the cheaper answer than maintaining a build machine.
+  Metro does not produce an Apple build; it only bundles the JavaScript.
