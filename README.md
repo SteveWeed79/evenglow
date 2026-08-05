@@ -32,7 +32,7 @@ Planning docs, which are the source of truth:
 
 | Doc | What it settles |
 |---|---|
-| [`docs/Steading-Masterplan.md`](docs/Steading-Masterplan.md) | Decisions D1–D12, phases, security rubric |
+| [`docs/Steading-Masterplan.md`](docs/Steading-Masterplan.md) | Decisions D1–D14, phases, security rubric |
 | [`docs/UX-SPEC.md`](docs/UX-SPEC.md) | Rules R1–R10, tokens, voice |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | What is left, in the order it should be built |
 | [`docs/COMPETITIVE-ANALYSIS.md`](docs/COMPETITIVE-ANALYSIS.md) | Why each feature exists, and what a farm must do before it sees one |
@@ -153,7 +153,10 @@ pnpm mobile:android                            # build and deploy to a device
 
 **You need the server running to sign in**, and only to sign in. Once a device
 has a session it works entirely offline — that is the point of the thing. A
-device that has never signed in has no orgId, so it has no database to open.
+device that has never signed in has no orgId, so it has no database to open —
+**which is the thing D14 changes**, and why it is on the roadmap: an
+offline-first app that cannot be opened offline is only offline-first from the
+second morning.
 
 | Command | What it does |
 | --- | --- |
@@ -349,5 +352,5 @@ Deploy is not done: the API needs a host and a MongoDB. That is now also a
 pricing question — see `docs/ACCESS-AND-BILLING.md` §4.1, which cannot be
 answered until per-org storage is instrumented.
 
-**D11 and D12 — free on one device, and opening before authenticating — are
+**D13 and D14 — free on one device, and opening before authenticating — are
 decided and unbuilt.** They are §7 of the roadmap.

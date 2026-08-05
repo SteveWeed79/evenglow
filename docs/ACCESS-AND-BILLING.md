@@ -5,8 +5,8 @@ How somebody gets into the app, and where the money is. Researched August 2026.
 The masterplan deferred billing at D7 — *"org invites, billing, and cross-org
 admin deferred"* — which was right at the time. It is no longer, because the
 question has started deciding other things: the weather licence, where photos
-live, whether there is a server bill at all. This document settles the shape
-and says what still has to be measured.
+live, whether there is a server bill at all. This document settles the shape,
+the number, and where the photo bytes belong.
 
 ---
 
@@ -127,55 +127,118 @@ that mostly does not land.
 
 ## 4. How The Price Gets Determined
 
-**Not yet, and that is the answer.** Three inputs, in order, and only the
-second and third exist today.
+**$39 a year, one tier, per farm, unlimited people.** $4.99 a month alongside
+it if a monthly option is wanted, priced so annual obviously wins.
 
-### 4.1 — The cost floor, which has to be measured
+An earlier draft of this section said the price could not be set until the cost
+floor was measured. That was wrong, and the reason it was wrong is the useful
+part: **the cost floor does not bind.**
 
-What does one synced farm cost per month? Mongo storage, bandwidth, and photo
-blobs — and photos dominate everything else by an order of magnitude. A 25 MB
-ceiling per photo against a farm that photographs receipts, wounds and kills
-is the only number here with real variance.
+### 4.1 — The cost floor, which turns out not to matter
 
-**This number does not exist yet and cannot be guessed.** It arrives once
-there are real synced farms, by instrumenting bytes-per-org. Until then any
-price is arithmetic on an invented cost.
+The measurement this section used to demand had already been half done, in the
+roadmap:
 
-The free tier is what makes this safe to defer: free users cost nothing, so
-there is no bill accruing while the number is being found.
+> A busy year — eggs and feed logged twice daily, a weekly care note, monthly
+> losses and weighings, 1,540 records — is **884 KB on disk**.
+>
+> A photo compressed for the purpose is **200–400 KB**.
 
-### 4.2 — The competitive anchors, which do exist
+So a synced farm is roughly **1 MB of records and ~30 MB of photos a year** at a
+hundred photos. A thousand paying farms is about **31 GB a year** — on S3 that
+is roughly **$0.70 a month for all of them**, and on R2 less, with no egress
+charge.
 
-| | Price | Shape |
+**Storage is not a constraint at any scale this reaches.** The 25 MB ceiling is
+a ceiling, not a typical, and the app already shrinks photos for the purpose.
+
+That changes what the instrumentation is for. Per-org bytes are still worth
+measuring — for capacity planning, for spotting the farm that uploads video,
+and for knowing when photos should leave the database — but **not for setting a
+price.** This is priced on what a smallholder will pay, not on cost-plus, and
+the two are three orders of magnitude apart.
+
+### 4.1a — What the paid tier actually costs to serve
+
+Roughly nothing, per farm, which is the point. The real costs are fixed rather
+than marginal: an API host, a MongoDB, and whoever answers the mail. Those are
+covered by a few hundred paying farms at any sane price, and are not reached
+faster by charging more per farm than the market bears.
+
+### 4.2 — The competitive anchors, which are what actually decide it
+
+| | Price | Per year | Shape |
+|---|---|---|---|
+| FlockPlenty, Egg Inventory | **$0** | $0 | No server, no account, no capability |
+| **Flockstar** | **$29.99/year** | $30 | Consumer. Annual, poultry only |
+| **Farmbrite** Essentials | **$29/month** | $348 | Business. Metered by active animals |
+| **Farmbrite** Complete | **from $59/month** | $708 | " |
+| **Farmbrite** Complete Premium | **~$109/month** | $1,308 | " |
+| LookOver | Free for 1 machine, then paid | — | Consumer, scope-limited free tier |
+
+*Researched August 2026. Farmbrite's and Flockstar's own pricing pages refuse
+automated fetches, so these are converging figures from aggregators rather than
+pages read directly. Flockstar's individual Backyarder / Keeper / Breeder tiers
+could not be separated; $29.99 is the figure that surfaces.*
+
+**The spread is the finding, and it is not a positioning difference — it is two
+pricing cultures.** Farmbrite is $348–1,308 a year; Flockstar is $30. Twelve to
+forty times apart. A number has to be chosen from inside one culture or the
+other, and the masterplan already chose: it excludes double-entry accounting,
+CSA order management, and field mapping — exactly the things that justify $29 a
+month. W6 makes comprehension the headline. P11 forbids per-seat fees.
+
+**A homesteader with twelve hens is not paying $350 a year.** Flockstar's
+neighbourhood, then — and above Flockstar, because mixed stock, growing,
+equipment, weather and withdrawal tracking is three or four apps against their
+poultry alone.
+
+### 4.3 — Why annual, with the arithmetic
+
+Card processing at 2.9% + $0.30 makes monthly billing expensive at consumer
+prices, and the difference is not marginal:
+
+| | Fee per charge | Lost to processing |
 |---|---|---|
-| Flockstar | **$29.99/year** | Consumer. Annual, one product. |
-| Farmbrite | **~$29–109/month** | Business. Tiered, metered by animals. |
-| LookOver | Free for 1 machine, then paid | Consumer, scope-limited free tier |
+| $2.99/month | $0.39 | **13%** |
+| $4.99/month | $0.44 | **8.8%** |
+| $39/year | $1.43 | **3.7%** |
 
-The spread is the finding. **Farmbrite is priced like business software and
-Flockstar like a consumer app**, an order of magnitude apart, and Steading sits
-between them in capability while its *buyer* is unambiguously Flockstar's
-buyer. A homesteader with twelve hens is not paying $350 a year.
+Monthly costs three to four times more in fees and brings twelve times the
+failed-card churn. **If billing runs through Play or App Store IAP, the
+platform takes 15% on top** at the small-business rate, which is its own reason
+to prefer a web checkout where policy allows.
 
-That puts the anchor band somewhere above Flockstar — we do considerably more —
-and far below Farmbrite. It does not pick a number, and should not until §4.1
-exists.
+So annual is the default and monthly exists for people who want it, priced at a
+deliberate premium — $4.99/month against $39/year makes the annual plan 35%
+cheaper, which is a large enough gap to steer without being punitive.
+Flockstar's own framing is the same: *annual for the best value, or monthly for
+flexibility.*
 
-### 4.3 — The unit and the shape
+Seasonal cash flow points the same way. A farm's money arrives in lumps.
+
+### 4.4 — The rest of the shape
 
 - **Per farm, not per seat.** P11.
-- **Annual, not monthly.** Farm cash flow is seasonal, and card processing eats
-  small monthly amounts.
 - **One paid tier, not four.** W6 makes comprehension the headline feature; a
   four-row pricing table is the same disease as a screen with too many
   sections. If a second tier ever appears it should be for a farm large enough
   to know it is large.
+- **$39 rather than $49**, because the decision should not be agonised over at
+  the homestead end, and because a price can be raised far more easily than it
+  can be lowered.
+- **The free tier is what makes the number safe.** Nobody pays until they want
+  a second phone or a backup, so the price is never the thing that stops
+  somebody trying it.
 
-### 4.4 — The sequence
+### 4.5 — The sequence
 
 1. Ship the free tier. It costs nothing, so there is no urgency.
-2. Instrument per-org storage and bandwidth on the first synced farms.
-3. Price against §4.1 with §4.2 as the ceiling and floor.
+2. Take payment only when somebody wants the server. $39/year is the number to
+   put in front of them.
+3. Instrument per-org bytes anyway — for capacity, for the outlier who uploads
+   video, and for knowing when photos should leave the database. **Not** to
+   revisit the price; §4.1 is why.
 
 The honest risk in this model is stated plainly: **it converts on an event, not
 a deadline.** Farmbrite converts because a clock runs out. Steading converts
@@ -183,6 +246,69 @@ when somebody buys a second phone, hires help, or gets frightened about backup �
 and a one-person homestead may never do any of those. Revenue is slower and
 smaller than a trial model. It is chosen anyway, because the cost floor is near
 zero and reach compounds.
+
+---
+
+## 4A. Where The Photo Bytes Live
+
+**Mongo holds the record; S3 (or R2) holds the bytes.** GridFS today, and the
+successor is decided rather than open.
+
+The record layer already works this way and always has — `photoShape` has said
+since it was written that it carries *"metadata only, the Blob is uploaded
+separately, which is why `uploadedAt` is optional"*. The photo record is
+`subjectId`, `contentType`, `byteSize`, `capturedAt`, `uploadedAt?`, `caption?`
+and **no location of any kind**. GridFS was never a decision about metadata; it
+was the nearest bucket.
+
+So the migration is a swap of four methods behind `blobsFor(orgId)` —
+`put`, `get`, `head`, `remove` — and nothing above it moves.
+
+### 4A.1 — The location is derived, never stored
+
+**Do not add a URL or a key to the record.** It is `{orgId}/{photoId}`, and
+both halves are already in hand at every call site. Storing one costs three
+things:
+
+- **Migration.** A URL bakes bucket, region and provider into every row, so
+  moving to R2 later becomes a data migration rather than a config change.
+- **Authorization.** A durable URL is a capability: anyone holding it reads
+  that photo for ever with no token check, and the tenancy story quietly
+  becomes "nobody shared the link". Presigned URLs minted per request keep the
+  check where it belongs.
+- **Tamper surface.** A stored key can be wrong; a derived one cannot. If it
+  ever arrives from a payload, that is D2's problem reinvented.
+
+Bucket policy blocks all public access. The client never holds a credential —
+invariant 12 — so uploads and downloads both run on short-lived presigned URLs.
+
+### 4A.2 — What survives the move, and what does not
+
+**The `_id` backstop survives.** `photos._id` is unique collection-wide
+regardless of `orgId`, so org B cannot create a record under org A's photo id —
+the guarantee CI taught us on #55. That is a property of the Mongo record and
+is unaffected by where bytes live.
+
+**S3 has no equivalent.** Two orgs *can* hold the same photo id under different
+key prefixes. So the record stays the real tenancy check and object storage is
+defence in depth, never the only gate.
+
+**The isolation tests become the conformance suite.** They call `blobsFor()`
+directly, including `remove()`, so an S3 implementation is correct exactly when
+it passes them unchanged — the same trick `packages/core/src/db/port.ts` plays
+for the storage layer.
+
+### 4A.3 — Why not yet
+
+GridFS is built, isolation-tested and costs nothing to provision, and §4.1 shows
+the volumes are small. The move earns itself on three things rather than the
+storage line: **backups stop copying image bytes on every run**, replica sets
+stop holding three copies of inert data on database-grade disk, and bytes stop
+streaming through Fastify.
+
+Switch when photo bytes become a serious fraction of the database's working set,
+or when backup and restore time becomes an operational problem rather than a
+line item. **R2 before S3** — zero egress is the right shape for serving images.
 
 ---
 

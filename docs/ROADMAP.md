@@ -347,7 +347,7 @@ waiting.**
 
 ## 7 — Getting in without an account
 
-**Decided as D11 and D12; see `ACCESS-AND-BILLING.md`. Nothing built.**
+**Decided as D13 and D14; see `ACCESS-AND-BILLING.md`. Nothing built.**
 
 **Cost of skipping it:** the wedge is offline-first and the first launch is a
 login wall, which is indistinguishable from a cloud app on the morning that
@@ -365,8 +365,11 @@ Ordered by cost, cheapest first:
    `orgId`. That answer is wanted before the work starts, not during.
 3. **Join by code**, so a hand is added by six characters at the gate rather
    than an email invitation built for distributed teams.
-4. **Instrument per-org storage and bandwidth.** D11 cannot be priced until
-   this number exists, and it cannot be guessed. Photos dominate it.
+4. **Instrument per-org storage and bandwidth.** Not for pricing — that is
+   settled at $39/year, and at ~1 MB of records and ~30 MB of photos per
+   farm-year storage does not bind the number. It is for capacity, for the
+   outlier who uploads video, and for knowing when photo bytes should leave
+   the database for S3. `ACCESS-AND-BILLING.md` §4.1 and §4A.
 
 ---
 
