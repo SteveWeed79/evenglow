@@ -288,12 +288,19 @@ during.** Nothing else in that document depends on it.
   keeps the record, object storage takes the bytes, and the key is *derived*
   from `{orgId}/{photoId}` rather than stored. `blobsFor(orgId)` is already the
   seam and its isolation tests are already the conformance suite. **S3 rather
-  than the marginally cheaper R2** — the gap is about ten dollars a year at a
-  thousand farms, and operating a platform you know is worth more than that.
+  than the marginally cheaper R2** — the gap is a fraction of a cent per farm
+  per year, and operating a platform you know is worth more than that.
   Build against the S3 SDK, which R2 also speaks, so the choice stays cheap to
   revisit. Timing and reasoning in `ACCESS-AND-BILLING.md` §4A.
-- API hosting: same box as your other services, or a managed host? A fixed
-  cost rather than a per-farm one — see `ACCESS-AND-BILLING.md` §4.1a.
+- ~~API hosting: same box as your other services, or a managed host?~~
+  **Answered: the box.** An Oracle Cloud Always Free ARM instance (4 cores,
+  24 GB, 10 TB egress) carries both Fastify and MongoDB at no cost, which is
+  what D10 describes and puts **break-even at three or four paying farms**.
+  ARM was checked rather than assumed — `@node-rs/argon2` is the only native
+  dependency and its `linux-arm64-gnu` build is already in the lockfile.
+  **The open part is backups**, which self-hosting makes ours: a nightly
+  `mongodump` to S3 is a condition of the first real farm, not a nicety.
+  `ACCESS-AND-BILLING.md` §4.1a.
 - Per-org storage and bandwidth are still uninstrumented. Worth measuring for
   capacity and for the outlier who uploads video — but **not for pricing**: at
   ~1 MB of records and ~30 MB of photos per farm-year, storage does not bind

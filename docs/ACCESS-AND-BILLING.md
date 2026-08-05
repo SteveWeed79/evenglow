@@ -130,11 +130,17 @@ that mostly does not land.
 **$39 a year, one tier, per farm, unlimited people.** $4.99 a month alongside
 it if a monthly option is wanted, priced so annual obviously wins.
 
-An earlier draft of this section said the price could not be set until the cost
-floor was measured. That was wrong, and the reason it was wrong is the useful
-part: **the cost floor does not bind.**
+An earlier draft said the price could not be set until per-farm cost was
+measured. That was wrong twice over, and both errors are worth keeping because
+they are the kind a cost-plus instinct produces:
 
-### 4.1 — The cost floor, which turns out not to matter
+1. **The cost floor does not bind.** A farm costs under a dime a year to serve
+   against $39 of revenue. The price is set by what a smallholder will pay.
+2. **Costs here are fixed, not marginal.** Reasoning per-farm at all was the
+   mistake. What matters is a flat hosting bill and how many farms clear it —
+   **break-even, at three or four**, on a box that is already rented.
+
+### 4.1 — What one farm costs, and what the whole thing costs
 
 The measurement this section used to demand had already been half done, in the
 roadmap:
@@ -144,26 +150,145 @@ roadmap:
 >
 > A photo compressed for the purpose is **200–400 KB**.
 
-So a synced farm is roughly **1 MB of records and ~30 MB of photos a year** at a
-hundred photos. A thousand paying farms is about **31 GB a year** — on S3 that
-is roughly **$0.70 a month for all of them**. §4A.4 covers why that is S3
-rather than the marginally cheaper R2.
+So a synced farm accumulates roughly **1 MB of records and ~30 MB of photos a
+year** at a hundred photos. On S3 that is about **half a cent a year** for a
+farm in its first year, and — because storage accrues rather than resets —
+somewhere near **four cents a year for a farm a decade old**. Requests and
+egress round to nothing beside it: one upload per photo, and roughly one
+download per photo per additional device, because each device caches locally
+after the first fetch.
 
-**Storage is not a constraint at any scale this reaches.** The 25 MB ceiling is
-a ceiling, not a typical, and the app already shrinks photos for the purpose.
+**The marginal cost of a paying farm is under a dime a year.** Against $39 of
+revenue, that is a quarter of one percent, and it stays there at any scale
+this reaches. The 25 MB ceiling is a ceiling rather than a typical, and the
+app already shrinks photos for the purpose.
 
-That changes what the instrumentation is for. Per-org bytes are still worth
-measuring — for capacity planning, for spotting the farm that uploads video,
-and for knowing when photos should leave the database — but **not for setting a
-price.** This is priced on what a smallholder will pay, not on cost-plus, and
-the two are three orders of magnitude apart.
+### 4.1a — The costs are fixed, not marginal, and that is the whole shape
 
-### 4.1a — What the paid tier actually costs to serve
+Everything that actually costs money is a flat bill that does not care how
+many farms there are:
 
-Roughly nothing, per farm, which is the point. The real costs are fixed rather
-than marginal: an API host, a MongoDB, and whoever answers the mail. Those are
-covered by a few hundred paying farms at any sane price, and are not reached
-faster by charging more per farm than the market bears.
+| | Annual |
+|---|---|
+| API host and MongoDB — Oracle Always Free ARM | **$0** |
+| Apple Developer | $99 |
+| Domain, Play Store (one-off $25), S3 | ~$25 |
+
+**Roughly $125 a year.** The masterplan's *"same box as your other services, or
+a managed host?"* has an answer: **the box, and it is already rented.**
+
+An Oracle Cloud Always Free Ampere A1 allocation is 4 ARM cores, 24 GB of RAM,
+200 GB of block storage and 10 TB a month of egress — more machine than this
+workload will ever notice, and on a pay-as-you-go account it is not subject to
+the idle reclamation that affects trial accounts. Fastify and MongoDB both run
+there, and it is what D10 describes: one long-running process with a stable
+connection pool.
+
+**ARM is not a blocker, and this was checked rather than assumed.** The only
+native dependency in `apps/api` is `@node-rs/argon2`, and
+`@node-rs/argon2-linux-arm64-gnu` is already in the lockfile as an optional
+dependency, so the right binary installs and nothing compiles. Everything else
+— Fastify, the Mongo driver, `jose`, `zod`, `ulid` — is pure JavaScript.
+MongoDB ships official ARM64 builds; **run Ubuntu on the instance** rather than
+Oracle Linux, which is the better-supported path for them.
+
+The alternatives, kept because the answer could change:
+
+| | ~Monthly | Note |
+|---|---|---|
+| **Oracle Always Free ARM** | **$0** | Current answer. API and MongoDB on one box |
+| MongoDB Atlas Flex | $8 | What it really buys is backups — see below |
+| Vercel Pro | $0 marginal | Already paid for another project. Serverless — see the payload note |
+| Lightsail / EC2 `t4g.micro` | $5–7 | Same shape as the Oracle box, for money |
+| ECS Fargate | $25+ | **Avoid at this scale** — the ALB alone is ~$16–18 whether used or not |
+| Lambda + API Gateway | ~$1 | Cheap, but inherits serverless friction with no edge over Vercel |
+
+**Serverless has one hard constraint worth writing down.** Vercel Functions cap
+a request or response body at **4.5 MB**, and it is infrastructure-level rather
+than configurable. `photoShape` permits `byteSize` up to 25 MB, so the contract
+allows a payload the platform will refuse with a 413 — and it would reach a
+farm as an unexplained rejected mutation.
+
+Nothing normal comes near it: photos are resized to 1600px at quality 0.7
+before they leave the phone, which is 200–400 KB, under a tenth of the limit.
+It bites only when something escapes the resize path. **Two fixes, and both are
+worth having** — lower the contract ceiling to match reality so an oversized
+photo is refused at the boundary with a sentence, and move to presigned S3
+(§4A) so the bytes never touch the API at all.
+
+**Co-locating the API on AWS would buy one real thing**: S3 through an attached
+IAM role rather than an access key in environment variables, since a credential
+that does not exist cannot leak. On the Oracle box that is not available, so an
+S3 key lives in the server's environment. Not an invariant-12 matter — nothing
+here ships in the bundle — but it is a credential to rotate and keep out of
+logs, and it is the one thing the free box costs.
+
+### 4.1a-i — The trade is backups, not compute
+
+Twenty-four gigabytes of RAM is absurd overkill for this. What Atlas's $96 a
+year would actually buy is **automated backups, point-in-time restore, and
+somebody else's patching** — and self-hosting means owning all three.
+
+**Self-host, and treat a backup as a condition of the first real farm.**
+`scripts/backup-mongo.sh` is that job: dump, encrypt, upload, and a restore
+beside it. Rotation is an S3 lifecycle rule on the prefix rather than logic in
+the script, because a bucket setting cannot silently stop working.
+
+**It encrypts to a public key, so the private half never exists on the
+server.** The box can write backups it cannot read, and a compromise of the
+machine is therefore not a compromise of its history. S3's own encryption is
+worth enabling too, but it guards against AWS-side access — not against the two
+failures that actually happen, a leaked access key and a bad bucket policy.
+
+**Nothing is redacted, deliberately.** A dump with `users` stripped restores a
+farm nobody can log into; that is a partial export wearing a backup's name.
+What the dump holds is emails, farm names and coordinates — real PII, but no
+usable credentials, since passwords are argon2 hashes and refresh tokens are
+stored as a sha256 of the token. Sensitivity is handled by encryption, which is
+reversible exactly when it needs to be.
+
+**The backup is also the migration path.** `mongodump` out, `mongorestore` into
+Atlas, change `MONGODB_URI`, restart — `apps/api/src/db/client.ts` takes the
+connection entirely from the environment and is the only module permitted to
+import `MongoClient`. A tested restore is a rehearsed migration, so there is no
+separate plan to keep current.
+
+Two things soften the single-box risk, and both are the architecture working:
+
+- **Downtime is nearly free.** If the box goes, farms keep logging — mutations
+  queue and flush later. The only thing that actually breaks is signing in on a
+  new device, which is the one flow that needs the server (A2.5).
+- **The server is not the only copy.** Every device holds a complete SQLite
+  copy of its farm. A total server loss is *in principle* recoverable by
+  devices re-syncing — except no mechanism exists for it, because `/snapshot`
+  runs server-to-client only. A latent property rather than a safety net, but
+  the cheapest disaster insurance this design could ever grow.
+
+### 4.1b — Break-even, which is the number worth holding
+
+At $39 a year, fixed costs of about $125 are covered by **three or four paying
+farms.** Under a dozen even if the host later has to be paid for.
+
+That is the number to plan against, and it is deliberately not a market
+forecast. For scale: `COMPETITIVE-ANALYSIS.md` records Farmbrite — the
+category leader, established and marketed — at **~5,000+ customers**. Any
+figure in the hundreds would already be a real business here, and a thousand
+would be a fifth of the leader's size. Conversion on this model runs on an
+*event* rather than a deadline, so a paying farm implies a good many free ones
+behind it.
+
+**None of which has to work for the project to survive**, and that is the
+point of the free tier rather than a consolation. Free farms never touch the
+server, so they never move the line above. The break-even is small enough to
+be reached by one well-received forum thread, and everything past it is real.
+
+### 4.1c — So what is the instrumentation for?
+
+Not pricing. Per-org bytes are still worth measuring, for three things:
+capacity planning, spotting the one farm that starts uploading video, and
+knowing when photo bytes should leave the database for object storage (§4A).
+The price is set by what a smallholder will pay — see §4.2 — and the two
+numbers are three orders of magnitude apart.
 
 ### 4.2 — The competitive anchors, which are what actually decide it
 
@@ -313,9 +438,10 @@ line item.
 ### 4A.4 — S3, not R2, and the reason is not price
 
 R2 is cheaper — roughly $0.015/GB against $0.023, and no egress charge against
-about $0.09/GB. At the volumes in §4.1 that is a difference of **around ten
-dollars a year at a thousand paying farms**, against some $39,000 of revenue.
-Three hundredths of one percent.
+about $0.09/GB. At the per-farm volumes in §4.1 that is a saving of **a
+fraction of a cent per farm per year**, on a marginal cost already under a
+dime. It stays smaller than the domain renewal until the farms number in the
+tens of thousands.
 
 **Familiarity is worth more than that.** The cost of a storage layer is not its
 invoice, it is the evening spent debugging an access policy on a platform

@@ -366,10 +366,17 @@ Ordered by cost, cheapest first:
 3. **Join by code**, so a hand is added by six characters at the gate rather
    than an email invitation built for distributed teams.
 4. **Instrument per-org storage and bandwidth.** Not for pricing — that is
-   settled at $39/year, and at ~1 MB of records and ~30 MB of photos per
-   farm-year storage does not bind the number. It is for capacity, for the
-   outlier who uploads video, and for knowing when photo bytes should leave
-   the database for S3. `ACCESS-AND-BILLING.md` §4.1 and §4A.
+   settled at $39/year, and a farm costs under a dime a year to serve. It is
+   for capacity, for the outlier who uploads video, and for knowing when photo
+   bytes should leave the database for S3. `ACCESS-AND-BILLING.md` §4.1c
+   and §4A.
+
+   **The number worth holding is break-even: three or four paying farms**, on
+   the Oracle Always Free box that already exists. Free farms never touch the
+   server, so they never move it. §4.1b.
+
+   **Before the first real farm syncs: a nightly `mongodump` to S3.**
+   Self-hosting makes backups ours, and a farm's records are the product.
 
 ---
 
