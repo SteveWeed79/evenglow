@@ -371,7 +371,7 @@ Ordered by cost, cheapest first:
    bytes should leave the database for S3. `ACCESS-AND-BILLING.md` §4.1c
    and §4A.
 
-   **The number worth holding is break-even: roughly 15–40 paying farms**, set
+   **The number worth holding is break-even: roughly 6–12 paying farms**, set
    almost entirely by the hosting choice rather than by anything per-farm. Free
    farms never touch the server, so they never move it. §4.1b.
 

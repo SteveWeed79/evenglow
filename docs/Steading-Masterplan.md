@@ -294,8 +294,10 @@ during.** Nothing else in that document depends on it.
   revisit. Timing and reasoning in `ACCESS-AND-BILLING.md` §4A.
 - **API hosting: same box as your other services, or a managed host?** This is
   now the only cost decision that matters. A farm costs under a dime a year to
-  serve, so hosting is ~99% of the cost structure and it alone sets where
-  break-even sits — roughly 15–40 paying farms. `ACCESS-AND-BILLING.md` §4.1a.
+  serve, so hosting is most of what is left and it alone sets where break-even
+  sits — **roughly 6–12 paying farms**, six on a host already paid for. The
+  candidates, and the 4.5 MB serverless payload cap that constrains two of
+  them, are in `ACCESS-AND-BILLING.md` §4.1a.
 - Per-org storage and bandwidth are still uninstrumented. Worth measuring for
   capacity and for the outlier who uploads video — but **not for pricing**: at
   ~1 MB of records and ~30 MB of photos per farm-year, storage does not bind

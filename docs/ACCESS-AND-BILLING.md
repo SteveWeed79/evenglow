@@ -138,7 +138,7 @@ they are the kind a cost-plus instinct produces:
    against $39 of revenue. The price is set by what a smallholder will pay.
 2. **Costs here are fixed, not marginal.** Reasoning per-farm at all was the
    mistake. What matters is a flat hosting bill and how many farms clear it —
-   **break-even, at roughly fifteen to forty.**
+   **break-even, at roughly six to twelve.**
 
 ### 4.1 — What one farm costs, and what the whole thing costs
 
@@ -168,22 +168,52 @@ app already shrinks photos for the purpose.
 Everything that actually costs money is a flat bill that does not care how
 many farms there are:
 
-| | Rough annual |
+| | Annual |
 |---|---|
-| API host | $250–500 |
-| MongoDB — same box, or managed | $0–700 |
+| MongoDB Atlas Flex | ~$96 |
+| API host | $0–250, see below |
 | Apple Developer | $99 |
-| Domain, Play Store (one-off $25), sundries | ~$50 |
+| Domain, Play Store (one-off $25), S3 | ~$25 |
 
-**Call it $500–1,500 a year**, dominated entirely by the hosting choice — which
-is why *"same box as your other services, or a managed host?"* is still the
-only cost decision in the masterplan's Open Questions that matters. It is
-roughly 99% of the cost structure. Storage is the rounding error.
+**Roughly $220–470 a year**, and the only line with real variance is the host.
+That is why *"same box as your other services, or a managed host?"* remains the
+only cost decision in the masterplan's Open Questions that matters — it is most
+of what is left once storage turns out to be a rounding error.
+
+The candidates, at this scale:
+
+| | ~Monthly | Note |
+|---|---|---|
+| **Vercel Pro** | $0 marginal | Already paid for another project. Serverless — see the payload note below |
+| Lightsail / EC2 `t4g.micro` | $5–7 | Long-running process, which is what D10 describes. Free tier covers year one |
+| AWS App Runner | $5–25 | Container, always-on, no box to patch |
+| ECS Fargate | $25+ | **Avoid at this scale** — the ALB alone is ~$16–18 whether used or not |
+| Lambda + API Gateway | ~$1 | Cheap, but inherits serverless friction with no edge over Vercel |
+
+**Serverless has one hard constraint worth writing down.** Vercel Functions cap
+a request or response body at **4.5 MB**, and it is infrastructure-level rather
+than configurable. `photoShape` permits `byteSize` up to 25 MB, so the contract
+allows a payload the platform will refuse with a 413 — and it would reach a
+farm as an unexplained rejected mutation.
+
+Nothing normal comes near it: photos are resized to 1600px at quality 0.7
+before they leave the phone, which is 200–400 KB, under a tenth of the limit.
+It bites only when something escapes the resize path. **Two fixes, and both are
+worth having** — lower the contract ceiling to match reality so an oversized
+photo is refused at the boundary with a sentence, and move to presigned S3
+(§4A) so the bytes never touch the API at all.
+
+**Co-locating the API on AWS buys one real thing**: S3 through an attached IAM
+role rather than an access key in environment variables. A credential that does
+not exist cannot leak. Not urgent, and not an invariant-12 matter since nothing
+here ships in the bundle — but strictly better, and free if the API is on EC2
+anyway.
 
 ### 4.1b — Break-even, which is the number worth holding
 
-At $39 a year, fixed costs of $500–1,500 are covered by **roughly fifteen to
-forty paying farms.** Under fifty either way.
+At $39 a year, fixed costs of $220–470 are covered by **roughly six to twelve
+paying farms** — six on a host already paid for, twelve on a dedicated one.
+Under fifteen either way.
 
 That is the number to plan against, and it is deliberately not a market
 forecast. For scale: `COMPETITIVE-ANALYSIS.md` records Farmbrite — the
