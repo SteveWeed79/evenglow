@@ -1,5 +1,5 @@
 import type { Collection } from 'mongodb';
-import type { Role } from '@steading/contracts';
+import type { Role, Subscription } from '@steading/contracts';
 import { db } from './client';
 
 /**
@@ -44,6 +44,14 @@ export interface OrgDoc {
   _id: string; // ULID
   name: string;
   createdAt: Date;
+  /**
+   * What the farm has paid for, if anything (D13).
+   *
+   * Absent on every farm that has never subscribed, which is the ordinary
+   * free-tier state and not a problem — `entitlementOf` reads an absent
+   * subscription as `unsubscribed` rather than as a fault.
+   */
+  subscription?: Subscription;
 }
 
 async function users(): Promise<Collection<UserDoc>> {
@@ -112,6 +120,18 @@ export async function findOrgById(id: string): Promise<OrgDoc | null> {
 
 export async function insertOrg(org: OrgDoc): Promise<void> {
   await (await orgs()).insertOne(org);
+}
+
+/**
+ * Records what a rail told us about this farm's subscription.
+ *
+ * Replaces wholesale rather than merging fields: a store notification
+ * describes the whole current state, and merging would let a stale field from
+ * a previous notification survive underneath a fresh one — which is exactly
+ * how a farm ends up entitled by a value nobody remembers writing.
+ */
+export async function setSubscription(orgId: string, subscription: Subscription): Promise<void> {
+  await (await orgs()).updateOne({ _id: orgId }, { $set: { subscription } });
 }
 
 /**

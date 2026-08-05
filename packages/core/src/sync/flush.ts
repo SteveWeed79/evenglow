@@ -127,6 +127,30 @@ async function runFlush(transport: SyncTransport): Promise<FlushOutcome> {
     return { ...outcome, deferred: 'unauthenticated' };
   }
 
+  /**
+   * 402 — the farm is on the free tier, or its subscription ended (D13).
+   *
+   * **Not a rejection, and the distinction is the most important one in this
+   * function.** A rejected mutation goes to the inbox as something a person
+   * must look at; there is nothing here for anybody to look at, and routing a
+   * farm's entire history there over a payment state would be the app turning
+   * on its own user.
+   *
+   * So it takes the 401 shape exactly: no `recordAttempt`, because attempts
+   * are what ripen into `rejectExhausted`, and a farm running free for a year
+   * would otherwise cross the ceiling and have its records swept into the
+   * inbox six flushes in. Nothing is dropped, nothing is counted, everything
+   * stays queued — and the day the farm subscribes, it all goes up.
+   *
+   * The message comes from the server rather than being written here, because
+   * the server knows which of the two states it is and the two say different
+   * things. See `syncRefusalMessage`.
+   */
+  if (response.status === 402) {
+    await setLastError(heldMessage(response.body));
+    return { ...outcome, deferred: 'unsubscribed' };
+  }
+
   if (!isSyncResponse(response.body)) {
     // A 4xx with no per-mutation results (a malformed batch) is not retryable
     // in any useful sense, but it must not loop forever either.
@@ -181,6 +205,20 @@ async function applyResults(
   }
 
   return next;
+}
+
+/**
+ * The server's own sentence about why it is holding, parsed not trusted.
+ *
+ * An API response is external data (invariant 11), and this one reaches a
+ * screen — so a malformed body falls back to a sentence that is true in both
+ * states rather than rendering whatever arrived.
+ */
+function heldMessage(body: unknown): string {
+  const said = (body as { error?: unknown } | null)?.error;
+  return typeof said === 'string' && said.length > 0 && said.length <= 200
+    ? said
+    : 'Kept on this phone. Nothing has been lost.';
 }
 
 async function recordAttempt(batch: QueuedMutation[], error: string): Promise<void> {

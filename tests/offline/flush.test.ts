@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { discardRejected, listRejected, retryRejected } from '@steading/core/sync/inbox';
+import { diagnostics } from '@steading/core/sync/engine';
 import { flushOnce, MAX_ATTEMPTS, type SyncTransport } from '@steading/core/sync/flush';
 import { checkIntegrity, enqueue, queueDepth } from '@steading/core/sync/queue';
 import { MAX_BATCH_SIZE, newId, type Mutation, type MutationStatus } from '@steading/contracts';
@@ -112,6 +113,67 @@ describe('flush', () => {
     expect(await queueDepth()).toBe(1);
     // Signing back in must not have cost the mutation part of its retry budget.
     expect((await readOutboxBySeq())[0]?.attempts).toBe(0);
+  });
+
+  /**
+   * The free tier, and the single most dangerous path in this file.
+   *
+   * A farm on D13's free tier flushes for months and is told 402 every time.
+   * If that counted as a failed attempt, the queue would cross `MAX_ATTEMPTS`
+   * and a farm's entire history would be swept into the rejected inbox as
+   * poison — over a payment state, with nothing for anybody to look at, and
+   * nothing anybody did wrong.
+   *
+   * So it takes the 401 shape exactly: queued, uncounted, untouched.
+   */
+  it('holds an unsubscribed farm without counting it against the retry budget', async () => {
+    await enqueue(eggLog());
+    await enqueue(eggLog());
+
+    const held = () =>
+      Promise.resolve({
+        status: 402,
+        body: { error: 'Kept on this phone. Everything works; nothing is sent anywhere.' },
+      });
+
+    // A year of mornings, compressed. Well past MAX_ATTEMPTS.
+    for (let i = 0; i < 20; i += 1) {
+      const outcome = await flushOnce(held);
+      expect(outcome.deferred).toBe('unsubscribed');
+    }
+
+    expect(await queueDepth()).toBe(2);
+    for (const row of await readOutboxBySeq()) {
+      expect(row.attempts).toBe(0);
+      // Not rejected, not applied — simply still waiting for the day the farm
+      // subscribes, when the whole lot goes up.
+      expect(row.status).toBe('queued');
+    }
+  });
+
+  it('shows the server’s own sentence about why it is holding', async () => {
+    await enqueue(eggLog());
+
+    await flushOnce(() =>
+      Promise.resolve({
+        status: 402,
+        body: { error: 'Kept on this phone since the subscription ended. Nothing has been lost.' },
+      }),
+    );
+
+    // The server knows which of the two states it is; the client shows what it
+    // was told rather than guessing between them.
+    expect((await diagnostics()).lastError).toMatch(/since the subscription ended/);
+  });
+
+  it('falls back to a sentence true in both states when the body is not readable', async () => {
+    await enqueue(eggLog());
+
+    // An API response is external data (invariant 11) and this one reaches a
+    // screen, so a malformed body must not be rendered as-is.
+    await flushOnce(() => Promise.resolve({ status: 402, body: { error: 42 } }));
+
+    expect((await diagnostics()).lastError).toBe('Kept on this phone. Nothing has been lost.');
   });
 
   it('keeps a mutation queued when the server omits it from the results', async () => {
