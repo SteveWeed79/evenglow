@@ -42,6 +42,7 @@ import { ServiceDoneScreen } from '../screens/ServiceDoneScreen';
 import { SetEggsScreen } from '../screens/SetEggsScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { SiteSetupScreen } from '../screens/SiteSetupScreen';
+import { SupportScreen } from '../screens/SupportScreen';
 import { TreatmentScreen } from '../screens/TreatmentScreen';
 import { TrendScreen } from '../screens/TrendScreen';
 import { WeatherScreen } from '../screens/WeatherScreen';
@@ -98,6 +99,8 @@ export type RootParamList = {
   Weather: undefined;
   Inbox: undefined;
   Diagnostics: undefined;
+  /** Telling somebody the app is wrong. See `docs/SUPPORT-LOOP.md`. */
+  Support: undefined;
   Members: undefined;
   Licences: undefined;
   /**
@@ -180,6 +183,7 @@ export function Root({
       <Stack.Screen name="Weather" component={WeatherScreen} />
       <Stack.Screen name="Inbox" component={InboxScreen} />
       <Stack.Screen name="Diagnostics" component={DiagnosticsScreen} />
+      <Stack.Screen name="Support" component={SupportScreen} />
       <Stack.Screen name="Members" component={MembersScreen} />
       <Stack.Screen name="Licences" component={LicencesScreen} />
       <Stack.Screen name="Account">{() => <AccountScreen onSignedIn={onSignedIn} />}</Stack.Screen>

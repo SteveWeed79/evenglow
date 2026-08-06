@@ -135,6 +135,18 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
           testID="go-diagnostics"
           onPress={() => nav.navigate('Diagnostics')}
         />
+        {/**
+          * Under Sync, because that is where somebody with a problem has just
+          * been — and the numbers on that screen are most of what a report is
+          * made of.
+          */}
+        <Row
+          title="Something is wrong"
+          detail="Tell us what happened — the app fills in the rest"
+          icon="needs-a-look"
+          testID="go-support"
+          onPress={() => nav.navigate('Support')}
+        />
         <Row
           title="Licences"
           detail="The open-source typefaces this app is set in"

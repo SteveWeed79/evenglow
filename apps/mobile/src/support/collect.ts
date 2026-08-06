@@ -6,6 +6,7 @@ import {
   type SupportBundle,
 } from '@steading/contracts';
 import { SCHEMA_VERSION } from '@steading/core/db/migrations';
+import { buildExport } from '@steading/core/export/csv';
 import { diagnostics } from '@steading/core/sync/engine';
 import { listRejected } from '@steading/core/sync/inbox';
 import { readCachedClaims } from '../auth/session';
@@ -139,4 +140,46 @@ export async function collectBundle(said?: string): Promise<SupportBundle> {
       ...(said_ === undefined || said_ === '' ? {} : { said: said_ }),
     }),
   };
+}
+
+/**
+ * The other half — the farm's own records — assembled only on a yes (S2).
+ *
+ * **The same rows the Export screen already hands out.** Not a second read
+ * path, and that is the point rather than a saving: a farm consenting to send
+ * "your records" is entitled to have that phrase mean the same thing here as
+ * it does on the screen where they can look at every row first. A bespoke dump
+ * would be a second definition of the farm's data, and the wider of the two
+ * would eventually be this one.
+ *
+ * Sheets rather than a database image: the escaping is proven by
+ * `export.test.ts`, and the thirteen names are what a diagnosis needs to know
+ * which read produced a wrong figure.
+ *
+ * Returns a string because that is what travels — see `supportTicketSchema`.
+ * The server stores it and does not read it.
+ */
+export async function collectRecords(): Promise<string> {
+  const sheets = await buildExport();
+
+  return JSON.stringify({
+    v: SUPPORT_BUNDLE_VERSION,
+    at: Date.now(),
+    app: { version: APP_VERSION, platform: Platform.OS },
+    schemaVersion: SCHEMA_VERSION,
+    sheets: sheets.map((sheet) => ({ name: sheet.name, rows: sheet.rows, csv: sheet.csv })),
+  });
+}
+
+/**
+ * Roughly how big that would be, for the sentence next to the question.
+ *
+ * Somebody agreeing to send their farm's records deserves to know whether that
+ * is forty kilobytes or four megabytes before they agree, and a size is the
+ * only honest way to say how much. Computed by building it, because an estimate
+ * that disagreed with the thing sent would be worse than no number.
+ */
+export function sizeOf(records: string): string {
+  const kb = Math.round(records.length / 1024);
+  return kb < 1024 ? `${Math.max(1, kb)} KB` : `${(kb / 1024).toFixed(1)} MB`;
 }
