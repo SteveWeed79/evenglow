@@ -197,7 +197,16 @@ having a bad morning must not silence another farm's first report.
 | Filing on GitHub | `apps/api/src/support/github.ts` | S3, S4, §3 |
 | Configuration | `apps/api/src/env.ts`, `.env.example` | S5 |
 
-Three things worth knowing that are not obvious from the design:
+Four things worth knowing that are not obvious from the design:
+
+- **A `Due.done.label` is the one route by which a farm's own words could reach
+  a lean bundle.** `TodayScreen` reports a failed log as ``reportTrouble(
+  `recording ${done.label.toLowerCase()}`, error)``, and `where` goes into the
+  bundle and into the issue title. Every label in the app today is a constant,
+  so nothing leaks — but nothing enforced it, and a builder that one day wrote
+  ``label: `Fed ${group.name}` `` would put a farm's herd name on a public
+  issue tracker silently. `tests/unit/support.test.ts` now checks both builders
+  that produce a `done`, with sentinel names.
 
 - **The fingerprint contains the schema version**, so migration v5 itself
   changes the fingerprint of every defect a migrating device reports. That is

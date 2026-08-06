@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  careDues,
   fingerprintOf,
   hash64,
   SUPPORT_BUNDLE_VERSION,
   supportBundleSchema,
+  taskDues,
   type SupportBundle,
 } from '@steading/contracts';
 import { titleFor } from '@steading/api/support/github';
@@ -242,6 +244,54 @@ describe('the one line a person reads', () => {
     // And collapses the whitespace a stack-ish message brings with it, so the
     // list does not grow rows of ragged height.
     expect(huge).not.toMatch(/\s\s/);
+  });
+});
+
+/**
+ * The one route by which a farm's own words could reach a lean bundle.
+ *
+ * `TodayScreen` reports a failed log as `reportTrouble(\`recording
+ * ${done.label.toLowerCase()}\`, error)`, and `where` goes into the bundle and
+ * into the issue title. Every `Due.done.label` in the app today is a constant —
+ * `CARE_KIND_LABELS[kind]`, or the literal "Done" — so nothing leaks. Nothing
+ * *enforced* that, which is the gap this closes: a builder that one day writes
+ * ``label: `Fed ${group.name}` `` would put a farm's herd name on a public
+ * issue tracker, silently, and no other test in this suite would notice.
+ *
+ * Both builders that produce a `done` are checked with sentinel names, because
+ * a fixture called "Nubians" would pass this while a genuine leak of the same
+ * shape went by.
+ */
+describe('what may reach a bundle from a farm', () => {
+  const SENTINEL = 'ZZ-FARM-AUTHORED-ZZ';
+  const NOW = Date.parse('2026-08-06T09:00:00Z');
+
+  it('never puts a farm-authored name on the button label a failure is reported by', () => {
+    const care = careDues(
+      { id: 'f1', name: SENTINEL, species: 'goat', lastDone: { worming: NOW - 90 * 86_400_000 } },
+      NOW,
+    );
+    const tasks = taskDues(
+      { id: 't1', title: SENTINEL, recurrence: 'none', dueAtDate: NOW },
+      SENTINEL,
+    );
+
+    const labels = [...care, ...tasks].map((due) => due.done?.label ?? '');
+
+    // The fixtures have to actually produce rows, or this asserts nothing.
+    expect(labels.length).toBeGreaterThan(0);
+    for (const label of labels) expect(label).not.toContain(SENTINEL);
+  });
+
+  /**
+   * The title is a farm's own sentence and belongs there — it is what makes a
+   * row readable on Today. It just must not be what a *failure* is named by,
+   * which is the distinction above.
+   */
+  it('still lets the farm name the row itself', () => {
+    const [task] = taskDues({ id: 't1', title: SENTINEL, recurrence: 'none', dueAtDate: NOW }, undefined);
+
+    expect(task?.title).toContain(SENTINEL);
   });
 });
 
