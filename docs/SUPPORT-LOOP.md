@@ -2,8 +2,9 @@
 
 How a defect gets from a farm's handset to a fix, and back.
 
-Decided August 2026. Nothing built yet — this is the design, written while the
-decisions were being made rather than reconstructed afterwards.
+Decided and built August 2026. The design below was written while the decisions
+were being made rather than reconstructed afterwards; §5 says where each part
+of it now lives.
 
 **Companion docs:** `Steading-Masterplan.md` (the invariants) · `UX-SPEC.md`
 (the voice) · `ACCESS-AND-BILLING.md` (who the farm is) · `ROADMAP.md`.
@@ -183,7 +184,45 @@ having a bad morning must not silence another farm's first report.
 
 ---
 
-## 5. Open
+## 5. Where it lives
+
+| Piece | File | Rule |
+|---|---|---|
+| The bundle, the fingerprint, the ticket shape | `packages/contracts/src/support.ts` | S1, S2, §3 |
+| Assembling one on the device | `apps/mobile/src/support/collect.ts` | S1, S2 |
+| The local queue (table, port, store) | `packages/core/src/db/` — migration **v5**, `tickets` | S6 |
+| Sending, holding, retrying, and the share text | `packages/core/src/support/tickets.ts` | S6, S7 |
+| The screen and the consent question | `apps/mobile/src/screens/SupportScreen.tsx` | S2, S7 |
+| The route | `apps/api/src/routes/support.ts` | S5 |
+| Filing on GitHub | `apps/api/src/support/github.ts` | S3, S4, §3 |
+| Configuration | `apps/api/src/env.ts`, `.env.example` | S5 |
+
+Three things worth knowing that are not obvious from the design:
+
+- **The fingerprint contains the schema version**, so migration v5 itself
+  changes the fingerprint of every defect a migrating device reports. That is
+  correct — a fault at one schema version is plausibly a different fault at the
+  next — but it does mean this migration splits any issue thread that was open
+  across it.
+- **`hash64` is FNV-1a rather than anything from `crypto`.** Hermes has no such
+  global; there is a lint rule about it because that exact assumption once
+  shipped.
+- **`markTicketSent` nulls the records column.** A farm's whole database sitting
+  on the handset a second time, indefinitely, after it has already reached
+  where it was going, is a copy nobody asked to keep.
+
+### Not built, deliberately
+
+- **No client purchase of anything, and no account required.** The route is
+  unauthenticated; see the header of `routes/support.ts`.
+- **Retries are not on a timer and not driven by the sync loop.** A ticket
+  about a broken sync must not be retried by the machinery it is about. The
+  support screen opening is the retry trigger, because somebody walking to it
+  is the honest signal that the situation may have changed.
+
+---
+
+## 6. Open
 
 - **Where the secret-gist URL lives** so it is not lost if the issue is
   transferred to another repository.
@@ -192,3 +231,9 @@ having a bad morning must not silence another farm's first report.
 - **Whether a fix can be reported back to the device that raised the ticket.**
   Closing the loop properly means the farm learns their report mattered, and
   there is no channel to tell them — the same gap §1 opens with.
+- **Rate limiting is per address, not per fingerprint.** §3 asks for per device
+  and per fingerprint; the route has the blunt version, and the device-side
+  queue is what currently keeps an honest farm well under it.
+- **Nothing has been on a handset yet.** The share sheet in particular is a
+  native intent, and §6 of the roadmap exists because every serious bug in this
+  project so far has been one only a device could show.
