@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { TAB_MARKS as TABS } from '../../apps/mobile/src/navigation/tab-marks';
+import {
+  dividerLength,
+  dividerOffsets,
+  TAB_DIVIDER,
+  TAB_MARKS as TABS,
+} from '../../apps/mobile/src/navigation/tab-marks';
 
 /**
  * The bottom bar, held to a width it can actually draw.
@@ -51,5 +56,59 @@ describe('the bottom bar', () => {
   it('uses no name that needs a space to read', () => {
     // A space is where a label wraps first, and the slot has room for one word.
     for (const tab of TABS) expect(tab.name, tab.name).not.toContain(' ');
+  });
+});
+
+/**
+ * The hairlines between the tabs.
+ *
+ * Geometry only — whether they *look* right is a handset question and this
+ * cannot answer it. What it can hold is the three ways the arithmetic goes
+ * wrong silently: a line on the outer edge, a line that misses a boundary, and
+ * a bar that gains a tab without gaining a divider.
+ */
+describe('the lines between them', () => {
+  it('draws one fewer line than there are tabs', () => {
+    expect(dividerOffsets(TABS.length)).toHaveLength(TABS.length - 1);
+
+    // Including the shapes the bar is allowed to take, not just today's.
+    for (let count = 1; count <= MOST_TABS; count += 1) {
+      expect(dividerOffsets(count), `${count} tabs`).toHaveLength(count - 1);
+    }
+  });
+
+  /**
+   * A line at 0 or 1 would sit on the screen edge, double the bar's own
+   * border on one side and read as a frame around the bar rather than a
+   * division inside it.
+   */
+  it('never puts one on an outer edge', () => {
+    for (let count = 2; count <= MOST_TABS; count += 1) {
+      for (const offset of dividerOffsets(count)) {
+        expect(offset).toBeGreaterThan(0);
+        expect(offset).toBeLessThan(1);
+      }
+    }
+  });
+
+  it('puts each one exactly on a boundary between slots', () => {
+    // Evenly spaced, because the bar divides its width evenly. A line half a
+    // slot out is worse than no line — it groups the wrong pair.
+    const three = dividerOffsets(3);
+    expect(three[0]).toBeCloseTo(1 / 3, 10);
+    expect(three[1]).toBeCloseTo(2 / 3, 10);
+  });
+
+  it('is one tab bar, not a segmented control', () => {
+    /**
+     * The line has to be visibly shorter than the bar or it reads as a table
+     * cell — a different promise about what pressing does. Roughly the height
+     * of a mark and its label is what brackets the content instead of ruling
+     * the whole bar.
+     */
+    expect(dividerLength()).toBeGreaterThan(0.3);
+    expect(dividerLength()).toBeLessThan(0.6);
+    // Centred: equal clearance top and bottom falls out of using one inset.
+    expect(TAB_DIVIDER.inset * 2 + dividerLength()).toBeCloseTo(1, 10);
   });
 });

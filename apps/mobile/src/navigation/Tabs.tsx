@@ -1,6 +1,7 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StyleSheet, Text, View } from 'react-native';
-import { tabs } from './tab-marks';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { dividerOffsets, TAB_DIVIDER, tabs } from './tab-marks';
 import { Icon, type IconName } from '../components/Icon';
 import { FarmScreen } from '../screens/FarmScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
@@ -72,6 +73,13 @@ export function Tabs(): React.ReactElement {
         // A tab is one of the two things tapped through a glove. It gets the
         // full primary target even though the icon is 26px.
         tabBarItemStyle: { minHeight: TAP.primary },
+        /**
+         * Renders as a child of the bar, so it paints over the bar's own
+         * background and under the items — which is the whole reason this
+         * option exists and why the dividers do not need the background moved
+         * out of `tabBarStyle` to be visible.
+         */
+        tabBarBackground: () => <TabDividers count={TABS.length} />,
       }}
     >
       {TABS.map(({ name, icon }) => (
@@ -88,6 +96,49 @@ export function Tabs(): React.ReactElement {
         />
       ))}
     </Tab.Navigator>
+  );
+}
+
+/**
+ * The hairlines between the tabs. See `TAB_DIVIDER` for why they are short.
+ *
+ * `pointerEvents="none"` because they sit across the bar and a tab is one of
+ * the two things in this app tapped through a glove — a decorative line that
+ * swallowed even a pixel of a target would be the worst possible trade.
+ *
+ * Centred by percentage rather than by a computed pixel offset, so the bar can
+ * be any width and gain or lose a tab without this knowing: the offsets are
+ * fractions and the inset is a fraction, which means rotation and a tablet
+ * both come free.
+ *
+ * **Except the bottom safe area, which is not free.** React Navigation adds the
+ * home-indicator inset as padding *below* the height set in `tabBarStyle`, so
+ * the container this fills is taller than the part anybody looks at — by 34pt
+ * on the phones that have one. Centring in the container would drop the lines
+ * a sixth of a bar below the marks they divide, which is exactly the sort of
+ * thing that looks fine in Node and wrong in the hand.
+ */
+function TabDividers({ count }: { count: number }): React.ReactElement {
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+
+  return (
+    <View style={[StyleSheet.absoluteFill, { bottom: insets.bottom }]} pointerEvents="none">
+      {dividerOffsets(count).map((offset) => (
+        <View
+          key={offset}
+          style={[
+            styles.divider,
+            {
+              left: `${offset * 100}%`,
+              top: `${TAB_DIVIDER.inset * 100}%`,
+              bottom: `${TAB_DIVIDER.inset * 100}%`,
+              backgroundColor: colors.border,
+            },
+          ]}
+        />
+      ))}
+    </View>
   );
 }
 
@@ -157,6 +208,13 @@ function TabMark({
 }
 
 const styles = StyleSheet.create({
+  /**
+   * Centred by equal insets rather than by `top: 50%` and a half-height
+   * transform. Percentage transforms resolve against the element's own size
+   * and are a newer RN feature; two equal insets are as old as flexbox and
+   * cannot behave differently on a handset than they do here.
+   */
+  divider: { position: 'absolute', width: StyleSheet.hairlineWidth },
   // Full width of the slot, so the label has the whole tab to sit in rather
   // than only as much as the icon happens to occupy.
   mark: { alignItems: 'center', justifyContent: 'center', gap: 3, width: '100%' },

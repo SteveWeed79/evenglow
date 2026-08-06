@@ -74,3 +74,64 @@ export const TAB_MARKS: readonly TabMarkSpec[] = [
 export function tabs(): readonly TabMarkSpec[] {
   return TAB_MARKS;
 }
+
+/**
+ * The hairlines between tabs.
+ *
+ * ## Why the bar needs them at all
+ *
+ * It does not, today — an icon over a word is self-separating, because the
+ * mark occupies the middle of its slot and the eye reads three objects. The
+ * design pass proposes dropping the marks and leaving three words, and three
+ * words in a row are a sentence until something says otherwise. This is that
+ * something.
+ *
+ * ## Short, and thinner than the bar's own rule
+ *
+ * The top rule separates the bar from the screen — a boundary between two
+ * different things — and is drawn at twice a hairline. These separate peers,
+ * so they are one hairline and roughly the height of the mark rather than the
+ * height of the bar. Same `border` token, less of it: the hierarchy comes from
+ * weight and length rather than from a second colour nobody would be able to
+ * name.
+ *
+ * A full-height divider was the other option and it is the one to avoid — it
+ * turns the bar into a segmented control, which is a different promise about
+ * what pressing does.
+ *
+ * ## Nothing hangs on them
+ *
+ * Each tab is already its own target at `TAP.primary` with its own
+ * accessibility label, and React Navigation announces them separately. These
+ * are decoration in the strict sense — removable without changing what the bar
+ * does — which is exactly why they are worth almost nothing and cost almost
+ * nothing.
+ */
+export const TAB_DIVIDER = {
+  /**
+   * Share of the bar's height left clear above and below.
+   *
+   * Expressed as the inset rather than the length because that is what the
+   * style takes — two equal insets centre the line without a percentage
+   * transform, which resolves against the element's own size and is a newer
+   * RN feature than this needs to depend on.
+   *
+   * 0.28 each end leaves 44% drawn: about the height of a mark and its label,
+   * so the line brackets the content rather than ruling the whole bar.
+   */
+  inset: 0.28,
+} as const;
+
+/** What is actually drawn, as a fraction. Derived, so the two cannot drift. */
+export const dividerLength = (): number => 1 - TAB_DIVIDER.inset * 2;
+
+/**
+ * Where each one sits, as a fraction of the bar's width.
+ *
+ * Between the slots and never at an edge — a line at 0 or 1 would double the
+ * screen border on one side and read as a frame.
+ */
+export function dividerOffsets(count: number): number[] {
+  if (count < 2) return [];
+  return Array.from({ length: count - 1 }, (_, i) => (i + 1) / count);
+}
