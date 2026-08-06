@@ -161,8 +161,8 @@ export function DueRow({
         >
           {/* No tick while it is armed. A tick is the app's mark for a thing
               that has happened, and nothing has happened yet. */}
-          <Icon name={armed ? 'forward' : 'check'} size={16} color={armed ? '#241c14' : colors.muted} />
-          <Text style={[styles.doneLabel, { color: armed ? '#241c14' : colors.muted }]}>
+          <Icon name={armed ? 'forward' : 'check'} size={16} color={armed ? colors.lanternOn : colors.muted} />
+          <Text style={[styles.doneLabel, { color: armed ? colors.lanternOn : colors.muted }]}>
             {armed ? 'Tap again' : 'Done'}
           </Text>
         </Pressable>

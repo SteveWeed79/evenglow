@@ -131,7 +131,9 @@ export function Notes({
                 read state is the part of a chat this app declines to have. */}
             {thread.length > 0 ? (
               <View style={[styles.badge, { backgroundColor: colors.lantern }]}>
-                <Text style={styles.badgeCount}>{thread.length}</Text>
+                <Text style={[styles.badgeCount, { color: colors.lanternOn }]}>
+                  {thread.length}
+                </Text>
               </View>
             ) : null}
           </View>
@@ -424,7 +426,6 @@ const styles = StyleSheet.create({
   badgeCount: {
     fontFamily: FONTS.data,
     fontSize: TYPE.label,
-    color: '#241c14',
     fontVariant: ['tabular-nums'],
   },
   preview: { fontFamily: FONTS.body, fontSize: TYPE.body },

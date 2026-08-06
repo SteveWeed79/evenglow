@@ -125,7 +125,12 @@ export function Screen({
             did load stays on it. */}
         {trouble === null ? null : (
           <View style={[styles.trouble, { borderColor: colors.rowan }]}>
-            <Text style={[styles.troubleTitle, { color: colors.rowan }]}>
+            {/* The border is rowan and the words are not, which is R7 rather
+                than a preference: rowan on the lamplight ground is 3.1:1 — a
+                perfectly good rule and an unreadable sentence, at 5am, on the
+                one banner in the app that appears when something has already
+                gone wrong. Keep the bar, set the heading in ink. */}
+            <Text style={[styles.troubleTitle, { color: colors.ink }]}>
               Could not read {trouble.where}
             </Text>
             <Text style={[styles.troubleBody, { color: colors.ink }]}>

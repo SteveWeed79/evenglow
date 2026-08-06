@@ -138,7 +138,7 @@ export function Chip({
     >
       {/* Ink on brass when selected: the lantern is a fill, and a label on top
           of it reads where a brass label on plaster would not. */}
-      <Text style={[styles.chipLabel, { color: selected ? '#241c14' : colors.ink }]}>{label}</Text>
+      <Text style={[styles.chipLabel, { color: selected ? colors.lanternOn : colors.ink }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -220,7 +220,7 @@ export function Toggle({
         },
       ]}
     >
-      <Text style={[styles.toggleLabel, { color: value ? '#241c14' : colors.ink }]}>{label}</Text>
+      <Text style={[styles.toggleLabel, { color: value ? colors.lanternOn : colors.ink }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -508,7 +508,7 @@ export function Primary({
         { backgroundColor: colors.lantern, opacity: disabled ? 0.4 : pressed ? 0.8 : 1 },
       ]}
     >
-      <Text style={styles.primaryLabel}>{label}</Text>
+      <Text style={[styles.primaryLabel, { color: colors.lanternOn }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -770,7 +770,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: SPACE.sm,
   },
-  primaryLabel: { fontFamily: FONTS.display, fontSize: TYPE.lede, color: '#241c14' },
+  primaryLabel: { fontFamily: FONTS.display, fontSize: TYPE.lede },
   secondary: {
     flexDirection: 'row',
     alignItems: 'center',

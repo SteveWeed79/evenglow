@@ -151,7 +151,9 @@ export function PickVarietyScreen({ route }: ScreenProps<'PickVariety'>): React.
             { backgroundColor: colors.lantern, opacity: saving || pressed ? 0.75 : 1 },
           ]}
         >
-          <Text style={styles.primaryLabel}>Plan it into {bed.name}</Text>
+          <Text style={[styles.primaryLabel, { color: colors.lanternOn }]}>
+            Plan it into {bed.name}
+          </Text>
         </Pressable>
 
         <Pressable onPress={() => setChosen(null)} accessibilityRole="button" style={styles.back}>
@@ -318,7 +320,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: SPACE.sm,
   },
-  primaryLabel: { fontFamily: FONTS.display, fontSize: TYPE.lede, color: '#241c14' },
+  primaryLabel: { fontFamily: FONTS.display, fontSize: TYPE.lede },
   back: { minHeight: TAP.min, alignItems: 'center', justifyContent: 'center' },
   backLabel: { fontFamily: FONTS.body, fontSize: TYPE.body },
 });

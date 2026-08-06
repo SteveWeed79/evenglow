@@ -185,7 +185,7 @@ export function SiteSetupScreen(): React.ReactElement {
           },
         ]}
       >
-        <Text style={styles.saveLabel}>Save</Text>
+        <Text style={[styles.saveLabel, { color: colors.lanternOn }]}>Save</Text>
       </Pressable>
     </Screen>
   );
@@ -243,7 +243,7 @@ function DatePick({
             ]}
           >
             <Text
-              style={[styles.monthLabel, { color: month === index ? '#241c14' : colors.ink }]}
+              style={[styles.monthLabel, { color: month === index ? colors.lanternOn : colors.ink }]}
             >
               {label}
             </Text>
@@ -311,5 +311,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: SPACE.lg,
   },
-  saveLabel: { fontFamily: FONTS.display, fontSize: TYPE.lede, color: '#241c14' },
+  saveLabel: { fontFamily: FONTS.display, fontSize: TYPE.lede },
 });
