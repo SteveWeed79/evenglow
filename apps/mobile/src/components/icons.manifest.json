@@ -1,6 +1,6 @@
 {
   "name": "steading-icons",
-  "version": "3.2.0",
+  "version": "3.3.0",
   "generatedFrom": "Steading Icons v3.dc.html",
   "masters": {
     "24": {
@@ -350,22 +350,6 @@
       }
     },
     {
-      "name": "in-water",
-      "group": "stock",
-      "elements": {
-        "24": 1,
-        "32": 1
-      }
-    },
-    {
-      "name": "injected",
-      "group": "stock",
-      "elements": {
-        "24": 4,
-        "32": 4
-      }
-    },
-    {
       "name": "mortality",
       "group": "stock",
       "elements": {
@@ -382,39 +366,7 @@
       }
     },
     {
-      "name": "mower",
-      "group": "iron",
-      "elements": {
-        "24": 4,
-        "32": 4
-      }
-    },
-    {
-      "name": "pump",
-      "group": "iron",
-      "elements": {
-        "24": 4,
-        "32": 4
-      }
-    },
-    {
-      "name": "hour-meter",
-      "group": "iron",
-      "elements": {
-        "24": 3,
-        "32": 3
-      }
-    },
-    {
       "name": "service",
-      "group": "iron",
-      "elements": {
-        "24": 3,
-        "32": 3
-      }
-    },
-    {
-      "name": "fuel",
       "group": "iron",
       "elements": {
         "24": 3,

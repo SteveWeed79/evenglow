@@ -188,14 +188,6 @@ const MARKS: Record<string, { readonly 32: readonly El[]; readonly 24: readonly 
     32: [['P', 'M11 12h10v14H11Z'], ['R', 13.5, 5, 5, 4, null, true], ['P', 'M11 19h10']],
     24: [['P', 'M8 10h8v10H8Z'], ['R', 10, 4, 4, 3, null, true], ['P', 'M8 15h8']],
   },
-  'in-water': {
-    32: [['P', 'M16 5l6.5 11.5A7.5 7.5 0 1 1 9.5 16.5Z']],
-    24: [['P', 'M12 4l5 8.5A5.5 5.5 0 1 1 7 12.5Z']],
-  },
-  'injected': {
-    32: [['P', 'M7.9 19.9 18.9 8.9 23.1 13.1 12.1 24.1Z'], ['P', 'M10 22 5.5 26.5'], ['P', 'M17.5 7.5 24.5 14.5'], ['P', 'M21 11 25.5 6.5']],
-    24: [['P', 'M5.9 14.9 14.2 6.7 17.3 9.8 9.1 18.1Z'], ['P', 'M7.5 16.5 4 20'], ['P', 'M13 5.6 18.4 11'], ['P', 'M15.75 8.25 19 5']],
-  },
   'mortality': {
     32: [['P', 'M9 26v-9a7 7 0 0 1 14 0v9'], ['P', 'M4 26h24'], ['P', 'M16 20v6']],
     24: [['P', 'M7 20v-7a5 5 0 0 1 10 0v7'], ['P', 'M3 20h18'], ['P', 'M12 15v5']],
@@ -204,25 +196,9 @@ const MARKS: Record<string, { readonly 32: readonly El[]; readonly 24: readonly 
     32: [['P', 'M5 16V11h6.3V6h14.4v10A8.5 8.5 0 0 0 11.3 16Z'], ['C', 18.5, 20.5, 5, false], ['C', 7, 22.5, 3, false], ['C', 18.5, 20.5, 1.25, true]],
     24: [['P', 'M3 11V7h7V4h10v7A7 7 0 0 0 10 11Z'], ['C', 15, 16, 4, false], ['C', 6, 18, 2, false], ['C', 15, 16, 1, true]],
   },
-  'mower': {
-    32: [['P', 'M5 9h17v7.5H5Z'], ['C', 9, 23, 3, false], ['C', 19, 23, 3, false], ['P', 'M22 9l5-5']],
-    24: [['P', 'M4 6h13v6H4Z'], ['C', 7, 18, 2, false], ['C', 15, 18, 2, false], ['P', 'M17 6l4-4']],
-  },
-  'pump': {
-    32: [['C', 14, 15, 6, false], ['P', 'M10 19l1 7h6l1-7'], ['P', 'M14 9V4'], ['P', 'M20 15h8']],
-    24: [['C', 10, 11, 4.5, false], ['P', 'M7 14l1 6h4l1-6'], ['P', 'M10 6.5V3'], ['P', 'M15 11h6']],
-  },
-  'hour-meter': {
-    32: [['R', 4, 11, 24, 11, 1.5, false], ['P', 'M11 15v4M16 15v4M21 15v4'], ['C', 24.5, 16, 1.25, true]],
-    24: [['R', 3, 8, 18, 9, 1, false], ['P', 'M8 11v3M12 11v3M16 11v3'], ['C', 18, 12, 1, true]],
-  },
   'service': {
     32: [['C', 11.5, 11.5, 6, false], ['P', 'M15.8 15.8 26.5 26.5'], ['C', 11.5, 11.5, 1.6, true]],
     24: [['C', 9, 9, 4.5, false], ['P', 'M12.2 12.2 20 20'], ['C', 9, 9, 1.25, true]],
-  },
-  'fuel': {
-    32: [['P', 'M7 12h13v14H7Z'], ['R', 11, 6, 5, 3.5, null, true], ['P', 'M20 16h6v10']],
-    24: [['P', 'M5 9h10v11H5Z'], ['R', 8, 4, 4, 3, null, true], ['P', 'M15 12h5v8']],
   },
   'date-due': {
     32: [['R', 5, 9, 22, 17, 1.5, false], ['P', 'M11 9V5M21 9V5'], ['P', 'M5 17h22']],
@@ -339,8 +315,17 @@ export function Icon({ name, size = 24, color, label }: IconProps): React.ReactE
       fill="none"
       stroke={color}
       strokeWidth={master === 32 ? 2.5 : 2}
-      strokeLinecap="square"
-      strokeLinejoin="miter"
+      /**
+       * Round, not square — and this is the cheapest warmth in the app.
+       *
+       * A square cap and a mitred join are what make a geometric set read as
+       * *drafted*: the corners come to points and every stroke ends on a hard
+       * edge. Rounding both softens forty-six marks at once without altering a
+       * single path, which is the whole argument for spending the charm budget
+       * on the ten drawn marks and leaving the controls alone (UX-SPEC §6).
+       */
+      strokeLinecap="round"
+      strokeLinejoin="round"
       accessible={label !== undefined}
       accessibilityRole={label === undefined ? 'none' : 'image'}
       {...(label === undefined ? {} : { accessibilityLabel: label })}
