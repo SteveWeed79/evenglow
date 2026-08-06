@@ -1,0 +1,203 @@
+import type { SupportBundle } from '@steading/contracts';
+import { HttpError } from '../http';
+
+/**
+ * Filing a ticket as a GitHub issue (`docs/SUPPORT-LOOP.md` S3, S4 and §3).
+ *
+ * **The fix happens where the report lands.** An issue can be read, reproduced,
+ * branched from, fixed, linked to a PR and closed by the commit, with no
+ * transcription between the report and the work — and transcription is where
+ * detail is lost. A support inbox would mean copying every ticket into an issue
+ * by hand.
+ *
+ * ## Dedup is what makes the whole thing survivable
+ *
+ * One device in a crash loop must produce one issue with a count, not four
+ * hundred issues. Every bundle carries a fingerprint of the parts that
+ * *identify* a defect rather than describe this instance, and an issue is
+ * labelled with it — so arrival either finds the open issue and adds evidence,
+ * or opens the first one.
+ *
+ * ## No Octokit
+ *
+ * Three REST calls. The client library is a dependency and a version treadmill
+ * to save writing `fetch` three times.
+ */
+
+export interface SupportConfig {
+  token: string;
+  owner: string;
+  repo: string;
+  /**
+   * Whether the opt-in half — the farm's own records — may be accepted (S5).
+   *
+   * **The gate lives here rather than in the app**, because the app cannot
+   * know a repository's visibility and a build shipped before the change would
+   * be wrong forever. While the repository is public, a farm cannot
+   * meaningfully consent to its records being world-readable on a prompt in a
+   * barn, so the server declines that half and says why.
+   */
+  acceptRecords: boolean;
+}
+
+const API = 'https://api.github.com';
+
+function headers(config: SupportConfig): Record<string, string> {
+  return {
+    authorization: `Bearer ${config.token}`,
+    accept: 'application/vnd.github+json',
+    'x-github-api-version': '2022-11-28',
+    'content-type': 'application/json',
+  };
+}
+
+/**
+ * A title a person can scan in a list, from a bundle written for a machine.
+ *
+ * The one human line in the whole artefact (S1). It leads with the first
+ * error or refusal because that is what distinguishes one row from the next in
+ * a list of forty, and falls back to what the farm said.
+ */
+export function titleFor(bundle: SupportBundle): string {
+  const lead =
+    bundle.errors[0] !== undefined
+      ? `${bundle.errors[0].where}: ${bundle.errors[0].message}`
+      : bundle.rejections[0] !== undefined
+        ? `${bundle.rejections[0].entity} refused: ${bundle.rejections[0].reason}`
+        : (bundle.said ?? 'A farm reported a problem');
+
+  return `[${bundle.app.platform} ${bundle.app.version}] ${lead}`.replace(/\s+/g, ' ').slice(0, 120);
+}
+
+/**
+ * The body: the bundle, fenced, and nothing else pretending to be prose.
+ *
+ * A line of context above it because a human does open these, and then the
+ * data — machine-first, which is S1 and the whole point.
+ */
+function bodyFor(bundle: SupportBundle, gistUrl: string | null): string {
+  return [
+    bundle.said === undefined ? null : `> ${bundle.said}`,
+    bundle.said === undefined ? null : '',
+    '```json',
+    JSON.stringify(bundle, null, 1),
+    '```',
+    gistUrl === null ? null : `\nFarm records (sent with consent): ${gistUrl}`,
+  ]
+    .filter((line) => line !== null)
+    .join('\n');
+}
+
+async function call(
+  config: SupportConfig,
+  path: string,
+  init: { method?: string; body?: unknown } = {},
+): Promise<unknown> {
+  const res = await fetch(`${API}${path}`, {
+    method: init.method ?? 'GET',
+    headers: headers(config),
+    ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+  });
+
+  if (!res.ok) {
+    // The status, never the body: a GitHub error can echo the request, and the
+    // request carried a token.
+    throw new HttpError(502, `Could not reach the issue tracker (${res.status}).`);
+  }
+
+  return res.json().catch(() => null);
+}
+
+/**
+ * The farm's records, as a secret gist (S4).
+ *
+ * Not in the issue body, for two reasons and the second is load-bearing: a
+ * body is capped at 65 KB and a farm's records are not, and **an issue whose
+ * body is four megabytes of JSON is an issue nobody opens** — the lean bundle
+ * is what gets read first anyway.
+ *
+ * Secret rather than private: a gist is unlisted and unindexed rather than
+ * access-controlled, so it is a URL that must not be published. Acceptable for
+ * a farm that opted in, unacceptable as a default — which is exactly why S2
+ * makes it opt-in.
+ */
+async function fileRecords(
+  config: SupportConfig,
+  fingerprint: string,
+  records: string,
+): Promise<string | null> {
+  const gist = await call(config, '/gists', {
+    method: 'POST',
+    body: {
+      description: `Steading support records — ${fingerprint}`,
+      public: false,
+      files: { 'records.json': { content: records } },
+    },
+  });
+
+  const url = (gist as { html_url?: unknown } | null)?.html_url;
+  return typeof url === 'string' ? url : null;
+}
+
+export interface Filed {
+  url: string;
+  /** True when this arrival opened the issue rather than adding to one. */
+  created: boolean;
+}
+
+export async function fileTicket(
+  config: SupportConfig,
+  bundle: SupportBundle,
+  records: string | undefined,
+): Promise<Filed> {
+  const label = `fp:${bundle.fingerprint}`;
+
+  /**
+   * The records go up first, so the link exists when the issue is written.
+   *
+   * A gist with no issue is litter; an issue promising a link it does not have
+   * is a dead end somebody investigates. Litter is cheaper.
+   */
+  const gistUrl =
+    records !== undefined && config.acceptRecords
+      ? await fileRecords(config, bundle.fingerprint, records).catch(() => null)
+      : null;
+
+  const open = (await call(
+    config,
+    `/repos/${config.owner}/${config.repo}/issues?state=open&labels=${encodeURIComponent(label)}&per_page=1`,
+  )) as { number?: number; html_url?: string }[] | null;
+
+  const existing = Array.isArray(open) ? open[0] : undefined;
+
+  /**
+   * Found: the issue accumulates evidence rather than multiplying.
+   *
+   * A second report of a defect is genuinely useful — it says the fix is still
+   * wanted, and a second bundle may differ in the field that explains it — so
+   * it is a comment rather than a discarded duplicate.
+   */
+  if (existing?.number !== undefined && existing.html_url !== undefined) {
+    await call(config, `/repos/${config.owner}/${config.repo}/issues/${existing.number}/comments`, {
+      method: 'POST',
+      body: { body: bodyFor(bundle, gistUrl) },
+    });
+    return { url: existing.html_url, created: false };
+  }
+
+  const issue = (await call(config, `/repos/${config.owner}/${config.repo}/issues`, {
+    method: 'POST',
+    body: {
+      title: titleFor(bundle),
+      body: bodyFor(bundle, gistUrl),
+      // The fingerprint is the label, so the next arrival can find this
+      // without a search index that may be minutes behind.
+      labels: [label, 'from-a-farm'],
+    },
+  })) as { html_url?: string } | null;
+
+  const url = issue?.html_url;
+  if (typeof url !== 'string') throw new HttpError(502, 'The issue tracker did not answer.');
+
+  return { url, created: true };
+}

@@ -44,20 +44,22 @@ describe('migration ladder', () => {
     await migrate(db);
 
     /**
-     * The four IndexedDB used, plus the three weather caches.
+     * The four IndexedDB used, plus the three weather caches and the ticket
+     * queue.
      *
-     * `forecast`, `observation` and `alerts` are deliberately NOT the engine's
-     * stores: they hold no records, never enter the outbox and never reach the
-     * wire. They are here because they are in the same file, not because they
-     * are part of the same system — see the migrations' notes and
-     * `contracts/weather.ts`.
+     * `forecast`, `observation`, `alerts` and `tickets` are deliberately NOT
+     * the engine's stores: they hold no records, never enter the outbox and
+     * never reach the wire as mutations. They are here because they are in the
+     * same file, not because they are part of the same system — see the
+     * migrations' notes, `contracts/weather.ts` and
+     * `docs/SUPPORT-LOOP.md` S6.
      *
-     * They are three tables rather than one because they go out of date at
-     * three different rates: a forecast run is regenerated hourly and is stale
-     * after two days; an airfield thermometer reading is worthless within the
-     * hour; an official alert is issued and cancelled on a scale of minutes,
-     * and is the one where showing a lapsed value is dangerous rather than
-     * merely wrong.
+     * The weather three are three rather than one because they go out of date
+     * at three different rates: a forecast run is regenerated hourly and is
+     * stale after two days; an airfield thermometer reading is worthless
+     * within the hour; an official alert is issued and cancelled on a scale of
+     * minutes, and is the one where showing a lapsed value is dangerous rather
+     * than merely wrong.
      */
     expect(await tableNames(db)).toEqual([
       'alerts',
@@ -67,6 +69,7 @@ describe('migration ladder', () => {
       'outbox',
       'quarantine',
       'records',
+      'tickets',
     ]);
   });
 
@@ -86,7 +89,7 @@ describe('migration ladder', () => {
     await Promise.all([migrate(db), migrate(db)]);
 
     expect(await currentVersion(db)).toBe(SCHEMA_VERSION);
-    expect(await tableNames(db)).toHaveLength(7);
+    expect(await tableNames(db)).toHaveLength(8);
   });
 
   /**
@@ -265,12 +268,14 @@ describe('the schema itself', () => {
       "SELECT name FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%' ORDER BY name",
     );
 
-    // Flush reads in clientSeq order, the chip and inbox read by status, and
-    // every projection read is per-entity.
+    // Flush reads in clientSeq order, the chip and inbox read by status,
+    // every projection read is per-entity, and the support screen asks for
+    // the unsent tickets oldest first.
     expect(indexes.map((i) => i.name)).toEqual([
       'outbox_by_seq',
       'outbox_by_status',
       'records_by_entity',
+      'tickets_unsent',
     ]);
   });
 });

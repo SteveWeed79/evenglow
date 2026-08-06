@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  careDues,
   fingerprintOf,
   hash64,
   SUPPORT_BUNDLE_VERSION,
   supportBundleSchema,
+  taskDues,
   type SupportBundle,
 } from '@steading/contracts';
+import { titleFor } from '@steading/api/support/github';
+import { readEnv } from '@steading/api/env';
 
 /**
  * The support bundle, and the fingerprint that decides whether a crash loop
@@ -185,5 +189,167 @@ describe('the bundle', () => {
 
   it('is versioned, so an old device is readable rather than merely parseable', () => {
     expect(supportBundleSchema.safeParse({ ...bundle, v: 99 }).success).toBe(false);
+  });
+});
+
+/**
+ * The title, which is the one human line in the whole artefact (S1).
+ *
+ * It is what somebody scans in a list of forty, so it has to distinguish one
+ * row from the next — and the bundle it comes from is written for a machine.
+ */
+describe('the one line a person reads', () => {
+  const bundle = (over: Partial<SupportBundle> = {}): SupportBundle => ({
+    v: SUPPORT_BUNDLE_VERSION,
+    at: 1_700_000_000_000,
+    app: { version: '0.1.0', platform: 'android' },
+    store: { schemaVersion: 4 },
+    sync: { queued: 0, rejected: 0, lastSyncAt: null, lastError: null },
+    rejections: [],
+    errors: [],
+    fingerprint: 'abc',
+    ...over,
+  });
+
+  it('leads with the failure and names the build', () => {
+    const title = titleFor(
+      bundle({ errors: [{ where: 'flush', message: 'Network error', count: 3 }] }),
+    );
+
+    expect(title).toContain('flush');
+    expect(title).toContain('Network error');
+    // Which build, because the same message from two releases is two defects.
+    expect(title).toContain('0.1.0');
+  });
+
+  it('falls back to the refusal, then to what the farm said', () => {
+    expect(
+      titleFor(bundle({ rejections: [{ entity: 'eggLog', op: 'create', reason: 'bad count', count: 1 }] })),
+    ).toContain('eggLog refused');
+
+    expect(titleFor(bundle({ said: 'the weather row is blank' }))).toContain('weather row');
+  });
+
+  it('says something even when nothing went wrong', () => {
+    // Somebody can raise a ticket because a screen looks odd. An empty title
+    // is a row nobody can tell from the row above it.
+    expect(titleFor(bundle()).length).toBeGreaterThan(10);
+  });
+
+  it('stays inside a title, whatever the message was', () => {
+    const huge = titleFor(
+      bundle({ errors: [{ where: 'x'.repeat(200), message: 'y'.repeat(400), count: 1 }] }),
+    );
+    expect(huge.length).toBeLessThanOrEqual(120);
+    // And collapses the whitespace a stack-ish message brings with it, so the
+    // list does not grow rows of ragged height.
+    expect(huge).not.toMatch(/\s\s/);
+  });
+});
+
+/**
+ * The one route by which a farm's own words could reach a lean bundle.
+ *
+ * `TodayScreen` reports a failed log as `reportTrouble(\`recording
+ * ${done.label.toLowerCase()}\`, error)`, and `where` goes into the bundle and
+ * into the issue title. Every `Due.done.label` in the app today is a constant —
+ * `CARE_KIND_LABELS[kind]`, or the literal "Done" — so nothing leaks. Nothing
+ * *enforced* that, which is the gap this closes: a builder that one day writes
+ * ``label: `Fed ${group.name}` `` would put a farm's herd name on a public
+ * issue tracker, silently, and no other test in this suite would notice.
+ *
+ * Both builders that produce a `done` are checked with sentinel names, because
+ * a fixture called "Nubians" would pass this while a genuine leak of the same
+ * shape went by.
+ */
+describe('what may reach a bundle from a farm', () => {
+  const SENTINEL = 'ZZ-FARM-AUTHORED-ZZ';
+  const NOW = Date.parse('2026-08-06T09:00:00Z');
+
+  it('never puts a farm-authored name on the button label a failure is reported by', () => {
+    const care = careDues(
+      { id: 'f1', name: SENTINEL, species: 'goat', lastDone: { worming: NOW - 90 * 86_400_000 } },
+      NOW,
+    );
+    const tasks = taskDues(
+      { id: 't1', title: SENTINEL, recurrence: 'none', dueAtDate: NOW },
+      SENTINEL,
+    );
+
+    const labels = [...care, ...tasks].map((due) => due.done?.label ?? '');
+
+    // The fixtures have to actually produce rows, or this asserts nothing.
+    expect(labels.length).toBeGreaterThan(0);
+    for (const label of labels) expect(label).not.toContain(SENTINEL);
+  });
+
+  /**
+   * The title is a farm's own sentence and belongs there — it is what makes a
+   * row readable on Today. It just must not be what a *failure* is named by,
+   * which is the distinction above.
+   */
+  it('still lets the farm name the row itself', () => {
+    const [task] = taskDues({ id: 't1', title: SENTINEL, recurrence: 'none', dueAtDate: NOW }, undefined);
+
+    expect(task?.title).toContain(SENTINEL);
+  });
+});
+
+describe('reading the tracker config', () => {
+  const base = {
+    AUTH_SECRET: 'a-test-secret-long-enough-for-hs256-abcdef',
+    MONGODB_URI: 'mongodb://localhost:27017',
+  };
+
+  it('is absent unless both halves are set', () => {
+    // The state a self-hosted server stays in: /support answers 501 and the
+    // app offers its share sheet, which needs no server at all.
+    expect(readEnv(base).supportConfig).toBeNull();
+    expect(readEnv({ ...base, SUPPORT_GITHUB_TOKEN: 'x' }).supportConfig).toBeNull();
+    expect(readEnv({ ...base, SUPPORT_REPO: 'a/b' }).supportConfig).toBeNull();
+  });
+
+  it('splits owner from repo and refuses anything else', () => {
+    expect(
+      readEnv({ ...base, SUPPORT_GITHUB_TOKEN: 'x', SUPPORT_REPO: 'SteveWeed79/steading' })
+        .supportConfig,
+    ).toMatchObject({ owner: 'SteveWeed79', repo: 'steading' });
+
+    expect(() =>
+      readEnv({ ...base, SUPPORT_GITHUB_TOKEN: 'x', SUPPORT_REPO: 'steading' }),
+    ).toThrow(/owner\/repo/);
+  });
+
+  /**
+   * The S5 gate, and it defaults to off.
+   *
+   * A farm cannot meaningfully consent to its records being world-readable on
+   * a prompt in a barn, so the half that carries them stays refused until
+   * somebody sets this deliberately — after the repository is private.
+   */
+  it('refuses the farm-records half unless it is turned on deliberately', () => {
+    const off = readEnv({ ...base, SUPPORT_GITHUB_TOKEN: 'x', SUPPORT_REPO: 'a/b' });
+    expect(off.supportConfig?.acceptRecords).toBe(false);
+
+    for (const value of ['1', 'true', 'TRUE']) {
+      const on = readEnv({
+        ...base,
+        SUPPORT_GITHUB_TOKEN: 'x',
+        SUPPORT_REPO: 'a/b',
+        SUPPORT_ACCEPT_RECORDS: value,
+      });
+      expect(on.supportConfig?.acceptRecords).toBe(true);
+    }
+
+    // Anything that is not an explicit yes is a no.
+    for (const value of ['', '0', 'yes', 'maybe']) {
+      const guess = readEnv({
+        ...base,
+        SUPPORT_GITHUB_TOKEN: 'x',
+        SUPPORT_REPO: 'a/b',
+        SUPPORT_ACCEPT_RECORDS: value,
+      });
+      expect(guess.supportConfig?.acceptRecords).toBe(false);
+    }
   });
 });

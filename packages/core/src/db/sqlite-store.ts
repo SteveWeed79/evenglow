@@ -7,6 +7,7 @@ import {
   type SyncRefusal,
 } from '@steading/contracts';
 import type { SqlDriver, SqlOps, SqlValue } from './driver';
+import type { StoredTicket } from './port';
 import { InvalidMutationError, StorageFullError } from './errors';
 import { migrate } from './migrations';
 import { migrateEnvelope } from './migrate';
@@ -161,6 +162,40 @@ export async function openSqliteStore(
   deps: StoreDeps,
 ): Promise<LocalStore> {
   await migrate(driver);
+
+  // ── support tickets ────────────────────────────────────────────────────────
+
+  /** The row as SQLite hands it back: nullable columns are null, not absent. */
+  interface TicketRow {
+    id: string;
+    at: number;
+    fingerprint: string;
+    bundle: string;
+    records: string | null;
+    attempts: number;
+    lastError: string | null;
+    sentAt: number | null;
+    url: string | null;
+  }
+
+  /**
+   * Null becomes absent, because `exactOptionalPropertyTypes` is on and the
+   * port says these fields are optional rather than nullable — a distinction
+   * the rest of the codebase keeps and this is not the place to break it.
+   */
+  function toTicket(row: TicketRow): StoredTicket {
+    return {
+      id: row.id,
+      at: row.at,
+      fingerprint: row.fingerprint,
+      bundle: row.bundle,
+      attempts: row.attempts,
+      ...(row.records === null ? {} : { records: row.records }),
+      ...(row.lastError === null ? {} : { lastError: row.lastError }),
+      ...(row.sentAt === null ? {} : { sentAt: row.sentAt }),
+      ...(row.url === null ? {} : { url: row.url }),
+    };
+  }
 
   // ── meta ───────────────────────────────────────────────────────────────────
 
@@ -657,6 +692,64 @@ export async function openSqliteStore(
 
     async setLastError(message): Promise<void> {
       await writeMeta(driver, META.lastError, message);
+    },
+
+    // ── support tickets ───────────────────────────────────────────────────
+
+    async enqueueTicket(ticket): Promise<void> {
+      await driver.run(
+        `INSERT INTO tickets (id, at, fingerprint, bundle, records, attempts)
+         VALUES (?, ?, ?, ?, ?, 0)`,
+        [
+          ticket.id,
+          ticket.at,
+          ticket.fingerprint,
+          ticket.bundle,
+          ticket.records ?? null,
+        ],
+      );
+    },
+
+    async pendingTickets(): Promise<StoredTicket[]> {
+      const rows = await driver.all<TicketRow>(
+        'SELECT * FROM tickets WHERE sentAt IS NULL ORDER BY at ASC',
+      );
+      return rows.map(toTicket);
+    },
+
+    async listTickets(limit = 20): Promise<StoredTicket[]> {
+      const rows = await driver.all<TicketRow>(
+        'SELECT * FROM tickets ORDER BY at DESC LIMIT ?',
+        [limit],
+      );
+      return rows.map(toTicket);
+    },
+
+    async markTicketSent(id, at, url): Promise<void> {
+      /**
+       * The row stays, marked — the same reasoning as invariant 7.
+       *
+       * The records go, though, and that is deliberate: a farm's whole
+       * database sitting on the handset a second time, indefinitely, after it
+       * has already reached where it was going, is a copy nobody asked to
+       * keep. The bundle stays because it is small and is the record of what
+       * was reported.
+       */
+      await driver.run(
+        'UPDATE tickets SET sentAt = ?, url = ?, records = NULL, lastError = NULL WHERE id = ?',
+        [at, url, id],
+      );
+    },
+
+    async recordTicketAttempt(id, error): Promise<void> {
+      await driver.run(
+        'UPDATE tickets SET attempts = attempts + 1, lastError = ? WHERE id = ?',
+        [error.slice(0, 300), id],
+      );
+    },
+
+    async dropTicket(id): Promise<void> {
+      await driver.run('DELETE FROM tickets WHERE id = ?', [id]);
     },
 
     async getSyncHeld(): Promise<SyncRefusal | null> {

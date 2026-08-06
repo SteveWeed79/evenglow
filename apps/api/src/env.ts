@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { type PlayConfig, readPlayConfig } from './billing/play';
+import type { SupportConfig } from './support/github';
 
 /**
  * Server configuration, parsed once at the boundary.
@@ -53,6 +54,31 @@ const envSchema = z.object({
   GOOGLE_PLAY_SERVICE_ACCOUNT: z.string().default(''),
   /** The package the purchase must belong to. `com.steading.app`. */
   GOOGLE_PLAY_PACKAGE: z.string().default(''),
+
+  /**
+   * Where support tickets are filed (`docs/SUPPORT-LOOP.md`).
+   *
+   * A GitHub token with issue write on the repository below. Absent, `/support`
+   * answers 501 and the app offers its share sheet instead — which is a
+   * supported state rather than a broken one, and the only state a farm
+   * running its own box will ever be in.
+   */
+  SUPPORT_GITHUB_TOKEN: z.string().default(''),
+  /** `owner/repo`. */
+  SUPPORT_REPO: z.string().default(''),
+  /**
+   * Whether a farm's own records may be accepted alongside a report (S5).
+   *
+   * **Off until the repository is private.** An issue on a public repository
+   * is world-readable, and a farm cannot meaningfully consent to that on a
+   * prompt in a barn. The gate is here rather than in the app because the app
+   * cannot know a repository's visibility, and a build shipped today would be
+   * wrong about it forever.
+   */
+  SUPPORT_ACCEPT_RECORDS: z
+    .string()
+    .default('')
+    .transform((value) => value === '1' || value.toLowerCase() === 'true'),
 });
 
 export type Env = z.infer<typeof envSchema> & {
@@ -60,6 +86,8 @@ export type Env = z.infer<typeof envSchema> & {
   googleClientIds: string[];
   /** Null when this server takes no payments, which is a supported state. */
   playConfig: PlayConfig | null;
+  /** Null when this server has nowhere to file a support ticket. */
+  supportConfig: SupportConfig | null;
 };
 
 /**
@@ -89,5 +117,32 @@ export function readEnv(source: Record<string, string | undefined> = process.env
       parsed.data.GOOGLE_PLAY_SERVICE_ACCOUNT || undefined,
       parsed.data.GOOGLE_PLAY_PACKAGE || undefined,
     ),
+    supportConfig: readSupportConfig(
+      parsed.data.SUPPORT_GITHUB_TOKEN,
+      parsed.data.SUPPORT_REPO,
+      parsed.data.SUPPORT_ACCEPT_RECORDS,
+    ),
   };
+}
+
+/**
+ * Splits `owner/repo` and refuses anything else.
+ *
+ * Null when either half is missing, which is the state a self-hosted server
+ * stays in: `/support` answers 501 and the app offers its share sheet, which
+ * needs no server at all.
+ */
+function readSupportConfig(
+  token: string,
+  repo: string,
+  acceptRecords: boolean,
+): SupportConfig | null {
+  if (token === '' || repo === '') return null;
+
+  const [owner, name] = repo.split('/');
+  if (owner === undefined || name === undefined || owner === '' || name === '') {
+    throw new Error('SUPPORT_REPO must be owner/repo.');
+  }
+
+  return { token, owner, repo: name, acceptRecords };
 }

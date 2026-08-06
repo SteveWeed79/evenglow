@@ -191,6 +191,52 @@ export const MIGRATIONS: readonly Migration[] = [
        )`,
     ],
   },
+
+  {
+    version: 5,
+    statements: [
+      /**
+       * Support tickets, held until they can be sent
+       * (`docs/SUPPORT-LOOP.md` S6).
+       *
+       * **Not in the outbox, and the distinction matters as much as it did for
+       * the forecast.** A ticket is not a farm record: it does not sync between
+       * a farm's devices, it does not belong to the org's history, and it must
+       * never be replayed onto the server as a mutation. Putting it in
+       * `records` would make it all three.
+       *
+       * Many rows rather than one, unlike the caches above: two problems on one
+       * morning are two reports, and a table that could hold one would silently
+       * discard the first — which is the failure the whole loop exists to
+       * prevent.
+       *
+       * `records` is the opt-in half (S2) and is NULL on almost every row. It
+       * is stored beside the bundle rather than regenerated at send time
+       * because consent was given about *this* moment's data: a farm that says
+       * yes on Tuesday and sends on Thursday agreed to Tuesday's records, and
+       * re-reading the database at send would quietly widen that.
+       *
+       * `sentAt` rather than a delete, for the same reason a mutation is marked
+       * applied rather than removed (invariant 7): the history is how somebody
+       * can tell whether the report they filed ever left the phone.
+       */
+      `CREATE TABLE IF NOT EXISTS tickets (
+         id          TEXT PRIMARY KEY,
+         at          INTEGER NOT NULL,
+         fingerprint TEXT NOT NULL,
+         bundle      TEXT NOT NULL,
+         records     TEXT,
+         attempts    INTEGER NOT NULL DEFAULT 0,
+         lastError   TEXT,
+         sentAt      INTEGER,
+         url         TEXT
+       )`,
+
+      // The send loop asks for the unsent, oldest first — the only query this
+      // table has.
+      `CREATE INDEX IF NOT EXISTS tickets_unsent ON tickets (sentAt, at)`,
+    ],
+  },
 ];
 
 /** The version a fresh database is brought to. */

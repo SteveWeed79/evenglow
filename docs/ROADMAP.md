@@ -559,6 +559,52 @@ Small, named so they stop being remembered at the wrong moment.
 
 ---
 
+## 10 — The support loop — **built**
+
+**Designed in full in `docs/SUPPORT-LOOP.md`; S1–S7 there are the rules.**
+
+**Cost of skipping it:** a farm that hits a defect has no way to tell anybody,
+and the person who could fix it has no way to see what happened. There is no
+email sender in this system, a screenshot cannot show a sync queue, and the
+farm is in a barn. That is not a support gap — it is the app going quiet at the
+exact moment it has broken somebody's morning.
+
+What was built:
+
+- **The bundle is machine-first** (S1). Structure and counts, never content:
+  app build, schema version, queue depth, refused-mutation reasons, engine
+  error signatures, a hashed org key. `.strict()`, so a field nobody described
+  cannot ride along. One human line survives, which is whatever the farm chose
+  to say.
+- **The farm's records are the second half and travel only on a yes** (S2) —
+  *"Do you want to send your farm data along with the ticket to help develop
+  the correction?"*, asked when the ticket is raised, defaulting to no, and
+  applying to that ticket only. They are the same sheets the Export screen
+  hands out, deliberately: a farm consenting to send "your records" is entitled
+  to have that phrase mean the same thing in both places.
+- **Tickets arrive as GitHub issues** (S3), deduplicated by a fingerprint label
+  so one device in a crash loop produces one issue with the evidence
+  accumulating on it rather than four hundred. The records half rides as a
+  secret gist the issue links (S4).
+- **The opt-in half is refused server-side until the repository is private**
+  (S5), by an environment variable that defaults to off. The gate is on the
+  server because the app cannot know a repository's visibility and a build
+  shipped today would be wrong about it forever.
+- **A ticket is queued in its own SQLite table and survives everything** (S6) —
+  migration v5, never the outbox.
+- **Two doors** (S7), and the second is a button rather than an automatic
+  fallback. If what is broken is sync, a report travelling over the sync
+  transport cannot leave either; the share sheet needs no server, no account
+  and no signal beyond whatever it is shared into.
+
+**What is left:** the route is rate-limited per address rather than per
+fingerprint, nothing deletes a gist once the fix ships, and there is no channel
+to tell a farm their report mattered. All three are in §6 of `SUPPORT-LOOP.md`.
+And none of it has been on a handset — the share sheet is a native intent, and
+§6 above is the reason that matters.
+
+---
+
 ## What is deliberately not on this list
 
 - **A weather tab.** Answered by the Farm hub.
