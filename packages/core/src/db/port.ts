@@ -46,6 +46,27 @@ export interface IntegrityReport {
   missing: number;
 }
 
+export interface StoredTicket {
+  id: string;
+  at: number;
+  fingerprint: string;
+  /** The lean bundle, serialised. */
+  bundle: string;
+  /**
+   * The farm's records, when they were asked for and agreed to (S2).
+   *
+   * Stored beside the bundle rather than regenerated at send time, because
+   * consent was given about *this* moment's data: a farm that says yes on
+   * Tuesday and sends on Thursday agreed to Tuesday's records, and re-reading
+   * the database at send would quietly widen that.
+   */
+  records?: string | undefined;
+  attempts: number;
+  lastError?: string | undefined;
+  sentAt?: number | undefined;
+  url?: string | undefined;
+}
+
 export interface PullResult {
   applied: number;
   skipped: number;
@@ -212,6 +233,32 @@ export interface LocalStore {
    */
   getSyncHeld(): Promise<SyncRefusal | null>;
   setSyncHeld(refusal: SyncRefusal | null): Promise<void>;
+
+  // ── Support tickets ───────────────────────────────────────────────────────
+
+  /**
+   * A report, held until it can be sent (`docs/SUPPORT-LOOP.md` S6).
+   *
+   * The same promise the mutation queue makes and for the same reason: the
+   * farm is in a barn and the problem happened *now*. Deliberately not in the
+   * outbox — a ticket is not a farm record, does not sync between devices, and
+   * must never be replayed onto the server as a mutation.
+   */
+  enqueueTicket(ticket: StoredTicket): Promise<void>;
+  /** Unsent, oldest first. */
+  pendingTickets(): Promise<StoredTicket[]>;
+  /** Every ticket, newest first, so a screen can say what happened to one. */
+  listTickets(limit?: number): Promise<StoredTicket[]>;
+  /**
+   * Marks it sent, keeping the row.
+   *
+   * The same reasoning as invariant 7: the history is how somebody can tell
+   * whether the report they filed ever left the phone.
+   */
+  markTicketSent(id: string, at: number, url: string | null): Promise<void>;
+  recordTicketAttempt(id: string, error: string): Promise<void>;
+  /** Explicit, and the only way a ticket leaves. */
+  dropTicket(id: string): Promise<void>;
 
   // ── Forecast cache ────────────────────────────────────────────────────────
 

@@ -14,11 +14,16 @@
  * and these files are compiled by webpack too.
  */
 
-export type Endpoint = 'sync' | 'snapshot' | 'photo';
+export type Endpoint = 'sync' | 'snapshot' | 'photo' | 'support';
 
 const PATHS: Record<Endpoint, { sameOrigin: string; api: string }> = {
   sync: { sameOrigin: '/api/sync', api: '/sync' },
   snapshot: { sameOrigin: '/api/pull', api: '/snapshot' },
+  /**
+   * A support ticket (`docs/SUPPORT-LOOP.md`). Unauthenticated at the other
+   * end, and it carries no token — see `support/tickets.ts` for why.
+   */
+  support: { sameOrigin: '/api/support', api: '/support' },
   /**
    * Bytes, not JSON. The id goes on the end as a path segment — see
    * `photoUrl`, which is the only thing that should build one of these.
