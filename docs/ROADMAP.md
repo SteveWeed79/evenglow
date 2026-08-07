@@ -642,6 +642,22 @@ landed. Everything that is a design decision is listed below it, unbuilt.
   list is short and was verified call site by call site.
 - **Round caps and joins on every mark**, which is a two-line diff and most of
   the available warmth without touching a path.
+- **Sixty-four marks became sixteen**, on one test — *does it help you do the
+  thing?* A mark beside a word that already says it is drawn twice on every
+  screen it appears on, and the app had fifty of those. What is left is the
+  header controls (icon-only, no room for a word), the five affordance signals,
+  and the seven sky marks — the one place a mark beats a word, because a week
+  strip is seven silhouettes read at once. All sixteen are geometry, so none of
+  them waits on an artist. **The lamp went with them**: it was a drawing of an
+  oil lamp that was never good at 24px, and the filled dot inside it was always
+  the whole signal. It is a ring now, filled when lit.
+- **The tab bar is words.** "Today", "the farm" and "history" have no objects
+  behind them; the three marks that stood in were told apart by the word
+  underneath. `TAB_DIVIDER` is what now says three words are three things.
+- **Every pressable declares its affordance** (`components/Touch.tsx`), held by
+  lint, by the type, and by `tests/screens/affordance.test.tsx` over all
+  forty-five screens. It reads declarations rather than drawings, which is what
+  let the mark set be cut underneath it without weakening a single assertion.
 - **The arch can carry its own light.** `<Arch glow>` paints the lamp glow as a
   `RadialGradient` clipped by the same path that draws the door — one element
   rather than a second positioned layer that would spill past the arched head.

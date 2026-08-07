@@ -4,18 +4,7 @@ import { BREEDING_METHODS, GESTATION_DAYS, newId } from '@steading/contracts';
 import { listAnimals, possibleDams } from '@steading/core/read/animals';
 import { listBreedings } from '@steading/core/read/breeding';
 import { listGroups } from '@steading/core/read/groups';
-import {
-  Choice,
-  Confirm,
-  DayPick,
-  Failure,
-  Field,
-  Primary,
-  Stepper,
-  TextField,
-  useSaver,
-} from '../components/Form';
-import { Icon } from '../components/Icon';
+import { Choice, Confirm, DayPick, Failure, Field, Primary, Stepper, TextField, useSaver } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
@@ -127,7 +116,6 @@ export function BreedingScreen({ route }: ScreenProps<'Breeding'>): React.ReactE
       {dams.length === 0 ? (
         <Panel label="Name her first">
           <View style={styles.spot}>
-            <Icon name="head-count" size={56} color={colors.muted} />
           </View>
           <Body>
             A mating is recorded against one animal, so the dam has to have a name before there

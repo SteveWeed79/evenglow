@@ -2,13 +2,12 @@ import { useCallback } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { listInventory, runningLow, type StockItem } from '@steading/core/read/iron';
 import { Primary, Stepper } from '../components/Form';
-import { Icon } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
+import { useTheme } from '../theme/ThemeProvider';
 import { useNav } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
-import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
 
 /**
@@ -26,7 +25,6 @@ import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
  */
 export function InventoryScreen(): React.ReactElement {
   const nav = useNav();
-  const { colors } = useTheme();
   const items = useLive(listInventory);
 
   if (items === null) return <Screen title="The shelf">{null}</Screen>;
@@ -38,7 +36,6 @@ export function InventoryScreen(): React.ReactElement {
       {items.length === 0 ? (
         <Panel label="Nothing tracked">
           <View style={styles.spot}>
-            <Icon name="parts" size={56} color={colors.muted} />
           </View>
           {/* Empty screens invite (UX-SPEC §6). */}
           <Body>

@@ -1,8 +1,7 @@
-import { StyleSheet, Text } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { heldLabel } from '@steading/contracts';
 import type { SyncState } from '@steading/core/sync/engine';
 import { apiFault } from '../boot/config';
-import { Icon, type IconName } from './Icon';
 import { Touch } from './Touch';
 import { useNav } from '../hooks/useNav';
 import { useSync } from '../hooks/useSync';
@@ -35,16 +34,16 @@ import { useTheme } from '../theme/ThemeProvider';
 function describe(
   state: SyncState,
   colors: { leaf: string; damson: string; rowan: string; muted: string },
-): { label: string; icon: IconName; tint: string } {
+): { label: string; tint: string } {
   switch (state.kind) {
     case 'synced':
-      return { label: 'Saved', icon: 'saved', tint: colors.leaf };
+      return { label: 'Saved', tint: colors.leaf };
     case 'queued':
-      return { label: `${state.count} waiting`, icon: 'waiting', tint: colors.damson };
+      return { label: `${state.count} waiting`, tint: colors.damson };
     case 'syncing':
-      return { label: `Sending ${state.count}`, icon: 'sending', tint: colors.damson };
+      return { label: `Sending ${state.count}`, tint: colors.damson };
     case 'rejected':
-      return { label: `${state.count} need a look`, icon: 'needs-a-look', tint: colors.rowan };
+      return { label: `${state.count} need a look`, tint: colors.rowan };
     /**
      * The free tier, and it is **not** rowan.
      *
@@ -57,7 +56,7 @@ function describe(
      * and nothing here is in flight.
      */
     case 'held':
-      return { label: heldLabel(state.count), icon: 'saved', tint: colors.muted };
+      return { label: heldLabel(state.count), tint: colors.muted };
   }
 }
 
@@ -83,10 +82,10 @@ export function SyncChip(): React.ReactElement {
    */
   const fault = apiFault();
 
-  const { label, icon, tint } =
+  const { label, tint } =
     fault === null
       ? describe(state, colors)
-      : { label: 'Not set up', icon: 'needs-a-look' as IconName, tint: colors.rowan };
+      : { label: 'Not set up', tint: colors.rowan };
 
   return (
     <Touch affordance="chevron"
@@ -107,13 +106,25 @@ export function SyncChip(): React.ReactElement {
         { backgroundColor: colors.raised, borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
       ]}
     >
-      <Icon name={icon} size={16} color={tint} />
+      {/**
+       * A dot, not a mark.
+       *
+       * The chip already says "2 need a look" or "Saved" in words, so a mark
+       * beside it drew the same fact twice — and six near-identical circles
+       * were six drawings whose whole job was to be told apart at 16px, which
+       * is the size at which they cannot be.
+       *
+       * Colour is never the only carrier (WCAG 1.4.1): the label is the state
+       * and the dot is how it is found across a room.
+       */}
+      <View style={[styles.dot, { backgroundColor: tint }]} />
       <Text style={[styles.label, { color: colors.muted }]}>{label}</Text>
     </Touch>
   );
 }
 
 const styles = StyleSheet.create({
+  dot: { width: 8, height: 8, borderRadius: RADII.pill },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',

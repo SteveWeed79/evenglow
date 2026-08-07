@@ -104,7 +104,6 @@ export function WeatherScreen(): React.ReactElement {
 
           <Secondary
             label={fetching ? 'Asking…' : 'Ask again'}
-            icon="try-again"
             testID="weather-again"
             onPress={again}
           />
@@ -379,7 +378,6 @@ function WhereIsTheFarm({ again = false }: { again?: boolean }): React.ReactElem
     return (
       <Secondary
         label={site?.placeName === undefined ? 'Where is the farm?' : `Where: ${site.placeName}`}
-        icon="search"
         testID="weather-where"
         onPress={() => setOpen(true)}
       />
@@ -411,7 +409,6 @@ function WhereIsTheFarm({ again = false }: { again?: boolean }): React.ReactElem
         />
         <Secondary
           label={searching ? 'Looking…' : 'Look it up'}
-          icon="search"
           testID="weather-search"
           onPress={() => void search()}
         />

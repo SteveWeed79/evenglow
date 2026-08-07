@@ -70,7 +70,6 @@ export function HistoryScreen(): React.ReactElement {
         <Panel label="Nothing logged yet">
           {/* Empty screens invite (UX-SPEC §6). */}
           <View style={styles.spot}>
-            <Icon name="season" size={56} color={colors.muted} />
           </View>
           <Body>
             Every tally, feed, treatment and loss you record lands here, oldest kept for as long

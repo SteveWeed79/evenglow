@@ -2,7 +2,6 @@ import { StyleSheet, Text, View } from 'react-native';
 import { incubationStage } from '@steading/contracts';
 import { listIncubations } from '@steading/core/read/breeding';
 import { Primary, Row } from '../components/Form';
-import { Icon } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
@@ -40,7 +39,6 @@ export function IncubationsScreen(): React.ReactElement {
       {incubations.length === 0 ? (
         <Panel label="Nothing set">
           <View style={styles.spot}>
-            <Icon name="egg" size={56} color={colors.muted} />
           </View>
           {/* Empty screens invite (UX-SPEC §6). */}
           <Body>
@@ -72,7 +70,6 @@ export function IncubationsScreen(): React.ReactElement {
               month: 'short',
             })}`
           }${incubation.candledAt === undefined ? '' : ' · candled'}`}
-          icon="egg"
           onPress={() => nav.navigate('Incubation', { incubationId: incubation.id })}
         />
       ))}
@@ -85,7 +82,6 @@ export function IncubationsScreen(): React.ReactElement {
           key={incubation.id}
           title={incubation.label}
           detail={`${incubation.hatched ?? 0} of ${incubation.eggsSet} hatched`}
-          icon="egg"
           onPress={() => nav.navigate('Incubation', { incubationId: incubation.id })}
         />
       ))}

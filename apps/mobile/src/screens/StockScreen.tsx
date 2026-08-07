@@ -8,8 +8,8 @@ import { Screen } from '../components/Screen';
 import { Touch } from '../components/Touch';
 import { growOutWindow, layOnsetWindow } from '../hooks/useDues';
 import { useGroups } from '../hooks/useGroups';
-import { useNav } from '../hooks/useNav';
 import { useTheme } from '../theme/ThemeProvider';
+import { useNav } from '../hooks/useNav';
 import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
 
 /**
@@ -24,7 +24,6 @@ import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
  */
 export function StockScreen(): React.ReactElement {
   const { groups, loading } = useGroups();
-  const { colors } = useTheme();
   const nav = useNav();
 
   if (loading) return <Screen title="Stock" back>{null}</Screen>;
@@ -34,7 +33,6 @@ export function StockScreen(): React.ReactElement {
       {groups.length === 0 ? (
         <Panel label="Nothing here yet">
           <View style={styles.spot}>
-            <Icon name="stock" size={56} color={colors.muted} />
           </View>
           {/* Empty screens invite (UX-SPEC §6). */}
           <Body>

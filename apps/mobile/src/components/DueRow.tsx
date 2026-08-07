@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { type Due, type DueKind, dueDate, type Urgency, urgencyOf } from '@steading/contracts';
-import { Icon, type IconName } from './Icon';
+import { type Due, dueDate, type Urgency, urgencyOf } from '@steading/contracts';
+import { Icon } from './Icon';
 import { Touch } from './Touch';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
@@ -13,23 +13,6 @@ import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
  * reserved for what you act on, and a due row is read and then acted on
  * somewhere else.
  */
-
-/** The mark for each kind. Every one exists in the set — check:icons proves it. */
-const MARKS: Record<DueKind, IconName> = {
-  withdrawal: 'withdrawal',
-  service: 'service',
-  storage: 'iron',
-  'start-indoors': 'growing',
-  sow: 'growing',
-  transplant: 'growing',
-  harvest: 'basket',
-  birth: 'stock',
-  hatch: 'egg',
-  candle: 'egg',
-  processing: 'meat',
-  shearing: 'basic-full',
-  task: 'date-due',
-};
 
 const DAY_MS = 86_400_000;
 
@@ -130,7 +113,6 @@ export function DueRow({
 
   const body = (
     <>
-      <Icon name={MARKS[due.kind]} size={24} color={colour} />
 
       <View style={styles.words}>
         <Text style={[styles.title, { color: colors.ink }]}>{due.title}</Text>

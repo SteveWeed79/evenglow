@@ -6,8 +6,8 @@ import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { Touch } from '../components/Touch';
 import { useLive } from '../hooks/useLive';
-import { useNav } from '../hooks/useNav';
 import { useTheme } from '../theme/ThemeProvider';
+import { useNav } from '../hooks/useNav';
 import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
 
 /**
@@ -26,7 +26,6 @@ import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
  * machinery. It is on the Farm hub as well now.
  */
 export function IronScreen(): React.ReactElement {
-  const { colors } = useTheme();
   const nav = useNav();
 
   const machines = useLive(listMachines);
@@ -41,7 +40,6 @@ export function IronScreen(): React.ReactElement {
       {machines.length === 0 ? (
         <Panel label="No equipment yet">
           <View style={styles.spot}>
-            <Icon name="bench" size={56} color={colors.muted} />
           </View>
           {/* Empty screens invite (UX-SPEC §6). */}
           <Body>Add your tractor and its service schedule comes with it.</Body>
@@ -69,7 +67,6 @@ export function IronScreen(): React.ReactElement {
             ? `Running low: ${low.map((item) => item.name).join(', ')}`
             : 'Feed, bedding, medicine and parts'
         }
-        icon="parts"
         testID="go-inventory"
         onPress={() => nav.navigate('Inventory')}
       />

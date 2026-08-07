@@ -46,11 +46,18 @@ describe('the bottom bar', () => {
     expect(TABS.length).toBeLessThanOrEqual(MOST_TABS);
   });
 
-  it('gives every tab its own name and its own mark', () => {
-    // Two tabs sharing an icon is a bar you navigate by position, which is the
-    // one thing a bar of icons must not be.
+  /**
+   * The bar is words now.
+   *
+   * It used to assert a distinct mark per tab as well, on the argument that
+   * two tabs sharing an icon is a bar you navigate by position. That argument
+   * survives and its subject does not: the three marks were a doorway, a
+   * doorway with a floor, and a bare tree, told apart by the word beneath
+   * them. The word was doing the work, so the word is what is left — and the
+   * lines between them are what say three words are three things.
+   */
+  it('gives every tab its own name', () => {
     expect(new Set(TABS.map((t) => t.name)).size).toBe(TABS.length);
-    expect(new Set(TABS.map((t) => t.icon)).size).toBe(TABS.length);
   });
 
   it('uses no name that needs a space to read', () => {

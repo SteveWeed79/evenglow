@@ -2,7 +2,6 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { dividerOffsets, TAB_DIVIDER, tabs } from './tab-marks';
-import { Icon, type IconName } from '../components/Icon';
 import { FarmScreen } from '../screens/FarmScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
 import { TodayScreen } from '../screens/TodayScreen';
@@ -29,7 +28,7 @@ import { FONTS, TAP, TYPE } from '../theme/tokens';
  * settings belong and where R3 will hang the sync chip beside them.
  */
 
-/** The screen behind each mark. Names and marks live in `tab-marks.ts`. */
+/** The screen behind each tab. The names live in `tab-marks.ts`. */
 const SCREENS: Record<string, () => React.ReactElement> = {
   Today: TodayScreen,
   Farm: FarmScreen,
@@ -82,7 +81,7 @@ export function Tabs(): React.ReactElement {
         tabBarBackground: () => <TabDividers count={TABS.length} />,
       }}
     >
-      {TABS.map(({ name, icon }) => (
+      {TABS.map(({ name }) => (
         <Tab.Screen
           key={name}
           name={name}
@@ -90,7 +89,7 @@ export function Tabs(): React.ReactElement {
           options={{
             tabBarAccessibilityLabel: name,
             tabBarIcon: ({ focused }) => (
-              <TabMark icon={icon} label={name} focused={focused} count={TABS.length} />
+              <TabMark label={name} focused={focused} count={TABS.length} />
             ),
           }}
         />
@@ -143,7 +142,11 @@ function TabDividers({ count }: { count: number }): React.ReactElement {
 }
 
 /**
- * One tab: its mark, and its name under it.
+ * One tab: its name, and nothing else.
+ *
+ * The mark that used to sit above it was a doorway, and the word under it said
+ * "TODAY" — so the bar drew every label twice. The words carry it now, at the
+ * size the mark used to leave room for.
  *
  * ## Why the label needed fixing
  *
@@ -165,12 +168,10 @@ function TabDividers({ count }: { count: number }): React.ReactElement {
  * name regardless of what is drawn.
  */
 function TabMark({
-  icon,
   label,
   focused,
   count,
 }: {
-  icon: IconName;
   label: string;
   focused: boolean;
   count: number;
@@ -184,7 +185,6 @@ function TabMark({
 
   return (
     <View style={styles.mark}>
-      <Icon name={icon} size={roomy ? 26 : 24} color={tint} />
       <Text
         // The whole point: one line, always. Everything else is how it copes.
         numberOfLines={1}
@@ -197,7 +197,7 @@ function TabMark({
           {
             color: tint,
             letterSpacing: roomy ? 1.2 : 0,
-            fontSize: roomy ? TYPE.label - 2 : TYPE.label - 3,
+            fontSize: roomy ? TYPE.label : TYPE.label - 2,
           },
         ]}
       >

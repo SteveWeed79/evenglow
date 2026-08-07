@@ -29,8 +29,10 @@ export function LampToggle(): React.ReactElement {
       hitSlop={12}
       style={styles.lamp}
     >
-      {/* The pair differs by the glass fill and nothing else — the handoff is
-          explicit about that, and it is what makes the state readable at 20px. */}
+      {/* A ring, filled when lit. The pair differs by the fill and nothing
+          else, which is what makes the state readable at this size — and is
+          all that survived of a lamp that could never be drawn well at 24px.
+          See `Icon.tsx`. */}
       <Icon
         name={theme === 'lamplight' ? 'lamp-lit' : 'lamp-unlit'}
         size={24}

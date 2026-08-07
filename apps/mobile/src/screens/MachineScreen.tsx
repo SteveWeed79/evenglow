@@ -105,7 +105,6 @@ export function MachineScreen({ route }: ScreenProps<'Machine'>): React.ReactEle
               ]
                 .filter((part): part is string => part !== null)
                 .join(' · ')}
-              icon="service"
               onPress={() => nav.navigate('ServiceDone', { serviceId: service.id })}
             />
           );

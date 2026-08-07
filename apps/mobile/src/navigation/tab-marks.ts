@@ -1,4 +1,3 @@
-import type { IconName } from '../components/Icon';
 
 /**
  * The tabs, as data: what each is called and which mark it carries.
@@ -34,23 +33,28 @@ import type { IconName } from '../components/Icon';
 export type TabName = 'Today' | 'Farm' | 'History';
 
 export interface TabMarkSpec {
-  /**
-   * Named as a union rather than a string so the navigator keeps its route
-   * checking — `Tab.Screen name=` will not take an arbitrary string, and a
-   * typo here should be a compile error rather than a tab that goes nowhere.
-   */
   name: TabName;
-  icon: IconName;
 }
 
 export const TAB_MARKS: readonly TabMarkSpec[] = [
-  { name: 'Today', icon: 'today' },
+  /**
+   * Text, not marks.
+   *
+   * "Today", "the farm" and "history" have no objects behind them — the three
+   * marks that stood in were a doorway, a doorway with a floor, and a bare
+   * tree, told apart by the word underneath. The word was carrying the bar the
+   * whole time; the marks were carrying the redundancy.
+   *
+   * With them gone the three words need something to say they are three
+   * things, which is what `TAB_DIVIDER` is for.
+   */
+  { name: 'Today' },
   /**
    * The hub. `arch` rather than `stock`, which belongs to the animals row
    * inside it — a tab wearing the mark of one of its own children reads as
    * that child.
    */
-  { name: 'Farm', icon: 'arch' },
+  { name: 'Farm' },
   /**
    * "History" here, "What happened" on the screen, and that is deliberate.
    *
@@ -59,7 +63,7 @@ export const TAB_MARKS: readonly TabMarkSpec[] = [
    * whole file exists to stop. So the bar gets the signpost and the screen
    * gets the sentence, which is the farm's own words for it.
    */
-  { name: 'History', icon: 'season' },
+  { name: 'History' },
 ];
 
 /**

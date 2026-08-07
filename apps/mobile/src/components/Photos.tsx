@@ -4,7 +4,6 @@ import { newId } from '@steading/contracts';
 import { listPhotos, type Photo } from '@steading/core/read/photos';
 import { capture, forgetBytes, hasBytes, photoUri } from '../photos/store';
 import { Confirm, Failure, Secondary } from './Form';
-import { Icon } from './Icon';
 import { Body, Panel } from './Panel';
 import { Touch } from './Touch';
 import { useLive } from '../hooks/useLive';
@@ -180,7 +179,6 @@ export function Photos({
                       { borderColor: open === photo.id ? colors.lanternInk : colors.border },
                     ]}
                   >
-                    <Icon name="offline" size={24} color={colors.muted} />
                     <Text style={[styles.label, { color: colors.muted }]}>On the other phone</Text>
                   </View>
                 )}
@@ -228,13 +226,11 @@ export function Photos({
       <View style={styles.actions}>
         <Secondary
           label={busy ? 'Working…' : 'Take one'}
-          icon="photo"
           onPress={() => void add('camera')}
           testID="photo-camera"
         />
         <Secondary
           label="Choose one"
-          icon="basket"
           onPress={() => void add('library')}
           testID="photo-library"
         />

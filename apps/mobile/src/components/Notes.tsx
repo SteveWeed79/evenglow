@@ -122,7 +122,6 @@ export function Notes({
           },
         ]}
       >
-        <Icon name="edit" size={24} color={thread.length === 0 ? colors.muted : colors.lanternInk} />
 
         <View style={styles.collapsedWords}>
           <View style={styles.head}>
@@ -338,7 +337,6 @@ function NoteRow({
             <Text style={[styles.body, { color: colors.ink }]}>{note.body}</Text>
 
             <View style={styles.by}>
-              <Icon name="head-count" size={16} color={colors.muted} />
               <Text style={[styles.byline, { color: colors.muted }]}>
                 {/* Unattributed rather than guessed at: a note that synced from a
                     build without a name should not claim to be from this device. */}
@@ -359,7 +357,6 @@ function NoteRow({
                 <View style={styles.half}>
                   <Secondary
                     label="Change it"
-                    icon="edit"
                     onPress={() => setEditing(true)}
                     testID={`note-edit-open-${note.id}`}
                   />

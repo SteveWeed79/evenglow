@@ -38,7 +38,6 @@ export function GrowingScreen(): React.ReactElement {
       <Screen title="Growing" back>
         <Panel label="First, where are you?">
           <View style={styles.spot}>
-            <Icon name="growing" size={56} color={colors.muted} />
           </View>
           <Body>
             Every sowing date is counted from your last spring frost, and every autumn crop is
@@ -62,7 +61,6 @@ export function GrowingScreen(): React.ReactElement {
   return (
     <Screen title="Growing" back>
       <View style={[styles.season, { backgroundColor: colors.raised, borderColor: colors.border }]}>
-        <Icon name="season" size={24} color={colors.lanternInk} />
         <Text style={[styles.seasonWords, { color: colors.ink }]}>
           {/* The number that decides whether a 120-day melon is possible at all. */}
           {days} days between frosts
@@ -157,7 +155,6 @@ function BedCard({
           { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
         ]}
       >
-        <Icon name="growing" size={20} color={colors.ink} />
         <Text style={[styles.plantLabel, { color: colors.ink }]}>Plant something here</Text>
       </Touch>
     </View>

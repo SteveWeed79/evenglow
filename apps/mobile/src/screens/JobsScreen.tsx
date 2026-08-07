@@ -144,7 +144,6 @@ export function JobsScreen(): React.ReactElement {
           <Row
             title={task.title}
             detail={detailOf(task)}
-            icon="date-due"
             // A tick, not a chevron: pressing this finishes the job rather
             // than opening anything, and the mark is the promise.
             mark="check"

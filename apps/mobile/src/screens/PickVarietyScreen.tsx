@@ -167,7 +167,6 @@ export function PickVarietyScreen({ route }: ScreenProps<'PickVariety'>): React.
   return (
     <Screen title={`Plant in ${bed.name}`} back>
       <View style={styles.search}>
-        <Icon name="search" size={24} color={colors.muted} />
         <TextInput
           value={query}
           onChangeText={setQuery}

@@ -4,7 +4,6 @@ import * as Haptics from 'expo-haptics';
 import type { QueuedMutation } from '@steading/core/db/records';
 import { discardRejected, listRejected, retryRejected } from '@steading/core/sync/inbox';
 import { nudge, subscribe } from '@steading/core/sync/engine';
-import { Icon } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { Touch } from '../components/Touch';
@@ -99,7 +98,6 @@ export function InboxScreen(): React.ReactElement {
       {rejected.length === 0 ? (
         <Panel label="Nothing to look at">
           <View style={styles.spot}>
-            <Icon name="saved" size={56} color={colors.leaf} />
           </View>
           <Body>
             Everything you have logged has either been sent or is waiting to be. Nothing has
@@ -122,7 +120,6 @@ export function InboxScreen(): React.ReactElement {
           style={[styles.card, { backgroundColor: colors.raised, borderColor: colors.rowan }]}
         >
           <View style={styles.head}>
-            <Icon name="needs-a-look" size={24} color={colors.rowan} />
             <View style={styles.words}>
               <Text style={[styles.title, { color: colors.ink }]}>
                 {NOUNS[mutation.entity] ?? mutation.entity}
@@ -159,13 +156,11 @@ export function InboxScreen(): React.ReactElement {
 
           <View style={styles.actions}>
             <Action
-              icon="try-again"
               label="Send it again"
               testID={`retry-${mutation.id}`}
               onPress={() => void retry(mutation.id)}
             />
             <Action
-              icon="discard"
               label={armed === mutation.id ? 'Tap again to throw away' : 'Throw away'}
               danger={armed === mutation.id}
               testID={`discard-${mutation.id}`}
@@ -179,13 +174,11 @@ export function InboxScreen(): React.ReactElement {
 }
 
 function Action({
-  icon,
   label,
   onPress,
   danger = false,
   testID,
 }: {
-  icon: 'try-again' | 'discard';
   label: string;
   onPress: () => void;
   danger?: boolean;
@@ -207,7 +200,6 @@ function Action({
         },
       ]}
     >
-      <Icon name={icon} size={20} color={danger ? '#fff' : colors.ink} />
       <Text style={[styles.actionLabel, { color: danger ? '#fff' : colors.ink }]}>{label}</Text>
     </Touch>
   );

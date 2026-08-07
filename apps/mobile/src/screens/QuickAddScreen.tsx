@@ -6,7 +6,6 @@ import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useGroups } from '../hooks/useGroups';
 import { useNav } from '../hooks/useNav';
-import type { IconName } from '../components/Icon';
 
 /**
  * Log something without starting from the animal.
@@ -56,7 +55,6 @@ interface Act {
   key: string;
   title: string;
   detail: string;
-  icon: IconName;
   route: GroupRoute;
 }
 
@@ -72,22 +70,19 @@ const ACTS: readonly Act[] = [
     key: 'treatment',
     title: 'Record a treatment',
     detail: 'Starts the withdrawal clock',
-    icon: 'medication',
     route: 'Treatment',
   },
   {
     key: 'care',
     title: 'Log a job done',
     detail: 'Worming, feet, minerals, a look-over',
-    icon: 'check',
     route: 'CareLog',
   },
-  { key: 'feed', title: 'Log a feed', detail: 'What went in, and how much', icon: 'feed', route: 'Feed' },
+  { key: 'feed', title: 'Log a feed', detail: 'What went in, and how much', route: 'Feed' },
   {
     key: 'loss',
     title: 'Record a loss',
     detail: 'A death, a cull, or a predator',
-    icon: 'mortality',
     route: 'Loss',
   },
 ];
@@ -138,7 +133,6 @@ export function QuickAddScreen(): React.ReactElement {
             key={option.key}
             title={option.title}
             detail={option.detail}
-            icon={option.icon}
             testID={`quick-${option.key}`}
             onPress={() => choose(option)}
           />
@@ -155,7 +149,6 @@ export function QuickAddScreen(): React.ReactElement {
           key={group.id}
           title={group.name}
           detail={`${group.count} ${SPECIES_TRAITS[group.species].label.toLowerCase()}`}
-          icon="stock"
           testID={`quick-group-${group.id}`}
           onPress={() => open(act, group.id)}
         />

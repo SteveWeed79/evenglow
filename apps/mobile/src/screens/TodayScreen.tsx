@@ -1,26 +1,10 @@
 import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import {
-  type ActiveWithdrawal,
-  dailyProductsOf,
-  type Due,
-  type DueBundle,
-  enteredToStored,
-  entryUnit,
-  gramsToUg,
-  longestWithdrawal,
-  massIn,
-  type Measure,
-  mlToUl,
-  type Product,
-  todayBundles,
-  type UnitSystem,
-  volumeIn,
-} from '@steading/contracts';
+import { type ActiveWithdrawal, dailyProductsOf, type Due, type DueBundle, enteredToStored, entryUnit, gramsToUg, longestWithdrawal, massIn, type Measure, mlToUl, type Product, todayBundles, type UnitSystem, volumeIn } from '@steading/contracts';
 import type { Group } from '@steading/core/read/groups';
 import { basketConfirmation } from '@steading/core/voice';
 import { DueRow } from '../components/DueRow';
-import { Icon, type IconName } from '../components/Icon';
+import { Icon } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { Tally } from '../components/Tally';
@@ -102,9 +86,6 @@ import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
  * nobody finishes reading.
  */
 const VISIBLE_DUES = 5;
-
-const MARKS: Record<Product, IconName> = { eggs: 'egg', milk: 'milk', fibre: 'basic-full' };
-
 /** What `productionLog` stores this product as. Eggs are counted, not measured. */
 const STORED: Record<Exclude<Product, 'eggs'>, 'ml' | 'g'> = { milk: 'ml', fibre: 'g' };
 
@@ -226,7 +207,6 @@ export function TodayScreen(): React.ReactElement {
         <Panel label="Nothing to log yet">
           {/* Empty screens invite (UX-SPEC §6). */}
           <View style={styles.spot}>
-            <Icon name="nest-box" size={56} color={colors.muted} />
           </View>
           <Body>Add what you keep under Stock, and the morning&rsquo;s tally lands here.</Body>
         </Panel>
@@ -458,7 +438,6 @@ function ProductTally({
           },
         ]}
       >
-        <Icon name={MARKS[product]} size={24} color={open ? colors.lanternInk : colors.muted} />
 
         <View style={styles.name}>
           <Text style={[styles.groupName, { color: colors.ink }]}>{group.name}</Text>

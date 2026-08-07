@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import type { Warning, WarningKind } from '@steading/contracts';
-import { Icon, type IconName } from './Icon';
+import type { Warning } from '@steading/contracts';
 import { Touch } from './Touch';
 import { useWarnings } from '../hooks/useWarnings';
 import { useTheme } from '../theme/ThemeProvider';
@@ -58,16 +57,6 @@ import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
  * matters every single morning is below it.
  */
 const VISIBLE_WARNINGS = 3;
-
-const MARKS: Record<WarningKind, IconName> = {
-  frost: 'season',
-  freeze: 'waterer',
-  'heat-poultry': 'sky-clear',
-  'heat-ruminant': 'sky-clear',
-  'heat-camelid': 'sky-clear',
-  'birth-cold': 'milestone',
-  'shearing-wet': 'sky-rain',
-};
 
 export function WeatherWarnings(): React.ReactElement | null {
   const { warnings } = useWarnings();
@@ -130,7 +119,6 @@ function WarningRow({ warning }: { warning: Warning }): React.ReactElement {
       // the alarm without the instruction.
       accessibilityLabel={`${warning.title} ${warning.detail}`}
     >
-      <Icon name={MARKS[warning.kind]} size={24} color={edge} />
       <View style={styles.words}>
         <Text style={[styles.title, { color: colors.ink }]}>{warning.title}</Text>
         <Text style={[styles.detail, { color: colors.muted }]}>{warning.detail}</Text>

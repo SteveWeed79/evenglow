@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { readSite } from '@steading/core/read/growing';
 import { Row } from '../components/Form';
-import { Icon } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { Touch } from '../components/Touch';
@@ -69,7 +68,6 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
         <Row
           title="My farm"
           detail="What you run — animals, crops, machines"
-          icon="stock"
           testID="go-my-farm"
           onPress={() => nav.navigate('MyFarm')}
         />
@@ -94,21 +92,18 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
         <Row
           title="Who is on this farm"
           detail="Invite someone, or change what they may do"
-          icon="head-count"
           testID="go-members"
           onPress={() => nav.navigate('Members')}
         />
         <Row
           title="Eggs under"
           detail="Sets in the incubator or under a broody"
-          icon="egg"
           testID="go-incubations"
           onPress={() => nav.navigate('Incubations')}
         />
         <Row
           title="The shelf"
           detail="Feed, bedding, medicine and parts"
-          icon="parts"
           onPress={() => nav.navigate('Inventory')}
         />
         <Row
@@ -118,21 +113,18 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
               ? 'Frost dates — nothing on Growing works without them'
               : 'Frost dates and hardiness zone'
           }
-          icon="season"
           testID="go-site"
           onPress={() => nav.navigate('SiteSetup')}
         />
         <Row
           title="Get your records out"
           detail="Spreadsheets for a vet, an accountant, or whoever buys the tractor"
-          icon="export"
           testID="go-export"
           onPress={() => nav.navigate('Export')}
         />
         <Row
           title="Sync"
           detail="What is waiting, what was refused, and why"
-          icon="diagnostics"
           testID="go-diagnostics"
           onPress={() => nav.navigate('Diagnostics')}
         />
@@ -144,14 +136,12 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
         <Row
           title="Something is wrong"
           detail="Tell us what happened — the app fills in the rest"
-          icon="needs-a-look"
           testID="go-support"
           onPress={() => nav.navigate('Support')}
         />
         <Row
           title="Licences"
           detail="The open-source typefaces this app is set in"
-          icon="basic-full"
           testID="go-licences"
           onPress={() => nav.navigate('Licences')}
         />
@@ -178,7 +168,6 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
           ]}
         >
           <View style={styles.row}>
-            <Icon name="sign-out" size={24} color={armed ? '#fff' : colors.ink} />
             <Text style={[styles.signOutLabel, { color: armed ? '#fff' : colors.ink }]}>
               {armed ? 'Tap again to sign out' : 'Sign out'}
             </Text>

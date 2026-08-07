@@ -99,7 +99,6 @@ export function DiagnosticsScreen(): React.ReactElement {
         <Row
           title={`${report.rejected} need a look`}
           detail="The server refused these — send them again or throw them away"
-          icon="needs-a-look"
           testID="go-inbox"
           onPress={() => nav.navigate('Inbox')}
         />
@@ -166,13 +165,11 @@ export function DiagnosticsScreen(): React.ReactElement {
             — see NudgeOptions.force. */}
         <Secondary
           label="Try sending now"
-          icon="try-again"
           onPress={() => nudge(undefined, { force: true })}
           testID="nudge"
         />
         <Secondary
           label={pulling ? 'Fetching…' : 'Fetch from the farm'}
-          icon="export"
           onPress={() => void pull()}
         />
       </View>

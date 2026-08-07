@@ -115,7 +115,6 @@ function AlertRow({
       ]}
     >
       <View style={styles.head}>
-        <Icon name="waterer" size={24} color={edge} />
         <View style={styles.words}>
           <Text style={[styles.title, { color: colors.ink }]}>{alert.event}</Text>
           {alert.headline === undefined ? null : (
