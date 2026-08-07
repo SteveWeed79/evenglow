@@ -374,6 +374,41 @@ describe('the Settings row', () => {
     screen.unmount();
   });
 
+  /**
+   * The two rows sit one above the other and "export" is the word most people
+   * already attach to backing up. Without this line somebody frightened about
+   * a failing phone sends themselves thirteen spreadsheets, believes they are
+   * covered, and finds out otherwise on the worst possible day.
+   */
+  it('says the spreadsheets cannot be put back', async () => {
+    await aFarm(6);
+    const screen = await mount(<SettingsScreen onSignedOut={() => undefined} />);
+
+    expect(reads(screen)).toContain('cannot be put back');
+    screen.unmount();
+  });
+
+  /**
+   * The date is the one fact that makes a wrong answer discoverable. Taking a
+   * copy stamps it when the file is written, and the share sheet never reports
+   * whether anything took the file — so somebody who opened the sheet and
+   * backed out has bought silence they did not earn, and being able to see
+   * what the app thinks happened is the only defence against it.
+   */
+  it('shows when the last copy was taken', async () => {
+    await aFarm(6);
+    const before = await mount(<SettingsScreen onSignedOut={() => undefined} />);
+    expect(reads(before)).toContain('none taken yet');
+    before.unmount();
+
+    await localStore().setLastBackupAt(Date.UTC(2026, 7, 7, 12));
+
+    const after = await mount(<SettingsScreen onSignedOut={() => undefined} />);
+    expect(reads(after)).toContain('Last taken');
+    expect(reads(after)).toContain('2026');
+    after.unmount();
+  });
+
   it('offers to put one back on an empty farm', async () => {
     const screen = await mount(<SettingsScreen onSignedOut={() => undefined} />);
 

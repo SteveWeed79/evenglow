@@ -125,9 +125,18 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
           testID="go-site"
           onPress={() => nav.navigate('SiteSetup')}
         />
+        {/**
+          * "Cannot be put back" is the load-bearing half of this line.
+          *
+          * Export is the word most people already attach to backing up, and
+          * these two rows sit one above the other. Without it, somebody
+          * frightened about a failing phone sends themselves thirteen
+          * spreadsheets, believes they are covered, and finds out otherwise on
+          * the worst possible day.
+          */}
         <Row
           title="Get your records out"
-          detail="Spreadsheets for a vet, an accountant, or whoever buys the tractor"
+          detail="Spreadsheets for a vet or an accountant — they cannot be put back"
           testID="go-export"
           onPress={() => nav.navigate('Export')}
         />
@@ -135,13 +144,29 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
           * Beside the export and not inside it, because they are different
           * acts with different audiences. A spreadsheet goes to a person and
           * loses every id on the way out by design; this comes back.
+          *
+          * The date is here rather than only on the screen behind it because
+          * it is the one fact that makes a wrong answer discoverable. Taking a
+          * copy stamps the date when the file is written, and the share sheet
+          * never reports whether anything took it — so somebody who opened the
+          * sheet and backed out has bought silence they did not earn, and the
+          * only defence against that is being able to see what the app thinks
+          * happened.
           */}
         <Row
           title="A copy of your farm"
           detail={
-            exposure !== null && exposure.records === 0
-              ? 'Put a backup from another phone onto this one'
-              : 'One file with every record in it, to keep somewhere else'
+            exposure === null
+              ? 'One file with every record in it, to keep somewhere else'
+              : exposure.records === 0
+                ? 'Put a backup from another phone onto this one'
+                : exposure.lastBackupAt === null
+                  ? 'One file with every record in it — none taken yet'
+                  : `Last taken ${new Date(exposure.lastBackupAt).toLocaleDateString(undefined, {
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric',
+                    })}`
           }
           testID="go-backup"
           onPress={() => nav.navigate('Backup')}

@@ -412,6 +412,15 @@ describe('what it refuses', () => {
     expect(result.refused).toBe(1);
     expect(result.firstRefusal).not.toBeNull();
     expect(result.written).toBe(file.entries.length - 1);
+
+    /**
+     * Named, not counted. "1 record could not be read" is a wound with no
+     * handle — it tells somebody mid-recovery that something is permanently
+     * gone and gives them nothing to do about it. A group's own name is a
+     * fact they can act on, usually by typing it back in.
+     */
+    expect(result.lost).toHaveLength(1);
+    expect(result.lost[0]).toContain(damaged.entries[0]!.entity);
   });
 });
 
@@ -443,3 +452,59 @@ async function restoreFrom(text: string): Promise<void> {
   if (!plan.ok) throw new Error(plan.message);
   await runRestore(plan);
 }
+
+describe('naming what was lost', () => {
+  it('says which records could not be read, and stops before it is a wall', async () => {
+    const { group } = await aFarm();
+    // Comfortably past the cap, so the truncation is actually exercised.
+    for (let i = 0; i < 12; i += 1) {
+      await enqueue({
+        entity: 'eggLog',
+        op: 'create',
+        payload: { occurredAt: Date.now() - i * 3_600_000, flockId: group, count: 6 },
+      });
+    }
+    const { file } = await buildBackup(newId(), APP);
+
+    // Every entry damaged: a file corrupted in the middle can do this, and a
+    // screen listing nine hundred names is a screen nobody reads.
+    const damaged = {
+      ...file,
+      entries: file.entries.map((e) => ({ ...e, payload: { nonsense: true } })),
+    };
+
+    await freshStore();
+    const read = readBackup(JSON.stringify(damaged));
+    if (!read.ok) throw new Error(read.message);
+    const plan = await planRestore(read.file, { signedIn: false });
+    if (!plan.ok) throw new Error(plan.message);
+
+    const result = await runRestore(plan);
+
+    expect(result.written).toBe(0);
+    expect(result.refused).toBe(file.entries.length);
+    expect(result.lost.length).toBeLessThanOrEqual(6);
+    expect(result.lost.length).toBeLessThan(result.refused);
+  });
+
+  /** A record with no human handle is named by its kind, which still beats a bare count. */
+  it('falls back to the kind when a record has no name', async () => {
+    await aFarm();
+    const { file } = await buildBackup(newId(), APP);
+    const egg = file.entries.find((e) => e.entity === 'eggLog');
+    if (egg === undefined) throw new Error('no egg log');
+
+    const damaged = {
+      ...file,
+      entries: [{ ...egg, payload: { nonsense: true } }],
+    };
+
+    await freshStore();
+    const read = readBackup(JSON.stringify(damaged));
+    if (!read.ok) throw new Error(read.message);
+    const plan = await planRestore(read.file, { signedIn: false });
+    if (!plan.ok) throw new Error(plan.message);
+
+    expect((await runRestore(plan)).lost).toEqual(['eggLog']);
+  });
+});

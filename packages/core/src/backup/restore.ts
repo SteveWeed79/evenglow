@@ -112,9 +112,45 @@ export interface RestoreProgress {
 
 export interface RestoreResult {
   written: number;
-  /** Entries the file held that this app could not write, with the first reason. */
+  /** Entries the file held that this app could not write. */
   refused: number;
+  /**
+   * What was lost, in words a person can act on.
+   *
+   * *"4 records could not be read"* is a wound with no handle: it tells
+   * somebody mid-recovery that four things are permanently gone and offers
+   * them nothing — no list, no retry, nothing to check against. Naming them
+   * turns it into a fact they can do something with, which on a farm usually
+   * means writing two groups back in by hand.
+   *
+   * Capped, because a file damaged in the middle can fail every entry and a
+   * screen listing nine hundred is a screen nobody reads.
+   */
+  lost: string[];
+  /** The first reason, kept for a support report. */
   firstRefusal: string | null;
+}
+
+/** How many refused records are named before the list is cut off. */
+const NAME_AT_MOST = 6;
+
+/**
+ * What a record calls itself, if anything.
+ *
+ * Every entity that has a human handle uses one of these three keys — `name`
+ * on a group, an animal, a machine or a shelf item; `title` on a service or a
+ * job; `label` on a set of eggs. A record with none is named by its kind
+ * alone, which is still more use than a bare count.
+ */
+function describe(entry: BackupEntry): string {
+  const payload: unknown = entry.payload;
+  if (typeof payload === 'object' && payload !== null) {
+    for (const key of ['name', 'title', 'label'] as const) {
+      const value: unknown = (payload as Record<string, unknown>)[key];
+      if (typeof value === 'string' && value.trim() !== '') return `${entry.entity} “${value}”`;
+    }
+  }
+  return entry.entity;
 }
 
 /**
@@ -240,6 +276,7 @@ export async function runRestore(
   const total = plan.toWrite.length;
   let written = 0;
   let refused = 0;
+  const lost: string[] = [];
   let firstRefusal: string | null = null;
 
   for (const [index, entry] of plan.toWrite.entries()) {
@@ -279,6 +316,7 @@ export async function runRestore(
     } catch (error) {
       if (error instanceof StorageFullError) throw error;
       refused += 1;
+      if (lost.length < NAME_AT_MOST) lost.push(describe(entry));
       if (firstRefusal === null) {
         firstRefusal = error instanceof Error ? error.message : 'That record could not be read.';
       }
@@ -302,5 +340,5 @@ export async function runRestore(
    */
   if (written > 0) await localStore().setLastBackupAt(plan.writtenAt);
 
-  return { written, refused, firstRefusal };
+  return { written, refused, lost, firstRefusal };
 }

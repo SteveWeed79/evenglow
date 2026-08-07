@@ -240,10 +240,20 @@ export function BackupScreen(): React.ReactElement {
       });
 
       setPlan(null);
+      /**
+       * When something is lost, it is named.
+       *
+       * "4 records could not be read" is a wound with no handle — it tells
+       * somebody in the middle of recovering a lost phone that four things
+       * are gone and gives them nothing to do about it. Two group names is a
+       * fact they can act on, usually by typing them back in.
+       */
       setNote(
         result.refused === 0
           ? `${result.written} records are back. They are on this phone — take a copy or make an account before you need one.`
-          : `${result.written} records are back. ${result.refused} could not be read: ${result.firstRefusal ?? 'no reason given'}`,
+          : `${result.written} records are back. These could not be read and are missing: ${result.lost.join(', ')}${
+              result.refused > result.lost.length ? `, and ${result.refused - result.lost.length} more` : ''
+            }.`,
       );
       await look();
     } catch (error) {
