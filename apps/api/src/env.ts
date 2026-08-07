@@ -63,6 +63,25 @@ const envSchema = z.object({
    * supported state rather than a broken one, and the only state a farm
    * running its own box will ever be in.
    */
+  /**
+   * Farms that sync free, whatever the payment rail says (D13).
+   *
+   * Comma-separated org ULIDs. For testers, for the people who build this, and
+   * for anyone who should not be charged — a grant, and the honest word for it
+   * is a comp.
+   *
+   * **Configuration rather than a route, deliberately.** A grant that can be
+   * requested is a grant that can be requested by anybody, and a new
+   * authenticated endpoint whose whole job is to disable a paywall is the
+   * worst possible thing to get wrong (invariant 10). Nothing a client sends
+   * can influence this; it is read from the server's own environment at
+   * startup and a farm cannot ask to be in it.
+   *
+   * It grants sync and nothing else. There is nothing else to grant — the free
+   * tier is already the whole app on one device, so this is the only line
+   * money has ever been on.
+   */
+  FREE_SYNC_ORGS: z.string().default(''),
   SUPPORT_GITHUB_TOKEN: z.string().default(''),
   /** `owner/repo`. */
   SUPPORT_REPO: z.string().default(''),
@@ -88,6 +107,8 @@ export type Env = z.infer<typeof envSchema> & {
   playConfig: PlayConfig | null;
   /** Null when this server has nowhere to file a support ticket. */
   supportConfig: SupportConfig | null;
+  /** Farms that sync free regardless of subscription. Usually empty. */
+  freeSyncOrgs: ReadonlySet<string>;
 };
 
 /**
@@ -117,12 +138,32 @@ export function readEnv(source: Record<string, string | undefined> = process.env
       parsed.data.GOOGLE_PLAY_SERVICE_ACCOUNT || undefined,
       parsed.data.GOOGLE_PLAY_PACKAGE || undefined,
     ),
+    freeSyncOrgs: readFreeSyncOrgs(parsed.data.FREE_SYNC_ORGS),
     supportConfig: readSupportConfig(
       parsed.data.SUPPORT_GITHUB_TOKEN,
       parsed.data.SUPPORT_REPO,
       parsed.data.SUPPORT_ACCEPT_RECORDS,
     ),
   };
+}
+
+/**
+ * Parses the comp list, and refuses anything that is not an org id.
+ *
+ * A typo here would be a farm that quietly kept getting 402s while somebody
+ * was certain they had been granted access — so a malformed entry fails at
+ * startup with the value in the message, rather than being skipped.
+ */
+function readFreeSyncOrgs(raw: string): ReadonlySet<string> {
+  const ids = raw.split(',').map((id) => id.trim()).filter(Boolean);
+
+  for (const id of ids) {
+    if (!/^[0-9A-HJKMNP-TV-Z]{26}$/.test(id)) {
+      throw new Error(`FREE_SYNC_ORGS must be a comma-separated list of farm ids. Got: ${id}`);
+    }
+  }
+
+  return new Set(ids);
 }
 
 /**
