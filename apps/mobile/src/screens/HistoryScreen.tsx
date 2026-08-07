@@ -1,10 +1,11 @@
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { type HistoryDay, listHistory } from '@steading/core/read/history';
 import { Icon } from '../components/Icon';
 import { Loading } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
+import { Touch } from '../components/Touch';
 import { useLive } from '../hooks/useLive';
 import { useUnits } from '../hooks/useUnits';
 import { useTheme } from '../theme/ThemeProvider';
@@ -96,7 +97,7 @@ export function HistoryScreen(): React.ReactElement {
       ))}
 
       {days.length > shown.length ? (
-        <Pressable
+        <Touch affordance="disclose"
           onPress={() => setShowAll(true)}
           accessibilityRole="button"
           testID="show-all-days"
@@ -105,7 +106,7 @@ export function HistoryScreen(): React.ReactElement {
           <Text style={[styles.moreLabel, { color: colors.muted }]}>
             Show all {days.length} days
           </Text>
-        </Pressable>
+        </Touch>
       ) : null}
     </Screen>
   );
@@ -130,7 +131,7 @@ function DayBlock({
 
   return (
     <View style={styles.day}>
-      <Pressable
+      <Touch affordance="disclose"
         onPress={onToggle}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
@@ -153,7 +154,7 @@ function DayBlock({
         </View>
 
         <Icon name={open ? 'minus' : 'plus'} size={20} color={colors.muted} />
-      </Pressable>
+      </Touch>
 
       {open
         ? day.events.map((event) => (

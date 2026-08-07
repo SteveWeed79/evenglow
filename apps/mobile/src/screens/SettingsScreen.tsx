@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { readSite } from '@steading/core/read/growing';
 import { Row } from '../components/Form';
 import { Icon } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
+import { Touch } from '../components/Touch';
 import { type CachedClaims, readCachedClaims, signOut } from '../auth/session';
 import { useLive } from '../hooks/useLive';
 import { useNav } from '../hooks/useNav';
@@ -162,7 +163,7 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
           send. It only means signing in again next time.
         </Body>
 
-        <Pressable
+        <Touch affordance="border"
           onPress={() => void press()}
           disabled={busy}
           accessibilityRole="button"
@@ -182,7 +183,7 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
               {armed ? 'Tap again to sign out' : 'Sign out'}
             </Text>
           </View>
-        </Pressable>
+        </Touch>
       </Panel>
     </Screen>
   );

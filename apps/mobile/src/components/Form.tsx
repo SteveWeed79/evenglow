@@ -1,10 +1,11 @@
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { reportTrouble } from '../hooks/useTrouble';
 import { describeLogFailure } from '@steading/core/sync/failure';
 import { Icon, type IconName } from './Icon';
 import { Body, Panel } from './Panel';
+import { Touch } from './Touch';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
 
@@ -121,7 +122,7 @@ export function Chip({
   const { colors } = useTheme();
 
   return (
-    <Pressable
+    <Touch affordance="check"
       onPress={onPress}
       disabled={disabled}
       accessibilityRole="button"
@@ -139,7 +140,7 @@ export function Chip({
       {/* Ink on brass when selected: the lantern is a fill, and a label on top
           of it reads where a brass label on plaster would not. */}
       <Text style={[styles.chipLabel, { color: selected ? colors.lanternOn : colors.ink }]}>{label}</Text>
-    </Pressable>
+    </Touch>
   );
 }
 
@@ -203,7 +204,7 @@ export function Toggle({
   const { colors } = useTheme();
 
   return (
-    <Pressable
+    <Touch affordance="check"
       {...(testID === undefined ? {} : { testID })}
       onPress={() => {
         void Haptics.selectionAsync();
@@ -221,7 +222,7 @@ export function Toggle({
       ]}
     >
       <Text style={[styles.toggleLabel, { color: value ? colors.lanternOn : colors.ink }]}>{label}</Text>
-    </Pressable>
+    </Touch>
   );
 }
 
@@ -497,7 +498,7 @@ export function Primary({
   const { colors } = useTheme();
 
   return (
-    <Pressable
+    <Touch affordance="brass"
       onPress={onPress}
       disabled={disabled}
       accessibilityRole="button"
@@ -509,7 +510,7 @@ export function Primary({
       ]}
     >
       <Text style={[styles.primaryLabel, { color: colors.lanternOn }]}>{label}</Text>
-    </Pressable>
+    </Touch>
   );
 }
 
@@ -538,7 +539,7 @@ export function Secondary({
   const { colors } = useTheme();
 
   return (
-    <Pressable
+    <Touch affordance="border"
       onPress={onPress}
       disabled={disabled}
       accessibilityRole="button"
@@ -555,7 +556,7 @@ export function Secondary({
     >
       {icon === undefined ? null : <Icon name={icon} size={20} color={danger ? '#fff' : colors.ink} />}
       <Text style={[styles.secondaryLabel, { color: danger ? '#fff' : colors.ink }]}>{label}</Text>
-    </Pressable>
+    </Touch>
   );
 }
 
@@ -586,7 +587,7 @@ export function Row({
   const { colors } = useTheme();
 
   return (
-    <Pressable
+    <Touch affordance="chevron"
       onPress={onPress}
       accessibilityRole="button"
       {...(testID === undefined ? {} : { testID })}
@@ -603,7 +604,7 @@ export function Row({
         )}
       </View>
       <Icon name={mark} size={20} color={colors.muted} />
-    </Pressable>
+    </Touch>
   );
 }
 

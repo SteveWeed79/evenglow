@@ -1,5 +1,6 @@
-import { Pressable, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { Icon } from './Icon';
+import { Touch } from './Touch';
 import { toggleLabel, useTheme } from '../theme/ThemeProvider';
 import { TAP } from '../theme/tokens';
 
@@ -20,7 +21,7 @@ export function LampToggle(): React.ReactElement {
   const label = toggleLabel(theme);
 
   return (
-    <Pressable
+    <Touch affordance="check"
       onPress={toggle}
       accessibilityRole="switch"
       accessibilityState={{ checked: theme === 'lamplight' }}
@@ -35,7 +36,7 @@ export function LampToggle(): React.ReactElement {
         size={24}
         color={theme === 'lamplight' ? colors.lanternInk : colors.muted}
       />
-    </Pressable>
+    </Touch>
   );
 }
 

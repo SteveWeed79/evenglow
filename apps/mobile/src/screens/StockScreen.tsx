@@ -1,10 +1,11 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { formatRange, libraryBreed, SPECIES_TRAITS } from '@steading/contracts';
 import type { Group } from '@steading/core/read/groups';
 import { Primary } from '../components/Form';
 import { Icon } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
+import { Touch } from '../components/Touch';
 import { growOutWindow, layOnsetWindow } from '../hooks/useDues';
 import { useGroups } from '../hooks/useGroups';
 import { useNav } from '../hooks/useNav';
@@ -77,7 +78,7 @@ function GroupCard({ group, onPress }: { group: Group; onPress: () => void }): R
   const breed = group.breedId === undefined ? undefined : libraryBreed(group.breedId);
 
   return (
-    <Pressable
+    <Touch affordance="chevron"
       onPress={onPress}
       accessibilityRole="button"
       testID={`group-${group.id}`}
@@ -118,7 +119,7 @@ function GroupCard({ group, onPress }: { group: Group; onPress: () => void }): R
         <Text style={[styles.label, { color: colors.lanternInk }]}>Open</Text>
         <Icon name="forward" size={20} color={colors.lanternInk} />
       </View>
-    </Pressable>
+    </Touch>
   );
 }
 

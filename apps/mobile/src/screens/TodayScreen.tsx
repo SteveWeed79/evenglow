@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import {
   type ActiveWithdrawal,
   dailyProductsOf,
@@ -24,6 +24,7 @@ import { Icon, type IconName } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { Tally } from '../components/Tally';
+import { Touch } from '../components/Touch';
 import { WeatherRow } from '../components/WeatherRow';
 import { WeatherAlerts } from '../components/WeatherAlerts';
 import { WeatherWarnings } from '../components/WeatherWarnings';
@@ -267,7 +268,7 @@ export function TodayScreen(): React.ReactElement {
           ))}
 
           {bundles.length > shown.length ? (
-            <Pressable
+            <Touch affordance="disclose"
               onPress={() => setShowAll(true)}
               accessibilityRole="button"
               testID="show-all-dues"
@@ -276,7 +277,7 @@ export function TodayScreen(): React.ReactElement {
               <Text style={[styles.moreLabel, { color: colors.muted }]}>
                 Show all {bundles.length}
               </Text>
-            </Pressable>
+            </Touch>
           ) : null}
         </View>
       ) : null}
@@ -358,7 +359,7 @@ function DueBundleRow({
         ))
       ) : null}
 
-      <Pressable
+      <Touch affordance="disclose"
         onPress={() => setExpanded(!expanded)}
         accessibilityRole="button"
         accessibilityState={{ expanded }}
@@ -375,7 +376,7 @@ function DueBundleRow({
         <Text style={[styles.moreLabel, { color: colors.muted }]}>
           {expanded ? 'Fewer' : `and ${rest} more`}
         </Text>
-      </Pressable>
+      </Touch>
     </View>
   );
 }
@@ -442,7 +443,7 @@ function ProductTally({
 
   return (
     <View style={styles.group}>
-      <Pressable
+      <Touch affordance="unsignalled"
         onPress={onToggle}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
@@ -478,7 +479,7 @@ function ProductTally({
         ) : null}
 
         <Icon name={open ? 'minus' : 'plus'} size={20} color={colors.muted} />
-      </Pressable>
+      </Touch>
 
       {open ? (
         <>

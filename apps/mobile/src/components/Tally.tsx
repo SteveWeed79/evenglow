@@ -1,10 +1,11 @@
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { describeLogFailure } from '@steading/core/sync/failure';
 import { loggedConfirmation } from '@steading/core/voice';
 import { Arch } from './Arch';
 import { NumberField } from './Form';
+import { Touch } from './Touch';
 import { tallySize } from '../theme/tally';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
@@ -229,7 +230,7 @@ export function Tally({
         <Step label="Type it" onPress={() => setTyping(true)} testID="tally-type" />
       )}
 
-      <Pressable
+      <Touch affordance="brass"
         onPress={() => void commit()}
         disabled={count === 0}
         accessibilityRole="button"
@@ -248,7 +249,7 @@ export function Tally({
         <Text style={[styles.commitLabel, { color: armed ? '#fff' : colors.lanternOn }]}>
           {armed ? `Log ${count} ${unit} anyway` : `Log ${count} ${unit}`}
         </Text>
-      </Pressable>
+      </Touch>
 
       {/* Ink, not rowan. This is the most important sentence the component can
           say — a log that did not save — and it is announced assertively, so
@@ -285,7 +286,7 @@ function Step({
   const { colors } = useTheme();
 
   return (
-    <Pressable
+    <Touch affordance="border"
       onPress={onPress}
       disabled={disabled}
       accessibilityRole="button"
@@ -301,7 +302,7 @@ function Step({
       ]}
     >
       <Text style={[styles.stepLabel, { color: colors.ink }]}>{label}</Text>
-    </Pressable>
+    </Touch>
   );
 }
 

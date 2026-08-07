@@ -1,8 +1,9 @@
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import { heldLabel } from '@steading/contracts';
 import type { SyncState } from '@steading/core/sync/engine';
 import { apiFault } from '../boot/config';
 import { Icon, type IconName } from './Icon';
+import { Touch } from './Touch';
 import { useNav } from '../hooks/useNav';
 import { useSync } from '../hooks/useSync';
 import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
@@ -88,7 +89,7 @@ export function SyncChip(): React.ReactElement {
       : { label: 'Not set up', icon: 'needs-a-look' as IconName, tint: colors.rowan };
 
   return (
-    <Pressable
+    <Touch affordance="chevron"
       onPress={() => nav.navigate(state.kind === 'rejected' && fault === null ? 'Inbox' : 'Diagnostics')}
       accessibilityRole="button"
       accessibilityLabel={`Sync: ${label}`}
@@ -108,7 +109,7 @@ export function SyncChip(): React.ReactElement {
     >
       <Icon name={icon} size={16} color={tint} />
       <Text style={[styles.label, { color: colors.muted }]}>{label}</Text>
-    </Pressable>
+    </Touch>
   );
 }
 

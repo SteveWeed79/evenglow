@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { mayChangeNote, newId, type NoteSubject, type Role } from '@steading/contracts';
 import { listNotes, type Note, notesOn } from '@steading/core/read/notes';
 import { Confirm, Failure, Primary, Secondary, TextField, useSaver } from './Form';
 import { Icon } from './Icon';
 import { Body, Panel } from './Panel';
+import { Touch } from './Touch';
 import { readCachedClaims } from '../auth/session';
 import { useLive } from '../hooks/useLive';
 import { useLog } from '../hooks/useSync';
@@ -103,7 +104,7 @@ export function Notes({
 
   if (!open) {
     return (
-      <Pressable
+      <Touch affordance="disclose"
         onPress={() => setOpen(true)}
         accessibilityRole="button"
         accessibilityLabel={
@@ -146,7 +147,7 @@ export function Notes({
         </View>
 
         <Icon name="forward" size={20} color={colors.muted} />
-      </Pressable>
+      </Touch>
     );
   }
 
@@ -319,7 +320,7 @@ function NoteRow({
         <>
           {/* The note IS the control, where there is one. A note somebody may
               not change is plain text, not a button that does nothing. */}
-          <Pressable
+          <Touch affordance="disclose"
             onPress={mine ? onSelect : undefined}
             disabled={!mine}
             {...(mine
@@ -348,7 +349,7 @@ function NoteRow({
                 <Icon name={selected ? 'minus' : 'more'} size={16} color={colors.muted} />
               ) : null}
             </View>
-          </Pressable>
+          </Touch>
 
           {mine && selected ? (
             <View style={styles.actions}>

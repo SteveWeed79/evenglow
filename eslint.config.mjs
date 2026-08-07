@@ -335,6 +335,42 @@ const eslintConfig = defineConfig([
   },
 
   /**
+   * Every tappable thing in the app says what pressing it promises.
+   *
+   * The arch used to answer "you can act on this" by shape, which meant a
+   * reviewer could say a screen looked wrong and nobody could say it *was*
+   * wrong. Five signals replace it (see `components/Touch.tsx`), and this is
+   * the layer that makes them exhaustive: a raw `Pressable` is the only way to
+   * make something tappable without declaring anything, so it is available in
+   * exactly one file.
+   *
+   * The alternative was to have the audit sniff the rendered tree for a
+   * chevron, which breaks the day the icon set changes — and the icon set is
+   * changing.
+   */
+  {
+    files: ['apps/mobile/src/**/*.tsx'],
+    ignores: ['apps/mobile/src/components/Touch.tsx'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'react-native',
+              importNames: ['Pressable', 'TouchableOpacity', 'TouchableHighlight'],
+              message:
+                'Use <Touch affordance="…"> from components/Touch. Every pressable element ' +
+                'declares what pressing it promises, and tests/screens/affordance.test.tsx ' +
+                'reads those declarations off the tree.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  /**
    * Metro and Babel read their config with `require`, before any transform has
    * run. These two files are CommonJS because the tools that load them are,
    * not because anyone chose it — so the ban on `require()` does not apply.

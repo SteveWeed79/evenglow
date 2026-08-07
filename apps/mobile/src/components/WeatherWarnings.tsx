@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import type { Warning, WarningKind } from '@steading/contracts';
 import { Icon, type IconName } from './Icon';
+import { Touch } from './Touch';
 import { useWarnings } from '../hooks/useWarnings';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
@@ -85,7 +86,7 @@ export function WeatherWarnings(): React.ReactElement | null {
       ))}
 
       {warnings.length > shown.length ? (
-        <Pressable
+        <Touch affordance="disclose"
           onPress={() => setShowAll(true)}
           accessibilityRole="button"
           // Said in full: "+2" read aloud on its own means nothing, and the
@@ -98,7 +99,7 @@ export function WeatherWarnings(): React.ReactElement | null {
           <Text style={[styles.moreLabel, { color: colors.muted }]}>
             and {warnings.length - shown.length} more
           </Text>
-        </Pressable>
+        </Touch>
       ) : null}
     </View>
   );

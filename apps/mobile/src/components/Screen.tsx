@@ -1,11 +1,12 @@
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import { ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from './Icon';
 import { LampToggle } from './LampToggle';
 import { Plaster } from './Plaster';
 import { SyncChip } from './SyncChip';
+import { Touch } from './Touch';
 import { useTrouble } from '../hooks/useTrouble';
 import type { RootParamList } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
@@ -47,7 +48,7 @@ export function Screen({
 
       <View style={styles.status}>
         {back ? (
-          <Pressable
+          <Touch affordance="chevron"
             onPress={() => navigation.goBack()}
             accessibilityRole="button"
             accessibilityLabel="Back"
@@ -55,7 +56,7 @@ export function Screen({
             style={styles.control}
           >
             <Icon name="back" size={24} color={colors.muted} />
-          </Pressable>
+          </Touch>
         ) : (
           /**
            * Just the date.
@@ -82,7 +83,7 @@ export function Screen({
               also has nowhere sensible to go from inside a form it would
               replace. */}
           {back ? null : (
-            <Pressable
+            <Touch affordance="chevron"
               onPress={() => navigation.navigate('QuickAdd')}
               accessibilityRole="button"
               accessibilityLabel="Log something"
@@ -92,12 +93,12 @@ export function Screen({
               style={styles.control}
             >
               <Icon name="plus" size={24} color={colors.lanternInk} />
-            </Pressable>
+            </Touch>
           )}
           <SyncChip />
           <LampToggle />
           {back ? null : (
-            <Pressable
+            <Touch affordance="chevron"
               onPress={() => navigation.navigate('Settings')}
               accessibilityRole="button"
               accessibilityLabel="Settings"
@@ -105,7 +106,7 @@ export function Screen({
               style={styles.control}
             >
               <Icon name="settings" size={24} color={colors.muted} />
-            </Pressable>
+            </Touch>
           )}
         </View>
       </View>

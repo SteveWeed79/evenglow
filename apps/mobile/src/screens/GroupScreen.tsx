@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import {
   formatMass,
   formatRange,
@@ -19,6 +19,7 @@ import { Notes } from '../components/Notes';
 import { Photos } from '../components/Photos';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
+import { Touch } from '../components/Touch';
 import { WithdrawalBanner } from '../components/WithdrawalBanner';
 import { growOutWindow, layOnsetWindow } from '../hooks/useDues';
 import { useLive } from '../hooks/useLive';
@@ -191,7 +192,7 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
         />
       </View>
 
-      <Pressable
+      <Touch affordance="disclose"
         onPress={() => setMore(!more)}
         accessibilityRole="button"
         accessibilityState={{ expanded: more }}
@@ -202,7 +203,7 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
       >
         <Text style={[styles.moreLabel, { color: colors.muted }]}>{more ? 'Fewer' : 'More'}</Text>
         <Icon name={more ? 'minus' : 'plus'} size={16} color={colors.muted} />
-      </Pressable>
+      </Touch>
 
       {more ? (
         <View style={styles.rows}>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import type { QueuedMutation } from '@steading/core/db/records';
 import { discardRejected, listRejected, retryRejected } from '@steading/core/sync/inbox';
@@ -7,6 +7,7 @@ import { nudge, subscribe } from '@steading/core/sync/engine';
 import { Icon } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
+import { Touch } from '../components/Touch';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
 
@@ -193,7 +194,7 @@ function Action({
   const { colors } = useTheme();
 
   return (
-    <Pressable
+    <Touch affordance="border"
       onPress={onPress}
       accessibilityRole="button"
       {...(testID === undefined ? {} : { testID })}
@@ -208,7 +209,7 @@ function Action({
     >
       <Icon name={icon} size={20} color={danger ? '#fff' : colors.ink} />
       <Text style={[styles.actionLabel, { color: danger ? '#fff' : colors.ink }]}>{label}</Text>
-    </Pressable>
+    </Touch>
   );
 }
 

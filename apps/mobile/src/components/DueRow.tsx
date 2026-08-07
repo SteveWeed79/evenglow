@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { type Due, type DueKind, dueDate, type Urgency, urgencyOf } from '@steading/contracts';
 import { Icon, type IconName } from './Icon';
+import { Touch } from './Touch';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
 
@@ -137,7 +138,7 @@ export function DueRow({
       </View>
 
       {due.done === undefined || onDone === undefined ? null : (
-        <Pressable
+        <Touch affordance="border"
           onPress={() => {
             if (!armed) {
               setArmed(true);
@@ -165,7 +166,7 @@ export function DueRow({
           <Text style={[styles.doneLabel, { color: armed ? colors.lanternOn : colors.muted }]}>
             {armed ? 'Tap again' : 'Done'}
           </Text>
-        </Pressable>
+        </Touch>
       )}
 
       {onPress === undefined ? null : <Icon name="forward" size={20} color={colors.muted} />}
@@ -187,7 +188,7 @@ export function DueRow({
   }
 
   return (
-    <Pressable
+    <Touch affordance="chevron"
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`${due.title}, ${when(due, now)}`}
@@ -197,7 +198,7 @@ export function DueRow({
       ]}
     >
       {body}
-    </Pressable>
+    </Touch>
   );
 }
 

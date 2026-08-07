@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import type { Alert, AlertSeverity } from '@steading/contracts';
 import { Icon } from './Icon';
+import { Touch } from './Touch';
 import { useWeather } from '../hooks/useWeather';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
@@ -94,7 +95,7 @@ function AlertRow({
   const edge = loud(alert.severity) ? colors.rowan : colors.lanternInk;
 
   return (
-    <Pressable
+    <Touch affordance="disclose"
       onPress={onPress}
       accessibilityRole="button"
       accessibilityState={{ expanded: open }}
@@ -140,7 +141,7 @@ function AlertRow({
           )}
         </View>
       ) : null}
-    </Pressable>
+    </Touch>
   );
 }
 

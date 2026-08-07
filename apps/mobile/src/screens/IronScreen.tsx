@@ -1,9 +1,10 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { listInventory, listMachines, type Machine, runningLow } from '@steading/core/read/iron';
 import { Primary, Row } from '../components/Form';
 import { Icon } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
+import { Touch } from '../components/Touch';
 import { useLive } from '../hooks/useLive';
 import { useNav } from '../hooks/useNav';
 import { useTheme } from '../theme/ThemeProvider';
@@ -87,7 +88,7 @@ function MachineCard({
   const description = [machine.make, machine.model].filter(Boolean).join(' ');
 
   return (
-    <Pressable
+    <Touch affordance="chevron"
       onPress={onPress}
       accessibilityRole="button"
       testID={`machine-${machine.id}`}
@@ -135,7 +136,7 @@ function MachineCard({
         <Text style={[styles.label, { color: colors.lanternInk }]}>Open</Text>
         <Icon name="forward" size={20} color={colors.lanternInk} />
       </View>
-    </Pressable>
+    </Touch>
   );
 }
 
