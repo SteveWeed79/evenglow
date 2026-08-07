@@ -196,11 +196,33 @@ export function leadingKey(index: IndexDescription): string | undefined {
   return Object.keys(index.key)[0];
 }
 
+/**
+ * Every collection that will actually be asked for indexes, and which.
+ *
+ * A pure function rather than a loop inlined below, because the defect it
+ * exists to prevent needed a live MongoDB to find and should not have.
+ *
+ * **`createIndexes([])` is not a no-op.** Mongo answers *"Must specify at
+ * least one index to create"* and the call throws — so `promoCodes: []`, which
+ * is empty on purpose because a code is found by its `_id` and there is
+ * nothing else to index, broke every route that opens a database. Every
+ * DB-backed suite skips without one, so the whole local run stayed green and
+ * CI caught it.
+ *
+ * The empty declaration stays: "listed and empty" says the question was asked,
+ * where absent says nothing at all. It is the caller that has to cope, and now
+ * a test can say so without a server.
+ */
+export function indexPlan(): [string, IndexDescription[]][] {
+  const planned: [string, IndexDescription[]][] = [
+    ...COLLECTIONS.map((name): [string, IndexDescription[]] => [name, INDEXES[name]]),
+    ...Object.entries(IDENTITY_INDEXES),
+  ];
+  return planned.filter(([, indexes]) => indexes.length > 0);
+}
+
 export async function applyIndexes(database: Db): Promise<void> {
-  for (const name of COLLECTIONS) {
-    await database.collection(name).createIndexes(INDEXES[name]);
-  }
-  for (const [name, indexes] of Object.entries(IDENTITY_INDEXES)) {
+  for (const [name, indexes] of indexPlan()) {
     await database.collection(name).createIndexes(indexes);
   }
 }
