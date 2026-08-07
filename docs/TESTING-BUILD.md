@@ -75,10 +75,11 @@ Mixing the two means an uninstall, and an uninstall means an empty farm.
 
 **There is a second, quieter version of this**, documented in
 `auth/local-org.ts`: the farm's id lives in secure storage and the records live
-in `steading-{orgId}.db`. Clearing app data takes both, so it is moot — but if
-the id were ever lost while the file survived, the records would be on disk
-with nothing knowing which file they are in. `pnpm farm:recover` (below) is how
-you would look.
+in `steading-{orgId}.db`. Clearing app data takes both, so usually it is moot —
+but if the id were lost while the file survived, the records would be on disk
+with nothing knowing which file they are in. §4 is how you tell the two apart,
+and **there is no recovery path in the app for that case yet**: the answer it
+is designed around is an account (A2.3), which is the whole thing being sold.
 
 ---
 
@@ -102,7 +103,32 @@ of a few KB is a farm that never had anything in it.
 
 ---
 
-## 5. Free access for a tester
+## 5. Knowing which build a tester is on
+
+Every build stamps itself with the commit it came from, and the stamp travels
+in three places: the issue title of any support ticket, **Settings → Sync** on
+the device, and the bundle itself.
+
+Nothing to remember on EAS — `scripts/stamp-build.mjs` is wired to
+`eas-build-post-install`, so it runs on the builder where
+`EAS_BUILD_GIT_COMMIT_HASH` is set. Locally it asks git, and a working tree
+with uncommitted changes is marked `abc1234+` so a stamp is never a lie about
+what was built.
+
+**The commit is deliberately not part of `version`.** `version` is in the
+fingerprint that decides whether two reports are the same defect, so folding a
+commit into it would open a fresh issue thread for every build — during a
+tester programme that is a new thread every few days for the same fault, which
+is exactly the flood dedup exists to prevent. The commit answers *which build*
+and splits nothing.
+
+Bump `version` in `app.json` when you want a release to be a different release
+— `0.2.0`, or `0.1.1` — and let the stamp handle telling two builds of the same
+version apart.
+
+---
+
+## 6. Free access for a tester
 
 Sync is the paid thing (D13), so a tester on `preview-farm` would hit a 402
 once a payment rail is configured. `FREE_SYNC_ORGS` in the API's environment is

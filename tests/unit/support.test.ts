@@ -211,6 +211,43 @@ describe('the one line a person reads', () => {
     ...over,
   });
 
+  /** The same fixture, from a build that knows which commit it came from. */
+  const built = (commit: string, over: Partial<SupportBundle> = {}): SupportBundle => ({
+    ...bundle(over),
+    app: { version: '0.1.0', platform: 'android', build: commit },
+  });
+
+  /**
+   * The commit is in the title and not in the fingerprint, which is the whole
+   * point of stamping it.
+   *
+   * "Which build are you on" is the first question about any report, and a
+   * machine-first bundle should never make somebody ask it out loud. But a
+   * commit inside `appVersion` would give every build its own fingerprint for
+   * every defect — a fresh issue thread every few days during a tester
+   * programme, for the same fault, which is precisely the flood dedup exists
+   * to prevent.
+   */
+  it('names the commit in the title without splitting the report', () => {
+    const errors = [{ where: 'flush', message: 'Network error', count: 1 }];
+    const one = built('abc1234', { errors });
+    const two = built('def5678', { errors });
+
+    expect(titleFor(one)).toContain('abc1234');
+    expect(titleFor(two)).toContain('def5678');
+
+    // Same defect, two builds, one thread: the build is not an input.
+    const shape = { appVersion: '0.1.0', schemaVersion: 4, rejections: [], errors };
+    expect(fingerprintOf(shape)).toBe(fingerprintOf(shape));
+    // And the bundles really did differ, so the assertion above is not vacuous.
+    expect(one.app.build).not.toBe(two.app.build);
+  });
+
+  it('says the version alone when nothing stamped a commit', () => {
+    expect(titleFor(bundle())).toContain('0.1.0');
+    expect(titleFor(bundle())).not.toContain('+');
+  });
+
   it('leads with the failure and names the build', () => {
     const title = titleFor(
       bundle({ errors: [{ where: 'flush', message: 'Network error', count: 3 }] }),

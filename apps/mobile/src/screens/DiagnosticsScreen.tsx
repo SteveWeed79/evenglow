@@ -6,6 +6,7 @@ import { type StorageReport, storageReport } from '@steading/core/sync/storage';
 import { readCachedClaims } from '../auth/session';
 import { readLocalOrgId } from '../auth/local-org';
 import { apiFault, explainFault } from '../boot/config';
+import { APP_BUILD, APP_VERSION } from '../version';
 import { Row, Secondary } from '../components/Form';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
@@ -133,6 +134,9 @@ export function DiagnosticsScreen(): React.ReactElement {
           * is the first thing worth knowing when a farm looks empty.
           */}
         <Stat label="Farm id" value={farmId ?? 'not set'} />
+        {/* Which build, so a tester can read it out and a report can name it
+            without anybody being asked. */}
+        <Stat label="Build" value={APP_BUILD === '' ? APP_VERSION : `${APP_VERSION}+${APP_BUILD}`} />
         <Stat label="Device id" value={report.deviceId ?? 'not set'} />
         <Stat
           label="Caught up to"
