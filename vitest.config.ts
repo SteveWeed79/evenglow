@@ -44,6 +44,27 @@ const imageRequires = {
 export default defineConfig({
   plugins: [imageRequires],
   resolve: {
+    /**
+     * One React, by file path and not merely by version.
+     *
+     * `node-linker=hoisted` (see `.npmrc`) puts a real `node_modules/react` at
+     * the workspace root, while `apps/mobile` keeps its own symlink into the
+     * store because it declares react itself. Both are 19.2.3 and they are two
+     * different files:
+     *
+     *   root    react -> node_modules/react/index.js
+     *   mobile  react -> node_modules/.pnpm/react@19.2.3/node_modules/react/index.js
+     *
+     * Two paths mean two module registries, so the renderer sets the hook
+     * dispatcher on one copy and the component reads it from the other —
+     * `Invalid hook call`, 437 of them, on every suite that mounts a screen.
+     * Before hoisting both went through `.pnpm` and matched by accident.
+     *
+     * Deduping collapses them to one. It is here rather than in the app's own
+     * config because it is a fact about how the tests resolve modules; Metro
+     * has its own resolver and does not share this hazard.
+     */
+    dedupe: ['react', 'react/jsx-runtime', 'react/jsx-dev-runtime', 'react-test-renderer'],
     alias: [
       { find: /^react-native$/, replacement: here('./tests/support/native/react-native.tsx') },
       { find: /^expo-haptics$/, replacement: here('./tests/support/native/modules.tsx') },
