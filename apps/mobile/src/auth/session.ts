@@ -446,3 +446,28 @@ export async function readBilling(): Promise<BillingState> {
   if (!res.ok) throw new SignInError('Could not reach the farm.');
   return billingSchema.parse(await res.json());
 }
+
+/**
+ * Redeems a promotion code.
+ *
+ * Deliberately the same shape as `readBilling` — it returns a `BillingState`,
+ * because what a redeemed code produces is a subscription and the screen
+ * should not have to learn a second vocabulary for the same fact. The panel
+ * that says "Syncing" after a purchase says it after a code, from the same
+ * field, having done nothing different.
+ *
+ * Every refusal is one sentence. The server does not distinguish unknown from
+ * spent from expired — telling a guesser they found a real code is most of the
+ * work of guessing — and there is exactly one thing to do about any of them,
+ * which is ask whoever handed it over.
+ */
+export async function redeemPromo(code: string): Promise<BillingState> {
+  const res = await fetch(url('/billing/promo'), {
+    method: 'POST',
+    headers: syncHeaders({ 'content-type': 'application/json' }),
+    body: JSON.stringify({ code }),
+  });
+
+  if (!res.ok) throw new SignInError('That code does not work.');
+  return billingSchema.parse(await res.json());
+}

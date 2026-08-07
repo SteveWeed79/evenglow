@@ -541,3 +541,75 @@ record on the handset behind an id it can never claim.
   account is sold on, so it is honest rather than hidden, but a device with a
   visible orphaned database and no way to open it is a support conversation
   waiting to happen.
+
+---
+
+## A2.6 — Promotion codes
+
+**A code somebody was handed, typed into the app, worth a subscription.**
+
+The first version of this was `FREE_SYNC_ORGS`, a list of farm ids in the
+server's environment, and it was built to answer a real objection: an
+authenticated route whose whole job is to switch off a paywall is the worst
+thing in a service to get wrong.
+
+**A code is not a request, and that is the distinction the first design
+missed.** Nobody asks for anything — they present a secret they could only have
+been given. That is the same shape as the join code (A2.5), and it is why this
+is safe where *"please grant me sync"* would not be.
+
+### It writes a subscription; it does not bypass the gate
+
+This is the whole design and everything else follows from it. Redeeming sets
+`org.subscription` with `source: 'promo'`, and nothing downstream changes:
+`entitlementOf` still decides, an expiry still overrides a stored state,
+`/billing` reports a promotion exactly as honestly as it reports a purchase,
+and `routes/sync.ts` never learns that promotions exist.
+
+A bypass would have been fewer lines and a second code path through the one
+decision in this app that money depends on.
+
+### Sized against the invite token, not the join code
+
+`membership.ts` argues carefully that six characters are enough for a join
+code, and every reason it gives is a reason this cannot be six: that code lives
+ten minutes while somebody holds a phone out, it is single use, and there is
+one per farm. A promotion code is handed over and then sits in a message for a
+month — the shape `invites.ts` says flatly that no rate limit can make safe if
+it is guessable.
+
+So: **twelve Crockford characters, 60 bits**, `randomInt` per character,
+formatted `4F7K-M2Q9-XT3B` so it can be read down a phone line, and normalised
+on the way in so `O` for `0` is understood rather than refused.
+
+| Property | Why |
+|---|---|
+| Redemption is authenticated | A grant lands on *a farm*, and a farm comes from a verified token — so an attacker needs an account before spending one guess |
+| `maxRedemptions`, default 1 | Claimed by one conditional update, so two phones at once cannot both win |
+| The code can expire | Separately from the grant it produces |
+| The grant can expire | `days`, counted from **redemption** — a code written in March and used in June is worth the same year either way |
+| `disabledAt` | The honest answer to "that got posted somewhere" is to turn it off, not to hope |
+| Stored hashed | A database dump must not hand over working codes |
+| Minted only by `pnpm promo:new` | There is no path from the wire to a new code |
+| One sentence for every refusal | "Spent" would tell a guesser they found a real code, which is most of the work |
+
+### Redeeming twice is not an error
+
+A farm that presses the button again on bad signal gets the grant it already
+had, and the code's remaining uses are untouched. Every other write path in
+this app is idempotent because the mutation queue insists on it; a redeem route
+that punished a retry would be the one place a dropped response cost somebody a
+subscription.
+
+### Making one
+
+```
+pnpm promo:new                        one code, forever, single use
+pnpm promo:new --days 365             a year from whenever it is redeemed
+pnpm promo:new --uses 5 --note beta   five farms, and a word to remember why
+```
+
+Printed once. It is stored hashed and cannot be shown again.
+
+**`FREE_SYNC_ORGS` stays** as the break-glass that needs no database — for the
+farm that cannot redeem because the thing that is broken is the server.

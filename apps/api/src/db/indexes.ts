@@ -159,6 +159,21 @@ const IDENTITY_INDEXES: Record<string, IndexDescription[]> = {
      */
     { key: { expiresAt: 1 }, expireAfterSeconds: 0 },
   ],
+  /**
+   * Promotion codes are found by their hash, which is the `_id` — so there is
+   * nothing to index for the redeem path.
+   *
+   * **And no TTL, deliberately**, unlike the join codes below. A join code is
+   * spent within ten minutes and the row is a receipt worth keeping for a day;
+   * a promotion code is a record of a subscription somebody was given, and the
+   * question "who did I hand codes to, and which are still live" has no answer
+   * if the rows delete themselves. They are few, they are small, and they are
+   * the only record that a farm's free year was intended.
+   *
+   * Listed rather than omitted so nobody has to wonder whether it was
+   * forgotten.
+   */
+  promoCodes: [],
   joinCodes: [
     // Minting replaces the farm's live code, and this is the lookup it does.
     { key: { orgId: 1, expiresAt: -1 } },

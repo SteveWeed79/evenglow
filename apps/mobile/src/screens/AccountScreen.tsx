@@ -12,6 +12,7 @@ import {
   googleSignIn,
   joinFarm,
   readBilling,
+  redeemPromo,
   readCachedClaims,
   signIn,
   SignInError,
@@ -68,6 +69,31 @@ export function AccountScreen({
   const [claims, setClaims] = useState<CachedClaims | null>(null);
   const [known, setKnown] = useState(false);
   const [billing, setBilling] = useState<BillingState | null>(null);
+
+  const [promo, setPromo] = useState('');
+  const [promoFailure, setPromoFailure] = useState<string | null>(null);
+  const [redeeming, setRedeeming] = useState(false);
+
+  /**
+   * Redeeming replaces the billing state rather than re-fetching it.
+   *
+   * The route answers with exactly what `/billing` would say next, so a second
+   * round trip could only introduce a window where the panel still said "kept
+   * on this phone" about a farm that is now syncing — on the one screen where
+   * somebody is watching for that sentence to change.
+   */
+  const usePromo = useCallback(async () => {
+    setRedeeming(true);
+    setPromoFailure(null);
+    try {
+      setBilling(await redeemPromo(promo));
+      setPromo('');
+    } catch (error) {
+      setPromoFailure(error instanceof Error ? error.message : 'That code does not work.');
+    } finally {
+      setRedeeming(false);
+    }
+  }, [promo]);
 
   const [mode, setMode] = useState<Mode>('claim');
   const [farmName, setFarmName] = useState('');
@@ -221,6 +247,32 @@ export function AccountScreen({
               phone sees the same records, a farm hand can log work, and a phone in a water
               trough costs you a phone rather than a season.
             </Body>
+
+            {/**
+              * Under the explanation, not above it.
+              *
+              * Almost nobody has a code, and a field asking for one is a
+              * question most people cannot answer — put first it reads as a
+              * wall. Whoever was handed one came here looking for it and will
+              * find it perfectly well at the bottom.
+              */}
+            <Field label="Been given a code?">
+              <TextField
+                value={promo}
+                onChangeText={setPromo}
+                placeholder="4F7K-M2Q9-XT3B"
+                maxLength={20}
+                caps
+                testID="promo-code"
+              />
+            </Field>
+            <Failure message={promoFailure} />
+            <Secondary
+              label={redeeming ? 'Checking…' : 'Use this code'}
+              disabled={redeeming || promo.trim() === ''}
+              onPress={() => void usePromo()}
+              testID="promo-redeem"
+            />
           </Panel>
         )}
       </Screen>

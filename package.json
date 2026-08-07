@@ -29,7 +29,8 @@
     "farm": "node scripts/dev-server.mjs",
     "db:password": "pnpm --filter @steading/api db:password",
     "bench:store": "tsx scripts/bench-store.mts",
-    "verify:alerts": "tsx scripts/verify-alerts.mts"
+    "verify:alerts": "tsx scripts/verify-alerts.mts",
+    "promo:new": "pnpm --filter @steading/api promo:new"
   },
   "dependencies": {
     "@steading/api": "workspace:*",

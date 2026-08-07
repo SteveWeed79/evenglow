@@ -1,6 +1,13 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { entitlementOf, syncRefusalMessage } from '@steading/contracts';
+import {
+  entitlementOf,
+  normalizeJoinCode,
+  promoRedeemSchema,
+  subscriptionFromPromo,
+  syncRefusalMessage,
+} from '@steading/contracts';
+import { redeemPromoCode } from '../db/promo-codes';
 import { requireClaims, requireMutationClaims } from '../auth/require';
 import { readPlaySubscription } from '../billing/play';
 import { findOrgById, findOrgIdByPurchaseToken, setSubscription } from '../db/identity';
@@ -77,6 +84,69 @@ export async function billingRoutes(app: FastifyInstance, env: Env): Promise<voi
    * holiday. Any member may pay; nobody may pay for a farm they do not belong
    * to, which the token already settles.
    */
+  /**
+   * A promotion code, typed into the app.
+   *
+   * ## Rate limited like sign-in, because it is the same kind of thing
+   *
+   * A code is a secret somebody presents to get something, which is what a
+   * password is, and the answer to guessing is the same answer: throttle hard
+   * and fail closed. Redemption is also authenticated — a grant lands on *a
+   * farm*, and a farm comes from a verified token — so an attacker needs an
+   * account before they can spend a single guess.
+   *
+   * ## One sentence for every refusal, deliberately
+   *
+   * "That code does not work" covers unknown, spent, expired and disabled.
+   * Distinguishing them would turn this into an oracle: "spent" tells a
+   * guesser they found a real code, which is most of the work. The farm loses
+   * nothing by the vagueness — there is exactly one thing to do about any of
+   * the four, which is ask whoever gave it to you.
+   *
+   * ## It writes a subscription rather than a bypass
+   *
+   * The gate in `sync.ts` is untouched and does not know promotions exist.
+   * That is the design: `entitlementOf` still decides, an expiry still
+   * overrides a stored state, and `/billing` above reports a promo exactly as
+   * honestly as it reports a purchase.
+   */
+  await app.register(async (scope) => {
+    await scope.register(import('@fastify/rate-limit'), { max: 5, timeWindow: '1 minute' });
+
+    scope.post('/billing/promo', async (request, reply) => {
+      try {
+        const claims = await requireMutationClaims(request.headers.authorization, env.AUTH_SECRET);
+
+        const parsed = promoRedeemSchema.safeParse(request.body);
+        if (!parsed.success) {
+          return reply.status(400).send({ error: 'That code does not work.' });
+        }
+
+        // Normalised the way a join code is: somebody reading a code off a
+        // screen and typing O for 0 has not made a mistake worth refusing.
+        const code = normalizeJoinCode(parsed.data.code);
+
+        const result = await redeemPromoCode(code, claims.orgId, claims.userId);
+        if (!result.ok) {
+          return reply.status(404).send({ error: 'That code does not work.' });
+        }
+
+        const subscription = subscriptionFromPromo(result.grant, Date.now());
+        await setSubscription(claims.orgId, subscription);
+
+        return reply.send({
+          state: subscription.state,
+          expiresAt: subscription.expiresAt ?? null,
+          syncing: entitlementOf(subscription, Date.now()).syncing,
+          message: null,
+        });
+      } catch (error) {
+        const { status, body } = errorBody(error);
+        return reply.status(status).send(body);
+      }
+    });
+  });
+
   app.post('/billing/play', async (request, reply) => {
     try {
       const claims = await requireMutationClaims(request.headers.authorization, env.AUTH_SECRET);

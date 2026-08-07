@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   entitlementOf,
+  formatPromoCode,
+  normalizeJoinCode,
+  PROMO_CODE_LENGTH,
+  promoGrantSchema,
+  subscriptionFromPromo,
   heldLabel,
   HELD_LABEL,
   SUBSCRIPTION_STATES,
@@ -361,5 +366,97 @@ describe('the farms that are never asked', () => {
   it('refuses anything that is not a farm id, rather than skipping it', () => {
     expect(() => readEnv({ ...base, FREE_SYNC_ORGS: 'steve@example.test' })).toThrow(/farm ids/);
     expect(() => readEnv({ ...base, FREE_SYNC_ORGS: `${ORG},nope` })).toThrow(/nope/);
+  });
+});
+
+/**
+ * Promotion codes (D13) — the pure half.
+ *
+ * **A code writes a subscription; it does not punch a hole in the gate.** That
+ * is the whole design, and it is why there is nothing to test in `sync.ts`:
+ * `entitlementOf` still decides, an expiry still overrides a stored state, and
+ * the route that refuses a lapsed farm never learns promotions exist. A bypass
+ * would have been fewer lines and a second code path through the one decision
+ * money depends on.
+ */
+describe('what a code is worth', () => {
+  const NOW = Date.parse('2026-05-15T09:00:00Z');
+
+  it('is a real subscription, indistinguishable to everything downstream', () => {
+    const granted = subscriptionFromPromo({ days: 365 }, NOW);
+
+    expect(entitlementOf(granted, NOW)).toEqual({ syncing: true, refusal: null });
+    expect(granted.source).toBe('promo');
+  });
+
+  /**
+   * The clock starts at redemption, not at minting. A code written in March
+   * and used in June is worth the same year either way — otherwise a code
+   * sitting in a message quietly loses value, which is not what anybody means
+   * by "a year".
+   */
+  it('counts its days from when it was used', () => {
+    const granted = subscriptionFromPromo({ days: 30 }, NOW);
+    expect(granted.expiresAt).toBe(NOW + 30 * 86_400_000);
+
+    const later = subscriptionFromPromo({ days: 30 }, NOW + 60 * 86_400_000);
+    expect(later.expiresAt).toBe(NOW + 90 * 86_400_000);
+  });
+
+  /** Forever is a real answer, and it is what the people who build this get. */
+  it('can be forever, and forever has no expiry to drift past', () => {
+    const granted = subscriptionFromPromo({ days: null }, NOW);
+
+    expect(granted.expiresAt).toBeUndefined();
+    expect(entitlementOf(granted, NOW + 10_000 * 86_400_000).syncing).toBe(true);
+  });
+
+  /**
+   * The safety this inherits for free by being a subscription rather than a
+   * bypass: a granted year still ends, and it ends through the same code path
+   * that ends a bought one.
+   */
+  it('lapses when its days run out, like anything else', () => {
+    const granted = subscriptionFromPromo({ days: 7 }, NOW);
+    const after = NOW + 8 * 86_400_000;
+
+    expect(entitlementOf(granted, after)).toEqual({ syncing: false, refusal: 'lapsed' });
+  });
+});
+
+describe('the code itself', () => {
+  /**
+   * Sized against `invites.ts`, not against the join code.
+   *
+   * A join code lives ten minutes while somebody holds their phone out, and
+   * six characters is defensible for exactly that. A promotion code is handed
+   * over and sits in a message for a month, which is the shape `invites.ts`
+   * says no rate limit can make safe if it is guessable.
+   */
+  it('is long enough to survive sitting in a message for a month', () => {
+    // 32 characters of Crockford is 5 bits each: 12 × 5 = 60.
+    expect(PROMO_CODE_LENGTH * 5).toBeGreaterThanOrEqual(60);
+    // A billion billion, against the join code's billion.
+    expect(32 ** PROMO_CODE_LENGTH).toBeGreaterThan(1e17);
+  });
+
+  it('is grouped so it can be read down a phone line', () => {
+    expect(formatPromoCode('4F7KM2Q9XT3B')).toBe('4F7K-M2Q9-XT3B');
+  });
+
+  /**
+   * The same courtesy the join code extends: somebody reading a code off a
+   * screen and typing O for 0 has not made a mistake worth refusing.
+   */
+  it('is understood however the ambiguous letters were typed', () => {
+    expect(normalizeJoinCode('4f7k-m2q9-xt3b')).toBe('4F7KM2Q9XT3B');
+    expect(normalizeJoinCode('OI L')).toBe('011');
+  });
+
+  it('refuses a grant that is not a whole number of days', () => {
+    expect(promoGrantSchema.safeParse({ days: 0 }).success).toBe(false);
+    expect(promoGrantSchema.safeParse({ days: -5 }).success).toBe(false);
+    expect(promoGrantSchema.safeParse({ days: 1.5 }).success).toBe(false);
+    expect(promoGrantSchema.safeParse({ days: null }).success).toBe(true);
   });
 });

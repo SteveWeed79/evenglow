@@ -48,8 +48,20 @@ export const subscriptionSchema = z.object({
   state: z.enum(SUBSCRIPTION_STATES),
   /** Unix ms. When the current paid period ends, or when the grace runs out. */
   expiresAt: z.number().int().optional(),
-  /** Which rail sold it. One today; the field exists so a second is additive. */
-  source: z.literal('play').optional(),
+  /**
+   * Which rail sold it — or gave it away.
+   *
+   * `promo` is a code somebody was handed: a tester, a neighbour, the person
+   * who built the thing. It is a **real subscription** rather than a hole in
+   * the gate, which is the whole design. Redeeming writes this record and
+   * nothing downstream changes — `entitlementOf` decides entitlement the same
+   * way, expiry still overrides state, `/billing` reports it honestly, and the
+   * sync route never learns that promotions exist.
+   *
+   * A bypass would have been fewer lines and a second code path through the
+   * one decision in this app that money depends on.
+   */
+  source: z.enum(['play', 'promo']).optional(),
   /** Play's own product id, kept for reconciling against a console. */
   productId: z.string().max(120).optional(),
   updatedAt: z.number().int().optional(),
@@ -200,4 +212,64 @@ export const HELD_LABEL = 'On this phone';
  */
 export function heldLabel(count: number, floor = 25): string {
   return count < floor ? HELD_LABEL : `${count} on this phone`;
+}
+
+/**
+ * A promotion code (D13).
+ *
+ * ## Why this is not the join code, and not the invite token either
+ *
+ * `membership.ts` argues carefully that six Crockford characters are enough
+ * for a join code, and every reason it gives is a reason this cannot be six:
+ * that code lives for ten minutes while somebody holds their phone out, it is
+ * single use, and there is one per farm. A promotion code is handed over and
+ * then sits in a message for a month. `invites.ts` states the rule for that
+ * shape flatly — *no rate limit makes a guessable secret safe* — so this is
+ * sized to be unguessable rather than to be typed quickly.
+ *
+ * Twelve characters of Crockford is 60 bits. Formatted in threes so it can be
+ * read down a phone line, normalised on the way in so `O` for `0` and `l` for
+ * `1` are understood rather than refused — the same courtesy the join code
+ * extends, and for the same reason.
+ */
+export const PROMO_CODE_LENGTH = 12;
+
+/** `4F7K-M2Q9-XT3B`. Groups of four, because that is what a person can hold. */
+export function formatPromoCode(code: string): string {
+  return (code.match(/.{1,4}/g) ?? [code]).join('-');
+}
+
+/**
+ * What a redeemed code is worth.
+ *
+ * `days` rather than a date, because a code minted in March and redeemed in
+ * June should give the same year either way — the clock starts when somebody
+ * uses it, not when it was written. `null` is forever, which is what the
+ * people who build this get.
+ */
+export const promoGrantSchema = z
+  .object({
+    days: z.number().int().positive().nullable(),
+    /** Free text, for the person reading a list of codes a year later. */
+    note: z.string().max(120).optional(),
+  })
+  .strict();
+
+export type PromoGrant = z.infer<typeof promoGrantSchema>;
+
+export const promoRedeemSchema = z.object({ code: z.string().min(1).max(40) }).strict();
+
+/**
+ * What redemption becomes.
+ *
+ * Pure, so the rule that decides a farm's entitlement can be tested without a
+ * database — the same argument `entitlementOf` makes, and this feeds it.
+ */
+export function subscriptionFromPromo(grant: PromoGrant, now: number): Subscription {
+  return {
+    state: 'active',
+    source: 'promo',
+    ...(grant.days === null ? {} : { expiresAt: now + grant.days * 86_400_000 }),
+    updatedAt: now,
+  };
 }
