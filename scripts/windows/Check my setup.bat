@@ -107,6 +107,66 @@ if errorlevel 1 (
 )
 
 echo.
+echo   --- Java, and the SDK pieces Gradle needs ---
+:: None of this mattered under Expo Go, because nothing was ever compiled on
+:: this machine. Building the app locally needs four things Android Studio does
+:: not install by its default flow, and a window that said "Nothing missing"
+:: without checking them would be exactly the false OK this file was rewritten
+:: to stop giving.
+set "J17="
+for /d %%D in ("%ProgramFiles%\Eclipse Adoptium\jdk-17*" "%ProgramFiles%\Java\jdk-17*" "%ProgramFiles%\Microsoft\jdk-17*" "%ProgramFiles%\Zulu\zulu-17*") do (
+  if exist "%%~D\bin\java.exe" set "J17=%%~D"
+)
+if defined J17 (
+  echo   [ OK ]      Java 17
+) else (
+  echo   [ MISSING ] Java 17        - Temurin 17 LTS from adoptium.net.
+  echo               NOT 21, and not the one inside Android Studio: React
+  echo               Native asks Gradle for 17 by name.
+  set /a MISSING+=1
+)
+
+for %%P in (
+  "ndk\27.1.12297006"
+  "cmake"
+  "platforms\android-36"
+  "build-tools\36.0.0"
+) do (
+  if exist "%LOCALAPPDATA%\Android\Sdk\%%~P" (
+    echo   [ OK ]      SDK %%~P
+  ) else (
+    echo   [ MISSING ] SDK %%~P
+    echo               Android Studio, Tools ^> SDK Manager, SDK Tools tab.
+    set /a MISSING+=1
+  )
+)
+
+:: 297-character paths already exist inside node_modules\.pnpm, and Gradle
+:: writes its own output underneath them. Windows truncates at 260 unless this
+:: is on, and the failure looks like a corrupt checkout rather than a limit.
+for /f "tokens=3" %%L in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\FileSystem" /v LongPathsEnabled 2^>nul ^| findstr LongPathsEnabled') do set "LONGPATHS=%%L"
+if "%LONGPATHS%"=="0x1" (
+  echo   [ OK ]      long file paths
+) else (
+  echo   [ NOTE ]    long file paths are OFF in Windows.
+  echo               If the build fails on a path nobody can read, that is
+  echo               why. The reliable fix is a short folder: C:\steading
+)
+
+echo.
+echo   --- Is the app installed on the device? ---
+:: The single most useful line this window can print now. Under Expo Go the
+:: answer was always "Expo Go is"; with a development build, "no" explains a
+:: QR code nobody can scan and a phone that never opens anything.
+adb shell pm list packages 2>nul | findstr /c:"com.steading.app" >nul
+if errorlevel 1 (
+  echo   [ NOTE ]    Steading is not installed on the attached device.
+  echo               Run "Run on emulator" once - it builds and installs it.
+) else (
+  echo   [ OK ]      Steading is installed
+)
+
+echo.
 echo   --- Do the app's packages match Expo? ---
 :: The one question this window could not answer, and the one that has cost
 :: the most time. The SDK pins a native version for every one of these

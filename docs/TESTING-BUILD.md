@@ -23,11 +23,11 @@ No Play Console, no $25, no signing keys to manage, no review.
 
 ## 2. Which profile
 
-`eas.json` has three, and the difference is one environment variable.
+`eas.json` has four. Three differ only by an environment variable; `development` differs by carrying the dev client.
 
 | Profile | `EXPO_PUBLIC_API_URL` | What it is for |
 |---|---|---|
-| `development` | `http://10.0.2.2:3001` | **You**, on the emulator, with Metro reload |
+| `development` | empty | A dev-client APK built in the cloud — for when the local Gradle toolchain is the problem |
 | `preview` | empty | **A tester.** The whole app, no server, nothing to set up |
 | `preview-farm` | your API origin | The same, plus sync and accounts |
 | `production` | your API origin | An AAB for the Play Store |
@@ -96,9 +96,21 @@ production because testers install new builds often.
 | Expo Go updating itself | **It did — which is why the app no longer runs there** |
 | A build signed with a different key | No — Android forces an uninstall first |
 
-The last one is the one that surprises people. EAS uses a keystore it generates
-once and reuses; a locally-built debug APK uses `~/.android/debug.keystore`.
-Mixing the two means an uninstall, and an uninstall means an empty farm.
+The last one is the one that surprises people, and the dev build makes it
+easier to hit rather than harder. EAS signs with a keystore it generates once;
+`expo run:android` signs with the template's debug keystore. **Those are two
+different keys**, so installing an `eas build --profile development` APK onto a
+device that already has a locally-built one fails with
+`INSTALL_FAILED_UPDATE_INCOMPATIBLE` — and the only way past it is an
+uninstall, which takes the farm.
+
+**Pick one route per device and stay on it.** Local for the machine you develop
+on; EAS for anything you hand to somebody else.
+
+Verified while writing this: the template's `debug.keystore` is byte-identical
+across expo 57.0.8, 57.0.9 and 57.0.11, and `android/` is regenerated from it
+by prebuild — so a patch bump genuinely does not wipe a locally-built dev
+build, the way it could under Expo Go.
 
 **There is a second, quieter version of this**, documented in
 `auth/local-org.ts`: the farm's id lives in secure storage and the records live

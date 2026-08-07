@@ -125,10 +125,26 @@ if errorlevel 1 (
 echo   Settings file - created.
 exit /b 0
 
+:set_emulator_address
+:: The inverse of :set_lan_address, and it did not used to be needed.
+::
+:: Under Expo Go, Metro re-read this value on every start, so a wifi address
+:: left behind by the phone script was live configuration and swapping back
+:: happened for free. A development build BAKES it into the apk at compile
+:: time — so a phone address left in place produces an emulator build that
+:: cannot reach the server on the machine that built it, with no clue on
+:: screen beyond "Not set up".
+powershell -NoProfile -Command "(Get-Content 'apps\mobile\.env') -replace 'EXPO_PUBLIC_API_URL=.*', 'EXPO_PUBLIC_API_URL=http://10.0.2.2:3001' | Set-Content 'apps\mobile\.env'"
+echo   Server address - set for the emulator.
+exit /b 0
+
 :set_lan_address
 :: The example points at 10.0.2.2, which is how the EMULATOR reaches this
 :: computer. A real phone on wifi cannot use that address at all, so the phone
 :: script swaps in this computer's own address.
+::
+:: Baked into the apk now rather than re-read every start, so `Run on
+:: emulator` calls :set_emulator_address to put it back before it builds.
 findstr /c:"10.0.2.2" "apps\mobile\.env" >nul 2>&1
 if errorlevel 1 (
   echo   Server address - already set.
@@ -154,30 +170,43 @@ exit /b 0
 
 :check_java
 :: Nothing was ever compiled locally under Expo Go, so no run script needed a
-:: JDK. `expo run:android` is Gradle, and Gradle is Java — so this is now as
-:: load-bearing as the Node check.
+:: JDK. `expo run:android` is Gradle, and Gradle is Java.
 ::
-:: Android Studio ships its own (JBR) and that one is fine; it is just not on
-:: PATH, so this looks there before giving up.
-where java >nul 2>&1
-if not errorlevel 1 goto :java_ok
-if exist "%ProgramFiles%\Android\Android Studio\jbr\bin\java.exe" (
-  set "PATH=%ProgramFiles%\Android\Android Studio\jbr\bin;%PATH%"
-  goto :java_ok
+:: **Seventeen specifically, and this is the part that surprises people.**
+:: React Native's Gradle plugin calls `jvmToolchain(17)` with no auto-download
+:: configured, so Gradle needs a JDK 17 on the machine — it will not satisfy a
+:: 17 toolchain with the 21 that recent Android Studio bundles. A check that
+:: only asked "is there a java" would print OK on a machine that then fails
+:: with a Gradle stack trace, which is the exact failure these scripts exist
+:: to prevent.
+set "JAVA17="
+for /d %%D in ("%ProgramFiles%\Eclipse Adoptium\jdk-17*" "%ProgramFiles%\Java\jdk-17*" "%ProgramFiles%\Microsoft\jdk-17*" "%ProgramFiles%\Zulu\zulu-17*") do (
+  if exist "%%~D\bin\java.exe" set "JAVA17=%%~D"
 )
+
+if not defined JAVA17 if defined JAVA_HOME (
+  "%JAVA_HOME%\bin\java.exe" -version 2>&1 | findstr /r /c:"version .1*7\." >nul && set "JAVA17=%JAVA_HOME%"
+)
+
+if defined JAVA17 (
+  set "JAVA_HOME=%JAVA17%"
+  set "PATH=%JAVA17%\bin;%PATH%"
+  echo   Java 17 - found.
+  exit /b 0
+)
+
 echo.
-echo   PROBLEM: no Java found, and building the app needs it.
+echo   PROBLEM: no Java 17 found, and building the app needs exactly that.
 echo.
-echo   Android Studio comes with one. If you have Android Studio,
-echo   it is usually here and just not on the PATH:
-echo     %ProgramFiles%\Android\Android Studio\jbr
+echo   Not 21, and not the one inside Android Studio - React Native asks
+echo   Gradle for 17 by name and will not accept a newer one.
 echo.
-echo   Otherwise install Temurin JDK 17 from adoptium.net.
+echo   Get "Temurin 17 (LTS)" from https://adoptium.net and install it.
+echo   Then close this window and run it again.
+echo.
+if defined JAVA_HOME echo   ^(JAVA_HOME is currently %JAVA_HOME%^)
 echo.
 exit /b 1
-:java_ok
-echo   Java - found.
-exit /b 0
 
 :check_adb
 where adb >nul 2>&1
