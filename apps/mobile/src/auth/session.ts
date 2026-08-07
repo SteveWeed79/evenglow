@@ -1,7 +1,7 @@
 import { apiBase, setAccessToken, syncHeaders } from '@steading/core/api';
 import { z } from 'zod';
 import { roleSchema } from '@steading/contracts';
-import { forgetLocalOrgId } from './local-org';
+import { retireLocalOrgId } from './local-org';
 import {
   type CachedClaims,
   clearCredentials,
@@ -272,12 +272,16 @@ export async function googleSignIn(input: {
  * **This device's own farm is left behind, deliberately.** A hand joining an
  * employer's farm gets that farm's database, and the org this handset minted
  * on first launch — with whatever was logged before the code was typed — is
- * no longer reachable. `forgetLocalOrgId` is what makes that final rather than
- * something a later sign-out would silently reopen.
+ * no longer the one this device belongs to. `retireLocalOrgId` moves the
+ * pointer aside so a later sign-out does not silently reopen it.
  *
- * The screen says so before the code is sent. It is the honest cost of a
- * one-org-per-user model, and hiding it would mean somebody discovering it on
- * the morning they went looking for last week's tallies.
+ * **Aside, not away.** It used to delete the id, which stranded every record
+ * behind it permanently — the file is named for that id and nothing else
+ * points at it. The records were never gone; the only copy of their address
+ * was. They stay reachable now, from `Get your records out`.
+ *
+ * The screen says so before the code is sent, with a count, because "anything
+ * you logged" is a sentence somebody agrees to without knowing what it costs.
  */
 export async function joinFarm(input: {
   code: string;
@@ -294,7 +298,7 @@ export async function joinFarm(input: {
   if (!res.ok) throw await refusal(res, 'That code did not work. Ask for a fresh one.');
 
   const claims = await establish(await res.json());
-  await forgetLocalOrgId();
+  await retireLocalOrgId();
   return claims;
 }
 

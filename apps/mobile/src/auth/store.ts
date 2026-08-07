@@ -32,6 +32,17 @@ const CLAIMS_KEY = 'steading.claims';
 const LOCAL_ORG_KEY = 'steading.localOrg';
 
 /**
+ * Farms this device minted and then moved away from.
+ *
+ * **The id is the only pointer to a farm's database** — the file is
+ * `steading-{orgId}.db` and nothing else names it — so deleting the id on a
+ * join stranded every record behind it permanently, with no error and nothing
+ * on any screen. The active pointer still has to move, or signing out would
+ * reopen the wrong farm; what it must not do is go in the bin.
+ */
+const RETIRED_ORGS_KEY = 'steading.retiredOrgs';
+
+/**
  * Parsed on read, never trusted (invariant 11).
  *
  * Secure storage is external data: it survives app upgrades, so a value
@@ -113,6 +124,17 @@ export async function writeLocalOrg(orgId: string): Promise<void> {
 
 export async function clearLocalOrg(): Promise<void> {
   await SecureStore.deleteItemAsync(LOCAL_ORG_KEY).catch(() => undefined);
+}
+
+/** Raw, parsed by `local-org.ts` — nothing here trusts what it reads. */
+export async function readRetiredOrgsRaw(): Promise<string | null> {
+  return SecureStore.getItemAsync(RETIRED_ORGS_KEY);
+}
+
+export async function writeRetiredOrgs(orgIds: readonly string[]): Promise<void> {
+  await SecureStore.setItemAsync(RETIRED_ORGS_KEY, JSON.stringify(orgIds), {
+    keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK,
+  });
 }
 
 /**
