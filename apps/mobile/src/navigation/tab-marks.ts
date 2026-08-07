@@ -128,14 +128,3 @@ export const TAB_DIVIDER = {
 
 /** What is actually drawn, as a fraction. Derived, so the two cannot drift. */
 export const dividerLength = (): number => 1 - TAB_DIVIDER.inset * 2;
-
-/**
- * Where each one sits, as a fraction of the bar's width.
- *
- * Between the slots and never at an edge — a line at 0 or 1 would double the
- * screen border on one side and read as a frame.
- */
-export function dividerOffsets(count: number): number[] {
-  if (count < 2) return [];
-  return Array.from({ length: count - 1 }, (_, i) => (i + 1) / count);
-}

@@ -1,7 +1,7 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { dividerOffsets, TAB_DIVIDER, tabs } from './tab-marks';
+import { TabDividers } from './TabDividers';
+import { tabs } from './tab-marks';
 import { FarmScreen } from '../screens/FarmScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
 import { TodayScreen } from '../screens/TodayScreen';
@@ -99,49 +99,6 @@ export function Tabs(): React.ReactElement {
 }
 
 /**
- * The hairlines between the tabs. See `TAB_DIVIDER` for why they are short.
- *
- * `pointerEvents="none"` because they sit across the bar and a tab is one of
- * the two things in this app tapped through a glove — a decorative line that
- * swallowed even a pixel of a target would be the worst possible trade.
- *
- * Centred by percentage rather than by a computed pixel offset, so the bar can
- * be any width and gain or lose a tab without this knowing: the offsets are
- * fractions and the inset is a fraction, which means rotation and a tablet
- * both come free.
- *
- * **Except the bottom safe area, which is not free.** React Navigation adds the
- * home-indicator inset as padding *below* the height set in `tabBarStyle`, so
- * the container this fills is taller than the part anybody looks at — by 34pt
- * on the phones that have one. Centring in the container would drop the lines
- * a sixth of a bar below the marks they divide, which is exactly the sort of
- * thing that looks fine in Node and wrong in the hand.
- */
-function TabDividers({ count }: { count: number }): React.ReactElement {
-  const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
-
-  return (
-    <View style={[StyleSheet.absoluteFill, { bottom: insets.bottom }]} pointerEvents="none">
-      {dividerOffsets(count).map((offset) => (
-        <View
-          key={offset}
-          style={[
-            styles.divider,
-            {
-              left: `${offset * 100}%`,
-              top: `${TAB_DIVIDER.inset * 100}%`,
-              bottom: `${TAB_DIVIDER.inset * 100}%`,
-              backgroundColor: colors.border,
-            },
-          ]}
-        />
-      ))}
-    </View>
-  );
-}
-
-/**
  * One tab: its name, and nothing else.
  *
  * The mark that used to sit above it was a doorway, and the word under it said
@@ -185,18 +142,29 @@ function TabMark({
 
   return (
     <View style={styles.mark}>
+      {/**
+        * One size for every tab, and no auto-shrink.
+        *
+        * `adjustsFontSizeToFit` shrinks each label independently, so the
+        * longest one — HISTORY, at seven characters against TODAY's five —
+        * came out visibly smaller than its neighbours and the bar read as
+        * three different things. That was tolerable while a mark sat above
+        * each word and carried the rank; with the marks gone the type *is*
+        * the bar, and three sizes in it is three levels of importance nobody
+        * meant.
+        *
+        * So the size is fixed and the names are held to what fits instead —
+        * `tests/unit/tabs.test.ts` caps them at eight characters, which is
+        * what a third of the narrowest phone takes at this size. Past that
+        * `numberOfLines` clips, and a clipped word still reads.
+        */}
       <Text
-        // The whole point: one line, always. Everything else is how it copes.
         numberOfLines={1}
-        // Android honours this alongside numberOfLines, so a long name shrinks
-        // to fit before it is cut.
-        adjustsFontSizeToFit
-        minimumFontScale={0.8}
         style={[
           styles.label,
           {
             color: tint,
-            letterSpacing: roomy ? 1.2 : 0,
+            letterSpacing: roomy ? 1 : 0,
             fontSize: roomy ? TYPE.label : TYPE.label - 2,
           },
         ]}
@@ -208,13 +176,7 @@ function TabMark({
 }
 
 const styles = StyleSheet.create({
-  /**
-   * Centred by equal insets rather than by `top: 50%` and a half-height
-   * transform. Percentage transforms resolve against the element's own size
-   * and are a newer RN feature; two equal insets are as old as flexbox and
-   * cannot behave differently on a handset than they do here.
-   */
-  divider: { position: 'absolute', width: StyleSheet.hairlineWidth },
+  /** Exactly as wide as a tab, because it is divided the same way. */
   // Full width of the slot, so the label has the whole tab to sit in rather
   // than only as much as the icon happens to occupy.
   mark: { alignItems: 'center', justifyContent: 'center', gap: 3, width: '100%' },
