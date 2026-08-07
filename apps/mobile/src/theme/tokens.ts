@@ -39,7 +39,20 @@ export interface Theme {
   raised: string;
   /** Body text. Deep loam in daylight, candle-warm off-white at night. */
   ink: string;
-  /** Secondary text, dividers. */
+  /**
+   * Labels and dividers. **Never a sentence.**
+   *
+   * It measures 4.8–5.4:1 on the two ambient grounds — comfortably past the
+   * 4.5:1 AA floor a label needs and short of R7's 7:1, which this app holds
+   * itself to because the screen is in the sun. That is the right value for
+   * what it is for: a stat label, a unit, a divider, a timestamp. It is the
+   * wrong value for anything somebody has to *read*.
+   *
+   * Secondary sentences take `ink` and earn their quietness from size and
+   * position instead. `tests/unit/contrast.test.ts` holds the floors; it
+   * cannot tell a label from a sentence, so that part is a rule rather than a
+   * gate.
+   */
   muted: string;
   /**
    * Primary action, lit lamp, current tab — as a FILL or a lit surface.
@@ -63,6 +76,22 @@ export interface Theme {
    * Values are the design system's (handoff 3.1), not derived here.
    */
   lanternInk: string;
+  /**
+   * What can be read **on top of** a `lantern` fill.
+   *
+   * Nine components put a hardcoded `#241c14` on the brass — the primary
+   * button, the chips, the toggles, the commit, the armed Done, the month
+   * picker. That is right on the two ambient themes, where the fill is bright
+   * brass and dark loam sits on it at 8.7:1.
+   *
+   * **In bright sun it was 3.9:1, which is a failure in the theme that exists
+   * to be legible.** Sun darkens the fill to `#a16c00` so the button can be
+   * seen as a shape against a white ground at all — and dark ink on a dark
+   * fill is the predictable consequence. So the sun theme puts white on it
+   * instead, and the choice belongs to the theme rather than to nine files
+   * that cannot know which one is active.
+   */
+  lanternOn: string;
   /** Complete, synced, healthy. */
   leaf: string;
   /** Overdue, withdrawal active, conflict. */
@@ -84,7 +113,33 @@ export interface Theme {
   shade: string;
 }
 
-const ACCENTS = { leaf: '#6b8f52', rowan: '#c4442c', damson: '#8a6484' } as const;
+/**
+ * The three accents, which are **graphical objects and never body text**.
+ *
+ * A rule, a bar, a dot, a border, a filled button. None of them clears R7's
+ * 7:1 on any ground and none of them needs to; the floor for a graphical
+ * object is 3:1, which is what `contrast.test.ts` holds them to.
+ *
+ * The one place this bites is a heading tinted to match its own rule — rowan
+ * on the lamplight ground is 3.1:1, which is a fine bar and an unreadable
+ * sentence. Keep the bar, set the words in `ink`.
+ */
+const ACCENTS = { rowan: '#c4442c', damson: '#8a6484' } as const;
+
+/**
+ * Leaf, which needed darkening on loam and nowhere else.
+ *
+ * `#6b8f52` measures **2.97:1 on the daylight ground** — under even the 3:1
+ * floor for a graphical object, so the "done" tick and the healthy dot were
+ * the two marks in the app that could not be relied on to be seen at all. It
+ * clears comfortably on both dark grounds and in bright sun.
+ *
+ * Theme-scoped in the same key rather than given a second token, exactly as
+ * `lanternInk` is and for the same reason: one name means one thing, and
+ * darkening it everywhere would dim the healthy colour at night to fix a
+ * problem it only has in daylight.
+ */
+const LEAF = { daylight: '#61824b', lamplight: '#6b8f52', sun: '#6b8f52' } as const;
 
 export const THEMES: Record<ThemeName, Theme> = {
   daylight: {
@@ -92,6 +147,9 @@ export const THEMES: Record<ThemeName, Theme> = {
     lantern: '#e9b23c',
     /** 5.15:1 on raised, 4.71:1 on ground. */
     lanternInk: '#8a5b00',
+    /** 8.71:1 on the brass fill. */
+    lanternOn: '#241c14',
+    leaf: LEAF.daylight,
     ...ACCENTS,
     border: 'rgba(36,28,20,0.22)', borderWidth: 2,
     alertTint: '#f3e2d8', scrim: 'rgba(36,28,20,0.55)', glow: 'rgba(233,178,60,0.22)',
@@ -102,6 +160,9 @@ export const THEMES: Record<ThemeName, Theme> = {
     lantern: '#e9b23c',
     /** 8:1 on raised — brass on a dark wall needs no darkening. */
     lanternInk: '#e9b23c',
+    /** 8.71:1 on the brass fill — the same fill as daylight. */
+    lanternOn: '#241c14',
+    leaf: LEAF.lamplight,
     ...ACCENTS,
     border: 'rgba(240,231,213,0.22)', borderWidth: 2,
     alertTint: '#372620', scrim: 'rgba(0,0,0,0.6)', glow: 'rgba(233,178,60,0.30)',
@@ -109,10 +170,21 @@ export const THEMES: Record<ThemeName, Theme> = {
   },
   sun: {
     ground: '#fffdf6', raised: '#ffffff', ink: '#14100a', muted: '#4a4238',
-    /** Darkened deliberately: brass on white does not hold 7:1. */
-    lantern: '#a66f00',
+    /**
+     * Darkened deliberately: brass on white does not hold 7:1, and a fill that
+     * cannot be told from the ground is not a button.
+     *
+     * Five points darker than the handoff's `#a66f00`, which is what lets
+     * white clear 4.5:1 on it. At `#a66f00` the primary button's own label
+     * measured 3.9:1 — the worst contrast of the three themes, in the theme
+     * that exists for reading a screen in a field at noon.
+     */
+    lantern: '#a16c00',
     /** 5.87:1 on white. The plain lantern is 4.29 and cannot carry a label. */
     lanternInk: '#8a5b00',
+    /** White, not loam: 4.51:1 on the darkened fill, against loam's 4.42. */
+    lanternOn: '#ffffff',
+    leaf: LEAF.sun,
     ...ACCENTS,
     border: '#14100a', borderWidth: 2,
     alertTint: '#fdeeea', scrim: 'rgba(20,16,10,0.55)', glow: 'rgba(166,111,0,0.16)',

@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import {
   formatMass,
   formatRange,
@@ -19,6 +19,7 @@ import { Notes } from '../components/Notes';
 import { Photos } from '../components/Photos';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
+import { Touch } from '../components/Touch';
 import { WithdrawalBanner } from '../components/WithdrawalBanner';
 import { growOutWindow, layOnsetWindow } from '../hooks/useDues';
 import { useLive } from '../hooks/useLive';
@@ -145,7 +146,6 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
         <Row
           title="Record a treatment"
           detail="Starts the withdrawal clock on eggs, meat or milk"
-          icon="medication"
           testID="go-treatment"
           onPress={() => nav.navigate('Treatment', { groupId })}
         />
@@ -162,7 +162,6 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
         <Row
           title="Routine jobs"
           detail="How often each one asks, or turn it off"
-          icon="date-due"
           testID="go-care-routine"
           onPress={() => nav.navigate('CareRoutine', { groupId })}
         />
@@ -171,27 +170,24 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
         <Row
           title="The numbers"
           detail="What they have produced over a season, against what they have eaten"
-          icon="streak-plant"
           testID="go-trend"
           onPress={() => nav.navigate('Trend', { groupId })}
         />
         <Row
           title="Log a feed"
           detail="What went in, and how much"
-          icon="feed"
           testID="go-feed"
           onPress={() => nav.navigate('Feed', { groupId })}
         />
         <Row
           title="Record a loss"
           detail="A death, a cull, or a predator"
-          icon="mortality"
           testID="go-loss"
           onPress={() => nav.navigate('Loss', { groupId })}
         />
       </View>
 
-      <Pressable
+      <Touch affordance="disclose"
         onPress={() => setMore(!more)}
         accessibilityRole="button"
         accessibilityState={{ expanded: more }}
@@ -202,7 +198,7 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
       >
         <Text style={[styles.moreLabel, { color: colors.muted }]}>{more ? 'Fewer' : 'More'}</Text>
         <Icon name={more ? 'minus' : 'plus'} size={16} color={colors.muted} />
-      </Pressable>
+      </Touch>
 
       {more ? (
         <View style={styles.rows}>
@@ -220,13 +216,11 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
               `other` is the only route for anything the app has no name for. */}
           <Row
             title={producesTitle(produces)}
-            icon="milk"
             testID="go-produce"
             onPress={() => nav.navigate('Produce', { groupId })}
           />
           <Row
             title="Weigh them"
-            icon="milestone"
             testID="go-weigh"
             onPress={() => nav.navigate('Weigh', { groupId })}
           />
@@ -236,7 +230,6 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
           <Row
             title="What they should get"
             detail="A ration, so the app can say when the sack runs out"
-            icon="feed"
             testID="go-feed-plan"
             onPress={() => nav.navigate('FeedPlan', { groupId })}
           />
@@ -247,26 +240,22 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
           {(group.purposes ?? []).includes('fibre') ? (
             <Row
               title="Record a clip"
-              icon="basic-full"
               testID="go-shearing"
               onPress={() => nav.navigate('Shearing', { groupId })}
             />
           ) : null}
           <Row
             title="Named animals"
-            icon="stock"
             testID="go-animals"
             onPress={() => nav.navigate('Animals', { groupId })}
           />
           <Row
             title="Matings and births"
-            icon="date-due"
             testID="go-breeding"
             onPress={() => nav.navigate('Breeding', { groupId })}
           />
           <Row
             title="Change this group"
-            icon="edit"
             testID="go-edit"
             onPress={() => nav.navigate('EditGroup', { groupId })}
           />

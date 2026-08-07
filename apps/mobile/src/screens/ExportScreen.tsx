@@ -147,7 +147,6 @@ export function ExportScreen(): React.ReactElement {
               ? 'Preparing…'
               : `${sheet.rows} ${sheet.rows === 1 ? 'record' : 'records'} in total`
           }
-          icon="export"
           testID={`export-${sheet.name}`}
           onPress={() => void share(sheet.name)}
         />

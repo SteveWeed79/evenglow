@@ -86,7 +86,6 @@ export function PlantingScreen({ route }: ScreenProps<'Planting'>): React.ReactE
         {needsIndoorStart && !started ? (
           <Secondary
             label="Started them indoors"
-            icon="growing"
             testID="mark-indoors"
             onPress={() => mark({ startedIndoorsAt: Date.now(), status: 'started' })}
           />
@@ -95,7 +94,6 @@ export function PlantingScreen({ route }: ScreenProps<'Planting'>): React.ReactE
         {planting.sownAt === undefined && !needsIndoorStart ? (
           <Secondary
             label="Sowed it"
-            icon="growing"
             testID="mark-sown"
             onPress={() => mark({ sownAt: Date.now(), status: 'in-ground' })}
           />
@@ -105,7 +103,6 @@ export function PlantingScreen({ route }: ScreenProps<'Planting'>): React.ReactE
         {planting.transplantedAt === undefined && (!needsIndoorStart || started) ? (
           <Secondary
             label="Planted it out"
-            icon="growing"
             testID="mark-planted"
             onPress={() => mark({ transplantedAt: Date.now(), status: 'in-ground' })}
           />
@@ -114,7 +111,6 @@ export function PlantingScreen({ route }: ScreenProps<'Planting'>): React.ReactE
         {planting.status !== 'harvesting' && planting.status !== 'finished' ? (
           <Secondary
             label="It is ready — start picking"
-            icon="basket"
             testID="mark-harvesting"
             onPress={() => mark({ status: 'harvesting' })}
           />

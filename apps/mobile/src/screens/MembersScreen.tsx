@@ -1,27 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Share, StyleSheet, Text, View } from 'react-native';
 import { z } from 'zod';
-import {
-  assignableRoles,
-  canInvite,
-  INVITE_TTL_DAYS,
-  JOIN_CODE_TTL_MINUTES,
-  type PendingInvite,
-  type Role,
-  roleSchema,
-} from '@steading/contracts';
+import { assignableRoles, canInvite, INVITE_TTL_DAYS, JOIN_CODE_TTL_MINUTES, type PendingInvite, type Role, roleSchema } from '@steading/contracts';
 import { apiBase, currentAccessToken } from '@steading/core/api';
-import {
-  Choice,
-  Confirm,
-  Failure,
-  Field,
-  Primary,
-  Secondary,
-  TextField,
-  useSaver,
-} from '../components/Form';
-import { Icon } from '../components/Icon';
+import { Choice, Confirm, Failure, Field, Primary, Secondary, TextField, useSaver } from '../components/Form';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { readCachedClaims, refreshSession } from '../auth/session';
@@ -251,14 +233,13 @@ export function MembersScreen(): React.ReactElement {
             This is the one screen that needs a signal — who may write to your farm is the
             server&rsquo;s decision, not this device&rsquo;s. Everything else still works.
           </Body>
-          <Secondary label="Try again" icon="try-again" onPress={() => void refresh()} />
+          <Secondary label="Try again" onPress={() => void refresh()} />
         </Panel>
       )}
 
       {members === null ? null : members.length === 0 ? (
         <Panel label="Just you">
           <View style={styles.spot}>
-            <Icon name="head-count" size={56} color={colors.muted} />
           </View>
           <Body>Nobody else has been added yet.</Body>
         </Panel>
@@ -339,7 +320,6 @@ export function MembersScreen(): React.ReactElement {
           </Text>
           <Secondary
             label="Share it"
-            icon="copy"
             onPress={() => void Share.share({ message: minted.token })}
           />
           <Secondary label="Done" icon="check" onPress={() => setMinted(null)} />

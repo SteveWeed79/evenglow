@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { mayChangeNote, newId, type NoteSubject, type Role } from '@steading/contracts';
 import { listNotes, type Note, notesOn } from '@steading/core/read/notes';
 import { Confirm, Failure, Primary, Secondary, TextField, useSaver } from './Form';
 import { Icon } from './Icon';
 import { Body, Panel } from './Panel';
+import { Touch } from './Touch';
 import { readCachedClaims } from '../auth/session';
 import { useLive } from '../hooks/useLive';
 import { useLog } from '../hooks/useSync';
@@ -103,7 +104,7 @@ export function Notes({
 
   if (!open) {
     return (
-      <Pressable
+      <Touch affordance="disclose"
         onPress={() => setOpen(true)}
         accessibilityRole="button"
         accessibilityLabel={
@@ -121,7 +122,6 @@ export function Notes({
           },
         ]}
       >
-        <Icon name="edit" size={24} color={thread.length === 0 ? colors.muted : colors.lanternInk} />
 
         <View style={styles.collapsedWords}>
           <View style={styles.head}>
@@ -131,7 +131,9 @@ export function Notes({
                 read state is the part of a chat this app declines to have. */}
             {thread.length > 0 ? (
               <View style={[styles.badge, { backgroundColor: colors.lantern }]}>
-                <Text style={styles.badgeCount}>{thread.length}</Text>
+                <Text style={[styles.badgeCount, { color: colors.lanternOn }]}>
+                  {thread.length}
+                </Text>
               </View>
             ) : null}
           </View>
@@ -144,7 +146,7 @@ export function Notes({
         </View>
 
         <Icon name="forward" size={20} color={colors.muted} />
-      </Pressable>
+      </Touch>
     );
   }
 
@@ -317,7 +319,7 @@ function NoteRow({
         <>
           {/* The note IS the control, where there is one. A note somebody may
               not change is plain text, not a button that does nothing. */}
-          <Pressable
+          <Touch affordance="disclose"
             onPress={mine ? onSelect : undefined}
             disabled={!mine}
             {...(mine
@@ -335,7 +337,6 @@ function NoteRow({
             <Text style={[styles.body, { color: colors.ink }]}>{note.body}</Text>
 
             <View style={styles.by}>
-              <Icon name="head-count" size={16} color={colors.muted} />
               <Text style={[styles.byline, { color: colors.muted }]}>
                 {/* Unattributed rather than guessed at: a note that synced from a
                     build without a name should not claim to be from this device. */}
@@ -346,7 +347,7 @@ function NoteRow({
                 <Icon name={selected ? 'minus' : 'more'} size={16} color={colors.muted} />
               ) : null}
             </View>
-          </Pressable>
+          </Touch>
 
           {mine && selected ? (
             <View style={styles.actions}>
@@ -356,7 +357,6 @@ function NoteRow({
                 <View style={styles.half}>
                   <Secondary
                     label="Change it"
-                    icon="edit"
                     onPress={() => setEditing(true)}
                     testID={`note-edit-open-${note.id}`}
                   />
@@ -424,7 +424,6 @@ const styles = StyleSheet.create({
   badgeCount: {
     fontFamily: FONTS.data,
     fontSize: TYPE.label,
-    color: '#241c14',
     fontVariant: ['tabular-nums'],
   },
   preview: { fontFamily: FONTS.body, fontSize: TYPE.body },

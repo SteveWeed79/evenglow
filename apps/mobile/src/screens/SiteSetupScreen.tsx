@@ -1,11 +1,12 @@
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { isValidMonthDay, monthDay, newId, normaliseZoneValue } from '@steading/contracts';
 import { readSiteOrBlank } from '@steading/core/read/growing';
 import { describeLogFailure } from '@steading/core/sync/failure';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
+import { Touch } from '../components/Touch';
 import { useLive } from '../hooks/useLive';
 import { useNav } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
@@ -172,7 +173,7 @@ export function SiteSetupScreen(): React.ReactElement {
         </Panel>
       ) : null}
 
-      <Pressable
+      <Touch affordance="brass"
         onPress={() => void save()}
         disabled={saving || !datesValid}
         accessibilityRole="button"
@@ -185,8 +186,8 @@ export function SiteSetupScreen(): React.ReactElement {
           },
         ]}
       >
-        <Text style={styles.saveLabel}>Save</Text>
-      </Pressable>
+        <Text style={[styles.saveLabel, { color: colors.lanternOn }]}>Save</Text>
+      </Touch>
     </Screen>
   );
 }
@@ -225,7 +226,7 @@ function DatePick({
     <View style={styles.date}>
       <View style={styles.months}>
         {MONTHS.map((label, index) => (
-          <Pressable
+          <Touch affordance="check"
             key={label}
             onPress={() => {
               void Haptics.selectionAsync();
@@ -243,11 +244,11 @@ function DatePick({
             ]}
           >
             <Text
-              style={[styles.monthLabel, { color: month === index ? '#241c14' : colors.ink }]}
+              style={[styles.monthLabel, { color: month === index ? colors.lanternOn : colors.ink }]}
             >
               {label}
             </Text>
-          </Pressable>
+          </Touch>
         ))}
       </View>
 
@@ -311,5 +312,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: SPACE.lg,
   },
-  saveLabel: { fontFamily: FONTS.display, fontSize: TYPE.lede, color: '#241c14' },
+  saveLabel: { fontFamily: FONTS.display, fontSize: TYPE.lede },
 });

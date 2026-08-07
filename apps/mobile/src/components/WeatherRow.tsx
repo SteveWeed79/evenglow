@@ -1,6 +1,7 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { CONDITION_WORDS, degrees, forecastFor } from '@steading/contracts';
 import { Icon, type IconName } from './Icon';
+import { Touch } from './Touch';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
 import { useWeather } from '../hooks/useWeather';
@@ -139,7 +140,7 @@ function Shell({
   const { colors } = useTheme();
 
   return (
-    <Pressable
+    <Touch affordance="chevron"
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
@@ -152,7 +153,7 @@ function Shell({
       <Icon name={mark} size={24} color={colors.muted} />
       <View style={styles.words}>{children}</View>
       <Icon name="forward" size={20} color={colors.muted} />
-    </Pressable>
+    </Touch>
   );
 }
 

@@ -1,6 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { type ActiveWithdrawal, withdrawalMessage } from '@steading/contracts';
-import { Icon } from './Icon';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
 
@@ -28,7 +27,6 @@ export function WithdrawalBanner({
       style={[styles.band, { backgroundColor: colors.alertTint, borderColor: colors.rowan }]}
       accessibilityRole="alert"
     >
-      <Icon name="withdrawal" size={24} color={colors.rowan} />
       <Text style={[styles.words, { color: colors.ink }]}>{withdrawalMessage(withdrawal)}</Text>
     </View>
   );

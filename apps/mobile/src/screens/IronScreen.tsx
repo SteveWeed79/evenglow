@@ -1,12 +1,13 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { listInventory, listMachines, type Machine, runningLow } from '@steading/core/read/iron';
 import { Primary, Row } from '../components/Form';
 import { Icon } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
+import { Touch } from '../components/Touch';
 import { useLive } from '../hooks/useLive';
-import { useNav } from '../hooks/useNav';
 import { useTheme } from '../theme/ThemeProvider';
+import { useNav } from '../hooks/useNav';
 import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
 
 /**
@@ -25,7 +26,6 @@ import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
  * machinery. It is on the Farm hub as well now.
  */
 export function IronScreen(): React.ReactElement {
-  const { colors } = useTheme();
   const nav = useNav();
 
   const machines = useLive(listMachines);
@@ -40,7 +40,6 @@ export function IronScreen(): React.ReactElement {
       {machines.length === 0 ? (
         <Panel label="No equipment yet">
           <View style={styles.spot}>
-            <Icon name="bench" size={56} color={colors.muted} />
           </View>
           {/* Empty screens invite (UX-SPEC §6). */}
           <Body>Add your tractor and its service schedule comes with it.</Body>
@@ -68,7 +67,6 @@ export function IronScreen(): React.ReactElement {
             ? `Running low: ${low.map((item) => item.name).join(', ')}`
             : 'Feed, bedding, medicine and parts'
         }
-        icon="parts"
         testID="go-inventory"
         onPress={() => nav.navigate('Inventory')}
       />
@@ -87,7 +85,7 @@ function MachineCard({
   const description = [machine.make, machine.model].filter(Boolean).join(' ');
 
   return (
-    <Pressable
+    <Touch affordance="chevron"
       onPress={onPress}
       accessibilityRole="button"
       testID={`machine-${machine.id}`}
@@ -135,7 +133,7 @@ function MachineCard({
         <Text style={[styles.label, { color: colors.lanternInk }]}>Open</Text>
         <Icon name="forward" size={20} color={colors.lanternInk} />
       </View>
-    </Pressable>
+    </Touch>
   );
 }
 

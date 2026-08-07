@@ -4,7 +4,6 @@ import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useEnterprises } from '../hooks/useEnterprises';
 import { useNav } from '../hooks/useNav';
-import type { IconName } from '../components/Icon';
 
 /**
  * The farm itself: what you keep, what you grow, what you run it with.
@@ -52,7 +51,6 @@ interface Place {
   route: PlaceRoute;
   title: string;
   detail: string;
-  icon: IconName;
 }
 
 const PLACES: readonly Place[] = [
@@ -61,21 +59,18 @@ const PLACES: readonly Place[] = [
     route: 'Stock',
     title: 'Animals',
     detail: 'Groups, individuals, health, and what they produce',
-    icon: 'stock',
   },
   {
     key: 'growing',
     route: 'Growing',
     title: 'Crops and beds',
     detail: 'Beds, plantings, sowing dates and harvests',
-    icon: 'growing',
   },
   {
     key: 'iron',
     route: 'Iron',
     title: 'Machines and kit',
     detail: 'Servicing, hours, and the parts shelf',
-    icon: 'iron',
   },
 ];
 
@@ -98,7 +93,6 @@ export function FarmScreen(): React.ReactElement {
           key={place.key}
           title={place.title}
           detail={place.detail}
-          icon={place.icon}
           testID={`farm-${place.key}`}
           onPress={() => nav.navigate(place.route)}
         />
@@ -130,7 +124,6 @@ export function FarmScreen(): React.ReactElement {
       <Row
         title="The shelf"
         detail="Feed, bedding, medicine and parts — what is in and what is low"
-        icon="parts"
         testID="farm-shelf"
         onPress={() => nav.navigate('Inventory')}
       />
@@ -141,7 +134,6 @@ export function FarmScreen(): React.ReactElement {
       <Row
         title="Jobs"
         detail="Fix the gate, ring the vet — the ones nothing else knows about"
-        icon="date-due"
         testID="farm-jobs"
         onPress={() => nav.navigate('Jobs')}
       />

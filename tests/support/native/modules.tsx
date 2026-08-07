@@ -64,6 +64,7 @@ export const Polygon = host('Polygon');
 export const Defs = host('Defs');
 export const ClipPath = host('ClipPath');
 export const LinearGradient = host('LinearGradient');
+export const RadialGradient = host('RadialGradient');
 export const Stop = host('Stop');
 export default Svg;
 

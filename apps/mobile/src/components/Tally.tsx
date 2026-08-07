@@ -1,10 +1,12 @@
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { describeLogFailure } from '@steading/core/sync/failure';
 import { loggedConfirmation } from '@steading/core/voice';
 import { Arch } from './Arch';
 import { NumberField } from './Form';
+import { Touch } from './Touch';
+import { tallySize } from '../theme/tally';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
 
@@ -85,10 +87,11 @@ export function Tally({
   const [typing, setTyping] = useState(false);
 
   /**
-   * The count is a fraction of the SHORTER edge, so it is the same size in
-   * the hand whichever way the phone is held. `clamp()` has no RN form.
+   * A fraction of the shorter edge, bounded by the column it has to share and
+   * by a floor and a ceiling. See `theme/tally.ts` — the fraction alone put a
+   * 94px numeral on a 430pt-tall screen the moment a phone was turned sideways.
    */
-  const countSize = Math.min(width, height) * TYPE.tally;
+  const countSize = tallySize(width, height);
 
   const bump = useCallback((by: number) => {
     setCount((c) => Math.max(0, c + by));
@@ -166,11 +169,17 @@ export function Tally({
     setTimeout(() => setConfirmation(null), 3_000);
   }, [count, unit, confirm, onCommit, requireConfirm, armed]);
 
+  /**
+   * The one gradient the whole interface is allowed (UX-SPEC §2), on the one
+   * control it is for. The `glow` token carries its own alpha per theme, so it
+   * is brightest at 5am and faintest at noon without this knowing which.
+   */
   return (
     <Arch
       fill={colors.raised}
       stroke={colors.border}
       strokeWidth={colors.borderWidth}
+      glow={colors.glow}
       style={styles.arch}
     >
       <Text style={[styles.label, { color: colors.muted }]}>{label}</Text>
@@ -221,7 +230,7 @@ export function Tally({
         <Step label="Type it" onPress={() => setTyping(true)} testID="tally-type" />
       )}
 
-      <Pressable
+      <Touch affordance="brass"
         onPress={() => void commit()}
         disabled={count === 0}
         accessibilityRole="button"
@@ -237,13 +246,19 @@ export function Tally({
           },
         ]}
       >
-        <Text style={[styles.commitLabel, { color: armed ? '#fff' : '#241c14' }]}>
+        <Text style={[styles.commitLabel, { color: armed ? '#fff' : colors.lanternOn }]}>
           {armed ? `Log ${count} ${unit} anyway` : `Log ${count} ${unit}`}
         </Text>
-      </Pressable>
+      </Touch>
 
+      {/* Ink, not rowan. This is the most important sentence the component can
+          say — a log that did not save — and it is announced assertively, so
+          it must also be *readable*: rowan measures 3.1:1 on the lamplight
+          ground, which is under R7's floor and under AA. Urgency comes from
+          the live region and the position, not from a colour that costs
+          legibility to get. */}
       {failure ? (
-        <Text style={[styles.failure, { color: colors.rowan }]} accessibilityLiveRegion="assertive">
+        <Text style={[styles.failure, { color: colors.ink }]} accessibilityLiveRegion="assertive">
           {failure}
         </Text>
       ) : null}
@@ -271,7 +286,7 @@ function Step({
   const { colors } = useTheme();
 
   return (
-    <Pressable
+    <Touch affordance="border"
       onPress={onPress}
       disabled={disabled}
       accessibilityRole="button"
@@ -287,7 +302,7 @@ function Step({
       ]}
     >
       <Text style={[styles.stepLabel, { color: colors.ink }]}>{label}</Text>
-    </Pressable>
+    </Touch>
   );
 }
 

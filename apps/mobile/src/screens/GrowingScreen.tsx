@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { growingSeasonDays } from '@steading/contracts';
 import { type Bed, occupants, type Planting } from '@steading/core/read/growing';
 import { listVarieties } from '@steading/core/read/growing';
@@ -6,6 +6,7 @@ import { Primary } from '../components/Form';
 import { Icon } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
+import { Touch } from '../components/Touch';
 import { useGrowing } from '../hooks/useGrowing';
 import { useLive } from '../hooks/useLive';
 import { useNav } from '../hooks/useNav';
@@ -37,7 +38,6 @@ export function GrowingScreen(): React.ReactElement {
       <Screen title="Growing" back>
         <Panel label="First, where are you?">
           <View style={styles.spot}>
-            <Icon name="growing" size={56} color={colors.muted} />
           </View>
           <Body>
             Every sowing date is counted from your last spring frost, and every autumn crop is
@@ -61,7 +61,6 @@ export function GrowingScreen(): React.ReactElement {
   return (
     <Screen title="Growing" back>
       <View style={[styles.season, { backgroundColor: colors.raised, borderColor: colors.border }]}>
-        <Icon name="season" size={24} color={colors.lanternInk} />
         <Text style={[styles.seasonWords, { color: colors.ink }]}>
           {/* The number that decides whether a 120-day melon is possible at all. */}
           {days} days between frosts
@@ -129,7 +128,7 @@ function BedCard({
         <Text style={[styles.empty, { color: colors.muted }]}>Empty</Text>
       ) : (
         plantings.map((p) => (
-          <Pressable
+          <Touch affordance="chevron"
             key={p.id}
             onPress={() => onOpen(p.id)}
             accessibilityRole="button"
@@ -143,11 +142,11 @@ function BedCard({
               {names.get(p.varietyId) ?? 'A planting'} · {p.status}
             </Text>
             <Icon name="forward" size={20} color={colors.muted} />
-          </Pressable>
+          </Touch>
         ))
       )}
 
-      <Pressable
+      <Touch affordance="border"
         onPress={onPlant}
         accessibilityRole="button"
         testID={`plant-in-${bed.id}`}
@@ -156,9 +155,8 @@ function BedCard({
           { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
         ]}
       >
-        <Icon name="growing" size={20} color={colors.ink} />
         <Text style={[styles.plantLabel, { color: colors.ink }]}>Plant something here</Text>
-      </Pressable>
+      </Touch>
     </View>
   );
 }

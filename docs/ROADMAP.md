@@ -605,6 +605,94 @@ And none of it has been on a handset — the share sheet is a native intent, and
 
 ---
 
+## 11 — The design pass — **the settled half is in; the rest waits on Design**
+
+Two handoff bundles from Claude Design (August 2026): screen frames in Charm
+and Plain, a lamplight pass, a mark inventory, and an audit of what in the
+prototypes has no React Native form. Everything in it that was *settled* — a
+defect against a binding rule, or a change with one obvious right answer — has
+landed. Everything that is a design decision is listed below it, unbuilt.
+
+**What landed:**
+
+- **The tally is no longer wrong on three of four screen sizes.** `TYPE.tally`
+  was a bare fraction of the shorter edge, which put a **94px numeral on a
+  430pt-tall screen** the moment a phone was turned sideways, and 183px on an
+  iPad. Now `theme/tally.ts` — the same fraction, bounded by the column it has
+  to share and by a floor and a ceiling. Design found this; it ships today and
+  Android landscape is one rotation away.
+- **R7 has the CI check its own Test column has always promised.**
+  `tests/unit/contrast.test.ts`, tiered rather than flat: 7:1 for `ink`, 4.5:1
+  for `muted`, 3:1 for marks and rules. A single flat number would have failed
+  every accent and been disabled within a week.
+- **Two colours it caught.** `leaf` was 2.97:1 on the daylight ground — under
+  even the graphical floor, so the done tick and the healthy dot were the two
+  marks in the app that could not be relied on to be seen. And nine components
+  hardcoded dark loam on the brass fill, which is 8.7:1 in daylight and
+  **3.9:1 in bright sun** — the least readable button in the app, in the theme
+  that exists for reading a screen in a field. Both fixed; `lanternOn` is now
+  the theme's own answer to what sits on brass.
+- **Two sentences moved off an accent.** The trouble banner's heading and the
+  Tally's failure line were both rowan, which is 3.1:1 on the lamplight ground
+  — under AA, on the two messages that only appear when something has already
+  gone wrong. Keep the bar, set the words in `ink`.
+- **The mark set is 64 → 58.** Six with no call site anywhere —
+  `mower`, `pump`, `hour-meter`, `fuel`, `in-water`, `injected`. Design's first
+  pass proposed nineteen; ten of those turned out to be live, which is why this
+  list is short and was verified call site by call site.
+- **Round caps and joins on every mark**, which is a two-line diff and most of
+  the available warmth without touching a path.
+- **Sixty-four marks became sixteen**, on one test — *does it help you do the
+  thing?* A mark beside a word that already says it is drawn twice on every
+  screen it appears on, and the app had fifty of those. What is left is the
+  header controls (icon-only, no room for a word), the five affordance signals,
+  and the seven sky marks — the one place a mark beats a word, because a week
+  strip is seven silhouettes read at once. All sixteen are geometry, so none of
+  them waits on an artist. **The lamp went with them**: it was a drawing of an
+  oil lamp that was never good at 24px, and the filled dot inside it was always
+  the whole signal. It is a ring now, filled when lit.
+- **The tab bar is words.** "Today", "the farm" and "history" have no objects
+  behind them; the three marks that stood in were told apart by the word
+  underneath. `TAB_DIVIDER` is what now says three words are three things.
+- **Every pressable declares its affordance** (`components/Touch.tsx`), held by
+  lint, by the type, and by `tests/screens/affordance.test.tsx` over all
+  forty-five screens. It reads declarations rather than drawings, which is what
+  let the mark set be cut underneath it without weakening a single assertion.
+- **The arch can carry its own light.** `<Arch glow>` paints the lamp glow as a
+  `RadialGradient` clipped by the same path that draws the door — one element
+  rather than a second positioned layer that would spill past the arched head.
+  The one gradient UX-SPEC §2 allows, on the Tally, which is the one control it
+  is for.
+
+**What is waiting on an answer, and what it is waiting for:**
+
+- **Charm / Plain as a setting.** Public Sans as a second type set, framed as a
+  legibility choice like bright sun rather than a taste one. Needs: whether the
+  type ramp is shared or per-set (Public Sans has the larger x-height, so Plain
+  reads a size bigger at the same numbers), and the font files. The work itself
+  is one refactor — 157 `fontFamily` references live inside `StyleSheet.create`,
+  which is evaluated at module load, so they move into the theme the way
+  `colors` already has.
+- **The Today layout.** Five cards to one, the arch on seven elements, the
+  quick-add out of the header. The R3 violation is real — the quick-add is in
+  `Screen.tsx` on every screen — but moving it is a layout decision per screen,
+  not a fix.
+- **`streak-plant`, `season` and `milestone` need two masters each.** All three
+  are commissioned as drawings and all three ship at 24px somewhere.
+- **`hung-lantern` is orphaned.** Its home was the sign-in screen, which is
+  deleted. Either it moves to `AccountScreen` or it is a seventh cut.
+- **16px is a size class with no rule.** `head-count` and `more` render at 16
+  in `Notes.tsx`, below the manifest's 24-unit master.
+- **The lift under the tally.** Design proposes `LIFT_HIGH`; UX-SPEC §2 says
+  *no drop shadows*. A real contradiction, and not one to resolve unilaterally
+  — note also that Android's `elevation` follows the *view* outline, so an
+  arched SVG inside a rectangular View gets a rectangular shadow whatever is
+  decided.
+- **A Fraunces Black cut** for the 96px numeral. Cheap — the Bold face is 73 KB,
+  the smallest of the four — but it needs the font binary.
+
+---
+
 ## What is deliberately not on this list
 
 - **A weather tab.** Answered by the Farm hub.

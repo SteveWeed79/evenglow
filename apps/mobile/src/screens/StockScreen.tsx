@@ -1,14 +1,15 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { formatRange, libraryBreed, SPECIES_TRAITS } from '@steading/contracts';
 import type { Group } from '@steading/core/read/groups';
 import { Primary } from '../components/Form';
 import { Icon } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
+import { Touch } from '../components/Touch';
 import { growOutWindow, layOnsetWindow } from '../hooks/useDues';
 import { useGroups } from '../hooks/useGroups';
-import { useNav } from '../hooks/useNav';
 import { useTheme } from '../theme/ThemeProvider';
+import { useNav } from '../hooks/useNav';
 import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
 
 /**
@@ -23,7 +24,6 @@ import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
  */
 export function StockScreen(): React.ReactElement {
   const { groups, loading } = useGroups();
-  const { colors } = useTheme();
   const nav = useNav();
 
   if (loading) return <Screen title="Stock" back>{null}</Screen>;
@@ -33,7 +33,6 @@ export function StockScreen(): React.ReactElement {
       {groups.length === 0 ? (
         <Panel label="Nothing here yet">
           <View style={styles.spot}>
-            <Icon name="stock" size={56} color={colors.muted} />
           </View>
           {/* Empty screens invite (UX-SPEC §6). */}
           <Body>
@@ -77,7 +76,7 @@ function GroupCard({ group, onPress }: { group: Group; onPress: () => void }): R
   const breed = group.breedId === undefined ? undefined : libraryBreed(group.breedId);
 
   return (
-    <Pressable
+    <Touch affordance="chevron"
       onPress={onPress}
       accessibilityRole="button"
       testID={`group-${group.id}`}
@@ -118,7 +117,7 @@ function GroupCard({ group, onPress }: { group: Group; onPress: () => void }): R
         <Text style={[styles.label, { color: colors.lanternInk }]}>Open</Text>
         <Icon name="forward" size={20} color={colors.lanternInk} />
       </View>
-    </Pressable>
+    </Touch>
   );
 }
 

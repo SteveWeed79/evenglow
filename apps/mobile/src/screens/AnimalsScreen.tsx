@@ -4,7 +4,6 @@ import { inGroup, listAnimals } from '@steading/core/read/animals';
 import { latestWeightBySubject, listWeights } from '@steading/core/read/breeding';
 import { listGroups } from '@steading/core/read/groups';
 import { Primary } from '../components/Form';
-import { Icon } from '../components/Icon';
 import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
@@ -52,7 +51,6 @@ export function AnimalsScreen({ route }: ScreenProps<'Animals'>): React.ReactEle
       {named.length === 0 ? (
         <Panel label="None named yet">
           <View style={styles.spot}>
-            <Icon name="head-count" size={56} color={colors.muted} />
           </View>
           {/* Empty screens invite (UX-SPEC §6). */}
           <Body>

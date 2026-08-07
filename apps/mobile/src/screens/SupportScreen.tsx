@@ -244,7 +244,6 @@ export function SupportScreen(): React.ReactElement {
          */}
         <Secondary
           label="Send it another way"
-          icon="export"
           onPress={() => void shareIt()}
           testID="support-share"
         />
@@ -271,8 +270,7 @@ export function SupportScreen(): React.ReactElement {
                 minute: '2-digit',
               })}
               detail={describe(ticket)}
-              icon={ticket.sentAt === undefined ? 'waiting' : 'saved'}
-              mark={ticket.sentAt === undefined ? 'try-again' : 'check'}
+              mark={ticket.sentAt === undefined ? 'forward' : 'check'}
               testID={`ticket-${ticket.id}`}
               onPress={() => {
                 if (ticket.sentAt === undefined) void retry(ticket.id);

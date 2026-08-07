@@ -1,4 +1,3 @@
-import type { IconName } from '../components/Icon';
 
 /**
  * The tabs, as data: what each is called and which mark it carries.
@@ -34,23 +33,28 @@ import type { IconName } from '../components/Icon';
 export type TabName = 'Today' | 'Farm' | 'History';
 
 export interface TabMarkSpec {
-  /**
-   * Named as a union rather than a string so the navigator keeps its route
-   * checking — `Tab.Screen name=` will not take an arbitrary string, and a
-   * typo here should be a compile error rather than a tab that goes nowhere.
-   */
   name: TabName;
-  icon: IconName;
 }
 
 export const TAB_MARKS: readonly TabMarkSpec[] = [
-  { name: 'Today', icon: 'today' },
+  /**
+   * Text, not marks.
+   *
+   * "Today", "the farm" and "history" have no objects behind them — the three
+   * marks that stood in were a doorway, a doorway with a floor, and a bare
+   * tree, told apart by the word underneath. The word was carrying the bar the
+   * whole time; the marks were carrying the redundancy.
+   *
+   * With them gone the three words need something to say they are three
+   * things, which is what `TAB_DIVIDER` is for.
+   */
+  { name: 'Today' },
   /**
    * The hub. `arch` rather than `stock`, which belongs to the animals row
    * inside it — a tab wearing the mark of one of its own children reads as
    * that child.
    */
-  { name: 'Farm', icon: 'arch' },
+  { name: 'Farm' },
   /**
    * "History" here, "What happened" on the screen, and that is deliberate.
    *
@@ -59,7 +63,7 @@ export const TAB_MARKS: readonly TabMarkSpec[] = [
    * whole file exists to stop. So the bar gets the signpost and the screen
    * gets the sentence, which is the farm's own words for it.
    */
-  { name: 'History', icon: 'season' },
+  { name: 'History' },
 ];
 
 /**
@@ -73,4 +77,65 @@ export const TAB_MARKS: readonly TabMarkSpec[] = [
  */
 export function tabs(): readonly TabMarkSpec[] {
   return TAB_MARKS;
+}
+
+/**
+ * The hairlines between tabs.
+ *
+ * ## Why the bar needs them at all
+ *
+ * It does not, today — an icon over a word is self-separating, because the
+ * mark occupies the middle of its slot and the eye reads three objects. The
+ * design pass proposes dropping the marks and leaving three words, and three
+ * words in a row are a sentence until something says otherwise. This is that
+ * something.
+ *
+ * ## Short, and thinner than the bar's own rule
+ *
+ * The top rule separates the bar from the screen — a boundary between two
+ * different things — and is drawn at twice a hairline. These separate peers,
+ * so they are one hairline and roughly the height of the mark rather than the
+ * height of the bar. Same `border` token, less of it: the hierarchy comes from
+ * weight and length rather than from a second colour nobody would be able to
+ * name.
+ *
+ * A full-height divider was the other option and it is the one to avoid — it
+ * turns the bar into a segmented control, which is a different promise about
+ * what pressing does.
+ *
+ * ## Nothing hangs on them
+ *
+ * Each tab is already its own target at `TAP.primary` with its own
+ * accessibility label, and React Navigation announces them separately. These
+ * are decoration in the strict sense — removable without changing what the bar
+ * does — which is exactly why they are worth almost nothing and cost almost
+ * nothing.
+ */
+export const TAB_DIVIDER = {
+  /**
+   * Share of the bar's height left clear above and below.
+   *
+   * Expressed as the inset rather than the length because that is what the
+   * style takes — two equal insets centre the line without a percentage
+   * transform, which resolves against the element's own size and is a newer
+   * RN feature than this needs to depend on.
+   *
+   * 0.28 each end leaves 44% drawn: about the height of a mark and its label,
+   * so the line brackets the content rather than ruling the whole bar.
+   */
+  inset: 0.28,
+} as const;
+
+/** What is actually drawn, as a fraction. Derived, so the two cannot drift. */
+export const dividerLength = (): number => 1 - TAB_DIVIDER.inset * 2;
+
+/**
+ * Where each one sits, as a fraction of the bar's width.
+ *
+ * Between the slots and never at an edge — a line at 0 or 1 would double the
+ * screen border on one side and read as a frame.
+ */
+export function dividerOffsets(count: number): number[] {
+  if (count < 2) return [];
+  return Array.from({ length: count - 1 }, (_, i) => (i + 1) / count);
 }

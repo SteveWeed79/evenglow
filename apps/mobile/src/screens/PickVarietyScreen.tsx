@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import {
   fitsSeason,
@@ -19,6 +19,7 @@ import { Icon } from '../components/Icon';
 import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
+import { Touch } from '../components/Touch';
 import { useLive2 } from '../hooks/useLive';
 import { useNav } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
@@ -141,7 +142,7 @@ export function PickVarietyScreen({ route }: ScreenProps<'PickVariety'>): React.
           </Panel>
         ) : null}
 
-        <Pressable
+        <Touch affordance="brass"
           onPress={() => void plant()}
           disabled={saving}
           accessibilityRole="button"
@@ -151,12 +152,14 @@ export function PickVarietyScreen({ route }: ScreenProps<'PickVariety'>): React.
             { backgroundColor: colors.lantern, opacity: saving || pressed ? 0.75 : 1 },
           ]}
         >
-          <Text style={styles.primaryLabel}>Plan it into {bed.name}</Text>
-        </Pressable>
+          <Text style={[styles.primaryLabel, { color: colors.lanternOn }]}>
+            Plan it into {bed.name}
+          </Text>
+        </Touch>
 
-        <Pressable onPress={() => setChosen(null)} accessibilityRole="button" style={styles.back}>
+        <Touch affordance="chevron" onPress={() => setChosen(null)} accessibilityRole="button" style={styles.back}>
           <Text style={[styles.backLabel, { color: colors.muted }]}>Choose something else</Text>
-        </Pressable>
+        </Touch>
       </Screen>
     );
   }
@@ -164,7 +167,6 @@ export function PickVarietyScreen({ route }: ScreenProps<'PickVariety'>): React.
   return (
     <Screen title={`Plant in ${bed.name}`} back>
       <View style={styles.search}>
-        <Icon name="search" size={24} color={colors.muted} />
         <TextInput
           value={query}
           onChangeText={setQuery}
@@ -180,7 +182,7 @@ export function PickVarietyScreen({ route }: ScreenProps<'PickVariety'>): React.
       </View>
 
       {matches.map((variety) => (
-        <Pressable
+        <Touch affordance="check"
           key={variety.id}
           onPress={() => {
             void Haptics.selectionAsync();
@@ -199,7 +201,7 @@ export function PickVarietyScreen({ route }: ScreenProps<'PickVariety'>): React.
             </Text>
           </View>
           <Icon name="forward" size={20} color={colors.muted} />
-        </Pressable>
+        </Touch>
       ))}
     </Screen>
   );
@@ -318,7 +320,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: SPACE.sm,
   },
-  primaryLabel: { fontFamily: FONTS.display, fontSize: TYPE.lede, color: '#241c14' },
+  primaryLabel: { fontFamily: FONTS.display, fontSize: TYPE.lede },
   back: { minHeight: TAP.min, alignItems: 'center', justifyContent: 'center' },
   backLabel: { fontFamily: FONTS.body, fontSize: TYPE.body },
 });

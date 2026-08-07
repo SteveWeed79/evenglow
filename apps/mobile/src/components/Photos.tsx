@@ -1,11 +1,11 @@
 import { useCallback, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { newId } from '@steading/contracts';
 import { listPhotos, type Photo } from '@steading/core/read/photos';
 import { capture, forgetBytes, hasBytes, photoUri } from '../photos/store';
 import { Confirm, Failure, Secondary } from './Form';
-import { Icon } from './Icon';
 import { Body, Panel } from './Panel';
+import { Touch } from './Touch';
 import { useLive } from '../hooks/useLive';
 import { useLog } from '../hooks/useSync';
 import { useTheme } from '../theme/ThemeProvider';
@@ -153,7 +153,7 @@ export function Photos({
             contentContainerStyle={styles.strip}
           >
             {mine.map((photo) => (
-              <Pressable
+              <Touch affordance="disclose"
                 key={photo.id}
                 onPress={() => setOpen(open === photo.id ? null : photo.id)}
                 accessibilityRole="button"
@@ -179,11 +179,10 @@ export function Photos({
                       { borderColor: open === photo.id ? colors.lanternInk : colors.border },
                     ]}
                   >
-                    <Icon name="offline" size={24} color={colors.muted} />
                     <Text style={[styles.label, { color: colors.muted }]}>On the other phone</Text>
                   </View>
                 )}
-              </Pressable>
+              </Touch>
             ))}
           </ScrollView>
 
@@ -227,13 +226,11 @@ export function Photos({
       <View style={styles.actions}>
         <Secondary
           label={busy ? 'Working…' : 'Take one'}
-          icon="photo"
           onPress={() => void add('camera')}
           testID="photo-camera"
         />
         <Secondary
           label="Choose one"
-          icon="basket"
           onPress={() => void add('library')}
           testID="photo-library"
         />
