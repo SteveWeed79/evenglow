@@ -25,9 +25,10 @@ No Play Console, no $25, no signing keys to manage, no review.
 
 `eas.json` has three, and the difference is one environment variable.
 
-| Profile | `EXPO_PUBLIC_API_URL` | What the tester gets |
+| Profile | `EXPO_PUBLIC_API_URL` | What it is for |
 |---|---|---|
-| `preview` | empty | **The whole app, on their phone, with no server.** |
+| `development` | `http://10.0.2.2:3001` | **You**, on the emulator, with Metro reload |
+| `preview` | empty | **A tester.** The whole app, no server, nothing to set up |
 | `preview-farm` | your API origin | The same, plus sync and accounts |
 | `production` | your API origin | An AAB for the Play Store |
 
@@ -40,6 +41,31 @@ dues, treatments, weather, photos, export.
 Move to `preview-farm` only once the API is deployed somewhere a phone can
 reach. An APK pointed at `localhost` is an APK that cannot sync from anywhere
 but the machine that built it.
+
+---
+
+## 2b. Expo Go is not one of them, and that is deliberate
+
+**A farm's records were emptied twice before this was understood**, so it is
+worth stating plainly rather than leaving as a preference.
+
+Expo Go is one shared app that every Expo project on a device borrows. The
+records therefore lived in *its* sandbox — `host.exp.exponent` — rather than in
+Steading's, and Expo Go reinstalls itself whenever the SDK version moves.
+Bumping `expo` from 57.0.9 to 57.0.11 was enough. Android takes an app's data
+on reinstall, so the database went with it, and neither loss was a bug in this
+app.
+
+A **development build** is Steading's own APK, `com.steading.app`, with its own
+sandbox. It still connects to Metro, so a code change still reloads in a second
+— what changes is that the records survive it. `Run on emulator` builds one
+now; `npx expo run:android` is the same thing by hand.
+
+The price is the first build: Gradle, five to fifteen minutes, and it needs
+Android Studio's toolchain rather than just its emulator. Every run after is as
+quick as Expo Go was. If the local toolchain turns out to be the problem,
+`eas build --profile development` builds the same thing on Expo's machines and
+gives you an APK to install.
 
 ---
 
@@ -67,6 +93,7 @@ production because testers install new builds often.
 | Uninstall, then install | No |
 | "Clear data" / "Clear storage" in Android settings | No |
 | Wiping or recreating an emulator image | No |
+| Expo Go updating itself | **It did — which is why the app no longer runs there** |
 | A build signed with a different key | No — Android forces an uninstall first |
 
 The last one is the one that surprises people. EAS uses a keystore it generates

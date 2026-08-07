@@ -109,10 +109,15 @@ if errorlevel 1 (
 echo.
 echo   --- Do the app's packages match Expo? ---
 :: The one question this window could not answer, and the one that has cost
-:: the most time: Expo Go ships fixed native module versions, so a package
-:: pinned to a different version is JavaScript talking to a native side that
-:: does not match it. That fails as "undefined is not a function" on a device
-:: and passes every test on a computer.
+:: the most time. The SDK pins a native version for every one of these
+:: packages, so a package.json naming a different one is JavaScript talking to
+:: a native side that does not match it. That fails as "undefined is not a
+:: function" on a device and passes every test on a computer.
+::
+:: It mattered under Expo Go because Expo Go shipped the native halves and the
+:: app had to agree with them. It still matters on a development build for the
+:: opposite reason: the build compiles whatever package.json says, so a wrong
+:: version is now baked into an apk rather than merely disagreed with.
 :: Answered "no" for us. `expo install --check` PROMPTS, and a stray Enter
 :: rewrites package.json and the lockfile — which this window's own header
 :: promises it will never do, and which then makes `git pull --ff-only`

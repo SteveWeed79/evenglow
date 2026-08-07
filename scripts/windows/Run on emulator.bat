@@ -55,17 +55,37 @@ if errorlevel 1 (
   goto :failed
 )
 
+:: Expo Go is gone, and losing a farm twice is why.
+::
+:: Expo Go is one shared app that every Expo project borrows, so the records
+:: lived in ITS sandbox (host.exp.exponent) rather than in Steading's. Expo Go
+:: reinstalls itself whenever the SDK version moves, and an Android reinstall
+:: takes the app's data with it — so bumping expo 57.0.9 to 57.0.11 emptied a
+:: farm, twice, and neither time was a bug in the app.
+::
+:: A development build is Steading's OWN apk, com.steading.app, with its own
+:: sandbox. It still talks to Metro, so editing code still reloads in a second;
+:: what changes is that the records survive it.
+::
+:: `expo run:android` builds and installs when it needs to and starts Metro
+:: either way, so this is one command for both the first run and every one
+:: after. The first is slow — Gradle, five to fifteen minutes — and the rest
+:: are as quick as Expo Go ever was.
 echo.
-echo   [2 of 2] Starting the app on the emulator.
+echo   [2 of 2] Building and starting the app on the emulator.
 echo.
-echo   Expo Go will install itself on the virtual device the
-echo   first time, then the app opens by itself.
+echo   THE FIRST RUN IS SLOW - five to fifteen minutes while it
+echo   builds the app itself. After that it is quick.
+echo.
+echo   This installs Steading as its own app, so what you log
+echo   stays put. Expo Go could not promise that: it is one
+echo   shared app, and it wipes itself whenever it updates.
 echo.
 echo   Leave this window OPEN while you use the app.
 echo.
 
 cd apps\mobile
-call npx expo start --android
+call npx expo run:android
 
 echo.
 echo   The app server has stopped.

@@ -1,9 +1,25 @@
 {
   "$schema": "https://raw.githubusercontent.com/expo/eas-cli/main/schema/eas.json",
-  "cli": { "version": ">= 12.0.0", "appVersionSource": "local" },
+  "cli": {
+    "version": ">= 12.0.0",
+    "appVersionSource": "local"
+  },
   "build": {
+    "development": {
+      "android": {
+        "buildType": "apk"
+      },
+      "developmentClient": true,
+      "distribution": "internal",
+      "channel": "development",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://10.0.2.2:3001"
+      }
+    },
     "preview": {
-      "android": { "buildType": "apk" },
+      "android": {
+        "buildType": "apk"
+      },
       "distribution": "internal",
       "channel": "preview",
       "env": {
@@ -17,7 +33,9 @@
       }
     },
     "production": {
-      "android": { "buildType": "app-bundle" },
+      "android": {
+        "buildType": "app-bundle"
+      },
       "distribution": "store",
       "channel": "production",
       "env": {
@@ -25,5 +43,7 @@
       }
     }
   },
-  "submit": { "production": {} }
+  "submit": {
+    "production": {}
+  }
 }
