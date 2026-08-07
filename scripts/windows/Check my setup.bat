@@ -164,18 +164,41 @@ for %%P in (
 :: and which default that is cannot be settled without running a build.
 :: 3.22.1 is AGP's, so it is the one offered; Gradle names the version in its
 :: error if it wants another, which is a better authority than a guess here.
+:: The command is offered only when it can actually run.
+::
+:: The first version of this printed the sdkmanager path unconditionally, and
+:: on a stock Android Studio install there is no `cmdline-tools` at all — so
+:: the one line meant to save somebody a trip through the GUI sent them to
+:: "The system cannot find the path specified" instead. Reported from a real
+:: machine within the hour.
+::
+:: And the fallback is not "go and install cmdline-tools first": that is a trip
+:: through the same SDK Manager the GUI route uses, so anybody who has to make
+:: it may as well tick the two boxes while they are there. The GUI is the
+:: instruction; the command is the shortcut for machines that already have it.
+set "SDKMAN="
+for /d %%T in ("%LOCALAPPDATA%\Android\Sdk\cmdline-tools\*") do (
+  if exist "%%~T\bin\sdkmanager.bat" set "SDKMAN=%%~T\bin\sdkmanager.bat"
+)
+
 if defined SDKMISSING (
   echo.
-  echo   To install the missing SDK pieces, paste this into a Command Prompt:
+  echo   To install the missing SDK pieces:
   echo.
-  echo     "%LOCALAPPDATA%\Android\Sdk\cmdline-tools\latest\bin\sdkmanager.bat" "ndk;27.1.12297006" "cmake;3.22.1" "platforms;android-36" "build-tools;36.0.0"
-  echo.
-  echo   If that path does not exist, install "Android SDK Command-line Tools"
-  echo   first: Android Studio, Tools ^> SDK Manager, SDK Tools tab.
-  echo.
-  echo   Doing it by hand instead? Tick "Show Package Details" in that tab, or
-  echo   the list hides the version numbers and gives you the newest NDK -
-  echo   which is not the one Gradle asked for.
+  echo     Android Studio, Tools ^> SDK Manager, "SDK Tools" tab.
+  echo     1. Tick "Show Package Details" - bottom right of the panel.
+  echo        Without it the versions are hidden and you get the NEWEST NDK,
+  echo        which is not the one Gradle asked for.
+  echo     2. Under "NDK (Side by Side)"  tick  27.1.12297006
+  echo     3. Under "CMake"               tick  3.22.1
+  echo     4. Apply. About 2 GB, mostly the NDK.
+  if defined SDKMAN (
+    echo.
+    echo   Or, since this machine has the command-line tools, paste this
+    echo   into a Command Prompt instead:
+    echo.
+    echo     "!SDKMAN!" "ndk;27.1.12297006" "cmake;3.22.1" "platforms;android-36" "build-tools;36.0.0"
+  )
   echo.
   echo   If the build later says a DIFFERENT CMake version is missing, it names
   echo   the number. Install that one the same way and carry on - the NDK
