@@ -12,7 +12,7 @@ import { listRejected } from '@steading/core/sync/inbox';
 import { readCachedClaims } from '../auth/session';
 import { readLocalOrgId } from '../auth/local-org';
 import { troubleHistory } from '../hooks/useTrouble';
-import { APP_VERSION } from '../version';
+import { APP_BUILD, APP_VERSION } from '../version';
 
 /**
  * Assembling the lean bundle (`docs/SUPPORT-LOOP.md` S1 and S2).
@@ -100,6 +100,7 @@ export async function collectBundle(said?: string): Promise<SupportBundle> {
     at: Date.now(),
     app: {
       version: APP_VERSION,
+      ...(APP_BUILD === '' ? {} : { build: APP_BUILD }),
       platform: Platform.OS,
       ...(typeof Platform.Version === 'string' || typeof Platform.Version === 'number'
         ? { os: String(Platform.Version).slice(0, 60) }
@@ -165,7 +166,7 @@ export async function collectRecords(): Promise<string> {
   return JSON.stringify({
     v: SUPPORT_BUNDLE_VERSION,
     at: Date.now(),
-    app: { version: APP_VERSION, platform: Platform.OS },
+    app: { version: APP_VERSION, build: APP_BUILD, platform: Platform.OS },
     schemaVersion: SCHEMA_VERSION,
     sheets: sheets.map((sheet) => ({ name: sheet.name, rows: sheet.rows, csv: sheet.csv })),
   });

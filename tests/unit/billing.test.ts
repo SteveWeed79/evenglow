@@ -9,6 +9,7 @@ import {
   type Subscription,
 } from '@steading/contracts';
 import { readPlayConfig, subscriptionFrom } from '@steading/api/billing/play';
+import { readEnv } from '@steading/api/env';
 
 /**
  * What a subscription buys, and what happens when it stops (D13).
@@ -317,5 +318,48 @@ describe('reading the Play credentials', () => {
     } catch (error) {
       expect((error as Error).message).not.toContain('SECRETVALUE');
     }
+  });
+});
+
+/**
+ * Free sync for a farm the server names (D13).
+ *
+ * Testers, and the people building this. **Configuration rather than a route**
+ * — a grant that can be requested is a grant that can be requested by anybody,
+ * and an authenticated endpoint whose whole job is to switch off a paywall is
+ * the worst thing in the service to get wrong (invariant 10).
+ */
+describe('the farms that are never asked', () => {
+  const base = {
+    AUTH_SECRET: 'a-test-secret-long-enough-for-hs256-abcdef',
+    MONGODB_URI: 'mongodb://localhost:27017',
+  };
+  const ORG = '01J0000000000000000000000A';
+  const OTHER = '01J0000000000000000000000B';
+
+  it('is empty unless somebody set it, which is the normal state', () => {
+    expect(readEnv(base).freeSyncOrgs.size).toBe(0);
+  });
+
+  it('grants the farms it names and nobody else', () => {
+    const env = readEnv({ ...base, FREE_SYNC_ORGS: `${ORG},${OTHER}` });
+
+    expect(env.freeSyncOrgs.has(ORG)).toBe(true);
+    expect(env.freeSyncOrgs.has(OTHER)).toBe(true);
+    expect(env.freeSyncOrgs.has('01J0000000000000000000000C')).toBe(false);
+  });
+
+  it('forgives whitespace, because this is pasted from a phone screen', () => {
+    expect(readEnv({ ...base, FREE_SYNC_ORGS: ` ${ORG} , ${OTHER} ` }).freeSyncOrgs.size).toBe(2);
+  });
+
+  /**
+   * A typo here would be a farm still getting 402s while somebody was certain
+   * they had been granted access — a support conversation that starts three
+   * days late. Fail at startup with the value in the message instead.
+   */
+  it('refuses anything that is not a farm id, rather than skipping it', () => {
+    expect(() => readEnv({ ...base, FREE_SYNC_ORGS: 'steve@example.test' })).toThrow(/farm ids/);
+    expect(() => readEnv({ ...base, FREE_SYNC_ORGS: `${ORG},nope` })).toThrow(/nope/);
   });
 });

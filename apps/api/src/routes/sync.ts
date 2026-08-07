@@ -54,7 +54,18 @@ export async function syncRoutes(app: FastifyInstance, env: Env): Promise<void> 
      * own hardware owes nobody anything, and a gate that charged it would be
      * charging for someone else's electricity.
      */
-    if (env.playConfig !== null) {
+    /**
+     * A granted farm is never asked (D13).
+     *
+     * Checked before the rail rather than after, so it holds whatever the
+     * store says about a farm — including nothing at all. That ordering is the
+     * point: this is for testers and for the people building the app, who have
+     * no purchase to reconcile and should never see a 402 because a Play
+     * sandbox had an opinion.
+     *
+     * Read from the server's own environment; nothing on the wire reaches it.
+     */
+    if (env.playConfig !== null && !env.freeSyncOrgs.has(claims.orgId)) {
       const entitlement = entitlementOf((await findOrgById(claims.orgId))?.subscription, Date.now());
       if (!entitlement.syncing && entitlement.refusal !== null) {
         // The reason travels beside the sentence so the client can persist

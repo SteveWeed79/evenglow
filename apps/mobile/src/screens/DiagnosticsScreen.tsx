@@ -3,7 +3,10 @@ import { StyleSheet, Text, View } from 'react-native';
 import { diagnostics, type Diagnostics, nudge, subscribe } from '@steading/core/sync/engine';
 import { pullOnce } from '@steading/core/sync/pull';
 import { type StorageReport, storageReport } from '@steading/core/sync/storage';
+import { readCachedClaims } from '../auth/session';
+import { readLocalOrgId } from '../auth/local-org';
 import { apiFault, explainFault } from '../boot/config';
+import { APP_BUILD, APP_VERSION } from '../version';
 import { Row, Secondary } from '../components/Form';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
@@ -31,6 +34,13 @@ export function DiagnosticsScreen(): React.ReactElement {
   const [report, setReport] = useState<Diagnostics | null>(null);
   const [storage, setStorage] = useState<StorageReport | null>(null);
   const [pulling, setPulling] = useState(false);
+  const [farmId, setFarmId] = useState<string | null>(null);
+
+  useEffect(() => {
+    void readCachedClaims().then((claims) =>
+      claims === null ? readLocalOrgId().then(setFarmId) : setFarmId(claims.orgId),
+    );
+  }, []);
 
   // Fixed for the life of the process — applied once in `start()`, before any
   // screen rendered.
@@ -113,6 +123,20 @@ export function DiagnosticsScreen(): React.ReactElement {
       )}
 
       <Panel label="This device">
+        {/**
+          * The farm id, and it is on this screen because this is where somebody
+          * is sent when sync is the problem.
+          *
+          * Not a secret — the access token has carried it on every request
+          * since there was one — and it is the only handle that identifies a
+          * farm to whoever runs the server, which is what makes it the thing
+          * to read out. It also names the database file (`db/open.ts`), so it
+          * is the first thing worth knowing when a farm looks empty.
+          */}
+        <Stat label="Farm id" value={farmId ?? 'not set'} />
+        {/* Which build, so a tester can read it out and a report can name it
+            without anybody being asked. */}
+        <Stat label="Build" value={APP_BUILD === '' ? APP_VERSION : `${APP_VERSION}+${APP_BUILD}`} />
         <Stat label="Device id" value={report.deviceId ?? 'not set'} />
         <Stat
           label="Caught up to"

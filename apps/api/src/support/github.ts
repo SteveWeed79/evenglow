@@ -66,7 +66,19 @@ export function titleFor(bundle: SupportBundle): string {
         ? `${bundle.rejections[0].entity} refused: ${bundle.rejections[0].reason}`
         : (bundle.said ?? 'A farm reported a problem');
 
-  return `[${bundle.app.platform} ${bundle.app.version}] ${lead}`.replace(/\s+/g, ' ').slice(0, 120);
+  /**
+   * The build goes in the title, not just the body.
+   *
+   * "Which build are you on" is the first question about any report and the
+   * one a machine-first bundle should never need to ask out loud. Two rows in
+   * a list, same message, different commit, is a fix that landed — and that is
+   * only visible if the title says so.
+   */
+  const build = bundle.app.build === undefined ? '' : `+${bundle.app.build}`;
+
+  return `[${bundle.app.platform} ${bundle.app.version}${build}] ${lead}`
+    .replace(/\s+/g, ' ')
+    .slice(0, 120);
 }
 
 /**

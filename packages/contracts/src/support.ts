@@ -62,6 +62,16 @@ export const supportBundleSchema = z
     /** Which build. The first question about any report. */
     app: z.object({
       version: z.string().max(40),
+      /**
+       * The commit, when the build was stamped with one.
+       *
+       * Beside `version` rather than inside it, because `version` is in the
+       * fingerprint: a commit folded into it would give every build its own
+       * fingerprint for every defect, which is one issue thread per build and
+       * exactly the flood §3 exists to prevent. This answers "which build" and
+       * splits nothing.
+       */
+      build: z.string().max(40).optional(),
       platform: z.string().max(20),
       os: z.string().max(60).optional(),
     }),
