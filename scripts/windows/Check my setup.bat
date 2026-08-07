@@ -126,6 +126,12 @@ if defined J17 (
   set /a MISSING+=1
 )
 
+:: The NDK version is not a guess and must not drift: React Native pins it in
+:: `react-native/gradle/libs.versions.toml`, and Gradle asks for that exact
+:: string. It is needed because expo-modules-core, expo-sqlite and
+:: react-native-svg each ship an android/CMakeLists.txt, so there really is C++
+:: compiled on this machine — this is not a precaution.
+set "SDKMISSING="
 for %%P in (
   "ndk\27.1.12297006"
   "cmake"
@@ -136,9 +142,67 @@ for %%P in (
     echo   [ OK ]      SDK %%~P
   ) else (
     echo   [ MISSING ] SDK %%~P
-    echo               Android Studio, Tools ^> SDK Manager, SDK Tools tab.
+    set "SDKMISSING=1"
     set /a MISSING+=1
   )
+)
+
+:: One command, because the GUI route has a trap in it.
+::
+:: "SDK Manager, SDK Tools tab" was the whole instruction, and it sends
+:: somebody to a list showing "NDK (Side by Side)" with no version — ticking it
+:: installs the NEWEST ndk, which is not the one Gradle asked for. The version
+:: numbers only appear after checking "Show Package Details", which is easy to
+:: miss and costs a two-gigabyte download to find out about.
+::
+:: **The NDK version is verified; the CMake one is not, and the difference is
+:: stated rather than smoothed over.** 27.1.12297006 is pinned in
+:: `react-native/gradle/libs.versions.toml` and Gradle asks for that string
+:: exactly. No module here pins a CMake version at all — expo-modules-core,
+:: expo-sqlite and react-native-svg each declare an `externalNativeBuild.cmake`
+:: block with no `version`, so the Android Gradle Plugin picks its own default,
+:: and which default that is cannot be settled without running a build.
+:: 3.22.1 is AGP's, so it is the one offered; Gradle names the version in its
+:: error if it wants another, which is a better authority than a guess here.
+:: The command is offered only when it can actually run.
+::
+:: The first version of this printed the sdkmanager path unconditionally, and
+:: on a stock Android Studio install there is no `cmdline-tools` at all — so
+:: the one line meant to save somebody a trip through the GUI sent them to
+:: "The system cannot find the path specified" instead. Reported from a real
+:: machine within the hour.
+::
+:: And the fallback is not "go and install cmdline-tools first": that is a trip
+:: through the same SDK Manager the GUI route uses, so anybody who has to make
+:: it may as well tick the two boxes while they are there. The GUI is the
+:: instruction; the command is the shortcut for machines that already have it.
+set "SDKMAN="
+for /d %%T in ("%LOCALAPPDATA%\Android\Sdk\cmdline-tools\*") do (
+  if exist "%%~T\bin\sdkmanager.bat" set "SDKMAN=%%~T\bin\sdkmanager.bat"
+)
+
+if defined SDKMISSING (
+  echo.
+  echo   To install the missing SDK pieces:
+  echo.
+  echo     Android Studio, Tools ^> SDK Manager, "SDK Tools" tab.
+  echo     1. Tick "Show Package Details" - bottom right of the panel.
+  echo        Without it the versions are hidden and you get the NEWEST NDK,
+  echo        which is not the one Gradle asked for.
+  echo     2. Under "NDK (Side by Side)"  tick  27.1.12297006
+  echo     3. Under "CMake"               tick  3.22.1
+  echo     4. Apply. About 2 GB, mostly the NDK.
+  if defined SDKMAN (
+    echo.
+    echo   Or, since this machine has the command-line tools, paste this
+    echo   into a Command Prompt instead:
+    echo.
+    echo     "!SDKMAN!" "ndk;27.1.12297006" "cmake;3.22.1" "platforms;android-36" "build-tools;36.0.0"
+  )
+  echo.
+  echo   If the build later says a DIFFERENT CMake version is missing, it names
+  echo   the number. Install that one the same way and carry on - the NDK
+  echo   version above is the one that has to be exact.
 )
 
 :: 297-character paths already exist inside node_modules\.pnpm, and Gradle
