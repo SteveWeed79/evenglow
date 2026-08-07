@@ -4,6 +4,7 @@ import { type ActiveWithdrawal, dailyProductsOf, type Due, type DueBundle, enter
 import type { Group } from '@steading/core/read/groups';
 import { basketConfirmation } from '@steading/core/voice';
 import { DueRow } from '../components/DueRow';
+import { ExposureNotice } from '../components/ExposureNotice';
 import { Icon } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
@@ -202,6 +203,15 @@ export function TodayScreen(): React.ReactElement {
       <WeatherAlerts />
       <WeatherWarnings />
       <WeatherRow />
+
+      {/* Below the weather and above the tallies, and both halves of that are
+          arguments. A meteorologist saying a tornado is on the ground outranks
+          this app's opinion about filing. And below the tallies is where a
+          thing goes to be scrolled past — which is precisely what the Settings
+          row this replaces had already become. Silent on a farm that syncs,
+          silent on a new one, and it ends when somebody acts rather than when
+          they agree to stop being told. */}
+      <ExposureNotice />
 
       {groups.length === 0 ? (
         <Panel label="Nothing to log yet">

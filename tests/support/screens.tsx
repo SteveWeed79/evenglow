@@ -19,6 +19,7 @@ import { AddItemScreen } from '../../apps/mobile/src/screens/AddItemScreen';
 import { AddMachineScreen } from '../../apps/mobile/src/screens/AddMachineScreen';
 import { AddServiceScreen } from '../../apps/mobile/src/screens/AddServiceScreen';
 import { AnimalsScreen } from '../../apps/mobile/src/screens/AnimalsScreen';
+import { BackupScreen } from '../../apps/mobile/src/screens/BackupScreen';
 import { BreedingScreen } from '../../apps/mobile/src/screens/BreedingScreen';
 import { CareLogScreen } from '../../apps/mobile/src/screens/CareLogScreen';
 import { DiagnosticsScreen } from '../../apps/mobile/src/screens/DiagnosticsScreen';
@@ -184,6 +185,7 @@ export const SCREENS: [string, () => React.ReactElement][] = [
   ['History', () => <HistoryScreen />],
   ['Farm', () => <FarmScreen />],
   ['Export', () => <ExportScreen />],
+  ['Backup', () => <BackupScreen />],
   ['Jobs', () => <JobsScreen />],
   ['AddGroup', () => <AddGroupScreen />],
   ['Group', () => <GroupScreen {...routeProps({ groupId: GROUP })} />],

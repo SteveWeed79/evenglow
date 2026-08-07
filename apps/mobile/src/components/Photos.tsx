@@ -202,9 +202,26 @@ export function Photos({
                     accessibilityLabel={`Photo of ${what}, ${taken(photo)}`}
                   />
                 ) : (
+                  /**
+                   * Two different facts wore one sentence, and a restore is
+                   * what made the difference matter.
+                   *
+                   * *"The picture is still coming"* is true of a photo the
+                   * server has: another phone uploaded it, this one fetches it
+                   * on the next pass. It is **false** of a photo whose bytes
+                   * were only ever on the handset that took them — which is
+                   * every photo in a farm that restored from a backup, because
+                   * a backup carries records and not bytes.
+                   *
+                   * `uploadedAt` is exactly that distinction and it has been on
+                   * the record since it was written. Telling somebody a
+                   * photograph is on its way when it is gone is the worst
+                   * version of this screen being wrong.
+                   */
                   <Body>
-                    Taken on another phone. The record is here and the picture is still coming —
-                    it arrives the next time this phone has signal and a moment spare.
+                    {photo.uploadedAt === undefined
+                      ? 'This picture is not on this phone. It was only ever on the handset that took it — a backup file carries the record, not the photograph.'
+                      : 'Taken on another phone. The record is here and the picture is still coming — it arrives the next time this phone has signal and a moment spare.'}
                   </Body>
                 )}
 

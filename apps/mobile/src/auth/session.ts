@@ -1,7 +1,7 @@
 import { apiBase, setAccessToken, syncHeaders } from '@steading/core/api';
 import { z } from 'zod';
 import { roleSchema } from '@steading/contracts';
-import { forgetLocalOrgId } from './local-org';
+import { retireLocalOrgId } from './local-org';
 import {
   type CachedClaims,
   clearCredentials,
@@ -272,12 +272,16 @@ export async function googleSignIn(input: {
  * **This device's own farm is left behind, deliberately.** A hand joining an
  * employer's farm gets that farm's database, and the org this handset minted
  * on first launch — with whatever was logged before the code was typed — is
- * no longer reachable. `forgetLocalOrgId` is what makes that final rather than
- * something a later sign-out would silently reopen.
+ * no longer the one this device belongs to. `retireLocalOrgId` moves the
+ * pointer aside so a later sign-out does not silently reopen it.
  *
- * The screen says so before the code is sent. It is the honest cost of a
- * one-org-per-user model, and hiding it would mean somebody discovering it on
- * the morning they went looking for last week's tallies.
+ * **Aside, not away.** It used to delete the id, which stranded every record
+ * behind it permanently — the file is named for that id and nothing else
+ * points at it. The records were never gone; the only copy of their address
+ * was. They stay reachable now, from `Get your records out`.
+ *
+ * The screen says so before the code is sent, with a count, because "anything
+ * you logged" is a sentence somebody agrees to without knowing what it costs.
  */
 export async function joinFarm(input: {
   code: string;
@@ -294,7 +298,7 @@ export async function joinFarm(input: {
   if (!res.ok) throw await refusal(res, 'That code did not work. Ask for a fresh one.');
 
   const claims = await establish(await res.json());
-  await forgetLocalOrgId();
+  await retireLocalOrgId();
   return claims;
 }
 
@@ -329,11 +333,26 @@ export async function refreshSession(): Promise<CachedClaims | null> {
     return readCachedClaims();
   }
 
-  if (!res.ok) {
+  /**
+   * Only a server that actually refuses ends a session.
+   *
+   * This wiped the credentials on **any** non-2xx, so a 500 or a 502 — a
+   * server restarting, a proxy having a moment, a deploy — signed the device
+   * out and sent somebody looking for a password in a yard. The offline branch
+   * above already gets this right and says why; a 5xx is the same situation
+   * with a different shape, because in neither case has anything been decided
+   * about this device's right to be signed in.
+   *
+   * 401 and 403 are the two that mean refused. Everything else keeps the
+   * session and lets the next refresh try again.
+   */
+  if (res.status === 401 || res.status === 403) {
     await clearCredentials();
     setAccessToken(null);
     return null;
   }
+
+  if (!res.ok) return readCachedClaims();
 
   const pair = pairSchema.parse(await res.json());
   const claims = readClaims(pair.accessToken);
@@ -429,5 +448,30 @@ export type BillingState = z.infer<typeof billingSchema>;
 export async function readBilling(): Promise<BillingState> {
   const res = await fetch(url('/billing'), { headers: syncHeaders({}) });
   if (!res.ok) throw new SignInError('Could not reach the farm.');
+  return billingSchema.parse(await res.json());
+}
+
+/**
+ * Redeems a promotion code.
+ *
+ * Deliberately the same shape as `readBilling` — it returns a `BillingState`,
+ * because what a redeemed code produces is a subscription and the screen
+ * should not have to learn a second vocabulary for the same fact. The panel
+ * that says "Syncing" after a purchase says it after a code, from the same
+ * field, having done nothing different.
+ *
+ * Every refusal is one sentence. The server does not distinguish unknown from
+ * spent from expired — telling a guesser they found a real code is most of the
+ * work of guessing — and there is exactly one thing to do about any of them,
+ * which is ask whoever handed it over.
+ */
+export async function redeemPromo(code: string): Promise<BillingState> {
+  const res = await fetch(url('/billing/promo'), {
+    method: 'POST',
+    headers: syncHeaders({ 'content-type': 'application/json' }),
+    body: JSON.stringify({ code }),
+  });
+
+  if (!res.ok) throw new SignInError('That code does not work.');
   return billingSchema.parse(await res.json());
 }

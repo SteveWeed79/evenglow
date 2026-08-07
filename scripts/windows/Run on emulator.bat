@@ -28,8 +28,19 @@ if errorlevel 1 goto :failed
 call "%~dp0_shared.bat" :ensure_env
 if errorlevel 1 goto :failed
 
+:: The address is compiled into the app now, so a wifi address left behind by
+:: "Run on phone" would build something the emulator cannot reach.
+call "%~dp0_shared.bat" :set_emulator_address
+
 call "%~dp0_shared.bat" :check_adb
 if errorlevel 1 goto :failed
+
+:: The app is compiled here now, so the build toolchain is checked here too.
+call "%~dp0_shared.bat" :check_java
+if errorlevel 1 goto :failed
+
+:: Gradle finds the SDK through this. `:check_adb` already located it.
+if exist "%LOCALAPPDATA%\Android\Sdk" set "ANDROID_HOME=%LOCALAPPDATA%\Android\Sdk"
 
 echo.
 echo   Looking for your virtual device...
@@ -55,17 +66,45 @@ if errorlevel 1 (
   goto :failed
 )
 
+:: Expo Go is gone, and losing a farm twice is why.
+::
+:: Expo Go is one shared app that every Expo project borrows, so the records
+:: lived in ITS sandbox (host.exp.exponent) rather than in Steading's. Expo Go
+:: reinstalls itself whenever the SDK version moves, and an Android reinstall
+:: takes the app's data with it — so bumping expo 57.0.9 to 57.0.11 emptied a
+:: farm, twice, and neither time was a bug in the app.
+::
+:: A development build is Steading's OWN apk, com.steading.app, with its own
+:: sandbox. It still talks to Metro, so editing code still reloads in a second;
+:: what changes is that the records survive it.
+::
+:: `expo run:android` builds and installs when it needs to and starts Metro
+:: either way, so this is one command for both the first run and every one
+:: after. The first is slow — Gradle, five to fifteen minutes — and the rest
+:: are as quick as Expo Go ever was.
 echo.
-echo   [2 of 2] Starting the app on the emulator.
+echo   [2 of 2] Building and starting the app on the emulator.
 echo.
-echo   Expo Go will install itself on the virtual device the
-echo   first time, then the app opens by itself.
+echo   THE VERY FIRST RUN IS SLOW - it can be half an hour while
+echo   it downloads Android's build tools. After that it is a
+echo   couple of minutes, and a code change still reloads in a
+echo   second.
+echo.
+echo   This installs Steading as its own app, so what you log
+echo   stays put. Expo Go could not promise that: it is one
+echo   shared app, and it wipes itself whenever it updates.
 echo.
 echo   Leave this window OPEN while you use the app.
 echo.
 
-cd apps\mobile
-call npx expo start --android
+:: Through the package script, not `npx expo run:android` directly — the script
+:: is `pnpm stamp && expo run:android`, and skipping it builds an app that
+:: cannot say which commit it came from.
+::
+:: `--no-install` because this window already ran `pnpm install` above. Left to
+:: itself `expo run:android` runs its own package install from apps/mobile,
+:: which in a pnpm workspace is redundant at best.
+call pnpm mobile:android --no-install
 
 echo.
 echo   The app server has stopped.

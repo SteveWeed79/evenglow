@@ -367,7 +367,6 @@ export function MembersScreen(): React.ReactElement {
 
           <Secondary
             label={code === null ? 'Show a join code' : 'Show a fresh one'}
-            icon="sync"
             onPress={mintCode}
             testID="mint-join-code"
           />

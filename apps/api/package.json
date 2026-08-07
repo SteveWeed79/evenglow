@@ -13,7 +13,8 @@
     "db:verify": "tsx --env-file-if-exists=../../.env.local src/db/verify.mts",
     "dev": "tsx watch --env-file-if-exists=../../.env.local src/server.ts",
     "start": "tsx --env-file-if-exists=../../.env.local src/server.ts",
-    "db:password": "tsx --env-file-if-exists=../../.env.local src/db/set-password.mts"
+    "db:password": "tsx --env-file-if-exists=../../.env.local src/db/set-password.mts",
+    "promo:new": "tsx --env-file-if-exists=../../.env.local src/db/new-promo.mts"
   },
   "dependencies": {
     "@fastify/cors": "^11.0.1",

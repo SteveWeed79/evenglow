@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   dividerLength,
-  dividerOffsets,
   TAB_DIVIDER,
   TAB_MARKS as TABS,
 } from '../../apps/mobile/src/navigation/tab-marks';
@@ -67,51 +66,26 @@ describe('the bottom bar', () => {
 });
 
 /**
- * The hairlines between the tabs.
+ * The hairlines between the tabs — what is left of them that is arithmetic.
  *
- * Geometry only — whether they *look* right is a handset question and this
- * cannot answer it. What it can hold is the three ways the arithmetic goes
- * wrong silently: a line on the outer edge, a line that misses a boundary, and
- * a bar that gains a tab without gaining a divider.
+ * **There used to be more here, and it all passed while the bar drew one line
+ * instead of two.** The first version positioned each line with
+ * `left: '66.666…%'` and this file proved the offsets were 1/3 and 2/3, which
+ * they were. The percentage resolved against a box that was not the one it
+ * looked like, and no assertion in Node could have seen that.
+ *
+ * The lesson is in the implementation rather than in a new test: `count` slots
+ * at `flex: 1`, one line on the left edge of every slot but the first. There
+ * is no arithmetic left to get wrong, which is why there is no arithmetic left
+ * to test. `tests/screens/tab-bar.test.tsx` counts what renders; the geometry
+ * is now structural and a handset is still the only thing that can confirm it
+ * looks right.
  */
 describe('the lines between them', () => {
-  it('draws one fewer line than there are tabs', () => {
-    expect(dividerOffsets(TABS.length)).toHaveLength(TABS.length - 1);
-
-    // Including the shapes the bar is allowed to take, not just today's.
-    for (let count = 1; count <= MOST_TABS; count += 1) {
-      expect(dividerOffsets(count), `${count} tabs`).toHaveLength(count - 1);
-    }
-  });
-
-  /**
-   * A line at 0 or 1 would sit on the screen edge, double the bar's own
-   * border on one side and read as a frame around the bar rather than a
-   * division inside it.
-   */
-  it('never puts one on an outer edge', () => {
-    for (let count = 2; count <= MOST_TABS; count += 1) {
-      for (const offset of dividerOffsets(count)) {
-        expect(offset).toBeGreaterThan(0);
-        expect(offset).toBeLessThan(1);
-      }
-    }
-  });
-
-  it('puts each one exactly on a boundary between slots', () => {
-    // Evenly spaced, because the bar divides its width evenly. A line half a
-    // slot out is worse than no line — it groups the wrong pair.
-    const three = dividerOffsets(3);
-    expect(three[0]).toBeCloseTo(1 / 3, 10);
-    expect(three[1]).toBeCloseTo(2 / 3, 10);
-  });
-
   it('is one tab bar, not a segmented control', () => {
     /**
      * The line has to be visibly shorter than the bar or it reads as a table
-     * cell — a different promise about what pressing does. Roughly the height
-     * of a mark and its label is what brackets the content instead of ruling
-     * the whole bar.
+     * cell — a different promise about what pressing does.
      */
     expect(dividerLength()).toBeGreaterThan(0.3);
     expect(dividerLength()).toBeLessThan(0.6);

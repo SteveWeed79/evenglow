@@ -189,6 +189,22 @@ export interface LocalStore {
   /** Local projections for one entity kind. Indexed, not a full scan. */
   readRecordsByEntity(entity: string): Promise<LocalRecord[]>;
 
+  /**
+   * How many records this farm holds, across every entity.
+   *
+   * A count rather than a read, because the one caller that needs it renders
+   * every morning — and the honest alternatives were both wrong. Reading all
+   * twenty-six entities is a full scan of the farm on Today, and counting
+   * outbox rows instead is not the same number: a never-synced farm that
+   * created a group and edited it three times has four mutations and one
+   * record, so a strip reading "1,540 records" would be about roughly 1,200
+   * of them. The word on the screen is the load-bearing part.
+   *
+   * Archived rows count. A retired group is still a record and still the
+   * history its logs name.
+   */
+  countRecords(): Promise<number>;
+
   counts(): Promise<QueueCounts>;
   checkIntegrity(): Promise<IntegrityReport>;
 
@@ -233,6 +249,17 @@ export interface LocalStore {
    */
   getSyncHeld(): Promise<SyncRefusal | null>;
   setSyncHeld(refusal: SyncRefusal | null): Promise<void>;
+
+  /**
+   * When a backup file was last written from this device, or null.
+   *
+   * Here rather than in secure storage because it is a fact about this farm's
+   * records, and the records are what it is read against — a device holding
+   * two farms over its life must not carry one farm's backup date onto the
+   * other's screen. The database is per farm; secure storage is not.
+   */
+  getLastBackupAt(): Promise<number | null>;
+  setLastBackupAt(at: number): Promise<void>;
 
   // ── Support tickets ───────────────────────────────────────────────────────
 

@@ -8,9 +8,17 @@ echo   ============================================
 echo     STEADING - run the app on your phone
 echo   ============================================
 echo.
-echo   You will need the free "Expo Go" app from the
-echo   Play Store on your phone, and your phone on the
-echo   same wifi as this computer.
+echo   You need STEADING already installed on your phone,
+echo   and your phone on the same wifi as this computer.
+echo.
+echo   Not installed yet? Plug the phone in with a USB cable,
+echo   turn on USB debugging, and run "Run on emulator" once -
+echo   it installs to whatever is plugged in. Or ask Claude for
+echo   a download link and install that.
+echo.
+echo   This used to say "Expo Go" and no longer does. Expo Go is
+echo   one shared app that wipes itself whenever it updates, and
+echo   it took a farm's records with it twice.
 echo.
 
 call "%~dp0_shared.bat" :check_node
@@ -43,7 +51,8 @@ echo.
 echo   [2 of 2] Starting the app.
 echo.
 echo   A big square QR CODE will appear below in a moment.
-echo   Open "Expo Go" on your phone and scan it.
+echo   Open STEADING on your phone and scan it from the
+echo   screen it shows when it cannot find this computer.
 echo.
 echo   Leave this window OPEN while you use the app.
 echo   To stop, close this window.

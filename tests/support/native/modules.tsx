@@ -135,8 +135,34 @@ export const Paths = {
   document: new FakeDirectory('file:///documents/'),
 };
 
+/**
+ * What the next `File.pickFileAsync` returns. Set by a test before it presses.
+ *
+ * Steerable rather than real for the same reason the camera is: the three
+ * states worth testing — a file chosen, the picker backed out of, and a file
+ * that is not a backup — are not ones a system file picker can be asked to
+ * produce on demand. The backed-out case is the one that matters most, because
+ * it is not a failure and a stub that always chose would hide it.
+ */
+export const picker = {
+  /** A URI in `files`, or null for a cancelled pick. */
+  next: null as string | null,
+};
+
 export class File {
   readonly uri: string;
+
+  /**
+   * The system file picker, which SDK 57 puts on `File` rather than in a
+   * separate document-picker package. Stubbed at the module boundary; the
+   * parsing and the restore either side of it are the real ones.
+   */
+  static async pickFileAsync(): Promise<
+    { canceled: true; result: null } | { canceled: false; result: File }
+  > {
+    if (picker.next === null) return { canceled: true, result: null };
+    return { canceled: false, result: new File(picker.next) };
+  }
 
   constructor(...parts: (string | FakeDirectory | File | Directory)[]) {
     const pieces = parts.map((part) => (typeof part === 'string' ? part : part.uri));
@@ -154,9 +180,16 @@ export class File {
       return;
     }
 
+    /**
+     * Neither a colon nor a slash before the run, or the pattern matches the
+     * first slash of `file:///` as the preceding character and collapses the
+     * triple to a double. That was latent here — writer and reader mangled it
+     * identically, so every path agreed with every other path — and became
+     * real the moment `Directory.list()` had to match keys `File` had written.
+     */
     this.uri = pieces
       .join('/')
-      .replace(/([^:])\/+/g, '$1/');
+      .replace(/([^:/])\/+/g, '$1/');
   }
 
   create(): void {
@@ -178,6 +211,14 @@ export class File {
   get size(): number | null {
     const content = files.get(this.uri);
     return content === undefined ? null : content.length;
+  }
+
+  async text(): Promise<string> {
+    const content = files.get(this.uri);
+    // The real one rejects on a file that is not there, and a test reading a
+    // file nobody wrote would otherwise get an empty string and pass.
+    if (content === undefined) throw new Error(`Nothing at ${this.uri}`);
+    return content;
   }
 
   /** Real move semantics: the source stops existing. */
@@ -204,6 +245,26 @@ export async function shareAsync(uri: string): Promise<void> {
     throw new Error(`Nothing to share at ${uri}`);
   }
   shared.push(uri);
+}
+
+// ── expo-sqlite ──────────────────────────────────────────────────────────────
+
+/**
+ * The native module `db/open.ts` is the only file allowed to name.
+ *
+ * Stubbed here rather than left real because `open.ts` also holds
+ * `knownFarmIds` — the read that decides whether a farm whose id was lost is
+ * reopened or replaced by an empty one — and that answer was previously
+ * reachable only from a handset. The store itself is still exercised for real
+ * everywhere else, through `nodeSqlDriver`; this is the module boundary, not
+ * the database.
+ */
+export async function openDatabaseAsync(name: string): Promise<unknown> {
+  throw new Error(`No native SQLite in a test. Asked for ${name}.`);
+}
+
+export async function deleteDatabaseAsync(name: string): Promise<void> {
+  files.delete(`file:///documents/SQLite/${name}`);
 }
 
 // ── expo-image-picker / expo-image-manipulator ───────────────────────────────
@@ -304,11 +365,24 @@ export class Directory {
   readonly uri: string;
 
   constructor(...parts: (string | { uri: string })[]) {
+    /**
+     * The same hazard `File` documents, and this half had it.
+     *
+     * A directory's uri never matched the keys `File` writes under, so
+     * `list()` came back empty for a directory with files in it — twice over.
+     *
+     * The old `.replace(/\/+/g, '/')` collapsed `file:///documents/` to
+     * `file:/documents/` and `.replace(':/', '://')` put back only two of the
+     * three slashes. Copying `File`'s `([^:])\/+` did not fix it either,
+     * because a **slash is not a colon**: the pattern matched the first slash
+     * of `///` as the preceding character and ate one anyway. The preceding
+     * character has to be neither.
+     */
     this.uri = `${parts
       .map((part) => (typeof part === 'string' ? part : part.uri))
       .join('/')
-      .replace(/\/+/g, '/')
-      .replace(':/', '://')}/`;
+      .replace(/([^:/])\/+/g, '$1/')
+      .replace(/\/$/, '')}/`;
   }
 
   get exists(): boolean {
@@ -317,5 +391,20 @@ export class Directory {
 
   create(): void {
     // Directories are implicit in a Map keyed by path.
+  }
+
+  /**
+   * Everything directly inside, as `{ name }`.
+   *
+   * Added for `knownFarmIds`, which reads the SQLite directory to find a farm
+   * whose id secure storage has lost. That path decides whether a farm's
+   * records come back or sit on disk with nothing pointing at them, so it had
+   * to be reachable from a test rather than only from a handset.
+   */
+  list(): { name: string; uri: string }[] {
+    const prefix = this.uri;
+    return [...files.keys()]
+      .filter((uri) => uri.startsWith(prefix) && !uri.slice(prefix.length).includes('/'))
+      .map((uri) => ({ name: uri.slice(prefix.length), uri }));
   }
 }

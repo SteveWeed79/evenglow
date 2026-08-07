@@ -163,7 +163,11 @@ Merged into the master plan:
 - Equipment presets by make/model; breed presets by species
 - Hour-meter usage-rate forecasting
 - Parts inventory linked to upcoming service intervals
-- CSV import as well as export
+- ~~CSV import as well as export~~ — **contradicted by §2.1 and superseded.**
+  Export is built; import stays refused for the reasons P9 gives. What was
+  built instead is a **backup file**, which is the app's own output going back
+  into an empty farm: nothing to merge against, every row carrying the ULID it
+  was minted with, and nothing to preview. See `ROADMAP.md` §12.
 - Deferred to v2, but not designed out: incubation and hatch runs, pedigree/lineage
 
 ---

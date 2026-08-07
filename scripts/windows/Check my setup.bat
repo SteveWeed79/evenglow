@@ -62,7 +62,7 @@ if exist "apps\mobile\.env" (
 )
 
 echo.
-echo   --- Android Studio ^(only needed for the emulator^) ---
+echo   --- Android Studio ^(needed to build and install the app^) ---
 
 if exist "%LOCALAPPDATA%\Android\Sdk" (
   echo   [ OK ]      Android SDK
@@ -107,12 +107,77 @@ if errorlevel 1 (
 )
 
 echo.
+echo   --- Java, and the SDK pieces Gradle needs ---
+:: None of this mattered under Expo Go, because nothing was ever compiled on
+:: this machine. Building the app locally needs four things Android Studio does
+:: not install by its default flow, and a window that said "Nothing missing"
+:: without checking them would be exactly the false OK this file was rewritten
+:: to stop giving.
+set "J17="
+for /d %%D in ("%ProgramFiles%\Eclipse Adoptium\jdk-17*" "%ProgramFiles%\Java\jdk-17*" "%ProgramFiles%\Microsoft\jdk-17*" "%ProgramFiles%\Zulu\zulu-17*") do (
+  if exist "%%~D\bin\java.exe" set "J17=%%~D"
+)
+if defined J17 (
+  echo   [ OK ]      Java 17
+) else (
+  echo   [ MISSING ] Java 17        - Temurin 17 LTS from adoptium.net.
+  echo               NOT 21, and not the one inside Android Studio: React
+  echo               Native asks Gradle for 17 by name.
+  set /a MISSING+=1
+)
+
+for %%P in (
+  "ndk\27.1.12297006"
+  "cmake"
+  "platforms\android-36"
+  "build-tools\36.0.0"
+) do (
+  if exist "%LOCALAPPDATA%\Android\Sdk\%%~P" (
+    echo   [ OK ]      SDK %%~P
+  ) else (
+    echo   [ MISSING ] SDK %%~P
+    echo               Android Studio, Tools ^> SDK Manager, SDK Tools tab.
+    set /a MISSING+=1
+  )
+)
+
+:: 297-character paths already exist inside node_modules\.pnpm, and Gradle
+:: writes its own output underneath them. Windows truncates at 260 unless this
+:: is on, and the failure looks like a corrupt checkout rather than a limit.
+for /f "tokens=3" %%L in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\FileSystem" /v LongPathsEnabled 2^>nul ^| findstr LongPathsEnabled') do set "LONGPATHS=%%L"
+if "%LONGPATHS%"=="0x1" (
+  echo   [ OK ]      long file paths
+) else (
+  echo   [ NOTE ]    long file paths are OFF in Windows.
+  echo               If the build fails on a path nobody can read, that is
+  echo               why. The reliable fix is a short folder: C:\steading
+)
+
+echo.
+echo   --- Is the app installed on the device? ---
+:: The single most useful line this window can print now. Under Expo Go the
+:: answer was always "Expo Go is"; with a development build, "no" explains a
+:: QR code nobody can scan and a phone that never opens anything.
+adb shell pm list packages 2>nul | findstr /c:"com.steading.app" >nul
+if errorlevel 1 (
+  echo   [ NOTE ]    Steading is not installed on the attached device.
+  echo               Run "Run on emulator" once - it builds and installs it.
+) else (
+  echo   [ OK ]      Steading is installed
+)
+
+echo.
 echo   --- Do the app's packages match Expo? ---
 :: The one question this window could not answer, and the one that has cost
-:: the most time: Expo Go ships fixed native module versions, so a package
-:: pinned to a different version is JavaScript talking to a native side that
-:: does not match it. That fails as "undefined is not a function" on a device
-:: and passes every test on a computer.
+:: the most time. The SDK pins a native version for every one of these
+:: packages, so a package.json naming a different one is JavaScript talking to
+:: a native side that does not match it. That fails as "undefined is not a
+:: function" on a device and passes every test on a computer.
+::
+:: It mattered under Expo Go because Expo Go shipped the native halves and the
+:: app had to agree with them. It still matters on a development build for the
+:: opposite reason: the build compiles whatever package.json says, so a wrong
+:: version is now baked into an apk rather than merely disagreed with.
 :: Answered "no" for us. `expo install --check` PROMPTS, and a stray Enter
 :: rewrites package.json and the lockfile — which this window's own header
 :: promises it will never do, and which then makes `git pull --ff-only`

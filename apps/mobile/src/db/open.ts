@@ -1,3 +1,4 @@
+import { Directory, Paths } from 'expo-file-system';
 import * as SQLite from 'expo-sqlite';
 import type { SqlDriver } from '@steading/core/db/driver';
 import { applyPragmas, createExpoDriver, type SqliteConnection } from './expo-driver';
@@ -55,4 +56,30 @@ export async function openExpoSqlDriver(databaseName: string): Promise<SqlDriver
  */
 export async function forgetDatabase(orgId: string): Promise<void> {
   await SQLite.deleteDatabaseAsync(databaseNameFor(orgId));
+}
+
+/**
+ * Every farm this device has a database for.
+ *
+ * **The one question nothing could ask.** A farm's id lives in secure storage
+ * and its records live in `steading-{orgId}.db`, so the id is the only pointer
+ * to the file — and when the pointer goes, `ensureLocalOrgId` mints a fresh
+ * one and the app opens an empty farm beside a full one, silently. That is a
+ * loss with no error, no warning and nothing on any screen, which is the worst
+ * shape a loss can take.
+ *
+ * It cannot be repaired from here — picking one of several files would be the
+ * app guessing which farm somebody meant. What it can do is refuse to pretend
+ * there is nothing there, which is what `boot/start.ts` uses this for.
+ *
+ * Returns the org ids, not the filenames, so callers never parse a path.
+ */
+export async function knownFarmIds(): Promise<string[]> {
+  const directory = new Directory(Paths.document, 'SQLite');
+  if (!directory.exists) return [];
+
+  return directory
+    .list()
+    .map((entry) => /^steading-([0-9A-HJKMNP-TV-Z]{26})\.db$/.exec(entry.name)?.[1])
+    .filter((id): id is string => id !== undefined);
 }

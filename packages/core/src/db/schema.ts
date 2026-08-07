@@ -89,6 +89,7 @@ export const META = {
   lastError: 'lastError',
   persistGranted: 'persistGranted',
   syncHeld: 'syncHeld',
+  lastBackupAt: 'lastBackupAt',
 } as const;
 
 export const metaSchemas = {
@@ -116,6 +117,20 @@ export const metaSchemas = {
    * device's relationship with the server, which is what `meta` is for.
    */
   syncHeld: z.enum(SYNC_REFUSALS),
+  /**
+   * When a backup file was last written from this device.
+   *
+   * Stored because it is the only honest way to stop telling a farm its
+   * records are in one place: it has *done* something about it. The
+   * alternative — a dismiss button — stores "I saw this", which is the
+   * completion flag the due engine refuses (property 3) and drifts from what
+   * it describes the moment anything changes.
+   *
+   * A moment rather than a boolean, because a copy taken last spring is not
+   * protection and a notice that never came back would be a promise this
+   * cannot keep.
+   */
+  lastBackupAt: z.number().int(),
 } as const;
 
 /**

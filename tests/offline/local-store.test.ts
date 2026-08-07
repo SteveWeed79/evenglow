@@ -345,6 +345,42 @@ describe.each(BACKINGS)('LocalStore — $name', (backing) => {
       expect(await store.readRecordsByEntity('equipment')).toEqual([]);
     });
 
+    /**
+     * A different number from `counts()`, and the difference is the point.
+     *
+     * The outbox counts mutations; this counts what they made. A group created
+     * and then edited is two of the first and one of the second, and the
+     * exposure notice says "records" — see `backup/exposure.ts`.
+     */
+    it('counts records across every entity, not the mutations behind them', async () => {
+      const flock = newId();
+      await store.enqueue({
+        entity: 'flock',
+        op: 'create',
+        targetId: flock,
+        payload: { name: 'The Dexters', species: 'cattle', count: 4 },
+      });
+      await store.enqueue({ entity: 'flock', op: 'update', targetId: flock, payload: { count: 5 } });
+      await store.enqueue(eggLog());
+
+      expect((await store.counts()).total).toBe(3);
+      expect(await store.countRecords()).toBe(2);
+    });
+
+    /**
+     * Its own pair of methods rather than a flag, because a copy taken last
+     * spring is not protection. See `backup/exposure.ts`.
+     */
+    it('remembers when a backup was last taken, and starts with none', async () => {
+      expect(await store.getLastBackupAt()).toBeNull();
+
+      await store.setLastBackupAt(1_700_000_000_000);
+      expect(await store.getLastBackupAt()).toBe(1_700_000_000_000);
+
+      await store.setLastBackupAt(1_800_000_000_000);
+      expect(await store.getLastBackupAt()).toBe(1_800_000_000_000);
+    });
+
     it('reports counts and integrity', async () => {
       const a = await store.enqueue(eggLog());
       await store.enqueue(eggLog());

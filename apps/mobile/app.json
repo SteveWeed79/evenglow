@@ -9,10 +9,10 @@
     "newArchEnabled": true,
     "android": {
       "package": "com.steading.app",
-      "edgeToEdgeEnabled": true,
       "adaptiveIcon": {
         "backgroundColor": "#EDE6D2"
-      }
+      },
+      "allowBackup": false
     },
     "ios": {
       "bundleIdentifier": "com.steading.app",

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { readExposure } from '@steading/core/backup/exposure';
 import { readSite } from '@steading/core/read/growing';
 import { Row } from '../components/Form';
 import { Body, Panel } from '../components/Panel';
@@ -26,6 +27,7 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
   const { colors } = useTheme();
   const nav = useNav();
   const site = useLive(readSite);
+  const exposure = useLive(readExposure);
 
   const [armed, setArmed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -77,15 +79,22 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
           * "Your account" is a chore nobody opens. What a farm running without
           * one actually needs to know is that its records are on this handset
           * and nowhere else — the third moment in A2.3, and the honest one.
+          *
+          * **It counts now, and that is the whole change.** "Everything is on
+          * this phone only" is true on day one about four records and in year
+          * two about two thousand, so it says the same thing whether or not it
+          * matters — which is how a row becomes furniture. A number is a fact
+          * somebody can weigh.
           */}
         <Row
           title={account === null ? 'Keep these records safe' : 'Your account'}
           detail={
-            account === null
-              ? 'Everything is on this phone only — an account keeps a copy'
-              : `Signed in${account.name === undefined ? '' : ` as ${account.name}`}`
+            account !== null
+              ? `Signed in${account.name === undefined ? '' : ` as ${account.name}`}`
+              : exposure === null
+                ? 'An account keeps a copy off this phone'
+                : `${exposure.records.toLocaleString()} records on this phone only — an account keeps a copy`
           }
-          icon="sync"
           testID="go-account"
           onPress={() => nav.navigate('Account')}
         />
@@ -116,11 +125,51 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
           testID="go-site"
           onPress={() => nav.navigate('SiteSetup')}
         />
+        {/**
+          * "Cannot be put back" is the load-bearing half of this line.
+          *
+          * Export is the word most people already attach to backing up, and
+          * these two rows sit one above the other. Without it, somebody
+          * frightened about a failing phone sends themselves thirteen
+          * spreadsheets, believes they are covered, and finds out otherwise on
+          * the worst possible day.
+          */}
         <Row
           title="Get your records out"
-          detail="Spreadsheets for a vet, an accountant, or whoever buys the tractor"
+          detail="Spreadsheets for a vet or an accountant — they cannot be put back"
           testID="go-export"
           onPress={() => nav.navigate('Export')}
+        />
+        {/**
+          * Beside the export and not inside it, because they are different
+          * acts with different audiences. A spreadsheet goes to a person and
+          * loses every id on the way out by design; this comes back.
+          *
+          * The date is here rather than only on the screen behind it because
+          * it is the one fact that makes a wrong answer discoverable. Taking a
+          * copy stamps the date when the file is written, and the share sheet
+          * never reports whether anything took it — so somebody who opened the
+          * sheet and backed out has bought silence they did not earn, and the
+          * only defence against that is being able to see what the app thinks
+          * happened.
+          */}
+        <Row
+          title="A copy of your farm"
+          detail={
+            exposure === null
+              ? 'One file with every record in it, to keep somewhere else'
+              : exposure.records === 0
+                ? 'Put a backup from another phone onto this one'
+                : exposure.lastBackupAt === null
+                  ? 'One file with every record in it — none taken yet'
+                  : `Last taken ${new Date(exposure.lastBackupAt).toLocaleDateString(undefined, {
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric',
+                    })}`
+          }
+          testID="go-backup"
+          onPress={() => nav.navigate('Backup')}
         />
         <Row
           title="Sync"

@@ -270,3 +270,54 @@ describe('where photos are offered', () => {
     group.unmount();
   });
 });
+
+/**
+ * A photo record with no bytes, and the two quite different reasons for it.
+ *
+ * One sentence used to cover both, and a restore is what made the difference
+ * matter: a backup file carries records and not photographs, so a restored
+ * farm's whole gallery is records with no bytes — and telling somebody the
+ * picture is on its way when it was only ever on the handset that took it is
+ * the worst version of this screen being wrong.
+ */
+describe('a picture that is not here', () => {
+  async function aRecordWithNoBytes(over: Record<string, unknown>): Promise<string> {
+    const id = newId();
+    await enqueue({
+      entity: 'photo',
+      op: 'create',
+      targetId: id,
+      payload: {
+        subjectId: MACHINE,
+        contentType: 'image/jpeg',
+        byteSize: 120_000,
+        capturedAt: Date.now(),
+        ...over,
+      },
+    });
+    return id;
+  }
+
+  it('says it is still coming when the server has it', async () => {
+    await aFarm();
+    const id = await aRecordWithNoBytes({ uploadedAt: Date.now() });
+
+    const screen = await mount(<MachineScreen {...routeProps({ machineId: MACHINE })} />);
+    await screen.press(`photo-${id}`);
+
+    expect(screen.text()).toContain('still coming');
+    screen.unmount();
+  });
+
+  it('says it is gone when nothing ever uploaded it', async () => {
+    await aFarm();
+    const id = await aRecordWithNoBytes({});
+
+    const screen = await mount(<MachineScreen {...routeProps({ machineId: MACHINE })} />);
+    await screen.press(`photo-${id}`);
+
+    expect(screen.text()).not.toContain('still coming');
+    expect(screen.text()).toContain('only ever on the handset that took it');
+    screen.unmount();
+  });
+});
