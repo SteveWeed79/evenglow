@@ -693,6 +693,89 @@ landed. Everything that is a design decision is listed below it, unbuilt.
 
 ---
 
+## 12 — The way home for a farm with no account — **built**
+
+**Cost of skipping it:** one farm in the app has no route back from a lost
+phone, and it is the one the whole local-first design was built to welcome.
+
+Everything else was already covered and it is worth saying exactly how, because
+the gap is narrower than it first looks:
+
+- **A new phone with an account.** `GET /snapshot` rebuilds the local database.
+  Built, and the designed path.
+- **A lapsed subscription.** Pull is **deliberately ungated on billing**
+  (`apps/api/src/routes/sync.ts`): *"a farm's records are the farm's, and a
+  lapsed subscription must never be the reason it cannot get them back."* So a
+  farm whose card expired reinstalls and pulls everything back. It simply
+  cannot push new work up until it pays again.
+- **A farm that never made an account** (A2.1). Records in one file on one
+  handset. Nothing.
+
+That last one is this section. Two halves.
+
+### 12a. Telling the farm, at the moment A2.3 already named
+
+A2.3 says an account is asked for at three moments and no others, and names the
+third as *"enough data to hurt losing"*. **That moment was never implemented.**
+What stood in for it was one Settings row reading "Everything is on this phone
+only" — true on day one about four records, true in year two about two
+thousand, and therefore read as furniture by the time it meant anything.
+
+- `packages/core/src/backup/exposure.ts` states the condition: nothing has ever
+  reached a server, **and** enough records to hurt, **and** no recent copy.
+- The first clause is `lastSyncAt === null` rather than "has no account", which
+  is the precise test. A lapsed farm has a server copy and must not be told it
+  is exposed; a free-tier farm that has never once flushed must be.
+- `ExposureNotice` draws it on Today, below the weather (a meteorologist
+  outranks this) and above the tallies (below them is where things go to be
+  scrolled past).
+- **Nothing to dismiss.** `WeatherWarnings` sets out why a dismiss button is
+  wrong and three of its four arguments hold unchanged. The fourth is what
+  makes this different rather than exempt: a weather warning has nothing to act
+  on, and this has two things that both genuinely end it — sync, or take a
+  copy.
+- The Settings row counts now. A number is a fact somebody can weigh.
+
+### 12b. A file that can come back
+
+**Not the CSV, and not a reversal of the CSV-import refusal below.** The export
+is thirteen sheets for a vet and an accountant: it resolves ids to names, has no
+id column at all, rounds times to the minute, and covers none of plantings,
+beds, incubations, tasks, inventory, notes or feed plans. Reading it back would
+be inventing data.
+
+- `packages/contracts/src/backup.ts` — the file, `.strict()` throughout because
+  a file off a filesystem is external data of the most hostile kind.
+- `packages/core/src/backup/file.ts` — built from the projection, not the
+  outbox: a mutation leaves the outbox the moment the server acknowledges it,
+  so the outbox is not a history. Validated on the way *out*, so the count of
+  what could not be read is known before the file is written.
+- `packages/core/src/backup/restore.ts` — **one rule does all the work.** It
+  writes every record the file has and the device does not, and refuses
+  outright if the device holds any record the file does not. That covers a
+  fresh install, a resume after a flat battery, the same file twice, and a farm
+  that already keeps its own records — with no flag anywhere saying a restore
+  is in progress, because a flag would have to survive the process death it
+  exists to describe.
+- **Through `enqueue`, never around it.** Invariant 5 for free, invariant 11 for
+  free, and idempotent all the way to the server: a `create` at a targetId that
+  already exists is a `noop` in `sync/projections.ts`. A restored farm that
+  later signs up sends its records rather than copies of them.
+- **Photographs are not in it**, and the file says so in `excludes` rather than
+  leaving a screen to remember.
+- `File.pickFileAsync` — SDK 57's own picker, so no document-picker dependency.
+
+**The app cannot find the file by itself, and that is Android rather than
+laziness.** Uninstalling deletes an app's directories and releases every
+Storage Access Framework grant it had persisted, so a fresh install has no
+folder it may read without being handed one. The two ways round it are a broad
+media permission — asking for every document on the phone in order to look at
+one — and Android Auto Backup, which is off in `app.json` on purpose because it
+would put an accountless farm's records into Google's backup without anybody
+agreeing to it.
+
+---
+
 ## What is deliberately not on this list
 
 - **A weather tab.** Answered by the Farm hub.
@@ -702,6 +785,12 @@ landed. Everything that is a design decision is listed below it, unbuilt.
   sync needs conflict rules, an id strategy for rows that have none, and a
   preview nobody reads. Every one of those is a way to quietly corrupt a farm's
   history. Export is the half that stops the app being a trap, and it is built.
+
+  **Still refused, and §12 is not a reversal of it.** The backup file is the
+  app's own output going back into an empty farm, so all three reasons above
+  fall away — there is nothing to merge against, every row already carries the
+  ULID it was minted with, and there is nothing to preview. A spreadsheet
+  somebody edited has none of those properties and none of this applies to it.
 - **Egg logging per individual bird** (P2). Refused: five hens share one roost,
   so a per-bird tally is a guess recorded as a fact. `eggLog.birdId` stays in
   the contract for a farm that genuinely traps nests; no screen writes one.

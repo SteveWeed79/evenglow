@@ -596,6 +596,11 @@ export async function openSqliteStore(
       return good;
     },
 
+    async countRecords(): Promise<number> {
+      const row = await driver.get<{ n: number }>('SELECT COUNT(*) AS n FROM records');
+      return row?.n ?? 0;
+    },
+
     async counts(): Promise<QueueCounts> {
       const row = await driver.get<{ queued: number; rejected: number; total: number }>(
         `SELECT
@@ -772,6 +777,14 @@ export async function openSqliteStore(
 
     async getDeviceId(): Promise<string | null> {
       return parseMeta('deviceId', await readMeta(driver, 'deviceId')) ?? null;
+    },
+
+    async getLastBackupAt(): Promise<number | null> {
+      return parseMeta('lastBackupAt', await readMeta(driver, 'lastBackupAt')) ?? null;
+    },
+
+    async setLastBackupAt(at): Promise<void> {
+      await writeMeta(driver, META.lastBackupAt, at);
     },
 
     /**

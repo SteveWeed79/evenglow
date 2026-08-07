@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { readExposure } from '@steading/core/backup/exposure';
 import { readSite } from '@steading/core/read/growing';
 import { Row } from '../components/Form';
 import { Body, Panel } from '../components/Panel';
@@ -26,6 +27,7 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
   const { colors } = useTheme();
   const nav = useNav();
   const site = useLive(readSite);
+  const exposure = useLive(readExposure);
 
   const [armed, setArmed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -77,13 +79,21 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
           * "Your account" is a chore nobody opens. What a farm running without
           * one actually needs to know is that its records are on this handset
           * and nowhere else — the third moment in A2.3, and the honest one.
+          *
+          * **It counts now, and that is the whole change.** "Everything is on
+          * this phone only" is true on day one about four records and in year
+          * two about two thousand, so it says the same thing whether or not it
+          * matters — which is how a row becomes furniture. A number is a fact
+          * somebody can weigh.
           */}
         <Row
           title={account === null ? 'Keep these records safe' : 'Your account'}
           detail={
-            account === null
-              ? 'Everything is on this phone only — an account keeps a copy'
-              : `Signed in${account.name === undefined ? '' : ` as ${account.name}`}`
+            account !== null
+              ? `Signed in${account.name === undefined ? '' : ` as ${account.name}`}`
+              : exposure === null
+                ? 'An account keeps a copy off this phone'
+                : `${exposure.records.toLocaleString()} records on this phone only — an account keeps a copy`
           }
           testID="go-account"
           onPress={() => nav.navigate('Account')}
@@ -120,6 +130,21 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
           detail="Spreadsheets for a vet, an accountant, or whoever buys the tractor"
           testID="go-export"
           onPress={() => nav.navigate('Export')}
+        />
+        {/**
+          * Beside the export and not inside it, because they are different
+          * acts with different audiences. A spreadsheet goes to a person and
+          * loses every id on the way out by design; this comes back.
+          */}
+        <Row
+          title="A copy of your farm"
+          detail={
+            exposure !== null && exposure.records === 0
+              ? 'Put a backup from another phone onto this one'
+              : 'One file with every record in it, to keep somewhere else'
+          }
+          testID="go-backup"
+          onPress={() => nav.navigate('Backup')}
         />
         <Row
           title="Sync"

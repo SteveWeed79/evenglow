@@ -135,8 +135,34 @@ export const Paths = {
   document: new FakeDirectory('file:///documents/'),
 };
 
+/**
+ * What the next `File.pickFileAsync` returns. Set by a test before it presses.
+ *
+ * Steerable rather than real for the same reason the camera is: the three
+ * states worth testing — a file chosen, the picker backed out of, and a file
+ * that is not a backup — are not ones a system file picker can be asked to
+ * produce on demand. The backed-out case is the one that matters most, because
+ * it is not a failure and a stub that always chose would hide it.
+ */
+export const picker = {
+  /** A URI in `files`, or null for a cancelled pick. */
+  next: null as string | null,
+};
+
 export class File {
   readonly uri: string;
+
+  /**
+   * The system file picker, which SDK 57 puts on `File` rather than in a
+   * separate document-picker package. Stubbed at the module boundary; the
+   * parsing and the restore either side of it are the real ones.
+   */
+  static async pickFileAsync(): Promise<
+    { canceled: true; result: null } | { canceled: false; result: File }
+  > {
+    if (picker.next === null) return { canceled: true, result: null };
+    return { canceled: false, result: new File(picker.next) };
+  }
 
   constructor(...parts: (string | FakeDirectory | File | Directory)[]) {
     const pieces = parts.map((part) => (typeof part === 'string' ? part : part.uri));
@@ -185,6 +211,14 @@ export class File {
   get size(): number | null {
     const content = files.get(this.uri);
     return content === undefined ? null : content.length;
+  }
+
+  async text(): Promise<string> {
+    const content = files.get(this.uri);
+    // The real one rejects on a file that is not there, and a test reading a
+    // file nobody wrote would otherwise get an empty string and pass.
+    if (content === undefined) throw new Error(`Nothing at ${this.uri}`);
+    return content;
   }
 
   /** Real move semantics: the source stops existing. */

@@ -8,6 +8,7 @@ import { AddItemScreen } from '../screens/AddItemScreen';
 import { AddMachineScreen } from '../screens/AddMachineScreen';
 import { AddServiceScreen } from '../screens/AddServiceScreen';
 import { AnimalsScreen } from '../screens/AnimalsScreen';
+import { BackupScreen } from '../screens/BackupScreen';
 import { BreedingScreen } from '../screens/BreedingScreen';
 import { CareLogScreen } from '../screens/CareLogScreen';
 import { CareRoutineScreen } from '../screens/CareRoutineScreen';
@@ -88,6 +89,15 @@ export type RootParamList = {
   Iron: undefined;
   /** Records out, as spreadsheets. */
   Export: undefined;
+  /**
+   * Records out as a file that can come back, and the way back from one.
+   *
+   * Distinct from Export, which is thirteen spreadsheets for a vet and an
+   * accountant and deliberately loses the ids that would let anything read
+   * them in again. This is the app's own format and the only route home for a
+   * farm with no account.
+   */
+  Backup: undefined;
   /** Chores the farm wrote down itself — the one authored due kind. */
   Jobs: undefined;
   /**
@@ -179,6 +189,7 @@ export function Root({
       <Stack.Screen name="Growing" component={GrowingScreen} />
       <Stack.Screen name="Iron" component={IronScreen} />
       <Stack.Screen name="Export" component={ExportScreen} />
+      <Stack.Screen name="Backup" component={BackupScreen} />
       <Stack.Screen name="Jobs" component={JobsScreen} />
       <Stack.Screen name="Weather" component={WeatherScreen} />
       <Stack.Screen name="Inbox" component={InboxScreen} />

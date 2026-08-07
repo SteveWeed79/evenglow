@@ -519,10 +519,14 @@ record on the handset behind an id it can never claim.
   screen shows the server's sentence verbatim. It stays near-impossible — an
   80-bit id — and it now has words rather than a stack trace.
 - ~~**What a local-only farm is told about recovery**, and where.~~
-  **Answered, and the wording is the feature.** The Settings row reads *"Keep
-  these records safe — everything is on this phone only"* rather than "Your
-  account", and the panel behind it leads with the water trough. Not a nag: it
-  is a row on a screen nobody opens during chores, and nothing pops up.
+  **Answered twice, and the second answer corrects the first.** The Settings
+  row reads *"Keep these records safe"* rather than "Your account", and the
+  panel behind it leads with the water trough.
+
+  That was called "not a nag: it is a row on a screen nobody opens during
+  chores" — which is true, and is also the whole problem with it. It said the
+  same sentence on day one about four records as in year two about two
+  thousand, so by the time it meant anything it was furniture. See A2.7.
 - **First flush at volume.** A month of offline mutations landing at once
   against a newly-claimed org. The batch cap is 100 and flush is sequential, so
   it should hold — but it has never been exercised at that size and wants a
@@ -535,12 +539,12 @@ record on the handset behind an id it can never claim.
   honest fix is a membership model where a user can belong to more than one
   farm, which is a schema change rather than a screen, and inventing one to
   make a warning go away would be the wrong place to decide it.
-- **Losing the local org id.** Android clears secure storage when app data is
-  cleared, and an unclaimed farm's id goes with it — the records are still in
-  the database file and nothing knows which file. This is exactly what the
-  account is sold on, so it is honest rather than hidden, but a device with a
-  visible orphaned database and no way to open it is a support conversation
-  waiting to happen.
+- ~~**Losing the local org id.**~~ **Answered.** Android clears secure storage
+  when app data is cleared, and an unclaimed farm's id went with it — the
+  records still in the database file and nothing knowing which file. It adopts
+  now when there is exactly one database on disk, because exactly one means
+  exactly one farm; two means the app would be guessing which farm somebody
+  meant, so it mints and leaves both alone. See `db/open.ts`.
 
 ---
 
@@ -613,3 +617,94 @@ Printed once. It is stored hashed and cannot be shown again.
 
 **`FREE_SYNC_ORGS` stays** as the break-glass that needs no database — for the
 farm that cannot redeem because the thing that is broken is the server.
+
+---
+
+## A2.7 — The third moment, and the copy that answers it
+
+A2.3 says an account is asked for at three moments and no others, and names the
+third as *"enough data to hurt losing"*. It also says that one is *"the honest
+one and must not be buried"*.
+
+**It was buried, in a row on a settings screen.** Not through neglect — the row
+was written for exactly this — but because the sentence it carried could not
+tell the two ends of the farm's life apart. *"Everything is on this phone
+only"* is true on the afternoon somebody installs the app, and true two years
+later about a season nobody can reconstruct. A line that says the same thing
+either way is furniture by the time it matters.
+
+### The condition, stated
+
+`packages/core/src/backup/exposure.ts`. Three clauses, all from reads a screen
+can afford every morning:
+
+1. **Nothing has ever reached a server** — `lastSyncAt === null`.
+2. **Enough records that losing them would hurt** — `EXPOSED_AT`, currently 200.
+3. **No copy taken recently** — `BACKUP_GOOD_FOR`, ninety days.
+
+**The first clause is not "has no account", and the difference is the point.**
+A farm whose card lapsed still has a copy on the server and can pull it back —
+`GET /snapshot` is deliberately ungated on billing — so it is not exposed and
+must not be told it is. A farm *with* an account that has never once flushed,
+because it is on the free tier, is exposed, and "has no account" would have
+missed it entirely.
+
+The second is a count rather than a span of days, which is the weaker measure
+and is chosen anyway: a span needs a scan of every record on a screen that
+renders every morning, and `countRecords()` is one query. Two hundred sits
+above a setup burst — every group, every animal, every machine and bed comes to
+a few dozen — and below a season.
+
+**Records, not mutations, and that was got wrong first.** The cheapest read
+available is `counts()`, which the sync chip already makes — but it counts
+outbox rows, and on a never-synced farm a group created and then edited three
+times is four of those and one record. A band reading *"1,540 records"* about
+roughly 1,200 of them would be the app overstating the exact thing it is asking
+somebody to act on, so the port grew a `countRecords()` instead.
+
+### Why there is nothing to dismiss
+
+`WeatherWarnings` already argued this out for a different strip, and three of
+its four reasons transfer unchanged: a stored *"I saw this"* is the completion
+flag the due engine refuses, it drifts from what it describes, and the reflex it
+trains gets spent on the row that mattered.
+
+The fourth reason is what makes this different rather than exempt. A weather
+warning has nothing you can do about it, so dismissal is the only thing on
+offer. This has two things, and doing either ends it honestly: sync, or take a
+copy. A copy goes stale, so the notice comes back — ninety days is long enough
+not to be a nag and short enough that *"your last copy is from February"* is not
+something somebody discovers in September.
+
+### What the copy is, and what it is not
+
+**Records, not photographs.** The bytes are far larger than everything else put
+together and a backup that quietly grew to 300 MB is one that fails to send
+with no explanation. The file names its own exclusions rather than leaving a
+screen to remember them.
+
+**A file is a copy of a moment; an account is a copy that keeps itself.** The
+backup screen says so, under the button rather than in front of it — somebody
+who came for the file should get the file, and should not leave without knowing
+what it does not do.
+
+**It is not a reversal of the CSV-import refusal.** That refusal names three
+reasons and a restore has none of them: it goes into a farm with nothing to
+merge against, every row already carries the ULID it was minted with (D1), and
+there is nothing to preview because the file is this app's own output. A
+spreadsheet somebody edited has none of those properties.
+
+### The one thing that cannot be built
+
+**The app cannot find a backup file by itself on a fresh install.** Uninstalling
+deletes an app's directories and releases every Storage Access Framework grant
+it had persisted, so there is no folder a new install may read without being
+handed it — and the handing over is the picker.
+
+The two ways round it are both worse. A broad media permission is asking for
+every document on the phone in order to look at one. And **Android Auto
+Backup**, which really is the platform doing this automatically, is off in
+`app.json` on purpose: it would put the records of a farm with no account into
+Google's backup without anybody agreeing to it, and *"everything is on this
+phone only"* — which is what this document says and what the app repeats —
+would quietly stop being true.
