@@ -1,4 +1,5 @@
 import { isUlid, newId } from '@steading/contracts';
+import { knownFarmIds } from '../db/open';
 import { clearLocalOrg, readLocalOrgRaw, writeLocalOrg } from './store';
 
 /**
@@ -52,6 +53,30 @@ export async function readLocalOrgId(): Promise<string | null> {
 export async function ensureLocalOrgId(): Promise<string> {
   const existing = await readLocalOrgId();
   if (existing !== null) return existing;
+
+  /**
+   * Nothing said which farm this is — but there may be one on disk.
+   *
+   * This is the silent loss, and it is the one worth guarding. Secure storage
+   * returns null rather than throwing when it cannot read a value, so a
+   * cleared keystore, a restored backup or a reinstall that kept the files
+   * looks exactly like a first launch: a fresh id is minted, a new empty
+   * database opens, and a farm's records sit in the file next to it with
+   * nothing pointing at them. No error, no warning, nothing on any screen.
+   *
+   * **Adopting is right and guessing is not.** Exactly one database means
+   * exactly one farm, and reopening it is the only answer that can be correct.
+   * More than one means two farms have been on this device and picking either
+   * would be the app deciding which somebody meant — so it mints, and the
+   * records stay where they are rather than being merged into a guess.
+   */
+  const known = await knownFarmIds();
+  const only = known.length === 1 ? known[0] : undefined;
+
+  if (only !== undefined) {
+    await writeLocalOrg(only);
+    return only;
+  }
 
   const minted = newId();
   await writeLocalOrg(minted);

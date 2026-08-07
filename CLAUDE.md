@@ -2,7 +2,7 @@
 
 Offline-first farm operations app. **React Native (Expo SDK 57, Android first) · TypeScript strict · SQLite on device · Fastify + MongoDB on the server.**
 
-There is no PWA and no Next.js. If a suggestion assumes SSR, server components, or Next API routes, it is aimed at the wrong project.
+There is no PWA, no Next.js, and **Expo Go is not a supported runtime** — the app runs as its own development build under `com.steading.app`, because Expo Go's shared sandbox wiped a farm's records twice. If a suggestion assumes SSR, server components, or Next API routes, it is aimed at the wrong project.
 
 **React Native replaces Capacitor — it is not a second client.** `docs/NATIVE-PIVOT.md` argued the other way and is marked superseded; `docs/REACT-NATIVE-PLAN.md` is the live plan. The client lives in `apps/mobile`. The Capacitor/Vite client and the Next app are **retired and deleted**; the framework-agnostic half of the old client is `packages/core`.
 
@@ -130,7 +130,7 @@ export const mutationSchema = z.object({
 **Client**
 - Enqueue the mutation and update the local projection in **one SQLite transaction**. Never one without the other.
 - Flush **sequentially**, ordered by `clientSeq`. Never parallel, never `Promise.all`.
-- Triggers: app resume (`@capacitor/app`), network regain (`@capacitor/network`), manual pull, and on enqueue when already online.
+- Triggers: app resume (`AppState`), network regain (`expo-network`), manual pull, and on enqueue when already online.
 - Cap 100 mutations per batch.
 - `409`/`422` → rejected inbox. `5xx`/network → backoff, stay queued, increment `attempts`.
 
@@ -158,7 +158,7 @@ if (!res.upsertedCount) return { id: m.id, status: 'duplicate' };
 ```
 pnpm farm             # dev back end from nothing: database, first account, API
 pnpm dev:api          # Fastify with watch
-pnpm mobile           # Expo dev server
+pnpm mobile           # Metro for the development build (install it first)
 pnpm mobile:android   # prebuild, compile, deploy to a device or emulator
 pnpm mobile:export    # Metro bundle — the quickest check that resolution is sound
 pnpm test             # vitest, all packages

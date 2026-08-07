@@ -329,11 +329,26 @@ export async function refreshSession(): Promise<CachedClaims | null> {
     return readCachedClaims();
   }
 
-  if (!res.ok) {
+  /**
+   * Only a server that actually refuses ends a session.
+   *
+   * This wiped the credentials on **any** non-2xx, so a 500 or a 502 — a
+   * server restarting, a proxy having a moment, a deploy — signed the device
+   * out and sent somebody looking for a password in a yard. The offline branch
+   * above already gets this right and says why; a 5xx is the same situation
+   * with a different shape, because in neither case has anything been decided
+   * about this device's right to be signed in.
+   *
+   * 401 and 403 are the two that mean refused. Everything else keeps the
+   * session and lets the next refresh try again.
+   */
+  if (res.status === 401 || res.status === 403) {
     await clearCredentials();
     setAccessToken(null);
     return null;
   }
+
+  if (!res.ok) return readCachedClaims();
 
   const pair = pairSchema.parse(await res.json());
   const claims = readClaims(pair.accessToken);

@@ -28,8 +28,7 @@ import { useLive } from '../hooks/useLive';
  * roughly 90 KB of CSV, and Android's intent payload limit throws
  * `TransactionTooLargeException` well before that — so the platform primitive
  * cannot do this job at all, not merely less neatly. `expo-file-system` writes
- * the file and `expo-sharing` attaches it; both run in Expo Go, so neither
- * costs a prebuild.
+ * the file and `expo-sharing` attaches it.
  *
  * ## Written to the cache, deliberately
  *

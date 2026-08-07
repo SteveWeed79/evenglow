@@ -94,7 +94,7 @@ should leave the database for S3, not for pricing, which is settled.
 |---|---|
 | `pnpm farm` | Dev back end from nothing: database, first account, API |
 | `pnpm dev:api` | Fastify with watch |
-| `pnpm mobile` | Expo dev server |
+| `pnpm mobile` | Metro for the development build — install it first with `pnpm mobile:android` |
 | `pnpm mobile:android` | Prebuild, compile, deploy to a device or emulator |
 | `pnpm mobile:export` | Metro bundle — the quickest check that resolution is sound |
 | `pnpm test` | Vitest — unit, screens, offline, isolation, and sync suites |
@@ -130,7 +130,9 @@ Expo SDK 57, React Navigation, `expo-sqlite` under the `LocalStore` port in
 
 ```bash
 pnpm farm                                      # server + database + first account
-pnpm mobile                                    # Expo dev server, second window
+pnpm mobile:android                            # ONCE: builds and installs the app
+                                               # (first run is slow — Gradle)
+pnpm mobile                                    # Metro, second window
 ```
 
 `pnpm farm` is the development back end for a machine with nothing installed on
@@ -167,7 +169,7 @@ second morning.
 
 | Command | What it does |
 | --- | --- |
-| `pnpm mobile` | Expo dev server |
+| `pnpm mobile` | Metro for the development build — install it first with `pnpm mobile:android` |
 | `pnpm mobile:android` | Prebuild, compile, and deploy to a device or emulator |
 | `pnpm mobile:export` | Bundle with Metro — the quickest check that resolution is sound |
 | `pnpm typecheck:mobile` | Typecheck against `expo/tsconfig.base`, which has no DOM in it |

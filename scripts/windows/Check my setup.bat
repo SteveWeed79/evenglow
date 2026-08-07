@@ -62,7 +62,7 @@ if exist "apps\mobile\.env" (
 )
 
 echo.
-echo   --- Android Studio ^(only needed for the emulator^) ---
+echo   --- Android Studio ^(needed to build and install the app^) ---
 
 if exist "%LOCALAPPDATA%\Android\Sdk" (
   echo   [ OK ]      Android SDK

@@ -54,6 +54,7 @@ export default defineConfig({
       },
       { find: /^expo-secure-store$/, replacement: here('./tests/support/native/modules.tsx') },
       { find: /^expo-file-system$/, replacement: here('./tests/support/native/modules.tsx') },
+      { find: /^expo-sqlite$/, replacement: here('./tests/support/native/modules.tsx') },
       { find: /^expo-sharing$/, replacement: here('./tests/support/native/modules.tsx') },
       { find: /^expo-image-picker$/, replacement: here('./tests/support/native/modules.tsx') },
       { find: /^expo-image-manipulator$/, replacement: here('./tests/support/native/modules.tsx') },

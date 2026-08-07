@@ -31,6 +31,13 @@ if errorlevel 1 goto :failed
 call "%~dp0_shared.bat" :check_adb
 if errorlevel 1 goto :failed
 
+:: The app is compiled here now, so the build toolchain is checked here too.
+call "%~dp0_shared.bat" :check_java
+if errorlevel 1 goto :failed
+
+:: Gradle finds the SDK through this. `:check_adb` already located it.
+if exist "%LOCALAPPDATA%\Android\Sdk" set "ANDROID_HOME=%LOCALAPPDATA%\Android\Sdk"
+
 echo.
 echo   Looking for your virtual device...
 adb devices | findstr /r "device$" >nul
@@ -74,8 +81,10 @@ if errorlevel 1 (
 echo.
 echo   [2 of 2] Building and starting the app on the emulator.
 echo.
-echo   THE FIRST RUN IS SLOW - five to fifteen minutes while it
-echo   builds the app itself. After that it is quick.
+echo   THE VERY FIRST RUN IS SLOW - it can be half an hour while
+echo   it downloads Android's build tools. After that it is a
+echo   couple of minutes, and a code change still reloads in a
+echo   second.
 echo.
 echo   This installs Steading as its own app, so what you log
 echo   stays put. Expo Go could not promise that: it is one
@@ -84,8 +93,14 @@ echo.
 echo   Leave this window OPEN while you use the app.
 echo.
 
-cd apps\mobile
-call npx expo run:android
+:: Through the package script, not `npx expo run:android` directly — the script
+:: is `pnpm stamp && expo run:android`, and skipping it builds an app that
+:: cannot say which commit it came from.
+::
+:: `--no-install` because this window already ran `pnpm install` above. Left to
+:: itself `expo run:android` runs its own package install from apps/mobile,
+:: which in a pnpm workspace is redundant at best.
+call pnpm mobile:android --no-install
 
 echo.
 echo   The app server has stopped.

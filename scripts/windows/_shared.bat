@@ -152,6 +152,33 @@ powershell -NoProfile -Command "(Get-Content 'apps\mobile\.env') -replace 'EXPO_
 echo   Server address - set to %LANIP%.
 exit /b 0
 
+:check_java
+:: Nothing was ever compiled locally under Expo Go, so no run script needed a
+:: JDK. `expo run:android` is Gradle, and Gradle is Java — so this is now as
+:: load-bearing as the Node check.
+::
+:: Android Studio ships its own (JBR) and that one is fine; it is just not on
+:: PATH, so this looks there before giving up.
+where java >nul 2>&1
+if not errorlevel 1 goto :java_ok
+if exist "%ProgramFiles%\Android\Android Studio\jbr\bin\java.exe" (
+  set "PATH=%ProgramFiles%\Android\Android Studio\jbr\bin;%PATH%"
+  goto :java_ok
+)
+echo.
+echo   PROBLEM: no Java found, and building the app needs it.
+echo.
+echo   Android Studio comes with one. If you have Android Studio,
+echo   it is usually here and just not on the PATH:
+echo     %ProgramFiles%\Android\Android Studio\jbr
+echo.
+echo   Otherwise install Temurin JDK 17 from adoptium.net.
+echo.
+exit /b 1
+:java_ok
+echo   Java - found.
+exit /b 0
+
 :check_adb
 where adb >nul 2>&1
 if not errorlevel 1 exit /b 0
