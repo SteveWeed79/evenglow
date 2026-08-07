@@ -112,24 +112,51 @@ function walk(dir) {
   return out;
 }
 
-/** `name="egg"` in JSX, and `icon: 'egg'` in a table like TABS. */
-const usagePatterns = [/\bname="([a-z-]+)"/g, /\bicon:\s*'([a-z-]+)'/g];
+/**
+ * Every way this codebase names a mark.
+ *
+ * **`icon="egg"` was missing, and it is the commonest of the three.** `Row`,
+ * `Secondary` and half the screens pass the mark as a JSX attribute, so the
+ * one form that went unchecked was the one most used — and a dangling
+ * `icon="sync"` sat in Settings until somebody noticed that one row's words
+ * started twenty-four pixels right of every other row's.
+ *
+ * That is what an unknown mark cost: `Icon` drew an empty SVG of the right
+ * size, so the failure was a silent indent rather than a visible hole.
+ * `Icon.tsx` no longer reserves space for a mark it does not have; this is the
+ * half that stops the reference existing at all.
+ */
+const usagePatterns = [
+  { pattern: /\bname="([a-z-]+)"/g, needsImport: true },
+  { pattern: /\bicon="([a-z-]+)"/g, needsImport: false },
+  { pattern: /\bmark="([a-z-]+)"/g, needsImport: false },
+  { pattern: /\bicon:\s*'([a-z-]+)'/g, needsImport: false },
+];
 
+/**
+ * `name="x"` is ambiguous — a route, a field, a species all use it — so that
+ * one is only trusted in a file that actually imports the component. The other
+ * three name a mark and nothing else, wherever they appear.
+ *
+ * **The old check required every file to mention `Icon`, and that was the
+ * hole.** A `Row` call site passes `icon="sync"` and never imports `Icon` —
+ * `Row` does — so the file was skipped before the pattern was ever tried. Most
+ * mark references in this codebase are in exactly that position.
+ */
 for (const file of walk(SOURCE)) {
   const text = readFileSync(file, 'utf8');
-  if (!text.includes('Icon')) continue;
+  const relative = path.relative(ROOT, file);
 
-  for (const pattern of usagePatterns) {
+  for (const { pattern, needsImport } of usagePatterns) {
+    if (needsImport && !/\bIcon\b/.test(text)) continue;
+
     for (const [, name] of text.matchAll(pattern)) {
-      // Only complain about names that look like icon names and are missing.
-      // A route called "Today" is not an icon reference; a lowercase hyphenated
-      // token next to an Icon import almost always is.
-      if (!named.has(name) && /^[a-z]+(-[a-z]+)*$/.test(name) && text.includes('from')) {
-        const relative = path.relative(ROOT, file);
-        if (/\bIcon\b/.test(text) && /icon:|<Icon/.test(text)) {
-          fail(`${relative} asks for icon "${name}", which is not in the set.`);
-        }
-      }
+      if (named.has(name)) continue;
+      // Lowercase and hyphenated is what a mark name looks like; a route
+      // called "Today" or a field called "name" is not one.
+      if (!/^[a-z]+(-[a-z]+)*$/.test(name)) continue;
+
+      fail(`${relative} asks for icon "${name}", which is not in the set.`);
     }
   }
 }

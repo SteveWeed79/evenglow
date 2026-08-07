@@ -85,7 +85,6 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
               ? 'Everything is on this phone only — an account keeps a copy'
               : `Signed in${account.name === undefined ? '' : ` as ${account.name}`}`
           }
-          icon="sync"
           testID="go-account"
           onPress={() => nav.navigate('Account')}
         />

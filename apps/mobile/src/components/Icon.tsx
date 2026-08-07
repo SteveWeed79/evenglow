@@ -176,12 +176,28 @@ export interface IconProps {
   label?: string;
 }
 
-export function Icon({ name, size = 24, color, label }: IconProps): React.ReactElement {
+export function Icon({ name, size = 24, color, label }: IconProps): React.ReactElement | null {
   const master: 24 | 32 = size <= SMALL_MASTER_MAX ? 24 : 32;
   // `name` is typed to the manifest, so a miss is impossible through the type
   // system — but noUncheckedIndexedAccess is right that a Record lookup is not
   // a proof, and an empty array renders nothing rather than throwing in a barn.
-  const marks = MARKS[name]?.[master] ?? [];
+  const marks = MARKS[name]?.[master];
+
+  /**
+   * Nothing at all for a mark that is not in the set — not an empty box of the
+   * right size.
+   *
+   * This drew a 24px `<Svg>` with no paths in it, which is a *silent indent*:
+   * a row whose mark does not exist keeps the mark's width and pushes its
+   * words right, and the row above it does not. Two dangling `icon="sync"`
+   * references lived that way until somebody looked at Settings and asked why
+   * one line was further in than the rest.
+   *
+   * A hole is findable and a shift is not, so the drawing has to disappear
+   * rather than merely be empty. `check:icons` is the half that stops the
+   * reference existing; this is the half that makes it visible when one does.
+   */
+  if (marks === undefined) return null;
 
   return (
     <Svg
