@@ -214,7 +214,18 @@ async function project(
   return decision;
 }
 
-/** The highest hours already recorded for the machine a reading belongs to. */
+/**
+ * The highest hours already recorded for the machine a reading belongs to.
+ *
+ * **Archived readings do not count, and that is the whole escape hatch.** The
+ * meter rule refuses anything below this number, so a fat-fingered 9999 would
+ * otherwise lock the machine out of its own log forever — the correction is
+ * below the mistake by definition. Taking the bad reading back has to lower
+ * this, or removing it would achieve nothing.
+ *
+ * `archivedAt: null` matches both an explicit null and a document that has
+ * never carried the field, which is every reading that was never removed.
+ */
 async function highestHours(scope: Scoped, payload: object): Promise<number | null> {
   const equipmentId = (payload as { equipmentId?: unknown }).equipmentId;
   if (typeof equipmentId !== 'string') return null;
@@ -223,7 +234,7 @@ async function highestHours(scope: Scoped, payload: object): Promise<number | nu
   // orgId+equipmentId+hours index makes this a single seek.
   const [highest] = await scope
     .col<ProjectedDoc & { equipmentId: string; hours: number }>('hourReadings')
-    .findMany({ equipmentId }, { limit: 1, sort: { hours: -1 } });
+    .findMany({ equipmentId, archivedAt: null }, { limit: 1, sort: { hours: -1 } });
 
   return highest?.hours ?? null;
 }

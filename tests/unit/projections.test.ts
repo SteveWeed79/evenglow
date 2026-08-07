@@ -45,6 +45,32 @@ describe('append-only projection (D3)', () => {
     const decision = decideProjection(entity, 'update', {}, PRESENT);
     expect(decision.kind).toBe('rejected');
   });
+
+  /**
+   * Immutable in value, removable in whole (D3, as amended).
+   *
+   * Every one of them, `hourReading` included — the meter is in this list
+   * rather than exempted from it, and §4 A10 has the argument. Note the pair
+   * these two describe blocks make: `update` rejected, `delete` archived. That
+   * is the whole of what append-only now means.
+   */
+  const everyAppendOnly = ENTITIES.filter(isAppendOnly);
+
+  it.each(everyAppendOnly)('%s can be taken back once written', (entity) => {
+    expect(decideProjection(entity, 'delete', {}, PRESENT)).toEqual({ kind: 'archive' });
+  });
+
+  it.each(everyAppendOnly)('%s takes a second removal as a no-op, not an error', (entity) => {
+    // The archive is `$set archivedAt` — repeatable, which is exactly why a
+    // removal cannot conflict and sync stays insert-if-absent.
+    expect(decideProjection(entity, 'delete', {}, ARCHIVED)).toEqual({ kind: 'noop' });
+  });
+
+  it.each(everyAppendOnly)('%s takes a removal of a record it never saw as a no-op', (entity) => {
+    // The delete raced ahead of its own create, or arrived on a device that
+    // never received one. The intent is satisfied either way.
+    expect(decideProjection(entity, 'delete', {}, NOTHING)).toEqual({ kind: 'noop' });
+  });
 });
 
 describe('hour-meter monotonicity', () => {
@@ -70,6 +96,31 @@ describe('hour-meter monotonicity', () => {
     if (decision.kind === 'rejected') {
       expect(decision.reason).not.toMatch(/sorry|oops/i);
     }
+  });
+
+  /**
+   * The reason this entity had to become removable, stated as a test.
+   *
+   * A fat-fingered 9999 on a tractor that has done 999 makes every true
+   * reading afterwards "below the last one", so the machine can never be
+   * logged again. "Record the correct one instead" is not available — the rule
+   * refuses the correction as readily as it refused nothing at all.
+   *
+   * `highestHours` skipping archived rows is the other half, and lives in
+   * apply.ts; this half is that removing the typo is permitted at all.
+   */
+  it('locks a machine out of its own log until the bad reading is removed', () => {
+    const typo = 9999;
+    const real = 1002;
+
+    expect(decideHourReading({ hours: real }, typo).kind).toBe('rejected');
+
+    // The way out, and the only one.
+    expect(decideProjection('hourReading', 'delete', {}, PRESENT)).toEqual({ kind: 'archive' });
+
+    // With the typo archived, `highestHours` no longer counts it, so the true
+    // reading is above the last one that survives.
+    expect(decideHourReading({ hours: real }, 999)).toEqual({ kind: 'insert' });
   });
 
   it('rejects a reading with no numeric value', () => {

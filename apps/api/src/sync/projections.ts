@@ -129,8 +129,20 @@ function decideAppendOnly(
   payload: unknown,
   context: ProjectionContext,
 ): ProjectionDecision {
-  // The contract layer has no schema for update/delete on these, so reaching
-  // here with one means a caller bypassed it.
+  /**
+   * Editing is still refused, and always will be — that is what append-only
+   * means, and it is what D3's load-bearing half rests on. Removing is not.
+   *
+   * The archive is `$set archivedAt`, which is repeatable, so it cannot
+   * conflict and sync stays insert-if-absent, exactly as a create does.
+   */
+  if (op === 'delete') {
+    // Already gone, or never here. Either way the intent is satisfied, and a
+    // replay must not be an error.
+    if (!context.existing || context.existing.archivedAt) return { kind: 'noop' };
+    return { kind: 'archive' };
+  }
+
   if (op !== 'create') {
     return { kind: 'rejected', reason: `A ${entity} cannot be changed once recorded.` };
   }
@@ -149,6 +161,12 @@ function decideAppendOnly(
  * An hour meter only counts up. A reading below the last recorded value is
  * a mistyped digit or the wrong machine, and accepting it would corrupt every
  * maintenance forecast derived from the series.
+ *
+ * **This rule is why an hour reading has to be removable.** It refuses the
+ * correction as readily as it refuses the mistake: type 9999 onto a tractor
+ * that has done 999 and every true reading afterwards is below the highest, so
+ * the machine can never be logged again. Taking the bad reading back is the
+ * only way out, and `highestHours` skips archived rows so that it works.
  */
 export function decideHourReading(payload: unknown, lastHours: number | null): ProjectionDecision {
   if (lastHours === null) return { kind: 'insert' };

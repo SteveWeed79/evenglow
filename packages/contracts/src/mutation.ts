@@ -68,9 +68,21 @@ export const opSchema = z.enum(OPS);
 export type Op = z.infer<typeof opSchema>;
 
 /**
- * Append-only entities (D3). Immutable observations cannot conflict, so sync
- * for these is insert-if-absent. An update or delete targeting one is a 400,
- * not a no-op — silently accepting it would hide a client bug.
+ * Append-only entities (D3): **immutable in value, removable in whole.**
+ *
+ * A record of these kinds is never edited. That is what append-only means and
+ * it is what D3's two load-bearing reasons rest on — an observation's value
+ * cannot change, so two devices cannot disagree about it, and sync stays
+ * insert-if-absent. An `update` targeting one is a 400, not a no-op; silently
+ * accepting it would hide a client bug.
+ *
+ * `delete` is allowed, and refusing it was a mistake. A delete archives —
+ * `$set archivedAt` — which is repeatable, so deleting twice is deleting once,
+ * so it cannot conflict either and none of the above changes. The only thing
+ * the refusal bought was D3's third reason, a "free audit history", and that
+ * reason does not survive being said out loud: nobody needs a paper trail
+ * proving somebody once typed twelve eggs against the wrong flock at six in
+ * the morning. It is a tally, not a controlled substance.
  */
 export const APPEND_ONLY_ENTITIES = new Set<Entity>([
   'eggLog',
@@ -88,6 +100,32 @@ export const APPEND_ONLY_ENTITIES = new Set<Entity>([
 export function isAppendOnly(entity: Entity): boolean {
   return APPEND_ONLY_ENTITIES.has(entity);
 }
+
+/**
+ * ## There is no permanent entity, and the hour meter was the argument
+ *
+ * This nearly shipped with `hourReading` exempted, on the reasoning that its
+ * readings are a monotonic series every maintenance forecast is derived from,
+ * so removing one from the middle silently widens the interval either side.
+ * That much is true. The conclusion drawn from it was backwards.
+ *
+ * The advice that came with the exemption was "a mistyped reading is corrected
+ * by recording the right one" — and the meter's own rule makes that impossible
+ * in the case that matters. `decideHourReading` refuses any reading below the
+ * highest recorded. Fat-finger 9999 hours onto a tractor that has done 999 and
+ * every correct reading for the rest of that machine's life is refused. The
+ * exemption did not protect the series; it made the one mistake that actually
+ * breaks the series unfixable, and left the farm with a machine it could no
+ * longer log.
+ *
+ * Losing a legitimate reading is a rounder forecast. Keeping a typo is a dead
+ * hour meter. So every append-only record can be taken back, and the fix path
+ * is load-bearing enough that `highestHours` on the server must ignore
+ * archived readings — see `apps/api/src/sync/apply.ts`.
+ *
+ * Mutable entities were always archived rather than deleted (P13). This is
+ * about the append-only ones, and the answer is the same for all of them.
+ */
 
 /**
  * Crockford base32, 26 chars, no I/L/O/U. Length alone would accept a string

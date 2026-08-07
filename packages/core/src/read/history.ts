@@ -3,6 +3,7 @@ import {
   CARE_KIND_LABELS,
   careLogCreateSchema,
   eggLogCreateSchema,
+  type Entity,
   feedLogCreateSchema,
   formatMass,
   formatVolume,
@@ -62,9 +63,16 @@ import { listMachines } from './iron';
 
 /** One thing that happened. */
 export interface HistoryEvent {
-  /** The record's own id, stable across recomputations. */
+  /**
+   * The record's own id, stable across recomputations.
+   *
+   * It is the `targetId` of the record behind the row, which is what makes
+   * taking one back possible from here: the screen enqueues a `delete` against
+   * this id and the entity beside it, with nothing else to look up.
+   */
   id: string;
-  entity: string;
+  /** Typed, not a loose string — the screen enqueues a mutation against it. */
+  entity: Entity;
   /** When the farm says it happened. */
   at: number;
   /** One line, already in the farm's words. */
@@ -106,7 +114,7 @@ function startOfDay(at: number): number {
  * The alternative is one bad row costing a farm every other row it has.
  */
 async function eventsFrom<T>(
-  entity: string,
+  entity: Entity,
   schema: z.ZodType<T>,
   build: (value: T, id: string) => HistoryEvent | null,
 ): Promise<HistoryEvent[]> {

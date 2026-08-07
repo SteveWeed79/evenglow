@@ -142,17 +142,44 @@ export const PAYLOAD_SCHEMAS: Partial<Record<PayloadKey, z.ZodType>> = {
   'note:update': noteUpdateSchema,
   'note:delete': deleteSchema,
 
-  // Append-only entities — create only, by construction
+  /**
+   * Append-only entities: written once, never edited, removable in whole.
+   *
+   * **There is no `:update` on any of them and there never will be.** That is
+   * what append-only means and what D3's load-bearing half rests on: an
+   * observation's value cannot change, so two devices cannot disagree about
+   * it and sync stays insert-if-absent.
+   *
+   * `:delete` is different and was wrong to refuse. An archive is
+   * `$set archivedAt` — repeatable, so it cannot conflict either — and the
+   * only thing it cost was D3's third reason, a "free audit history" nobody
+   * asked for. A farm that logs twelve eggs against the wrong flock at 6am
+   * needs to take it back, not to keep a record of having been mistaken.
+   *
+   * The hour meter is on this list like everything else. Why it was very
+   * nearly not, and why exempting it would have been the worst place to do
+   * so, is in `mutation.ts` beside `APPEND_ONLY_ENTITIES`.
+   */
   'eggLog:create': eggLogCreateSchema,
+  'eggLog:delete': deleteSchema,
   'productionLog:create': productionLogCreateSchema,
+  'productionLog:delete': deleteSchema,
   'feedLog:create': feedLogCreateSchema,
+  'feedLog:delete': deleteSchema,
   'mortality:create': mortalityCreateSchema,
+  'mortality:delete': deleteSchema,
   'predator:create': predatorCreateSchema,
+  'predator:delete': deleteSchema,
   'hourReading:create': hourReadingCreateSchema,
+  'hourReading:delete': deleteSchema,
   'harvest:create': harvestCreateSchema,
+  'harvest:delete': deleteSchema,
   'weight:create': weightCreateSchema,
+  'weight:delete': deleteSchema,
   'shearing:create': shearingCreateSchema,
+  'shearing:delete': deleteSchema,
   'careLog:create': careLogCreateSchema,
+  'careLog:delete': deleteSchema,
 };
 
 /** Returns the schema for an entity+op pair, or undefined if the op is forbidden. */
@@ -168,8 +195,19 @@ export function isOpAllowed(entity: Entity, op: Op): boolean {
   return payloadSchemaFor(entity, op) !== undefined;
 }
 
-/** Exported for tests: the invariant that append-only means create-only. */
-export function appendOnlyOpsAreCreateOnly(entity: Entity): boolean {
+/**
+ * Exported for tests: append-only means **never edited**, which is the half of
+ * D3 that is load-bearing.
+ *
+ * It used to mean create-only, delete included. Removing a record turned out
+ * to cost none of what D3 protects — an archive is repeatable, so it cannot
+ * conflict and sync stays insert-if-absent — and the audit trail it protected
+ * instead was one nobody wanted for an egg tally.
+ *
+ * So `update` stays forbidden on every one of them, and `delete` is allowed on
+ * all of them.
+ */
+export function appendOnlyIsNeverEdited(entity: Entity): boolean {
   if (!isAppendOnly(entity)) return true;
-  return isOpAllowed(entity, 'create') && !isOpAllowed(entity, 'update') && !isOpAllowed(entity, 'delete');
+  return isOpAllowed(entity, 'create') && isOpAllowed(entity, 'delete') && !isOpAllowed(entity, 'update');
 }

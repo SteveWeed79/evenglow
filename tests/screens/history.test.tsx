@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { newId } from '@steading/contracts';
+import { localStore } from '@steading/core/db/store';
 import { intoDays, listHistory } from '@steading/core/read/history';
 import { enqueue } from '@steading/core/sync/queue';
 import { freshStore } from '../support/store';
@@ -251,6 +252,164 @@ describe('the screen', () => {
     const screen = await mount(<HistoryScreen />);
 
     expect(screen.text()).toContain('Nothing logged yet');
+    screen.unmount();
+  });
+});
+
+/**
+ * "how do users remove produce (eggs/milk/etc) placed in the wrong group. Not
+ * just eggs mind you" — and then, on the exception this nearly shipped with:
+ * *"i feel like a system that doesn't understand that accidents/mistypes
+ * happen with counts of any kind is incorrect for this type of application."*
+ *
+ * Both are right. Counts are typed one-handed, in the dark, wearing gloves.
+ * This is the only screen that shows an individual record, so it is the only
+ * place a person can point at the wrong one — everywhere else shows the total
+ * it landed in.
+ */
+describe('taking one back', () => {
+  const wrong = newId();
+
+  async function twoTallies(): Promise<void> {
+    await theHens();
+    await enqueue({
+      entity: 'eggLog',
+      op: 'create',
+      targetId: newId(),
+      payload: { occurredAt: at(0, 8), flockId: GROUP, count: 7 },
+    });
+    // The one that went against the wrong group.
+    await enqueue({
+      entity: 'eggLog',
+      op: 'create',
+      targetId: wrong,
+      payload: { occurredAt: at(0, 17), flockId: GROUP, count: 5 },
+    });
+  }
+
+  it('takes two taps, and the row is not one of them', async () => {
+    await twoTallies();
+    const screen = await mount(<HistoryScreen />);
+
+    // A list where one tap destroys a record is a list nobody scrolls with
+    // gloves on. Opening the row offers; it does not act.
+    expect(screen.has(`event-remove-${wrong}`)).toBe(false);
+    await screen.press(`event-${wrong}`);
+    expect(screen.has(`event-remove-${wrong}`)).toBe(true);
+
+    // Armed, not fired.
+    await screen.press(`event-remove-${wrong}`);
+    expect(screen.text()).toContain('5 eggs');
+    expect((await listHistory())[0]?.events).toHaveLength(2);
+
+    screen.unmount();
+  });
+
+  it('removes the record and re-adds the day without it', async () => {
+    await twoTallies();
+    const screen = await mount(<HistoryScreen />);
+
+    const [before] = await listHistory();
+    expect(before?.summary).toContain('12 eggs');
+
+    await screen.press(`event-${wrong}`);
+    await screen.press(`event-remove-${wrong}`);
+    await screen.press(`event-remove-${wrong}`);
+
+    // The row is gone from the screen and the readout above it re-added.
+    expect(screen.text()).not.toContain('5 eggs');
+    expect(screen.text()).toContain('7 eggs');
+
+    const [after] = await listHistory();
+    expect(after?.events).toHaveLength(1);
+    expect(after?.summary).toContain('7 eggs');
+    expect(after?.summary).not.toContain('12 eggs');
+
+    screen.unmount();
+  });
+
+  /**
+   * The record is archived, never deleted (P13) — so what actually goes out is
+   * a `delete` mutation the server will apply, not a row vanishing from the
+   * device with nothing to say for itself.
+   */
+  it('queues the removal for the server rather than only forgetting locally', async () => {
+    await twoTallies();
+    const screen = await mount(<HistoryScreen />);
+
+    await screen.press(`event-${wrong}`);
+    await screen.press(`event-remove-${wrong}`);
+    await screen.press(`event-remove-${wrong}`);
+
+    const queued = await localStore().readOutboxBySeq();
+    const removal = queued.find((mutation) => mutation.op === 'delete');
+
+    expect(removal).toBeDefined();
+    expect(removal?.entity).toBe('eggLog');
+    expect(removal?.targetId).toBe(wrong);
+
+    screen.unmount();
+  });
+
+  /**
+   * Not just eggs. Every append-only record a person can enter, they can take
+   * back — including the hour meter, whose own monotonic rule makes a typo
+   * uncorrectable by any other route (see `tests/unit/projections.test.ts`).
+   */
+  it('works on produce, feed, weights and the hour meter alike', async () => {
+    await theHens();
+    const machine = newId();
+    await enqueue({
+      entity: 'equipment',
+      op: 'create',
+      targetId: machine,
+      payload: { name: 'The tractor' },
+    });
+
+    const ids = {
+      productionLog: newId(),
+      feedLog: newId(),
+      weight: newId(),
+      hourReading: newId(),
+    };
+
+    await enqueue({
+      entity: 'productionLog',
+      op: 'create',
+      targetId: ids.productionLog,
+      payload: { occurredAt: at(0, 6), flockId: GROUP, kind: 'milk', amount: 4000, unit: 'ml' },
+    });
+    await enqueue({
+      entity: 'feedLog',
+      op: 'create',
+      targetId: ids.feedLog,
+      payload: { occurredAt: at(0, 7), flockId: GROUP, amountGrams: 900 },
+    });
+    await enqueue({
+      entity: 'weight',
+      op: 'create',
+      targetId: ids.weight,
+      payload: { occurredAt: at(0, 8), flockId: GROUP, massUg: 2_000_000_000 },
+    });
+    await enqueue({
+      entity: 'hourReading',
+      op: 'create',
+      targetId: ids.hourReading,
+      // The fat-fingered one. Left alone, every true reading afterwards is
+      // below it and the machine can never be logged again.
+      payload: { occurredAt: at(0, 9), equipmentId: machine, hours: 9999 },
+    });
+
+    const screen = await mount(<HistoryScreen />);
+    expect((await listHistory())[0]?.events).toHaveLength(4);
+
+    for (const id of Object.values(ids)) {
+      await screen.press(`event-${id}`);
+      await screen.press(`event-remove-${id}`);
+      await screen.press(`event-remove-${id}`);
+    }
+
+    expect(await listHistory()).toHaveLength(0);
     screen.unmount();
   });
 });

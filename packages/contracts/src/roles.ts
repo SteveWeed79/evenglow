@@ -42,7 +42,15 @@ export function isRole(value: unknown): value is Role {
 export function canMutate(role: Role, entity: Entity, op: Op): boolean {
   if (role === 'owner' || role === 'admin') return true;
 
-  if (isAppendOnly(entity)) return op === 'create';
+  /**
+   * A hand may take back what a hand may write.
+   *
+   * Append-only used to mean create-only for everyone below admin, which left
+   * the person who mis-logged the tally unable to correct it and an owner
+   * doing it for them at the end of the day, from a description. `update` is
+   * still refused — that is what append-only means.
+   */
+  if (isAppendOnly(entity)) return op === 'create' || op === 'delete';
   if (entity === 'task' && op === 'update') return true;
   if (entity === 'photo' && op === 'create') return true;
   // Ownership is enforced by mayChangeNote at apply time — see above.
