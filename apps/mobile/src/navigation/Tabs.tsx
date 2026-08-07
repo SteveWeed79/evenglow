@@ -59,9 +59,23 @@ export function Tabs(): React.ReactElement {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        // The label is drawn below, so the built-in one is off: its type ramp
-        // and spacing are not ours, and two labels is worse than either.
-        tabBarShowLabel: false,
+        /**
+         * The word goes in the LABEL slot, which is the correction.
+         *
+         * It was drawn into `tabBarIcon` with the built-in label switched off,
+         * on the reasoning that one label beats two and ours should be the one
+         * that survives. The reasoning held; the slot did not. React Navigation
+         * sizes the icon box for an icon — narrow, and `width: '100%'` inside
+         * it is a hundred percent of something already too small. So the words
+         * clipped: TODAY to "TO…", FARM to "FA…", HISTORY to "HI…", on a bar
+         * whose only content is words.
+         *
+         * `tests/unit/tabs.test.ts` names this box as the cause and answers it
+         * by keeping the names short. Five characters was not short enough,
+         * and no name is: the slot is the wrong slot. The label slot spans the
+         * tab, which is what a bar made of words needs.
+         */
+        tabBarShowLabel: true,
         tabBarStyle: {
           backgroundColor: colors.raised,
           borderTopColor: colors.border,
@@ -88,7 +102,9 @@ export function Tabs(): React.ReactElement {
           component={SCREENS[name]!}
           options={{
             tabBarAccessibilityLabel: name,
-            tabBarIcon: ({ focused }) => (
+            // No icon at all, so the label has the tab to itself rather than
+            // sharing a column with an empty box.
+            tabBarLabel: ({ focused }) => (
               <TabMark label={name} focused={focused} count={TABS.length} />
             ),
           }}
@@ -105,13 +121,18 @@ export function Tabs(): React.ReactElement {
  * "TODAY" — so the bar drew every label twice. The words carry it now, at the
  * size the mark used to leave room for.
  *
- * ## Why the label needed fixing
+ * ## Why the label needed fixing, twice
  *
- * This is drawn into the navigator's ICON slot, which is a narrow box — and
- * the label had no line limit. So "TODAY" wrapped to "TODA / Y", "STOCK" to
- * "STOC / K" and "GROWING" to "GROW / ING", on every screen, in every
- * screenshot. Letter-spacing on an uppercase word in a box that narrow is what
- * pushed it over.
+ * It was drawn into the navigator's ICON slot, which is a narrow box, with no
+ * line limit — so "TODAY" wrapped to "TODA / Y" and "GROWING" to "GROW / ING"
+ * in every screenshot. `numberOfLines={1}` stopped the wrapping and traded it
+ * for clipping: the same narrow box, now cutting "TODAY" to "TO…" and
+ * "HISTORY" to "HI…". A bar of three two-letter stubs.
+ *
+ * Shortening the names could not fix it and `tests/unit/tabs.test.ts` caps
+ * them at eight characters trying. Five characters still clipped, because the
+ * box is sized for an icon and no word is short enough to be an icon. It draws
+ * in the LABEL slot now, which spans the tab.
  *
  * ## Why it scales with the number of tabs
  *
