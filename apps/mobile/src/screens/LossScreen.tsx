@@ -58,7 +58,14 @@ export function LossScreen({ route }: ScreenProps<'Loss'>): React.ReactElement {
   const losses = useLive(lossesByGroup);
   const group = groups?.find((g) => g.id === groupId) ?? null;
 
-  const [count, setCount] = useState(1);
+  /**
+   * Zero, and the save button refuses it.
+   *
+   * It started at 1 with `min={1}`, which meant a tap on Save recorded the
+   * death of an animal nobody had counted. A number the app chose is the worst
+   * possible default on this screen of all screens.
+   */
+  const [count, setCount] = useState(0);
   const [cause, setCause] = useState<Cause>('unknown');
   const [predator, setPredator] = useState('');
   const [note, setNote] = useState('');
@@ -116,7 +123,7 @@ export function LossScreen({ route }: ScreenProps<'Loss'>): React.ReactElement {
         {/* Negative, because this screen is headed "Record a loss" and a `+5`
             under that heading reads as five more animals rather than five
             fewer. */}
-        <Stepper value={count} onChange={setCount} steps={[1, 5]} min={1} suffix="head" negative />
+        <Stepper value={count} onChange={setCount} steps={[1, 5]} suffix="head" negative />
       </Field>
 
       <Field label="What happened?">
@@ -155,7 +162,7 @@ export function LossScreen({ route }: ScreenProps<'Loss'>): React.ReactElement {
 
       <Primary
         label={`Record ${count === 1 ? 'it' : `${count} lost`}`}
-        disabled={saving}
+        disabled={saving || count === 0}
         onPress={commit}
         testID="save-loss"
       />

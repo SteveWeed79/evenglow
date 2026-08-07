@@ -122,6 +122,13 @@ export function FarmScreen(): React.ReactElement {
         * arrangement this hub already uses for "What you run".
         */}
       <Row
+        title="Eggs under"
+        detail="Sets in the incubator or under a broody — candling and hatch dates"
+        testID="go-incubations"
+        onPress={() => nav.navigate('Incubations')}
+      />
+
+      <Row
         title="The shelf"
         detail="Feed, bedding, medicine and parts — what is in and what is low"
         testID="farm-shelf"

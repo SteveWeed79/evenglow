@@ -18,10 +18,15 @@ import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
  * It is not somewhere you go during chores, so it does not get one of the four
  * places a thumb can reach without looking; Growing does.
  *
- * It is also where the things that are not a tab live: who else is on the
- * farm, what is under the broody, sync details, and the frost dates every
- * growing date is counted from. Each of those is a once-or-twice-a-year visit,
- * which is exactly what this screen is for.
+ * It holds the once-or-twice-a-year visits: who else is on the farm, the
+ * account, the frost dates every growing date is counted from, getting the
+ * records out, and what to do when something is wrong.
+ *
+ * **What is under the broody used to be here and is not any more.** A set of
+ * eggs wants candling around day seven and hatches on day twenty-one, which is
+ * ordinary keeping rather than configuration — it lives on the Farm hub with
+ * the animals now. The shelf went the same way, and it had been in both places
+ * at once.
  */
 export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): React.ReactElement {
   const { colors } = useTheme();
@@ -104,17 +109,19 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
           testID="go-members"
           onPress={() => nav.navigate('Members')}
         />
-        <Row
-          title="Eggs under"
-          detail="Sets in the incubator or under a broody"
-          testID="go-incubations"
-          onPress={() => nav.navigate('Incubations')}
-        />
-        <Row
-          title="The shelf"
-          detail="Feed, bedding, medicine and parts"
-          onPress={() => nav.navigate('Inventory')}
-        />
+        {/**
+          * "Eggs under" and "The shelf" used to sit here, and neither belonged.
+          *
+          * This screen is somewhere you go once and then twice a year. A set of
+          * eggs wants candling around day seven and hatches on day twenty-one,
+          * and the shelf is read whenever something runs low — both are
+          * ordinary keeping, not configuration.
+          *
+          * They were parked here because Stock, Growing and Iron used to be
+          * tabs and anything without a tab had nowhere else to go. When those
+          * three became the Farm hub, these two never moved. The shelf was in
+          * both places at once, with better words on the hub's copy.
+          */}
         <Row
           title="Your ground"
           detail={

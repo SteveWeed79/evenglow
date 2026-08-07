@@ -18,6 +18,7 @@ import { AddGroupScreen } from '../../apps/mobile/src/screens/AddGroupScreen';
 import { AddItemScreen } from '../../apps/mobile/src/screens/AddItemScreen';
 import { AddMachineScreen } from '../../apps/mobile/src/screens/AddMachineScreen';
 import { AddServiceScreen } from '../../apps/mobile/src/screens/AddServiceScreen';
+import { AccountScreen } from '../../apps/mobile/src/screens/AccountScreen';
 import { AnimalsScreen } from '../../apps/mobile/src/screens/AnimalsScreen';
 import { BackupScreen } from '../../apps/mobile/src/screens/BackupScreen';
 import { BreedingScreen } from '../../apps/mobile/src/screens/BreedingScreen';
@@ -178,6 +179,16 @@ export const SCREENS: [string, () => React.ReactElement][] = [
   ['Growing', () => <GrowingScreen />],
   ['Iron', () => <IronScreen />],
   ['Settings', () => <SettingsScreen onSignedOut={() => undefined} />],
+  /**
+    * The one screen that leads to an account, and it was not on this list.
+    *
+    * `useGoogleSignIn` throws during render when no Google client id is
+    * configured — which is every build of this app so far — so `AccountScreen`
+    * was a red error box on a handset while the whole suite stayed green.
+    * Nothing else could have caught it: a typecheck cannot see a hook that
+    * throws, and the bundler cannot either.
+    */
+  ['Account', () => <AccountScreen onSignedIn={() => undefined} />],
   ['Inbox', () => <InboxScreen />],
   ['Diagnostics', () => <DiagnosticsScreen />],
   ['Members', () => <MembersScreen />],

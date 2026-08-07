@@ -3,7 +3,8 @@ import { StyleSheet, Text } from 'react-native';
 import { Choice, Failure, Field, Primary, Secondary, TextField, useSaver } from '../components/Form';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
-import { useGoogleSignIn } from '../auth/google';
+import { GoogleButton } from '../auth/GoogleButton';
+import { GOOGLE_AVAILABLE } from '../auth/google';
 import { ensureLocalOrgId } from '../auth/local-org';
 import {
   type BillingState,
@@ -118,8 +119,6 @@ export function AccountScreen({
     });
   }, []);
 
-  const google = useGoogleSignIn();
-
   const { saving, failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
 
   /**
@@ -131,28 +130,30 @@ export function AccountScreen({
    * Asking for a farm name before knowing whether a farm is being made would
    * be a question with no answer for half the people who see it.
    */
-  const withGoogle = useCallback(() => {
-    void save(async () => {
-      const idToken = await google.prompt();
+  const withGoogle = useCallback(
+    (idToken: string | null) => {
       // Backing out of the Google sheet is a decision, not a failure. No
       // message, nothing changed.
       if (idToken === null) return;
 
-      try {
-        onSignedIn(
-          await googleSignIn({
-            idToken,
-            orgId: await ensureLocalOrgId(),
-            orgName: farmName.trim() === '' ? 'My farm' : farmName.trim(),
-          }),
-        );
-      } catch (error) {
-        throw error instanceof SignInError
-          ? error
-          : new Error('Could not reach the farm. Check the connection and try again.');
-      }
-    });
-  }, [save, google, onSignedIn, farmName]);
+      void save(async () => {
+        try {
+          onSignedIn(
+            await googleSignIn({
+              idToken,
+              orgId: await ensureLocalOrgId(),
+              orgName: farmName.trim() === '' ? 'My farm' : farmName.trim(),
+            }),
+          );
+        } catch (error) {
+          throw error instanceof SignInError
+            ? error
+            : new Error('Could not reach the farm. Check the connection and try again.');
+        }
+      });
+    },
+    [save, onSignedIn, farmName],
+  );
 
   const submit = useCallback(() => {
     void save(async () => {
@@ -428,13 +429,8 @@ export function AccountScreen({
         * Absent entirely in a build with no client id. A dead button that
         * fails on every tap is worse than no button.
         */}
-      {google.available && mode !== 'join' ? (
-        <Secondary
-          label="Continue with Google"
-          disabled={saving || !google.ready}
-          onPress={withGoogle}
-          testID="account-google"
-        />
+      {GOOGLE_AVAILABLE && mode !== 'join' ? (
+        <GoogleButton disabled={saving} onToken={withGoogle} />
       ) : null}
 
       <Text style={[styles.note, { color: colors.muted }]}>

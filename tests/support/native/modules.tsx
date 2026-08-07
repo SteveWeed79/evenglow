@@ -408,3 +408,37 @@ export class Directory {
       .map((uri) => ({ name: uri.slice(prefix.length), uri }));
   }
 }
+
+// ── expo-auth-session / expo-web-browser ─────────────────────────────────────
+
+/**
+ * The OAuth flow, stubbed at the module boundary.
+ *
+ * The real `useIdTokenAuthRequest` **throws during render** when no client id
+ * is configured, which is every build of this app so far — and that is exactly
+ * the defect this stub let the suite finally catch. It is here so
+ * `AccountScreen` can be mounted at all; the guard that decides whether the
+ * hook is called lives in `GoogleButton` and is real.
+ */
+export function maybeCompleteAuthSession(): void {
+  // The real one closes the browser tab a redirect came back through.
+}
+
+export const googlePrompts: string[] = [];
+
+export function useIdTokenAuthRequest(): [
+  { url: string } | null,
+  null,
+  () => Promise<{ type: string; params: Record<string, string> }>,
+] {
+  return [
+    { url: 'https://accounts.test/auth' },
+    null,
+    async () => {
+      googlePrompts.push('prompt');
+      // Backed out, which is the state a test gets unless it says otherwise —
+      // and the one the screen must treat as a decision rather than a failure.
+      return { type: 'dismiss', params: {} };
+    },
+  ];
+}

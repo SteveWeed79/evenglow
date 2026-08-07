@@ -91,6 +91,13 @@ export default defineConfig({
       { find: /^expo-image-picker$/, replacement: here('./tests/support/native/modules.tsx') },
       { find: /^expo-image-manipulator$/, replacement: here('./tests/support/native/modules.tsx') },
       { find: /^expo-location$/, replacement: here('./tests/support/native/modules.tsx') },
+      // The OAuth flow. Its real hook throws during render when unconfigured,
+      // which is why AccountScreen could never be mounted by this suite.
+      {
+        find: /^expo-auth-session\/providers\/google$/,
+        replacement: here('./tests/support/native/modules.tsx'),
+      },
+      { find: /^expo-web-browser$/, replacement: here('./tests/support/native/modules.tsx') },
       {
         find: /^@react-navigation\/(native|native-stack|bottom-tabs)$/,
         replacement: here('./tests/support/native/navigation.tsx'),

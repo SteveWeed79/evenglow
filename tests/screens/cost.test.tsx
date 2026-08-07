@@ -73,8 +73,10 @@ describe('putting a price on the shelf', () => {
     await screen.type('item-name', 'Layer pellets');
     await screen.pressLabel('Pounds');
 
-    // Starts at 1; four taps of +5 makes it a 21 lb sack.
+    // Starts at nothing now, so the sack is entered rather than corrected —
+    // four taps of +5 and one of +1 makes 21 lb.
     for (let i = 0; i < 4; i += 1) await screen.press('item-quantity-plus-5');
+    await screen.press('item-quantity-plus-1');
     await screen.type('item-paid', '10.50');
 
     // The hint is what proves the division happened, and it is the only place
