@@ -54,6 +54,19 @@ function Detail({ incubation }: { incubation: IncubationEntry }): React.ReactEle
   const log = useLog();
   const { colors } = useTheme();
 
+  /**
+   * The one count that does NOT start at zero, deliberately.
+   *
+   * Everywhere else a stepper starts at nothing, because a default is a number
+   * the app chose and saving without touching it records a fact nobody
+   * entered. Candling is the opposite motion: you set twelve, two are clear,
+   * and the answer is ten. Starting at what was set means taking away the ones
+   * that failed — which is what the person is actually doing — where starting
+   * at zero would mean counting ten eggs back up one at a time.
+   *
+   * It is also not a number the app invented. It is the number already on the
+   * record, offered back for correction.
+   */
   const [fertile, setFertile] = useState(incubation.eggsSet);
   const [hatched, setHatched] = useState(0);
   const [earlyLosses, setEarlyLosses] = useState(0);

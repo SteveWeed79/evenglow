@@ -340,6 +340,17 @@ describe('what comes off them', () => {
      * sign the buttons show changes, so that the buttons and the heading agree.
      */
     expect(screen.has('step-plus-1')).toBe(false);
+
+    /**
+     * Nothing is recordable until a number is entered.
+     *
+     * The stepper starts at zero everywhere a count is being built up, so
+     * pressing Save straight away must do nothing — the alternative is
+     * recording the death of an animal nobody counted.
+     */
+    expect(screen.get('save-loss').props['accessibilityState']).toMatchObject({ disabled: true });
+
+    await screen.press('step-minus-1');
     await screen.press('step-minus-1');
     await screen.press('choice-predator');
     await screen.type('loss-predator', 'Fox');
@@ -419,6 +430,8 @@ describe('birthing and hatching', () => {
   it('sets eggs, candles them, then hatches them', async () => {
     const setter = await mount(<SetEggsScreen />);
     await setter.type('incubation-label', 'The Sussex set');
+    // A dozen, entered rather than assumed — the stepper starts at nothing.
+    await setter.press('step-plus-12');
     await setter.press('save-incubation');
 
     const [set] = await listIncubations();
@@ -559,6 +572,15 @@ describe('iron', () => {
   it('adds a part and corrects the count on the shelf', async () => {
     const add = await mount(<AddItemScreen {...routeProps({})} />);
     await add.type('item-name', 'Oil filter');
+    /**
+     * One filter, said rather than defaulted.
+     *
+     * The quantity stepper started at 1, so every entry began by pressing
+     * minus — a bag of feed is fifty pounds, never one of anything. It starts
+     * at nothing now, which means a count that is saved is a count somebody
+     * entered.
+     */
+    await add.press('item-quantity-plus-1');
     await add.press('save-item');
 
     expect((await listInventory())[0]).toMatchObject({ name: 'Oil filter', quantity: 1 });
@@ -912,6 +934,7 @@ describe('what is under the broody', () => {
     const screen = await mount(<SetEggsScreen />);
 
     await screen.press('incubation-breed-chicken-rhode-island-red');
+    await screen.press('step-plus-12');
     await screen.press('save-incubation');
     screen.unmount();
 
@@ -923,6 +946,7 @@ describe('what is under the broody', () => {
   it('sets them without one', async () => {
     const screen = await mount(<SetEggsScreen />);
 
+    await screen.press('step-plus-12');
     await screen.press('save-incubation');
     screen.unmount();
 
@@ -940,6 +964,7 @@ describe('what is under the broody', () => {
 
     await screen.press('incubation-breed-chicken-rhode-island-red');
     await screen.pressLabel('Ducks');
+    await screen.press('step-plus-12');
     await screen.press('save-incubation');
     screen.unmount();
 

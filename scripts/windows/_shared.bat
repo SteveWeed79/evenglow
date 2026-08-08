@@ -93,6 +93,39 @@ exit /b 0
 :: pnpm is fast and idempotent when nothing changed, so this runs every time
 :: rather than trying to guess whether the pull touched a manifest. Guessing
 :: wrong is a broken run; guessing right saves two seconds.
+:: A layout change is not something `pnpm install` will do on its own here.
+::
+:: `.npmrc` sets `node-linker=hoisted`, because the Android C++ build cannot
+:: complete under pnpm's default layout on Windows — see the file for the
+:: arithmetic. Switching linkers means deleting and rebuilding node_modules,
+:: and pnpm asks before doing that. There is no console to ask on, so a script
+:: install answers nothing and **quietly leaves the old layout in place**:
+::
+::   Lockfile is up to date, resolution step is skipped
+::   Packages: -72
+::   Done in 2.2s
+::
+:: — after which the build fails on `.pnpm` paths that should not exist any
+:: more, and the window says nothing about why. Cost a real evening.
+::
+:: node_modules records which linker built it, so the mismatch is detectable
+:: rather than guessable. When it differs, rebuild rather than asking.
+if exist "node_modules\.modules.yaml" (
+  findstr /r /c:"nodeLinker.*hoisted" "node_modules\.modules.yaml" >nul 2>&1
+  if errorlevel 1 (
+    echo   The package layout has changed - rebuilding it.
+    echo   This takes a couple of minutes and only happens once.
+    rd /s /q "node_modules" 2>nul
+    rd /s /q "apps\mobile\node_modules" 2>nul
+    rd /s /q "apps\api\node_modules" 2>nul
+    rd /s /q "packages\contracts\node_modules" 2>nul
+    rd /s /q "packages\core\node_modules" 2>nul
+    :: The generated Android project has the old paths compiled into it, and
+    :: Gradle will happily reuse them. `expo prebuild` makes it again.
+    rd /s /q "apps\mobile\android" 2>nul
+  )
+)
+
 echo   Checking the packages...
 call pnpm install --silent
 if errorlevel 1 (

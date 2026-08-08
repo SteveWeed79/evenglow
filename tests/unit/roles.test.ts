@@ -22,10 +22,24 @@ describe('role matrix', () => {
       }
     });
 
-    it('may never update or delete an append-only observation', () => {
+    it('may never edit an append-only observation', () => {
       for (const entity of ENTITIES.filter(isAppendOnly)) {
         expect(canMutate('hand', entity, 'update')).toBe(false);
-        expect(canMutate('hand', entity, 'delete')).toBe(false);
+      }
+    });
+
+    /**
+     * A hand may take back what a hand may write.
+     *
+     * The person who mis-logged the tally is standing at the coop with the
+     * phone in their hand. Sending them to find the owner, who then removes a
+     * record they never saw from a description given hours later, is worse for
+     * the data than letting them fix it — and it is why this used to read
+     * `create` only.
+     */
+    it('may take back an append-only observation it recorded', () => {
+      for (const entity of ENTITIES.filter(isAppendOnly)) {
+        expect(canMutate('hand', entity, 'delete')).toBe(true);
       }
     });
 

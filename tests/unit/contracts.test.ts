@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  appendOnlyOpsAreCreateOnly,
+  appendOnlyIsNeverEdited,
   canMutate,
   eggLogCreateSchema,
   ENTITIES,
@@ -65,11 +65,17 @@ describe('mutation envelope', () => {
 });
 
 describe('append-only entities (D3)', () => {
-  it.each(ENTITIES.filter(isAppendOnly))('%s accepts create only', (entity) => {
-    expect(appendOnlyOpsAreCreateOnly(entity)).toBe(true);
+  /**
+   * Immutable in value, removable in whole. The refusal that matters is
+   * `update` — an observation's value never changes, which is what makes these
+   * unable to conflict. A delete archives, and an archive is repeatable, so it
+   * cannot conflict either.
+   */
+  it.each(ENTITIES.filter(isAppendOnly))('%s can be written and taken back, never edited', (entity) => {
+    expect(appendOnlyIsNeverEdited(entity)).toBe(true);
     expect(isOpAllowed(entity, 'create')).toBe(true);
     expect(isOpAllowed(entity, 'update')).toBe(false);
-    expect(isOpAllowed(entity, 'delete')).toBe(false);
+    expect(isOpAllowed(entity, 'delete')).toBe(true);
   });
 
   it.each(ENTITIES.filter((e) => !isAppendOnly(e)))('%s supports all three ops', (entity) => {

@@ -46,7 +46,15 @@ export function SetEggsScreen(): React.ReactElement {
 
   const [label, setLabel] = useState('');
   const [species, setSpecies] = useState<Species>('chicken');
-  const [eggsSet, setEggsSet] = useState(12);
+  /**
+   * Zero rather than a dozen.
+   *
+   * Twelve is the commonest clutch and it was there as a kindness, but it is
+   * still a number the app picked and it would be recorded by anyone who
+   * pressed Set them without looking. `+12` is one tap for the common case,
+   * which is the whole cost of asking.
+   */
+  const [eggsSet, setEggsSet] = useState(0);
   const [setAt, setSetAt] = useState(() => startOfDay(Date.now()));
   const [source, setSource] = useState<(typeof EGG_SOURCES)[number]>('own');
   const [method, setMethod] = useState<(typeof INCUBATION_METHODS)[number]>('incubator');
@@ -134,7 +142,7 @@ export function SetEggsScreen(): React.ReactElement {
       </Field>
 
       <Field label="How many eggs?">
-        <Stepper value={eggsSet} onChange={setEggsSet} steps={[1, 6, 12]} min={1} suffix="eggs" />
+        <Stepper value={eggsSet} onChange={setEggsSet} steps={[1, 6, 12]} suffix="eggs" />
       </Field>
 
       <Field label="Set on">
@@ -164,7 +172,7 @@ export function SetEggsScreen(): React.ReactElement {
 
       <Failure message={failure} />
 
-      <Primary label="Set them" disabled={saving} onPress={commit} testID="save-incubation" />
+      <Primary label="Set them" disabled={saving || eggsSet === 0} onPress={commit} testID="save-incubation" />
     </Screen>
   );
 }

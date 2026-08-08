@@ -47,22 +47,33 @@ export default defineConfig({
     /**
      * One React, by file path and not merely by version.
      *
-     * `node-linker=hoisted` (see `.npmrc`) puts a real `node_modules/react` at
-     * the workspace root, while `apps/mobile` keeps its own symlink into the
-     * store because it declares react itself. Both are 19.2.3 and they are two
-     * different files:
+     * **This is insurance against a half-migrated `node_modules`, and the first
+     * version of this comment claimed something else that was not true.** It
+     * said `apps/mobile` keeps its own react symlink under
+     * `node-linker=hoisted` (`.npmrc`) because it declares react itself. It
+     * does not: a clean install resolves react to `node_modules/react` from
+     * every workspace package, and the suite passes with this line deleted.
+     * The claim was written from the symptom rather than checked, and an
+     * adversarial pass disproved it by installing into an empty tree.
      *
-     *   root    react -> node_modules/react/index.js
-     *   mobile  react -> node_modules/.pnpm/react@19.2.3/node_modules/react/index.js
+     * What actually produced 437 `Invalid hook call` failures was **installing
+     * over a tree built by the previous linker**. pnpm rebuilt the root flat
+     * and left the old per-package symlinks in place, so:
      *
-     * Two paths mean two module registries, so the renderer sets the hook
-     * dispatcher on one copy and the component reads it from the other —
-     * `Invalid hook call`, 437 of them, on every suite that mounts a screen.
-     * Before hoisting both went through `.pnpm` and matched by accident.
+     *   tests           -> node_modules/react/index.js
+     *   apps/mobile/src -> node_modules/.pnpm/react@19.2.3/node_modules/react/index.js
      *
-     * Deduping collapses them to one. It is here rather than in the app's own
-     * config because it is a fact about how the tests resolve modules; Metro
-     * has its own resolver and does not share this hazard.
+     * Same version, same inode, two paths — so two module registries, and the
+     * renderer sets the hook dispatcher on one copy while the component reads
+     * it from the other.
+     *
+     * **The real fix is to delete `node_modules` when the linker changes**, and
+     * that is what the docs and the run scripts say to do. This line stays
+     * because the failure it prevents is silent, arrives on somebody else's
+     * machine, and cannot be reproduced in CI — a fresh runner always installs
+     * clean, so CI is green while a developer who merely re-installed is red.
+     * It costs nothing and it is the only thing standing between that person
+     * and four hundred inscrutable failures.
      */
     dedupe: ['react', 'react/jsx-runtime', 'react/jsx-dev-runtime', 'react-test-renderer'],
     alias: [
@@ -80,6 +91,13 @@ export default defineConfig({
       { find: /^expo-image-picker$/, replacement: here('./tests/support/native/modules.tsx') },
       { find: /^expo-image-manipulator$/, replacement: here('./tests/support/native/modules.tsx') },
       { find: /^expo-location$/, replacement: here('./tests/support/native/modules.tsx') },
+      // The OAuth flow. Its real hook throws during render when unconfigured,
+      // which is why AccountScreen could never be mounted by this suite.
+      {
+        find: /^expo-auth-session\/providers\/google$/,
+        replacement: here('./tests/support/native/modules.tsx'),
+      },
+      { find: /^expo-web-browser$/, replacement: here('./tests/support/native/modules.tsx') },
       {
         find: /^@react-navigation\/(native|native-stack|bottom-tabs)$/,
         replacement: here('./tests/support/native/navigation.tsx'),

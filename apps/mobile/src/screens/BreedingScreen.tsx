@@ -209,7 +209,12 @@ function BreedingCard({
   const { colors } = useTheme();
 
   const [open, setOpen] = useState(false);
-  const [liveBorn, setLiveBorn] = useState(1);
+  /**
+   * Both start at nothing, which they did not: `stillborn` was 0 and
+   * `liveBorn` was 1, so the same form disagreed with itself about whether a
+   * default is a fact. Neither is.
+   */
+  const [liveBorn, setLiveBorn] = useState(0);
   const [stillborn, setStillborn] = useState(0);
 
   const { saving, failure, save } = useSaver(useCallback(() => setOpen(false), []));
@@ -257,7 +262,7 @@ function BreedingCard({
 
           <Primary
             label="Record the birth"
-            disabled={saving}
+            disabled={saving || liveBorn + stillborn === 0}
             onPress={() => record(false)}
             testID={`birth-${id}`}
           />

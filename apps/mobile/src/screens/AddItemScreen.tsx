@@ -84,9 +84,17 @@ export function AddItemScreen({ route }: ScreenProps<'AddItem'>): React.ReactEle
     route.params.equipmentId === undefined ? 'feed' : 'part',
   );
   const [unit, setUnit] = useState<(typeof INVENTORY_UNITS)[number]>('bag');
-  const [quantity, setQuantity] = useState(1);
+  /**
+   * Nothing, until somebody says otherwise.
+   *
+   * These started at 1, so every entry began by pressing minus — a bag of feed
+   * is fifty pounds or twenty kilos, never one of anything. A stepper holding a
+   * number nobody typed is a pre-filled answer, and saving without touching it
+   * records a quantity the app chose.
+   */
+  const [quantity, setQuantity] = useState(0);
   const [warns, setWarns] = useState(true);
-  const [reorderBelow, setReorderBelow] = useState(1);
+  const [reorderBelow, setReorderBelow] = useState(0);
   const [equipmentId, setEquipmentId] = useState<string | null>(route.params.equipmentId ?? null);
   const [species, setSpecies] = useState<Species[]>([]);
   /** What the whole lot cost, as typed. Divided by `quantity` before storing. */
