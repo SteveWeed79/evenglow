@@ -15,15 +15,23 @@ import { mutationSchema, SYNC_REFUSALS } from '@steading/contracts';
  */
 
 /** Local lifecycle, distinct from the server's per-mutation result status. */
-const LOCAL_STATUSES = ['queued', 'sending', 'rejected'] as const;
+const LOCAL_STATUSES = ['queued', 'sending', 'rejected', 'applied'] as const;
 
 /**
  * A mutation in the outbox: the wire envelope plus local bookkeeping.
  *
- * A record leaves this store in exactly one way — the server reported it
- * applied or duplicate. Rejections flip status and stay (A6), so "never drop
- * a rejected mutation" is a property of the storage layer rather than a rule
- * the flush loop has to remember.
+ * **Nothing leaves this store because it succeeded.** A mutation the server
+ * accepted is marked `applied` and stays, which is hard invariant 7 — history
+ * is the audit trail and the duplicate defence. It used to be deleted, so the
+ * only record that a farm's morning had ever been sent was that the row was
+ * gone, which is indistinguishable from the row never having existed.
+ *
+ * Rejections flip status and stay too (A6), so "never drop a rejected
+ * mutation" is a property of the storage layer rather than a rule the flush
+ * loop has to remember.
+ *
+ * The one deletion that remains is a user deliberately discarding a rejected
+ * record, and it is guarded on that status — see `discardRejected`.
  */
 export const queuedMutationSchema = mutationSchema.extend({
   status: z.enum(LOCAL_STATUSES),

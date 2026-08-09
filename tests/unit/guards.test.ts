@@ -1,6 +1,8 @@
+import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { ESLint } from 'eslint';
 import { describe, expect, it } from 'vitest';
+import { readEnv } from '@steading/api/env';
 
 /**
  * The guards are asserted, not assumed.
@@ -252,5 +254,48 @@ describe('device parity — what Hermes does not have', () => {
         "export const b = (s: string): unknown => Buffer.from(s, 'base64');",
       ),
     ).not.toContain('no-restricted-globals');
+  });
+});
+
+/**
+ * Who the server is willing to believe about where a request came from.
+ *
+ * `request.ip` is what every rate limiter in the service keys on, and
+ * `trustProxy: true` makes it a value the caller chooses. The auth limiter is
+ * the thing standing between a password and an unlimited number of guesses, so
+ * a forgeable key there is invariant 10 — authorization failing open.
+ */
+describe('proxy trust (invariant 10)', () => {
+  const base = {
+    AUTH_SECRET: 'a-test-secret-long-enough-for-hs256-abcdef',
+    MONGODB_URI: 'mongodb://localhost:27017',
+  };
+
+  it('trusts nothing unless a deployment says otherwise', () => {
+    // The default has to be the failing-closed one: a server reachable
+    // directly must not take an address from a header.
+    expect(readEnv(base).TRUSTED_PROXY_HOPS).toBe(0);
+  });
+
+  it('takes the number of proxies the deployment actually runs', () => {
+    expect(readEnv({ ...base, TRUSTED_PROXY_HOPS: '1' }).TRUSTED_PROXY_HOPS).toBe(1);
+    expect(readEnv({ ...base, TRUSTED_PROXY_HOPS: '2' }).TRUSTED_PROXY_HOPS).toBe(2);
+  });
+
+  it('refuses a value that is not a count, at startup rather than at a request', () => {
+    // `true` is the tempting wrong answer, and it is exactly the old behaviour.
+    expect(() => readEnv({ ...base, TRUSTED_PROXY_HOPS: 'true' })).toThrow(/whole number/);
+    expect(() => readEnv({ ...base, TRUSTED_PROXY_HOPS: '-1' })).toThrow(/whole number/);
+  });
+
+  it('hands Fastify false rather than 0 when nothing is trusted', async () => {
+    // `trustProxy: 0` is not the same as `false` to Fastify, and passing the
+    // number straight through would be a quiet behaviour change.
+    const source = await readFile(
+      fileURLToPath(new URL('../../apps/api/src/server.ts', import.meta.url)),
+      'utf8',
+    );
+    expect(source).toContain('env.TRUSTED_PROXY_HOPS > 0 ? env.TRUSTED_PROXY_HOPS : false');
+    expect(source).not.toMatch(/trustProxy:\s*true/);
   });
 });

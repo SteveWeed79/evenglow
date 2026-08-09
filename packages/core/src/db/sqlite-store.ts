@@ -427,7 +427,22 @@ export async function openSqliteStore(
           }
 
           if (result.status === 'applied' || result.status === 'duplicate') {
-            await tx.run('DELETE FROM outbox WHERE id = ?', [mutation.id]);
+            /**
+             * Marked, not deleted — hard invariant 7.
+             *
+             * This was a DELETE, which threw away the audit trail the
+             * invariant exists to keep and left "it was sent" and "it never
+             * existed" looking identical on a device. `clearedCount` still
+             * counts it, so the integrity check is unchanged; what changes is
+             * that the row survives to be counted against.
+             *
+             * Every reader that means "work still outstanding" filters this
+             * status out — see `readOutboxBySeq`, `counts` and `applyPulled`.
+             */
+            await tx.run(
+              'UPDATE outbox SET status = ?, lastError = NULL WHERE id = ?',
+              ['applied', mutation.id],
+            );
             cleared += 1;
             continue;
           }
@@ -528,7 +543,13 @@ export async function openSqliteStore(
      * must not stop every mutation behind it from ever being sent.
      */
     async readOutboxBySeq(): Promise<QueuedMutation[]> {
-      const rows = await driver.all<OutboxRow>('SELECT * FROM outbox ORDER BY clientSeq');
+      // Work still outstanding, in the order it must be sent. Applied rows stay
+      // in the table as the audit trail (invariant 7) but are not work — and
+      // parsing every mutation a farm has ever made, on every flush, would make
+      // the loop slower every morning it ran.
+      const rows = await driver.all<OutboxRow>(
+        "SELECT * FROM outbox WHERE status != 'applied' ORDER BY clientSeq",
+      );
 
       const good: QueuedMutation[] = [];
       const corrupt: { key: string; raw: unknown; reason: string }[] = [];
@@ -602,11 +623,14 @@ export async function openSqliteStore(
     },
 
     async counts(): Promise<QueueCounts> {
+      // `total` is outstanding work, not rows in the table. Applied rows are
+      // the audit trail and counting them would make the chip say a farm has
+      // 1,400 things waiting when it has none.
       const row = await driver.get<{ queued: number; rejected: number; total: number }>(
         `SELECT
-           SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END)   AS queued,
-           SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS rejected,
-           COUNT(*)                                             AS total
+           SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END)    AS queued,
+           SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END)  AS rejected,
+           SUM(CASE WHEN status != 'applied' THEN 1 ELSE 0 END)  AS total
          FROM outbox`,
       );
       return {
@@ -625,7 +649,12 @@ export async function openSqliteStore(
     async checkIntegrity(): Promise<IntegrityReport> {
       const everEnqueued = parseMeta('nextClientSeq', await readMeta(driver, 'nextClientSeq')) ?? 0;
       const cleared = parseMeta('clearedCount', await readMeta(driver, 'clearedCount')) ?? 0;
-      const row = await driver.get<{ n: number }>('SELECT COUNT(*) AS n FROM outbox');
+      // Outstanding rows only. `cleared` counts acknowledgements, and since
+      // invariant 7 those rows stay in the table marked `applied` — counting
+      // them here would report every acknowledged mutation as an excess.
+      const row = await driver.get<{ n: number }>(
+        "SELECT COUNT(*) AS n FROM outbox WHERE status != 'applied'",
+      );
       const actualInOutbox = row?.n ?? 0;
       const expectedInOutbox = everEnqueued - cleared;
 
@@ -646,20 +675,46 @@ export async function openSqliteStore(
      */
     async applyPulled(mutations: readonly PulledMutation[], cursor): Promise<PullResult> {
       return driver.transaction(async (tx) => {
-        // Anything this device still holds is newer than what the server can
-        // say about it, so local optimistic state wins until it flushes.
+        /**
+         * Records this device still owes the server, and only those.
+         *
+         * Anything genuinely on its way out is newer than what the server can
+         * say about it, so local optimistic state wins until it flushes.
+         *
+         * **`rejected` and `applied` are deliberately not in that set, and
+         * leaving them in was a silent, permanent hydration failure.** A
+         * rejected mutation never flushes — it sits in the inbox until a
+         * person deals with it — so treating it as pending meant one refused
+         * edit froze that record's hydration for the life of the install: the
+         * server's version of it could never arrive again, on any device,
+         * ever. An applied row is already on the server, so skipping it would
+         * have done the same thing to every record a farm had ever synced the
+         * moment invariant 7 stopped deleting them.
+         */
         const pendingRows = await tx.all<{ targetId: string }>(
-          'SELECT DISTINCT targetId FROM outbox',
+          "SELECT DISTINCT targetId FROM outbox WHERE status IN ('queued', 'sending')",
         );
         const pending = new Set(pendingRows.map((r) => r.targetId));
 
         let applied = 0;
-        let skipped = 0;
+        let paused = false;
+        /** The last row actually written, which is how far it is safe to claim. */
+        let committed: { through: number; throughId: string } | null = null;
 
         for (const mutation of mutations) {
+          /**
+           * Stop here rather than skipping past it.
+           *
+           * Skipping used to advance the watermark over the skipped row in the
+           * same transaction, so the server was never asked for it again — a
+           * record edited on this phone and also on another one lost the other
+           * one's version outright, silently and permanently. Pausing costs a
+           * round trip: the queue drains on the next flush, this row stops
+           * being pending, and the following pull delivers it.
+           */
           if (pending.has(mutation.targetId)) {
-            skipped += 1;
-            continue;
+            paused = true;
+            break;
           }
 
           await projectOne(
@@ -671,12 +726,20 @@ export async function openSqliteStore(
             mutation.serverTs,
           );
           applied += 1;
+          committed = { through: mutation.serverTs, throughId: mutation.id };
         }
 
-        await writeMeta(tx, META.pulledThrough, cursor.through);
-        if (cursor.throughId !== null) await writeMeta(tx, META.pulledThroughId, cursor.throughId);
+        // Paused before the first row: the watermark does not move at all, so
+        // the same page is asked for again once the queue has drained.
+        const advanceTo = paused ? committed : cursor;
+        if (advanceTo !== null) {
+          await writeMeta(tx, META.pulledThrough, advanceTo.through);
+          if (advanceTo.throughId !== null) {
+            await writeMeta(tx, META.pulledThroughId, advanceTo.throughId);
+          }
+        }
 
-        return { applied, skipped };
+        return { applied, skipped: mutations.length - applied, paused };
       });
     },
 

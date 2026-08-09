@@ -1,3 +1,4 @@
+import { localStore } from '@steading/core/db/store';
 import { startSync, stopSync } from '@steading/core/sync/engine';
 import { setPhotoBytes } from '@steading/core/sync/photos';
 import { setStorageBacking } from '@steading/core/sync/storage';
@@ -129,7 +130,39 @@ export async function start(raw?: string): Promise<Started> {
    * lost: every mutation is already durable in SQLite and the queue is exactly
    * what claiming the farm turns loose.
    */
-  if (claims === null) return { claims: null, orgId, fault: null, stop() {} };
+  if (claims === null) {
+    /**
+     * ...and the chip has to say so, or it says something worse.
+     *
+     * With no loop there is no flush, so nothing ever writes `syncHeld` — and
+     * `currentState` fell through to `queued`, which is the one word that must
+     * never describe this. A farm on the free tier read "3 waiting" on its
+     * first morning and "1,400 waiting" two seasons later, in damson, on every
+     * screen, about work that was not waiting for anything: per D13 this is
+     * the product working, permanently and by design.
+     *
+     * Written to the store rather than held in memory for the same reason the
+     * other two refusals are — the first frame after a cold start must already
+     * be right.
+     */
+    await localStore().setSyncHeld('noAccount');
+    return { claims: null, orgId, fault: null, stop() {} };
+  }
+
+  /**
+   * Signed in, so whatever this device believed about having no account is
+   * stale the moment it is true.
+   *
+   * Only that one. `unsubscribed` and `lapsed` are the server's answer and
+   * only the server can withdraw them — cleared on a successful flush, in
+   * flush.ts, because being allowed to write again is how the app finds out.
+   * Signing in is different: the app performed it and knows it happened, and
+   * leaving the hold set would label a signed-in device that is merely in a
+   * barn as "on this phone", which is the same lie in the other direction.
+   */
+  if ((await localStore().getSyncHeld()) === 'noAccount') {
+    await localStore().setSyncHeld(null);
+  }
 
   /**
    * Past this line nothing may stop the app.

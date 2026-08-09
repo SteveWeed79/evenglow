@@ -77,7 +77,7 @@ export type Subscription = z.infer<typeof subscriptionSchema>;
  * it never paid, its card failed, or the app is broken — and those get very
  * different responses from a person.
  */
-export const SYNC_REFUSALS = ['unsubscribed', 'lapsed'] as const;
+export const SYNC_REFUSALS = ['unsubscribed', 'lapsed', 'noAccount'] as const;
 export type SyncRefusal = (typeof SYNC_REFUSALS)[number];
 
 export interface Entitlement {
@@ -168,6 +168,21 @@ export function syncRefusalMessage(refusal: SyncRefusal): string {
       return 'Kept on this phone. Everything works; nothing is sent anywhere.';
     case 'lapsed':
       return 'Kept on this phone since the subscription ended. Nothing has been lost.';
+    /**
+     * The D14 state, and the one this app is most often in.
+     *
+     * A farm that has never made an account has nowhere to send anything, and
+     * the loop is not started at all — so before this existed the chip fell
+     * through to `queued` and said "3 waiting", then "1,400 waiting", forever.
+     * Per D13 that is a **supported permanent state**, not a backlog, and
+     * calling it waiting told a farm its work was stuck when nothing was
+     * wrong.
+     *
+     * Says where the records are and stops. The offer lives on the account
+     * screen, which somebody has to choose to open.
+     */
+    case 'noAccount':
+      return 'Kept on this phone. There is no account yet, so there is nowhere to send it.';
   }
 }
 

@@ -24,7 +24,18 @@ function connect(): Promise<MongoClient> {
     );
   }
 
-  // Cached across HMR reloads in dev; a fresh pool per cold start in prod.
+  /**
+   * One client for the life of the process, in every environment.
+   *
+   * **This used to be cached only when `NODE_ENV !== 'production'`**, with a
+   * comment about "a fresh pool per cold start" — reasoning inherited from the
+   * deleted Next deployment, where each invocation really was a cold start and
+   * the global existed to survive HMR. Under the Fastify service (D10) the
+   * process is long-lived and `db()` is called on *every request*, so in
+   * production it built a new `MongoClient` and a new connection pool per
+   * request and never closed any of them. Development was fine, which is the
+   * worst shape a bug of this kind can have.
+   */
   const existing = globalThis.__steadingMongoClient;
   if (existing) return existing;
 
@@ -38,9 +49,19 @@ function connect(): Promise<MongoClient> {
    * worked.
    */
   const created = new MongoClient(uri, { serverSelectionTimeoutMS: 5_000 }).connect();
-  if (process.env.NODE_ENV !== 'production') {
-    globalThis.__steadingMongoClient = created;
-  }
+  globalThis.__steadingMongoClient = created;
+
+  /**
+   * A failed connect must not be cached, or the first request while Mongo is
+   * still starting poisons every request after it with the same rejected
+   * promise and the service never recovers without a restart.
+   */
+  void created.catch(() => {
+    if (globalThis.__steadingMongoClient === created) {
+      globalThis.__steadingMongoClient = undefined;
+    }
+  });
+
   return created;
 }
 

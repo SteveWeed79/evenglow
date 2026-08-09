@@ -4,6 +4,7 @@ import {
   type PulledMutation,
 } from '@steading/contracts';
 import { apiUrl, syncHeaders } from '../api';
+import type { PullResult } from '../db/port';
 import { localStore } from '../db/store';
 
 /**
@@ -77,8 +78,24 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
     const result = await applyPage(parsed.data);
     outcome.applied += result.applied;
     outcome.skipped += result.skipped;
-    outcome.through = parsed.data.through;
     outcome.more = parsed.data.more;
+
+    /**
+     * The store stopped at a record this device still owes, and did not move
+     * the watermark past it. Paging on would ask for rows beyond a point we
+     * have not accepted yet and then discard them — which is the bug this
+     * whole path exists to fix, one page further along.
+     *
+     * Not a `deferred`: nothing failed, and the engine counts a deferral
+     * towards its backoff. The next flush drains the queue and the pull after
+     * it continues from exactly here.
+     */
+    if (result.paused) {
+      outcome.through = (await localStore().pulledThrough()).through;
+      return outcome;
+    }
+
+    outcome.through = parsed.data.through;
 
     // A page that does not advance the cursor would loop forever. The cursor
     // is the pair, so both halves have to stand still for that to be true —
@@ -93,8 +110,8 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
   return outcome;
 }
 
-async function applyPage(page: PullResponse): Promise<{ applied: number; skipped: number }> {
-  // Skipping a record with a pending local edit, and advancing BOTH halves of
+async function applyPage(page: PullResponse): Promise<PullResult> {
+  // Pausing at a record with a pending local edit, and advancing BOTH halves of
   // the watermark in the same transaction as the records they cover, are the
   // store's guarantees now — stated in port.ts and asserted against every
   // implementation.

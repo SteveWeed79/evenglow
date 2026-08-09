@@ -45,6 +45,7 @@ import { SettingsScreen } from '../screens/SettingsScreen';
 import { SiteSetupScreen } from '../screens/SiteSetupScreen';
 import { SupportScreen } from '../screens/SupportScreen';
 import { TreatmentScreen } from '../screens/TreatmentScreen';
+import { TreatmentsScreen } from '../screens/TreatmentsScreen';
 import { TrendScreen } from '../screens/TrendScreen';
 import { WeatherScreen } from '../screens/WeatherScreen';
 import { WeighScreen } from '../screens/WeighScreen';
@@ -128,7 +129,16 @@ export type RootParamList = {
   EditGroup: { groupId: string };
   Animals: { groupId: string };
   AddAnimal: { groupId: string };
-  Treatment: { groupId: string };
+  /**
+   * The form, for a new treatment or an existing one.
+   *
+   * `treatmentId` present means editing: it is the only way to close a course
+   * that is still running, and a running course holds its produce for ever
+   * until somebody does.
+   */
+  Treatment: { groupId: string; treatmentId?: string };
+  /** What this group has been given, and the way back into any of it. */
+  Treatments: { groupId: string };
   CareLog: { groupId: string };
   /** How often this group's routine jobs come round, and which it does at all. */
   CareRoutine: { groupId: string };
@@ -205,6 +215,7 @@ export function Root({
       <Stack.Screen name="Animals" component={AnimalsScreen} />
       <Stack.Screen name="AddAnimal" component={AddAnimalScreen} />
       <Stack.Screen name="Treatment" component={TreatmentScreen} />
+      <Stack.Screen name="Treatments" component={TreatmentsScreen} />
       <Stack.Screen name="CareLog" component={CareLogScreen} />
       <Stack.Screen name="CareRoutine" component={CareRoutineScreen} />
       <Stack.Screen name="Trend" component={TrendScreen} />

@@ -54,6 +54,7 @@ import { ShearingScreen } from '../../apps/mobile/src/screens/ShearingScreen';
 import { StockScreen } from '../../apps/mobile/src/screens/StockScreen';
 import { TodayScreen } from '../../apps/mobile/src/screens/TodayScreen';
 import { TreatmentScreen } from '../../apps/mobile/src/screens/TreatmentScreen';
+import { TreatmentsScreen } from '../../apps/mobile/src/screens/TreatmentsScreen';
 import { WeighScreen } from '../../apps/mobile/src/screens/WeighScreen';
 
 /**
@@ -204,6 +205,7 @@ export const SCREENS: [string, () => React.ReactElement][] = [
   ['Animals', () => <AnimalsScreen {...routeProps({ groupId: GROUP })} />],
   ['AddAnimal', () => <AddAnimalScreen {...routeProps({ groupId: GROUP })} />],
   ['Treatment', () => <TreatmentScreen {...routeProps({ groupId: GROUP })} />],
+  ['Treatments', () => <TreatmentsScreen {...routeProps({ groupId: GROUP })} />],
   ['CareLog', () => <CareLogScreen {...routeProps({ groupId: GROUP })} />],
   ['Weigh', () => <WeighScreen {...routeProps({ groupId: GROUP })} />],
   ['Shearing', () => <ShearingScreen {...routeProps({ groupId: GROUP })} />],

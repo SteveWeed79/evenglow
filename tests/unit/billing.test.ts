@@ -9,6 +9,7 @@ import {
   heldLabel,
   HELD_LABEL,
   SUBSCRIPTION_STATES,
+  SYNC_REFUSALS,
   subscriptionSchema,
   syncRefusalMessage,
   type Subscription,
@@ -128,7 +129,7 @@ describe('what it says about it', () => {
    * tells you something and one that nags.
    */
   it('never demands payment', () => {
-    for (const refusal of ['unsubscribed', 'lapsed'] as const) {
+    for (const refusal of SYNC_REFUSALS) {
       const said = syncRefusalMessage(refusal);
 
       /**
@@ -148,6 +149,29 @@ describe('what it says about it', () => {
   it('says nothing has been lost, because nothing has', () => {
     expect(syncRefusalMessage('lapsed')).toMatch(/nothing has been lost/i);
     expect(syncRefusalMessage('unsubscribed')).toMatch(/everything works/i);
+  });
+
+  /**
+   * The state most farms are in most of the time, and the one that had no
+   * sentence at all.
+   *
+   * A device with no account never starts the loop, so nothing ever wrote a
+   * refusal and the chip fell through to `queued` — "1,400 waiting", in
+   * damson, forever, about work that was not waiting for anything. D13 says
+   * that farm is the product working, not a backlog.
+   */
+  it('has a sentence for a farm that has no account, and it is not a nag', () => {
+    const said = syncRefusalMessage('noAccount');
+
+    expect(said).toMatch(/on this phone/i);
+    expect(said).not.toMatch(/waiting|stuck|pending|failed|error/i);
+  });
+
+  /** Every refusal is one the chip can render, or the pill has a hole in it. */
+  it('has a message for every refusal there is', () => {
+    for (const refusal of SYNC_REFUSALS) {
+      expect(syncRefusalMessage(refusal).length).toBeGreaterThan(0);
+    }
   });
 });
 
