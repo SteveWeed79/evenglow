@@ -143,6 +143,19 @@ Ranked by what blocks "fully functional" first.
    renamed or taken out of use. A **shelf item's** quantity is editable and nothing
    else is.
 
+   > **Corrected while implementing this.** An earlier draft of this entry said an
+   > unclosed course counts its withdrawal from *today*, so the produce it covers
+   > never clears. That is wrong, and a failing test said so —
+   > `tests/screens/treatments.test.tsx`. `withdrawalClearsAt` takes
+   > `Math.max(administeredAt, treatmentEndsAt ?? 0)`, so a course left open counts
+   > from the **first dose** and clears produce *early*, short by however long the
+   > course actually ran. That is the dangerous direction rather than the merely
+   > annoying one, and it makes the gap worse: a farm has no reason to go looking at
+   > a withdrawal that has quietly expired ahead of time.
+   >
+   > **Treatments are done as of this branch** — a list on the group, the form
+   > reused for editing, closing a running course, and removal.
+
 2. **Births and hatches are dead ends.** The offspring exist in the world and
    nowhere in the app — no path from a `breeding` or `incubation` record to the
    animals or group it produced.

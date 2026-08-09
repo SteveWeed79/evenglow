@@ -21,9 +21,19 @@ import { syncRoutes } from './routes/sync';
 
 export async function buildServer(env: Env = readEnv()): Promise<FastifyInstance> {
   const app = Fastify({
-    // Trust the proxy for client IPs, or every request rate-limits against the
-    // same address and the auth limiter protects nothing.
-    trustProxy: true,
+    /**
+     * Believe `X-Forwarded-For` only as far as the proxies we actually run.
+     *
+     * `true` here meant believing it from anyone, and `request.ip` is what
+     * every rate limiter in this service keys on — so one forged header per
+     * attempt gave each guess its own address and the auth limiter never
+     * fired. A number tells Fastify to take the address that many hops from
+     * the right, which a caller cannot forge past. Zero (the default) trusts
+     * nothing, which is correct for a service reachable directly.
+     *
+     * See `TRUSTED_PROXY_HOPS` in env.ts for why this cannot be inferred.
+     */
+    trustProxy: env.TRUSTED_PROXY_HOPS > 0 ? env.TRUSTED_PROXY_HOPS : false,
     logger: false,
   });
 

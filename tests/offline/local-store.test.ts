@@ -40,6 +40,15 @@ interface Backing {
   emptyOutbox(): Promise<void>;
   /** Put a row in the outbox that cannot be read back. */
   writeUnreadableOutboxRow(key: string): Promise<void>;
+  /**
+   * The raw row, past every reader.
+   *
+   * Invariant 7 is about what is in the table, and every reader in the store
+   * deliberately hides an applied row — so asserting through them cannot tell
+   * "marked" from "deleted", which is exactly the confusion that let a DELETE
+   * live here.
+   */
+  rawOutboxRow(id: string): Promise<{ status: string } | undefined>;
   /** Make the next write to `table` fail as a full device. Returns a restore. */
   failNextWriteTo(table: 'outbox' | 'records'): () => void;
 }
@@ -75,6 +84,9 @@ function sqlBacking(name: string, make: () => SqlDriver): Backing {
          VALUES (?, 1, 'x', 'eggLog', 'create', '{}', 'nope', 99, 1, 'queued', 0, 1)`,
         [key],
       );
+    },
+    async rawOutboxRow(id) {
+      return driver!.get<{ status: string }>('SELECT status FROM outbox WHERE id = ?', [id]);
     },
     /**
      * The fault has to be injected into the TRANSACTION'S handle, not only the
@@ -218,6 +230,73 @@ describe.each(BACKINGS)('LocalStore — $name', (backing) => {
 
       expect((await store.counts()).total).toBe(0);
       expect((await store.checkIntegrity()).cleared).toBe(2);
+    });
+
+    /**
+     * Hard invariant 7: never delete a mutation row on success, mark it
+     * `applied`. History is the audit trail and the duplicate defence.
+     *
+     * This was a `DELETE`. Nothing above the store could tell the difference,
+     * which is why it survived — "the row is gone" and "the row was never
+     * written" look identical from every reader in the app.
+     */
+    it('marks an accepted mutation rather than deleting it (invariant 7)', async () => {
+      const a = await store.enqueue(eggLog());
+
+      await store.resolveBatch([a], [{ id: a.id, status: 'applied' }]);
+
+      const row = await backing.rawOutboxRow(a.id);
+      expect(row).toBeDefined();
+      expect(row?.status).toBe('applied');
+      // Still off the queue for every reader that means outstanding work.
+      expect(await store.readOutboxBySeq()).toEqual([]);
+      expect(await store.counts()).toEqual({ queued: 0, rejected: 0, total: 0 });
+    });
+
+    it('reports no loss once acknowledged rows stay in the table', async () => {
+      const a = await store.enqueue(eggLog());
+      const b = await store.enqueue(eggLog());
+
+      await store.resolveBatch(
+        [a, b],
+        [
+          { id: a.id, status: 'applied' },
+          { id: b.id, status: 'duplicate' },
+        ],
+      );
+
+      // everEnqueued 2, cleared 2, so nothing should be outstanding — and the
+      // two marked rows must not read as an excess.
+      const report = await store.checkIntegrity();
+      expect(report.expectedInOutbox).toBe(0);
+      expect(report.actualInOutbox).toBe(0);
+    });
+
+    /** An applied row is on the server already, so it can never hold hydration up. */
+    it('does not let an applied row block that record hydrating', async () => {
+      const a = await store.enqueue(eggLog());
+      await store.resolveBatch([a], [{ id: a.id, status: 'applied' }]);
+
+      const result = await store.applyPulled(
+        [
+          {
+            schemaVersion: 1,
+            id: newId(),
+            targetId: a.targetId,
+            entity: 'eggLog',
+            op: 'create',
+            payload: { occurredAt: 1, flockId: newId(), count: 4 },
+            deviceId: '00000000-0000-4000-8000-0000000000ff',
+            clientSeq: 0,
+            clientTs: 1,
+            serverTs: 5_000,
+          },
+        ],
+        { through: 5_000, throughId: newId() },
+      );
+
+      expect(result.paused).toBe(false);
+      expect(result.applied).toBe(1);
     });
 
     it('keeps a rejection, with its reason, and never drops it (A6)', async () => {
@@ -425,7 +504,7 @@ describe.each(BACKINGS)('LocalStore — $name', (backing) => {
 
       const result = await store.applyPulled([mutation], { through: 1_000, throughId: mutation.id });
 
-      expect(result).toEqual({ applied: 1, skipped: 0 });
+      expect(result).toEqual({ applied: 1, skipped: 0, paused: false });
       // The ULID half is what stops a resume from re-reading a millisecond.
       expect(await store.pulledThrough()).toEqual({ through: 1_000, throughId: mutation.id });
     });
@@ -445,9 +524,85 @@ describe.each(BACKINGS)('LocalStore — $name', (backing) => {
 
       // A queued edit visibly reverting is the most alarming thing an offline
       // app can do, so local optimistic state wins until it flushes.
-      expect(result).toEqual({ applied: 0, skipped: 1 });
+      expect(result).toEqual({ applied: 0, skipped: 1, paused: true });
       const [record] = await store.readRecordsByEntity('flock');
       expect(record?.value).toMatchObject({ name: 'My name for it' });
+    });
+
+    /**
+     * The silent, permanent half of that skip, which used to be missing.
+     *
+     * Holding the record back was always right. Advancing the watermark past
+     * it in the same transaction was not: the server was never asked for that
+     * row again, so a record edited on two phones lost one side outright, with
+     * nothing on any screen to say so.
+     */
+    it('does not advance the watermark past a record it held back', async () => {
+      const local = await store.enqueue({
+        entity: 'flock',
+        op: 'create',
+        targetId: newId(),
+        payload: { name: 'My name for it', species: 'goat', count: 9 },
+      });
+
+      await store.applyPulled([pulled({ targetId: local.targetId })], {
+        through: 2_000,
+        throughId: newId(),
+      });
+
+      // Untouched, so the next pull asks for that page again.
+      expect(await store.pulledThrough()).toEqual({ through: 0, throughId: null });
+    });
+
+    it('advances only as far as the last row it actually wrote', async () => {
+      const local = await store.enqueue({
+        entity: 'flock',
+        op: 'create',
+        targetId: newId(),
+        payload: { name: 'Mine', species: 'goat', count: 9 },
+      });
+
+      const first = pulled({ serverTs: 1_000 });
+      const held = pulled({ targetId: local.targetId, serverTs: 1_500 });
+      const behind = pulled({ serverTs: 2_000 });
+
+      const result = await store.applyPulled([first, held, behind], {
+        through: 2_000,
+        throughId: behind.id,
+      });
+
+      // It stops AT the held row rather than stepping over it, so the row
+      // behind it is still owed and is counted as such.
+      expect(result).toEqual({ applied: 1, skipped: 2, paused: true });
+      expect(await store.pulledThrough()).toEqual({ through: 1_000, throughId: first.id });
+    });
+
+    /**
+     * A rejected mutation never flushes — it waits in the inbox for a person.
+     * Treating it as pending meant the server's version of that record could
+     * never arrive again on this device, for the life of the install.
+     */
+    it('hydrates a record whose local edit was rejected', async () => {
+      const local = await store.enqueue({
+        entity: 'flock',
+        op: 'create',
+        targetId: newId(),
+        payload: { name: 'Refused', species: 'goat', count: 9 },
+      });
+      await store.rejectExhausted([local], 0, 'The server refused that record.');
+
+      const mutation = pulled({
+        targetId: local.targetId,
+        payload: { name: 'Server name', species: 'goat', count: 2 },
+      });
+      const result = await store.applyPulled([mutation], {
+        through: 3_000,
+        throughId: mutation.id,
+      });
+
+      expect(result).toEqual({ applied: 1, skipped: 0, paused: false });
+      const [record] = await store.readRecordsByEntity('flock');
+      expect(record?.value).toMatchObject({ name: 'Server name' });
     });
 
     it('starts from nothing on a device that has never pulled', async () => {

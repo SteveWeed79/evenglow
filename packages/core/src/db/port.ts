@@ -70,6 +70,15 @@ export interface StoredTicket {
 export interface PullResult {
   applied: number;
   skipped: number;
+  /**
+   * True when hydration stopped at a record this device has not sent yet.
+   *
+   * The watermark was NOT advanced past that record, so the caller must stop
+   * paging: everything from here on is still owed and will be offered again
+   * once the outbox drains. Without this the loop would page forward on the
+   * server's cursor and re-fetch the same rows on the next pass.
+   */
+  paused: boolean;
 }
 
 /**

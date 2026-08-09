@@ -98,6 +98,37 @@ const envSchema = z.object({
     .string()
     .default('')
     .transform((value) => value === '1' || value.toLowerCase() === 'true'),
+
+  /**
+   * How many proxies sit in front of this service, or empty for none.
+   *
+   * **Off by default, and this used to be `trustProxy: true` unconditionally.**
+   * That tells Fastify to believe `X-Forwarded-For` from whoever connected, so
+   * `request.ip` becomes a value the caller chose — and every rate limiter in
+   * the service keys on `request.ip`. One header per attempt and the auth
+   * limiter, the thing standing between a password and an unlimited number of
+   * guesses, counts each one against a different address and never fires. That
+   * is invariant 10: authorization must not fail open.
+   *
+   * The comment beside it was right about the failure it prevented — behind a
+   * proxy with no trust, every request rate-limits against the proxy's own
+   * address and legitimate traffic is throttled as one client. Both states are
+   * bad, they are opposites, and which one is correct is a fact about the
+   * deployment that the code cannot guess. So it is configuration, and the
+   * default is the one that fails closed.
+   *
+   * Set it to the number of proxies you control — `1` behind a single nginx or
+   * a load balancer — and Fastify takes the address that many hops from the
+   * right, which a caller cannot forge past. Direct-to-internet: leave it
+   * unset.
+   */
+  TRUSTED_PROXY_HOPS: z
+    .string()
+    .default('')
+    .refine((value) => value === '' || /^\d+$/.test(value), {
+      message: 'TRUSTED_PROXY_HOPS must be a whole number of proxies, or unset.',
+    })
+    .transform((value) => (value === '' ? 0 : Number(value))),
 });
 
 export type Env = z.infer<typeof envSchema> & {

@@ -149,6 +149,22 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
           testID="go-treatment"
           onPress={() => nav.navigate('Treatment', { groupId })}
         />
+        {/**
+          * Beside recording one rather than replacing it, because they are
+          * different acts: giving a wormer is a thing you do standing at the
+          * pen, and looking one up is a thing you do because somebody asked.
+          *
+          * It also carries the only way to close a course that is still
+          * running — and an open course has its withdrawal counted from the
+          * first dose, so it clears produce early until somebody closes it.
+          * See `TreatmentsScreen`.
+          */}
+        <Row
+          title="What they have had"
+          detail="Every treatment, and the way to correct or close one"
+          testID="go-treatments"
+          onPress={() => nav.navigate('Treatments', { groupId })}
+        />
         <Row
           title="Log a job done"
           detail="Worming, feet, minerals, a look-over"

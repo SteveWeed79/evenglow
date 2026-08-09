@@ -125,6 +125,8 @@ const startTriggers = vi.fn(() => ({ stop: vi.fn() }));
 const setStorageBacking = vi.fn();
 
 const ensureLocalOrgId = vi.fn(async () => 'localOrg');
+const setSyncHeld = vi.fn(async (_refusal: string | null) => undefined);
+const getSyncHeld = vi.fn(async (): Promise<string | null> => null);
 
 vi.mock('@steading/mobile/auth/session', () => ({
   refreshSession: () => refreshSession(),
@@ -134,6 +136,17 @@ vi.mock('@steading/mobile/auth/local-org', () => ({
 }));
 vi.mock('@steading/mobile/db/store', () => ({
   openLocalStore: (orgId: string) => openLocalStore(orgId),
+}));
+/**
+ * The boot writes one thing to the store itself: whether this device has an
+ * account, so the chip can say "on this phone" instead of "1,400 waiting"
+ * forever. That is the only reason it is here.
+ */
+vi.mock('@steading/core/db/store', () => ({
+  localStore: () => ({
+    getSyncHeld: () => getSyncHeld(),
+    setSyncHeld: (refusal: string | null) => setSyncHeld(refusal),
+  }),
 }));
 vi.mock('@steading/mobile/sync/triggers', () => ({
   startTriggers: () => startTriggers(),
@@ -219,6 +232,23 @@ describe('booting without an account', () => {
     refreshSession.mockResolvedValue(null);
   });
 
+  /**
+   * The chip's whole problem, fixed at the only place that knows.
+   *
+   * With no account the loop never starts, so nothing ever writes a refusal —
+   * and `currentState` fell through to `queued`, painting a farm's permanent,
+   * supported, by-design free-tier state as "1,400 waiting" in damson on every
+   * screen. Written to the store rather than held in memory so the first frame
+   * after a cold start is already right.
+   */
+  it('records that there is no account, so the chip does not say "waiting"', async () => {
+    const { start } = await import('@steading/mobile/boot/start');
+
+    await start('http://10.0.2.2:3001');
+
+    expect(setSyncHeld).toHaveBeenCalledWith('noAccount');
+  });
+
   it('opens the minted farm and leaves the loop alone', async () => {
     const { start } = await import('@steading/mobile/boot/start');
 
@@ -259,6 +289,31 @@ describe('booting normally', () => {
     vi.clearAllMocks();
     resetApiFault();
     resetApiBase();
+  });
+
+  /**
+   * Signing in is the one transition the app performs itself, so it is the one
+   * hold the app may clear. `unsubscribed` and `lapsed` are the server's
+   * answer and only a successful flush withdraws them — see flush.ts.
+   */
+  it('clears a stale no-account hold once somebody signs in', async () => {
+    const { start } = await import('@steading/mobile/boot/start');
+    refreshSession.mockResolvedValue(CLAIMS);
+    getSyncHeld.mockResolvedValue('noAccount');
+
+    await start('http://10.0.2.2:3001');
+
+    expect(setSyncHeld).toHaveBeenCalledWith(null);
+  });
+
+  it('leaves a payment hold alone, because only the server can lift one', async () => {
+    const { start } = await import('@steading/mobile/boot/start');
+    refreshSession.mockResolvedValue(CLAIMS);
+    getSyncHeld.mockResolvedValue('unsubscribed');
+
+    await start('http://10.0.2.2:3001');
+
+    expect(setSyncHeld).not.toHaveBeenCalled();
   });
 
   it('starts the loop and the triggers', async () => {
