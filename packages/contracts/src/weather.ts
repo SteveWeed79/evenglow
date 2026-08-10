@@ -337,6 +337,34 @@ const SEVERITY_ORDER: Record<AlertSeverity, number> = {
  * some products, and dropping those would silently hide a whole class of
  * warning — the failure has to fall on the side of showing one too many.
  */
+/**
+ * The collapsed row's version of `area`, which is otherwise a wall.
+ *
+ * `areaDesc` is every county a product covers, semicolon-separated — nineteen
+ * of them on an ordinary Missouri heat warning, and NWS issues watches and
+ * warnings over the same ground, so it renders twice. Four lines of place
+ * names, in the state the row is in before anybody taps it, above the tally a
+ * farm opens the app for. Reported from a handset with exactly that on screen.
+ *
+ * It is also the least useful line in the row: a farm knows which county it is
+ * in. What the collapsed state owes it is the hazard. The full list is still
+ * there on the opened row, whole and unedited — this is what is *shouted*, not
+ * what is kept.
+ *
+ * Two or fewer places read out in full, because "Riley and 1 more" is longer
+ * than saying it.
+ */
+export function alertCoverage(area: string): string {
+  const places = area
+    .split(';')
+    .map((place) => place.trim())
+    .filter((place) => place !== '');
+
+  if (places.length === 0) return area.trim();
+  if (places.length <= 2) return places.join(', ');
+  return `${places[0]!} and ${places.length - 1} more`;
+}
+
 export function alertLive(alert: Alert, now: number): boolean {
   return alert.endsAt === undefined || alert.endsAt > now;
 }

@@ -159,6 +159,21 @@ function TabMark({
   // in the bar, so "where am I" is answered by colour and not by underline.
   const tint = focused ? colors.lanternInk : colors.muted;
 
+  /**
+   * And the weight, because colour alone was not enough on a handset.
+   *
+   * Reported from a device: the active tab changed colour and nothing else, so
+   * in daylight, at arm's length, three mono labels of identical weight read as
+   * three of the same thing. Brass against muted is a hue shift of similar
+   * value — the exact difference a bright screen outdoors flattens, and the
+   * one a colour-blind eye may not get at all. Weight survives both.
+   *
+   * A separate FAMILY rather than `fontWeight: 'bold'`: Android resolves a
+   * named custom family to one registered file and ignores the weight prop, so
+   * asking for bold here would have changed nothing and looked like it had.
+   */
+  const face = focused ? FONTS.dataBold : FONTS.data;
+
   const roomy = count <= 4;
 
   return (
@@ -185,6 +200,7 @@ function TabMark({
           styles.label,
           {
             color: tint,
+            fontFamily: face,
             letterSpacing: roomy ? 1 : 0,
             fontSize: roomy ? TYPE.label : TYPE.label - 2,
           },
@@ -202,10 +218,10 @@ const styles = StyleSheet.create({
   // than only as much as the icon happens to occupy.
   mark: { alignItems: 'center', justifyContent: 'center', gap: 3, width: '100%' },
   label: {
-    fontFamily: FONTS.data,
     textTransform: 'uppercase',
     textAlign: 'center',
-    // Size and tracking come from TabMark — they depend on how many tabs there
-    // are, and a StyleSheet cannot know that.
+    // Family, size and tracking all come from TabMark — the face depends on
+    // whether this is the tab you are standing in, and the other two on how
+    // many tabs there are. A StyleSheet cannot know either.
   },
 });

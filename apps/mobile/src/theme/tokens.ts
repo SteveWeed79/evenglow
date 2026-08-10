@@ -207,6 +207,16 @@ export const FONTS = {
   body: 'AlegreyaSans-Regular',
   bodyBold: 'AlegreyaSans-Bold',
   data: 'IBMPlexMono-Regular',
+  /**
+   * The same face, cut bold. Used where a mono label has to carry emphasis
+   * that colour alone does not — the tab you are standing in, most of all.
+   *
+   * A separate family rather than `fontWeight: 'bold'` because Android resolves
+   * a named custom family to exactly one file: the weight prop is ignored and
+   * the label silently stays regular, which is the failure this token exists
+   * to prevent.
+   */
+  dataBold: 'IBMPlexMono-Bold',
 } as const;
 
 /**

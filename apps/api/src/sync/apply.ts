@@ -1,6 +1,7 @@
 import { MongoServerError } from 'mongodb';
 import {
   canMutate,
+  roleRefusal,
   MUTATION_SCHEMA_VERSION,
   payloadSchemaFor,
   type Mutation,
@@ -74,7 +75,7 @@ async function applyMutation(
 
   // Role is re-derived server-side, never read from the payload (invariant 5).
   if (!canMutate(claims.role, entity, op)) {
-    return rejected(id, `Your role cannot ${op} a ${entity}.`);
+    return rejected(id, roleRefusal(op, entity));
   }
 
   // An absent schema means the op is forbidden for this entity — notably every

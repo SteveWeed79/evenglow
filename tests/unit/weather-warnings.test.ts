@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  alertCoverage,
   camelidHeatIndex,
   dayStart,
   type FarmToday,
@@ -437,5 +438,40 @@ describe('the two indices, checked against their published figures', () => {
   it('computes the camelid index as degrees Fahrenheit plus humidity', () => {
     // 30°C is 86°F.
     expect(Math.round(camelidHeatIndex(300, 40))).toBe(126);
+  });
+});
+
+/**
+ * The county list, which was the single biggest thing on a farmer's screen.
+ *
+ * Reported twice from a handset: two heat products in force, each drawing
+ * nineteen counties in its COLLAPSED row, so the strip ran from the top of
+ * Today to below the fold all day. The list is metadata — a farm knows which
+ * county it is in — and it is still there in full on the opened row.
+ */
+describe('how much ground an alert covers', () => {
+  it('names the first and counts the rest', () => {
+    expect(alertCoverage('Bourbon; Crawford; Cherokee; Benton')).toBe('Bourbon and 3 more');
+  });
+
+  it('says one or two in full, because a count would be longer', () => {
+    expect(alertCoverage('Riley County, KS')).toBe('Riley County, KS');
+    expect(alertCoverage('Riley; Geary')).toBe('Riley, Geary');
+  });
+
+  it('shortens the real thing to one line', () => {
+    // Verbatim from the screenshot that prompted this.
+    const real =
+      'Bourbon; Crawford; Cherokee; Benton; Morgan; Miller; Maries; Vernon; St. Clair; ' +
+      'Hickory; Camden; Barton; Cedar; Polk; Dallas; Jasper; Dade; Newton; Lawrence; McDonald';
+
+    expect(alertCoverage(real)).toBe('Bourbon and 19 more');
+    expect(alertCoverage(real).length).toBeLessThan(30);
+  });
+
+  it('survives the shapes a feed actually sends', () => {
+    // Trailing separators and doubled spaces are ordinary in areaDesc.
+    expect(alertCoverage('Riley; Geary; ')).toBe('Riley, Geary');
+    expect(alertCoverage('')).toBe('');
   });
 });

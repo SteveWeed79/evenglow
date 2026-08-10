@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { newId } from '@steading/contracts';
 import { enqueue } from '@steading/core/sync/queue';
 import { forgetWeather } from '@steading/core/weather';
-import { freshStore } from '../support/store';
+import { freshStore, simulateRestart } from '../support/store';
 import { mount } from '../support/screen';
 import { resetWeatherState } from '../../apps/mobile/src/weather/store';
 import { TodayScreen } from '../../apps/mobile/src/screens/TodayScreen';
@@ -189,5 +189,125 @@ describe('an ordinary day', () => {
 
     const screen = await mount(<TodayScreen />);
     expect(screen.has('weather-alerts')).toBe(false);
+  });
+});
+
+/**
+ * "the heat warnings are useful But we have to be able to minimize them all or
+ * click an acknowlegment that hides them. Today they take up the entire
+ * screen, all day long."
+ *
+ * Reported from a handset, twice. The answer is not dismissal — the four
+ * refusals in `WeatherWarnings` all still hold — but the two things that were
+ * actually making it fill the screen are both fixed, and neither of them
+ * silences anything.
+ */
+describe('a strip that does not eat the screen', () => {
+  const COUNTIES =
+    'Bourbon; Crawford; Cherokee; Benton; Morgan; Miller; Maries; Vernon; St. Clair; ' +
+    'Hickory; Camden; Barton; Cedar; Polk; Dallas; Jasper; Dade; Newton; Lawrence; McDonald';
+
+  it('shows a count of counties rather than nineteen of them', async () => {
+    service([tornado({ areaDesc: COUNTIES })]);
+    await farm();
+
+    const screen = await mount(<TodayScreen />);
+
+    expect(screen.text()).toContain('Bourbon and 19 more');
+    // The wall is gone from the collapsed row.
+    expect(screen.text()).not.toContain('McDonald');
+  });
+
+  it('gives the whole list back when the row is opened', async () => {
+    service([tornado({ areaDesc: COUNTIES })]);
+    await farm();
+
+    const screen = await mount(<TodayScreen />);
+    await screen.press('alert-tornado-1');
+
+    // Nothing was thrown away — it was only not shouted.
+    expect(screen.text()).toContain('McDonald');
+  });
+
+  /** The acknowledgement is at the bottom of the OPENED row, past the text. */
+  it('offers nothing to tap until the alert has been opened', async () => {
+    service([tornado()]);
+    await farm();
+
+    const screen = await mount(<TodayScreen />);
+    expect(screen.has('alert-read-tornado-1')).toBe(false);
+
+    await screen.press('alert-tornado-1');
+    expect(screen.has('alert-read-tornado-1')).toBe(true);
+  });
+
+  it('collapses a read alert to one line, keeping the event and losing the bulk', async () => {
+    service([tornado({ areaDesc: COUNTIES })]);
+    await farm();
+
+    const screen = await mount(<TodayScreen />);
+    await screen.press('alert-tornado-1');
+    await screen.press('alert-read-tornado-1');
+
+    // Still on screen — this is not a dismissal, and a severe warning that has
+    // been read is still severe.
+    expect(screen.text()).toContain('Tornado Warning');
+    // The headline and the coverage are what went.
+    expect(screen.text()).not.toContain('issued for Riley County');
+    expect(screen.text()).not.toContain('Bourbon and 19 more');
+  });
+
+  it('still opens to every word of the official text once read', async () => {
+    service([tornado()]);
+    await farm();
+
+    const screen = await mount(<TodayScreen />);
+    await screen.press('alert-tornado-1');
+    await screen.press('alert-read-tornado-1');
+    await screen.press('alert-tornado-1');
+
+    expect(screen.text()).toContain('TAKE COVER NOW');
+  });
+
+  /**
+   * The property that stops this becoming a reflex that hides real weather.
+   * Acknowledgement is keyed to the service's own id, so tomorrow's warning —
+   * or an upgrade from watch to warning — is a different product and arrives
+   * at full size.
+   */
+  it('does not carry over to a different alert', async () => {
+    service([tornado()]);
+    await farm();
+
+    const first = await mount(<TodayScreen />);
+    await first.press('alert-tornado-1');
+    await first.press('alert-read-tornado-1');
+    first.unmount();
+
+    resetWeatherState();
+    await forgetWeather();
+    service([tornado({ id: 'tornado-2', headline: 'A second Tornado Warning' })]);
+
+    const next = await mount(<TodayScreen />);
+    expect(next.text()).toContain('A second Tornado Warning');
+  });
+
+  /** It survives the app being closed, or it is not worth storing at all. */
+  it('remembers across a restart', async () => {
+    service([tornado()]);
+    await farm();
+
+    const screen = await mount(<TodayScreen />);
+    await screen.press('alert-tornado-1');
+    await screen.press('alert-read-tornado-1');
+    screen.unmount();
+
+    await simulateRestart();
+    resetWeatherState();
+    service([tornado()]);
+
+    const after = await mount(<TodayScreen />);
+    expect(after.text()).toContain('Tornado Warning');
+    expect(after.text()).not.toContain('issued for Riley County');
   });
 });

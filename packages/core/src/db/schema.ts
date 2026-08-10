@@ -98,6 +98,7 @@ export const META = {
   persistGranted: 'persistGranted',
   syncHeld: 'syncHeld',
   lastBackupAt: 'lastBackupAt',
+  readAlerts: 'readAlerts',
 } as const;
 
 export const metaSchemas = {
@@ -125,6 +126,33 @@ export const metaSchemas = {
    * device's relationship with the server, which is what `meta` is for.
    */
   syncHeld: z.enum(SYNC_REFUSALS),
+  /**
+   * Official weather alerts this device has been told about, by service id.
+   *
+   * ## Why this exists after the refusal beside it
+   *
+   * `WeatherWarnings` refuses dismissal in four sentences and every one still
+   * holds. This is not dismissal. An acknowledged alert stays on Today, stays
+   * tappable, and still carries its full text — it collapses to a single line
+   * instead of a card. Nothing is hidden and nothing is silenced.
+   *
+   * That distinction is what makes device-local storage acceptable here. A
+   * second phone showing the card at full size is correct: that phone has not
+   * been told. A reinstall forgetting is correct for the same reason. Both
+   * would be unacceptable if the effect were silence, and are fine when the
+   * effect is a smaller row.
+   *
+   * **Keyed by the service's own alert id**, which is the part that stops this
+   * becoming the completion flag the due engine refuses. A farm cannot
+   * acknowledge "heat" in general; it acknowledges one product, and when the
+   * service issues a new one — an upgrade from watch to warning, a fresh
+   * warning tomorrow — that is a new id and it arrives loud. The reflex that
+   * taps things away cannot reach next week's tornado.
+   *
+   * Ids of alerts no longer in force are dropped when the list is written, so
+   * this cannot grow without bound.
+   */
+  readAlerts: z.array(z.string().max(300)).max(200),
   /**
    * When a backup file was last written from this device.
    *
