@@ -11,6 +11,11 @@ import { MachineScreen } from '../../apps/mobile/src/screens/MachineScreen';
 /**
  * Photos, and the two cases they were built for.
  *
+ * **The panel is closed by default**, so every test here opens it first. That
+ * is the behaviour rather than a harness detail: photographs are evidence and
+ * evidence is occasional, so the row sits beside Notes as one line until it is
+ * asked for. See `Photos.tsx`.
+ *
  * **Receipts and manuals on kit**, because the history handed over with a
  * machine is what LookOver sells on and a receipt cannot be reconstructed
  * later. And **evidence** — a wound, a kill, a diseased leaf — the one a
@@ -53,6 +58,7 @@ describe('keeping a photo', () => {
   it('writes the bytes and a record that names the subject', async () => {
     await aFarm();
     const screen = await mount(<MachineScreen {...routeProps({ machineId: MACHINE })} />);
+    await screen.press(`photos-open-${MACHINE}`);
 
     await screen.press('photo-camera');
     screen.unmount();
@@ -73,6 +79,7 @@ describe('keeping a photo', () => {
   it('shrinks a camera-sized image on the way in', async () => {
     await aFarm();
     const screen = await mount(<MachineScreen {...routeProps({ machineId: MACHINE })} />);
+    await screen.press(`photos-open-${MACHINE}`);
 
     await screen.press('photo-camera');
     screen.unmount();
@@ -89,6 +96,8 @@ describe('keeping a photo', () => {
     };
 
     const screen = await mount(<MachineScreen {...routeProps({ machineId: MACHINE })} />);
+
+    await screen.press(`photos-open-${MACHINE}`);
     await screen.press('photo-camera');
     screen.unmount();
 
@@ -104,6 +113,8 @@ describe('keeping a photo', () => {
     };
 
     const screen = await mount(<MachineScreen {...routeProps({ machineId: MACHINE })} />);
+
+    await screen.press(`photos-open-${MACHINE}`);
     await screen.press('photo-camera');
     screen.unmount();
 
@@ -119,6 +130,8 @@ describe('backing out', () => {
     camera.next = { canceled: true };
 
     const screen = await mount(<MachineScreen {...routeProps({ machineId: MACHINE })} />);
+
+    await screen.press(`photos-open-${MACHINE}`);
     await screen.press('photo-camera');
 
     expect(await listPhotos()).toEqual([]);
@@ -132,6 +145,8 @@ describe('backing out', () => {
     camera.granted = false;
 
     const screen = await mount(<MachineScreen {...routeProps({ machineId: MACHINE })} />);
+
+    await screen.press(`photos-open-${MACHINE}`);
     await screen.press('photo-camera');
 
     expect(await listPhotos()).toEqual([]);
@@ -148,6 +163,7 @@ describe('removing one', () => {
   it('takes the bytes with it', async () => {
     await aFarm();
     const screen = await mount(<MachineScreen {...routeProps({ machineId: MACHINE })} />);
+    await screen.press(`photos-open-${MACHINE}`);
     await screen.press('photo-camera');
 
     const [photo] = await listPhotos();
@@ -179,6 +195,7 @@ describe('opening one', () => {
   it('shows nothing until the photo is tapped', async () => {
     await aFarm();
     const screen = await mount(<MachineScreen {...routeProps({ machineId: MACHINE })} />);
+    await screen.press(`photos-open-${MACHINE}`);
     await screen.press('photo-camera');
 
     const [photo] = await listPhotos();
@@ -194,6 +211,7 @@ describe('opening one', () => {
   it('folds away on a second tap', async () => {
     await aFarm();
     const screen = await mount(<MachineScreen {...routeProps({ machineId: MACHINE })} />);
+    await screen.press(`photos-open-${MACHINE}`);
     await screen.press('photo-camera');
 
     const [photo] = await listPhotos();
@@ -208,6 +226,7 @@ describe('opening one', () => {
   it('opens one at a time', async () => {
     await aFarm();
     const screen = await mount(<MachineScreen {...routeProps({ machineId: MACHINE })} />);
+    await screen.press(`photos-open-${MACHINE}`);
     await screen.press('photo-camera');
     await screen.press('photo-camera');
 
@@ -224,6 +243,7 @@ describe('opening one', () => {
   it('closes when the photo it was showing is removed', async () => {
     await aFarm();
     const screen = await mount(<MachineScreen {...routeProps({ machineId: MACHINE })} />);
+    await screen.press(`photos-open-${MACHINE}`);
     await screen.press('photo-camera');
     await screen.press('photo-camera');
 
@@ -243,6 +263,7 @@ describe('where photos are offered', () => {
   it('is on kit, for the receipt', async () => {
     await aFarm();
     const screen = await mount(<MachineScreen {...routeProps({ machineId: MACHINE })} />);
+    await screen.press(`photos-open-${MACHINE}`);
     expect(screen.has('photo-camera')).toBe(true);
     screen.unmount();
   });
@@ -250,6 +271,7 @@ describe('where photos are offered', () => {
   it('is on a group, for the evidence', async () => {
     await aFarm();
     const screen = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
+    await screen.press(`photos-open-${GROUP}`);
     expect(screen.has('photo-camera')).toBe(true);
     screen.unmount();
   });
@@ -261,10 +283,13 @@ describe('where photos are offered', () => {
   it('keeps one subject’s photos off another', async () => {
     await aFarm();
     const machine = await mount(<MachineScreen {...routeProps({ machineId: MACHINE })} />);
+    await machine.press(`photos-open-${MACHINE}`);
     await machine.press('photo-camera');
     machine.unmount();
 
     const group = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
+
+    await group.press(`photos-open-${GROUP}`);
     // The group has none of its own, so it still shows the invitation.
     expect(group.text()).toContain('A receipt, a manual');
     group.unmount();
@@ -303,6 +328,8 @@ describe('a picture that is not here', () => {
     const id = await aRecordWithNoBytes({ uploadedAt: Date.now() });
 
     const screen = await mount(<MachineScreen {...routeProps({ machineId: MACHINE })} />);
+
+    await screen.press(`photos-open-${MACHINE}`);
     await screen.press(`photo-${id}`);
 
     expect(screen.text()).toContain('still coming');
@@ -314,10 +341,87 @@ describe('a picture that is not here', () => {
     const id = await aRecordWithNoBytes({});
 
     const screen = await mount(<MachineScreen {...routeProps({ machineId: MACHINE })} />);
+
+    await screen.press(`photos-open-${MACHINE}`);
     await screen.press(`photo-${id}`);
 
     expect(screen.text()).not.toContain('still coming');
     expect(screen.text()).toContain('only ever on the handset that took it');
     screen.unmount();
+  });
+});
+
+/**
+ * The panel's own ranking, which is the thing a handset reported.
+ *
+ * An open well plus two buttons is roughly 200px, and it was **largest when it
+ * held nothing** — sitting above `Log a feed`, `Log a job done` and `Record a
+ * treatment`. Three of the four daily acts pushed toward the fold by an
+ * occasional one. `GroupScreen` already ranks by how often a thing is done;
+ * this is that rule applied to the one panel that had escaped it.
+ */
+describe('closed until it is asked for', () => {
+  it('shows one row rather than a well, and no camera behind it', async () => {
+    await aFarm();
+    const screen = await mount(<MachineScreen {...routeProps({ machineId: MACHINE })} />);
+
+    expect(screen.has(`photos-open-${MACHINE}`)).toBe(true);
+    // The controls are genuinely not mounted, not merely hidden — an offscreen
+    // tap target is worse than none.
+    expect(screen.has('photo-camera')).toBe(false);
+    expect(screen.has('photo-library')).toBe(false);
+    screen.unmount();
+  });
+
+  it('opens on a tap and everything is where it was', async () => {
+    await aFarm();
+    const screen = await mount(<MachineScreen {...routeProps({ machineId: MACHINE })} />);
+
+    await screen.press(`photos-open-${MACHINE}`);
+
+    expect(screen.has('photo-camera')).toBe(true);
+    expect(screen.has('photo-library')).toBe(true);
+    screen.unmount();
+  });
+
+  it('invites rather than sitting blank when there is nothing yet', async () => {
+    await aFarm();
+    const screen = await mount(<MachineScreen {...routeProps({ machineId: MACHINE })} />);
+
+    // Closed, and still saying what it is for (UX-SPEC §6).
+    expect(screen.text()).toContain('A receipt, a manual, or evidence');
+    screen.unmount();
+  });
+
+  it('counts what is there without being opened', async () => {
+    await aFarm();
+    const screen = await mount(<MachineScreen {...routeProps({ machineId: MACHINE })} />);
+    await screen.press(`photos-open-${MACHINE}`);
+    await screen.press('photo-camera');
+    await screen.press('photo-camera');
+    screen.unmount();
+
+    // Re-mounted, so the row is closed again and reading from the store.
+    const reopened = await mount(<MachineScreen {...routeProps({ machineId: MACHINE })} />);
+
+    expect(reopened.text()).toContain('2');
+    // The count is the point of a closed row: it answers "is there anything
+    // here" without costing the tap that would answer it.
+    expect(reopened.has('photo-camera')).toBe(false);
+    reopened.unmount();
+  });
+
+  it('keeps one subject out of another subject count', async () => {
+    await aFarm();
+    const machine = await mount(<MachineScreen {...routeProps({ machineId: MACHINE })} />);
+    await machine.press(`photos-open-${MACHINE}`);
+    await machine.press('photo-camera');
+    machine.unmount();
+
+    const group = await mount(<GroupScreen {...routeProps({ groupId: GROUP })} />);
+
+    // The tractor's receipt is not evidence about the hens.
+    expect(group.text()).toContain('A receipt, a manual, or evidence');
+    group.unmount();
   });
 });

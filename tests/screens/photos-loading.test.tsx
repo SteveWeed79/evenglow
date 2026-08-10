@@ -54,12 +54,20 @@ describe('the photo strip, mid-read', () => {
   it('does not claim there are none while it is still looking', async () => {
     const screen = await mount(<MachineScreen {...routeProps({ machineId: MACHINE })} />);
 
-    // The read is still open, so the panel must not answer the question.
+    // The read is still open, so the closed row must not answer the question.
     expect(screen.text()).not.toContain('A receipt, a manual');
 
-    // The buttons are right either way, so they are not withheld — a farmer
-    // can take a photo before the list of old ones has loaded.
+    /**
+     * The row is closed by default now, and the guarantee moved with it: it is
+     * openable mid-read, and the buttons behind it are right either way — a
+     * farmer can take a photo before the list of old ones has loaded.
+     */
+    expect(screen.has(`photos-open-${MACHINE}`)).toBe(true);
+    await screen.press(`photos-open-${MACHINE}`);
     expect(screen.has('photo-camera')).toBe(true);
+
+    // Still mid-read, so the open panel must not answer it either.
+    expect(screen.text()).not.toContain('A receipt, a manual');
 
     held.resolve();
     await screen.settle();
