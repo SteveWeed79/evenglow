@@ -311,7 +311,54 @@ export async function joinFarm(input: {
  * dead credential on every resume forever, and on a stolen handset it would
  * mean keeping a credential the owner has already revoked.
  */
-export async function refreshSession(): Promise<CachedClaims | null> {
+let refreshing: Promise<CachedClaims | null> | null = null;
+
+/**
+ * Single-flight, and this is a real defect rather than an optimisation.
+ *
+ * ## Two triggers, one token, and a device signed out
+ *
+ * `wake()` in `sync/triggers.ts` calls this, and it is wired to TWO listeners
+ * — the app becoming active, and the network coming back. On a handset those
+ * fire together constantly: unlock the phone in a yard and it regains wifi in
+ * the same second as it resumes.
+ *
+ * Both calls read the SAME refresh token out of secure storage and both post
+ * it. The server rotates on use — `consumeRefreshToken` is one conditional
+ * update filtered on `usedAt` absent — so the first wins and the second is,
+ * correctly and by design, **reuse of a spent token**. Reuse revokes the whole
+ * family (`revokeFamily`), which is exactly right when it is a stolen token
+ * and catastrophic when it is this app racing itself.
+ *
+ * The device is then holding a refresh token from a revoked family. Nothing is
+ * wrong until the next launch, when the refresh comes back 401, credentials
+ * are cleared, and somebody is asked for a password in a barn — having done
+ * nothing but open the app twice.
+ *
+ * Reported as *"the app makes me sign in each time"*, and blamed on the
+ * emulator. The emulator only made it reliable: network state flaps on boot,
+ * so both triggers land together every run.
+ *
+ * ## Why sharing the promise is the whole fix
+ *
+ * Concurrent callers get the same in-flight request and therefore the same
+ * rotation. There is no second post, so there is nothing to look like reuse.
+ * The server's rule is untouched — it should still revoke a family when a
+ * spent token is presented, because the next time that happens it will not be
+ * us.
+ *
+ * The same shape as `pullOnce` and `flushOnce`, which are single-flight for
+ * the same class of reason: two passes racing over one piece of state that
+ * only moves forward.
+ */
+export function refreshSession(): Promise<CachedClaims | null> {
+  refreshing ??= runRefresh().finally(() => {
+    refreshing = null;
+  });
+  return refreshing;
+}
+
+async function runRefresh(): Promise<CachedClaims | null> {
   const refreshToken = await readRefreshToken();
   if (refreshToken === null) return null;
 
