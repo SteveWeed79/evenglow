@@ -135,35 +135,38 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
           half.
 
           The split is by how often a thing is done, not by what module it
-          belongs to. A treatment, a job, a feed and a loss are the daily acts
+          belongs to. A feed, a job, a treatment and a loss are the daily acts
           and keep their explanations. Weighing, produce, the named animals and
           the breeding book are occasional — they keep their place, lose the
           teaching copy, and sit behind one tap.
 
+          **The rule was written here and then not followed**, which is how
+          "Log a feed" ended up fifth. Reference rows drifted in among the
+          acts one at a time, each defensible on its own — beside the thing it
+          relates to — and the cumulative effect was the row a farm taps twice
+          a day sitting below three it taps monthly. A principle in a comment
+          is worth nothing if the list underneath it is ordered by what was
+          added last.
+
           Nothing is removed (invariant 13): every destination that was here is
           still here. */}
       <View style={styles.rows}>
+        {/* Feeding leads, because feeding is what happens most.
+
+            It was fifth. The comment above names the four daily acts and then
+            the list did not follow it: two reference rows had drifted in among
+            them and a third was added with the treatments list, so the row a
+            farm taps twice a day sat below three it taps monthly. Reported
+            from a handset, in those words - "adding a feed is way too low on
+            the list. It's the most frequent item on a farm."
+
+            Acts first, in the order a week actually contains them. Then the
+            three things you come here to READ rather than do. */}
         <Row
-          title="Record a treatment"
-          detail="Starts the withdrawal clock on eggs, meat or milk"
-          testID="go-treatment"
-          onPress={() => nav.navigate('Treatment', { groupId })}
-        />
-        {/**
-          * Beside recording one rather than replacing it, because they are
-          * different acts: giving a wormer is a thing you do standing at the
-          * pen, and looking one up is a thing you do because somebody asked.
-          *
-          * It also carries the only way to close a course that is still
-          * running — and an open course has its withdrawal counted from the
-          * first dose, so it clears produce early until somebody closes it.
-          * See `TreatmentsScreen`.
-          */}
-        <Row
-          title="What they have had"
-          detail="Every treatment, and the way to correct or close one"
-          testID="go-treatments"
-          onPress={() => nav.navigate('Treatments', { groupId })}
+          title="Log a feed"
+          detail="What went in, and how much"
+          testID="go-feed"
+          onPress={() => nav.navigate('Feed', { groupId })}
         />
         <Row
           title="Log a job done"
@@ -172,9 +175,42 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
           testID="go-care"
           onPress={() => nav.navigate('CareLog', { groupId })}
         />
-        {/* Beside logging a job rather than under Edit: "how often does this
-            come round" is a question somebody asks while looking at the row
-            that is asking, not while renaming the group. */}
+        <Row
+          title="Record a treatment"
+          detail="Starts the withdrawal clock on eggs, meat or milk"
+          testID="go-treatment"
+          onPress={() => nav.navigate('Treatment', { groupId })}
+        />
+        <Row
+          title="Record a loss"
+          detail="A death, a cull, or a predator"
+          testID="go-loss"
+          onPress={() => nav.navigate('Loss', { groupId })}
+        />
+
+        {/* ── and the three you come here to read ─────────────────────────
+
+            Below the acts, because none of them is something a thumb is
+            reaching for at six in the morning. They keep their order relative
+            to each other: what was given, how often it comes round, what it
+            all added up to. */}
+        {/**
+          * Below "Record a treatment" rather than beside it now.
+          *
+          * The adjacency was right about the subject and wrong about the
+          * screen: giving a wormer is done at the pen and looking one up is
+          * done because somebody asked, and only the first belongs among the
+          * acts. It still carries the only way to close a course that is
+          * running - an open course has its withdrawal counted from the first
+          * dose, so it clears produce early until somebody closes it. See
+          * `TreatmentsScreen`.
+          */}
+        <Row
+          title="What they have had"
+          detail="Every treatment, and the way to correct or close one"
+          testID="go-treatments"
+          onPress={() => nav.navigate('Treatments', { groupId })}
+        />
         <Row
           title="Routine jobs"
           detail="How often each one asks, or turn it off"
@@ -188,18 +224,6 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
           detail="What they have produced over a season, against what they have eaten"
           testID="go-trend"
           onPress={() => nav.navigate('Trend', { groupId })}
-        />
-        <Row
-          title="Log a feed"
-          detail="What went in, and how much"
-          testID="go-feed"
-          onPress={() => nav.navigate('Feed', { groupId })}
-        />
-        <Row
-          title="Record a loss"
-          detail="A death, a cull, or a predator"
-          testID="go-loss"
-          onPress={() => nav.navigate('Loss', { groupId })}
         />
       </View>
 
