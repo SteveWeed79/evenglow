@@ -239,8 +239,6 @@ export function MembersScreen(): React.ReactElement {
 
       {members === null ? null : members.length === 0 ? (
         <Panel label="Just you">
-          <View style={styles.spot}>
-          </View>
           <Body>Nobody else has been added yet.</Body>
         </Panel>
       ) : (
@@ -416,7 +414,6 @@ export function MembersScreen(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
-  spot: { alignItems: 'center', paddingVertical: SPACE.md },
   card: {
     padding: SPACE.lg,
     borderRadius: RADII.softHead,

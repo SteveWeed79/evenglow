@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Animated, StyleSheet, Text, View } from 'react-native';
 import { type ActiveWithdrawal, dailyProductsOf, type Due, type DueBundle, enteredToStored, entryUnit, gramsToUg, longestWithdrawal, massIn, type Measure, mlToUl, type Product, todayBundles, type UnitSystem, volumeIn } from '@steading/contracts';
 import type { Group } from '@steading/core/read/groups';
 import { basketConfirmation } from '@steading/core/voice';
@@ -21,6 +21,7 @@ import { useNav } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import { useUnits } from '../hooks/useUnits';
 import { reportTrouble } from '../hooks/useTrouble';
+import { useReveal } from '../theme/motion';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
 
@@ -221,8 +222,6 @@ export function TodayScreen(): React.ReactElement {
       {groups.length === 0 ? (
         <Panel label="Nothing to log yet">
           {/* Empty screens invite (UX-SPEC §6). */}
-          <View style={styles.spot}>
-          </View>
           <Body>Add what you keep under Stock, and the morning&rsquo;s tally lands here.</Body>
         </Panel>
       ) : null}
@@ -393,6 +392,7 @@ function ProductTally({
   const nav = useNav();
   const { colors } = useTheme();
   const units = useUnits();
+  const reveal = useReveal();
   const { group, product } = item;
 
   const commit = useCallback(
@@ -477,7 +477,9 @@ function ProductTally({
       </Touch>
 
       {open ? (
-        <>
+        /* The tally settles in rather than appearing whole — this is the
+           control the app is opened for, and it was a hard cut. */
+        <Animated.View style={[styles.opened, reveal]}>
           {/* Informs, does not interrupt (R10). */}
           {withdrawal ? <WithdrawalBanner withdrawal={withdrawal} /> : null}
 
@@ -528,7 +530,7 @@ function ProductTally({
               </Text>
             </Touch>
           ) : null}
-        </>
+        </Animated.View>
       ) : null}
     </View>
   );
@@ -546,8 +548,11 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
-  spot: { alignItems: 'center', paddingVertical: SPACE.md },
   group: { gap: SPACE.sm },
+  // The opened half used to be a fragment, so its children inherited `group`'s
+  // gap. They are wrapped now so they can animate as one; the wrapper repeats
+  // the gap and keeps `group`'s spacing to the header above it.
+  opened: { gap: SPACE.sm },
   head: {
     flexDirection: 'row',
     alignItems: 'center',

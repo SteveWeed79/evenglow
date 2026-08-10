@@ -33,8 +33,6 @@ export function StockScreen(): React.ReactElement {
     <Screen title="Stock" back>
       {groups.length === 0 ? (
         <Panel label="Nothing here yet">
-          <View style={styles.spot}>
-          </View>
           {/* Empty screens invite (UX-SPEC §6). */}
           <Body>
             Add what you keep and the morning&rsquo;s tally, the withdrawal windows and the
@@ -93,7 +91,7 @@ function GroupCard({ group, onPress }: { group: Group; onPress: () => void }): R
               count is deliberately absent: it has its own column to the right,
               at display size, because on a list it is the thing being
               compared between cards. */}
-          <Text style={[styles.lede, { color: colors.ink }]}>
+          <Text style={[styles.lede, { color: colors.inkQuiet }]}>
             {groupPhrase({
               collective: traits.collective,
               ...(group.species === 'other' ? {} : { species: traits.label.toLowerCase() }),
@@ -109,13 +107,13 @@ function GroupCard({ group, onPress }: { group: Group; onPress: () => void }): R
       </View>
 
       {grow ? (
-        <Text style={[styles.clock, { color: colors.muted }]}>
+        <Text style={[styles.clock, { color: colors.inkQuiet }]}>
           Ready to process at {formatRange(grow.weeks, 'weeks')} old.
         </Text>
       ) : null}
 
       {lay ? (
-        <Text style={[styles.clock, { color: colors.muted }]}>
+        <Text style={[styles.clock, { color: colors.inkQuiet }]}>
           Expect first eggs at {formatRange(lay.weeks, 'weeks')} old.
         </Text>
       ) : null}
@@ -129,7 +127,6 @@ function GroupCard({ group, onPress }: { group: Group; onPress: () => void }): R
 }
 
 const styles = StyleSheet.create({
-  spot: { alignItems: 'center', paddingVertical: SPACE.md },
   card: {
     padding: SPACE.lg,
     borderRadius: RADII.softHead,

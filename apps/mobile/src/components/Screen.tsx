@@ -133,7 +133,7 @@ export function Screen({
           <Text style={[styles.hero, { color: colors.ink }]}>{title}</Text>
 
           {subtitle === undefined ? null : (
-            <Text style={[styles.subtitle, { color: colors.ink }]}>{subtitle}</Text>
+            <Text style={[styles.subtitle, { color: colors.inkQuiet }]}>{subtitle}</Text>
           )}
         </View>
 

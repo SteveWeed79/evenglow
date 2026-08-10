@@ -92,7 +92,7 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
           AUSTRALORP`: tracked caps in the data face, the register this app
           reserves for section labels and units. A farm's own word for its own
           animals, formatted as telemetry. Same facts, said as English. */}
-      <Text style={[styles.lede, { color: colors.ink }]}>
+      <Text style={[styles.lede, { color: colors.inkQuiet }]}>
         {groupPhrase({
           collective: traits.collective,
           // "A group of 2 other" is not a sentence. An unknown species drops

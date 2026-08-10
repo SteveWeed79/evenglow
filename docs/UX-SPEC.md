@@ -16,10 +16,24 @@ The competitive finding that drives this document: the market leader loses on **
 | R4 | **Tap targets ≥56px, primary actions 64px, ≥12px spacing.** Gloves cut touch precision to roughly 12–25mm even with capacitive tips; the 44px accessibility floor is a floor, not a target. | Automated audit in CI. |
 | R5 | **Numbers are entered with steppers, never a keyboard,** unless the value can exceed 99. | No numeric `<input>` on any daily log screen. |
 | R6 | **Nothing waits on the network.** Every write is optimistic; the queue is visible and calm. | No spinner blocks a log action, ever. |
-| R7 | **7:1 contrast on body text**, exceeding WCAG AA, because the screen is in the sun. | Contrast check in CI. |
+| R7 | **7:1 contrast on body text** (WCAG AAA), because the people reading it are mostly over forty. Two prose tiers share the floor — `ink` leads, `inkQuiet` follows. | Contrast check in CI. |
 | R8 | **No hover-dependent affordance and no gesture-only action.** Every gesture has a visible button. | Manual review per screen. |
 | R9 | **Basic / Full toggle per module.** Basic is default and hides every optional field. | New user completes a week of logs without opening Full. |
 | R10 | **No modal blocks a log.** Warnings inform; only withdrawal violations confirm. | Review per screen. |
+
+> **R7's reason changed; its number did not.** It used to read "because the
+> screen is in the sun". Ambient light adds reflected luminance to foreground
+> and background alike, so it *compresses* every ratio toward 1 — a 7:1 pair
+> under harsh reflection lands near 1.3:1 and is unreadable whatever the
+> palette says. Contrast is a weak lever against glare; screen luminance, an
+> anti-reflective panel and the **bright-sun theme** are what handle that.
+> Age-related loss of contrast sensitivity is the reason that actually holds,
+> and unlike the sun it holds in a dark barn at 5am too — which is where the
+> old reason broke down, since it was being applied to the lamplight theme.
+>
+> Reading R7 as *one colour for all prose* is what left the app with a single
+> volume for every sentence it says. It is a floor, not a target: `ink` clears
+> it by 1.8–2.7×, and `inkQuiet` is quieter while still AAA.
 
 ---
 
@@ -312,7 +326,7 @@ Charm is spent where the app is *waiting* — never where it's working. The spli
 **Where the warmth actually lives — six places, and no others:**
 
 1. **Lamplight.** A genuinely warm dark mode, not a grey one — system-driven with a header toggle for pre-sunrise chores. Daylight remains the default, because sun is the harsher constraint and it's the majority of use.
-2. **Hand-drawn spot marks.** Inline SVG line drawings, one per empty state — a nesting box, a hung lantern, a grease gun on a bench. Single-weight strokes in `--muted`, under 2KB each, never full-bleed, never animated.
+2. ~~**Hand-drawn spot marks.**~~ **Dropped — see below.** The twelve empty containers that held their place have been removed; the copy is the invitation.
 3. **Milestones.** The thousandth egg. A machine's first 500 hours. A hen's first lay. A small arched card appears at the *top of Today*, auto-dismisses, blocks nothing, and can be turned off in one setting. This is where the leaderboard from the competitive analysis lives too.
 4. **The streak, as a growing thing.** Consecutive days of morning chores render as a small plant gaining a leaf per week rather than a number with a flame. Same information, better feeling, and it doesn't shame you when it breaks — it just goes back to a seedling.
 5. **Pantry-label typography.** Section labels are set small-caps in `--font-data` with generous tracking, like handwritten labels on stored jars. Structural, not decorative — they mark where you are.
@@ -326,6 +340,30 @@ The charm layer is the most enjoyable and least load-bearing work in this projec
 - **Not until Phase 2 exits:** milestones, streaks, spot illustrations, the leaderboard. **Gate: mutations survive a hard device restart and flush without loss or duplication.** A beautiful arched interface on a sync engine that silently eats egg counts is worse than no app.
 
 **What's explicitly banned:** mascots, animal puns in controls, exclamation marks in system copy, confetti, bouncing, loading-screen jokes, anything that adds a tap, anything that delays a log by a single frame. Charm that costs time isn't charm.
+
+### Why the spot marks were dropped
+
+Twelve empty states carried an empty container waiting on illustration for as
+long as they have existed. The containers are gone and the art is not coming.
+
+**An empty state is the one surface that deletes itself.** A farmer reads
+"Nothing here yet" on Stock once, adds their goats, and never sees it again —
+so twelve illustrations, in light and dark variants, held to one hand, would
+have been the largest art budget in the project spent on its shortest-lived
+screens. The copy already does the work this list asked for: *"Add what you
+keep under Stock, and the morning's tally lands here."* That **is** the
+invitation.
+
+It is also the same mistake `Icon.tsx` documents having already made once —
+sixty-four marks cut to sixteen because "a mark beside a word that already says
+the same thing is drawn twice on every screen it appears on." A drawing above a
+sentence that already invites is that error at 112px.
+
+**What survives from this idea:** the launcher icon, which is not charm. It is
+the only image in the project seen daily and permanently, `app.json` still has
+no `foregroundImage`, and an APK handed to anyone wears the default Expo icon.
+Milestones and the streak (points 3 and 4) also still stand — an achievement is
+a surface where a picture is the medium rather than a decoration on one.
 
 ### Voice
 

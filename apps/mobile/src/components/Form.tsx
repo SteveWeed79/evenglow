@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { Animated, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { reportTrouble } from '../hooks/useTrouble';
 import { describeLogFailure } from '@steading/core/sync/failure';
 import { Icon, type IconName } from './Icon';
 import { Body, Panel } from './Panel';
 import { Touch } from './Touch';
+import { useFade } from '../theme/motion';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
 
@@ -751,23 +752,44 @@ export function Failure({ message }: { message: string | null }): React.ReactEle
  * The one sentence a form is allowed after it saves (UX-SPEC §6).
  *
  * Set in the body face, not the data face: it is read as English rather than
- * scanned as a value. `polite` so a screen reader finishes what it was saying
- * first — this is the least urgent text in the app by construction, since
- * nothing depends on it being heard.
+ * scanned as a value, and in `inkQuiet` because it is the least urgent text on
+ * the screen by construction — nothing depends on it being read at all.
+ * `polite` so a screen reader finishes what it was saying first.
+ *
+ * ## Why it holds its space when it has nothing to say
+ *
+ * The obvious build returns `null` and lets the form collapse. That puts a
+ * blank line into the layout on save and takes it out again three seconds
+ * later — twice moving the primary button under a thumb that has just been on
+ * it. One reserved line costs a few pixels on four forms; a control that
+ * shifts under a finger costs a mis-tap in a barn.
+ *
+ * The same trick, for the same reason, as `Tally`'s confirmation line.
  */
-export function Confirmation({ message }: { message: string | null }): React.ReactElement | null {
+export function Confirmation({ message }: { message: string | null }): React.ReactElement {
   const { colors } = useTheme();
-  if (message === null) return null;
+  const opacity = useFade(message !== null);
 
   return (
-    <Text style={[styles.said, { color: colors.ink }]} accessibilityLiveRegion="polite">
-      {message}
-    </Text>
+    <Animated.Text
+      style={[styles.said, { color: colors.inkQuiet, opacity }]}
+      accessibilityLiveRegion="polite"
+    >
+      {/* A space rather than an empty string: an empty Text collapses to zero
+          height and reintroduces the shift this is written to avoid. */}
+      {message ?? ' '}
+    </Animated.Text>
   );
 }
 
 const styles = StyleSheet.create({
-  said: { fontFamily: FONTS.body, fontSize: TYPE.body, lineHeight: TYPE.body * 1.4 },
+  said: {
+    fontFamily: FONTS.body,
+    fontSize: TYPE.body,
+    lineHeight: TYPE.body * 1.4,
+    // Holds the line whether or not there is anything on it.
+    minHeight: TYPE.body * 1.4,
+  },
   field: { gap: SPACE.sm },
   label: {
     fontFamily: FONTS.data,

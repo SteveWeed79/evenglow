@@ -50,8 +50,6 @@ export function AnimalsScreen({ route }: ScreenProps<'Animals'>): React.ReactEle
 
       {named.length === 0 ? (
         <Panel label="None named yet">
-          <View style={styles.spot}>
-          </View>
           {/* Empty screens invite (UX-SPEC §6). */}
           <Body>
             Name the ones you know — the doe you breed from, the ram, the hen that goes broody
@@ -94,7 +92,6 @@ export function AnimalsScreen({ route }: ScreenProps<'Animals'>): React.ReactEle
 }
 
 const styles = StyleSheet.create({
-  spot: { alignItems: 'center', paddingVertical: SPACE.md },
   card: {
     padding: SPACE.lg,
     borderRadius: RADII.softHead,

@@ -85,3 +85,52 @@ export const Share = {
 };
 
 export const Platform = { OS: 'android' as const, select: <T,>(o: { android?: T; default?: T }) => o.android ?? o.default };
+
+/**
+ * Animation, resolved instantly.
+ *
+ * A test has no frames, so `timing().start()` jumps straight to the end value
+ * and calls back. That is the honest double: every assertion in this suite is
+ * about what a screen ends up saying, and none of them should have to wait
+ * 200ms of wall clock to read it — or worse, assert against a half-faded
+ * value that depends on when the scheduler happened to run.
+ *
+ * What it therefore does NOT prove: that anything eases, that the native
+ * driver accepts the properties being animated, or that a transition looks
+ * right. `useNativeDriver: true` silently accepts only `opacity` and
+ * `transform`, and a screen that animated a `height` through here would pass
+ * this suite and warn on a handset. Same standing caveat as the rest of this
+ * file — the bundler is not a phone.
+ */
+class AnimatedValue {
+  constructor(private value: number) {}
+  setValue(next: number): void {
+    this.value = next;
+  }
+  interpolate(config: { inputRange: number[]; outputRange: number[] }): AnimatedValue {
+    const [from = 0, to = 0] = config.outputRange;
+    return new AnimatedValue(this.value === 0 ? from : to);
+  }
+}
+
+export const Animated = {
+  Value: AnimatedValue,
+  View: host('Animated.View'),
+  Text: host('Animated.Text'),
+  timing: (value: AnimatedValue, config: { toValue: number }) => ({
+    start: (done?: () => void): void => {
+      value.setValue(config.toValue);
+      done?.();
+    },
+    stop: (): void => undefined,
+  }),
+};
+
+/**
+ * Reduced motion off, which is the majority case and the one worth exercising:
+ * it is the branch that actually runs the animations.
+ */
+export const AccessibilityInfo = {
+  isReduceMotionEnabled: async (): Promise<boolean> => false,
+  addEventListener: (): { remove: () => void } => ({ remove: () => undefined }),
+};

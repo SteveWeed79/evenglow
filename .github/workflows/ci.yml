@@ -85,6 +85,12 @@ jobs:
       - name: Icon set matches its manifest
         run: pnpm check:icons
 
+      # Warns while the launcher icon and splash are unconfigured — a known,
+      # written-down gap — and fails the moment app.json names an image it
+      # cannot find, is the wrong size, or would be clipped by an OEM mask.
+      - name: Launcher icon and splash
+        run: pnpm check:assets
+
       - name: Bundle the app (Metro)
         run: pnpm mobile:export
 

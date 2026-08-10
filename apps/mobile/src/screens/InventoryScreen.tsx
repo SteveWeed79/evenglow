@@ -35,8 +35,6 @@ export function InventoryScreen(): React.ReactElement {
     <Screen title="The shelf" back>
       {items.length === 0 ? (
         <Panel label="Nothing tracked">
-          <View style={styles.spot}>
-          </View>
           {/* Empty screens invite (UX-SPEC §6). */}
           <Body>
             Add the filters and the feed you keep, say what level is too low, and the app will
@@ -101,7 +99,6 @@ function ItemCard({ item }: { item: StockItem }): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
-  spot: { alignItems: 'center', paddingVertical: SPACE.md },
   card: {
     padding: SPACE.lg,
     borderRadius: RADII.softHead,
