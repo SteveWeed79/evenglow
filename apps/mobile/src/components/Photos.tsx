@@ -179,7 +179,23 @@ export function Photos({
                       { borderColor: open === photo.id ? colors.lanternInk : colors.border },
                     ]}
                   >
-                    <Text style={[styles.label, { color: colors.muted }]}>On the other phone</Text>
+                    {/**
+                      * "On the other phone" - and there was not another phone.
+                      *
+                      * Reported from a one-handset farm looking at a photo it
+                      * had taken itself. The label asserted a second device
+                      * that has never existed on that farm, which is not a
+                      * thing this app can know: what it knows is that the
+                      * bytes are not here.
+                      *
+                      * `uploadedAt` separates the two real cases and the
+                      * opened row below already branches on it correctly. The
+                      * thumbnail did not, so the tile and the sentence under
+                      * it disagreed.
+                      */}
+                    <Text style={[styles.label, { color: colors.muted }]}>
+                      {photo.uploadedAt === undefined ? 'Not on this phone' : 'Still coming'}
+                    </Text>
                   </View>
                 )}
               </Touch>
@@ -217,11 +233,21 @@ export function Photos({
                    * the record since it was written. Telling somebody a
                    * photograph is on its way when it is gone is the worst
                    * version of this screen being wrong.
+                   *
+                   * **Neither sentence may claim a second phone.** Both did,
+                   * and a farm with one handset reported it: "there is not
+                   * another phone." Whether one exists is not something this
+                   * app can know — a record with no `uploadedAt` is a picture
+                   * the server never received, and where it is now depends on
+                   * which device took it, which is exactly the fact that is
+                   * absent. So the copy says what is true of this phone and
+                   * names the loss as conditional, rather than inventing a
+                   * handset to put the blame on.
                    */
                   <Body>
                     {photo.uploadedAt === undefined
-                      ? 'This picture is not on this phone. It was only ever on the handset that took it — a backup file carries the record, not the photograph.'
-                      : 'Taken on another phone. The record is here and the picture is still coming — it arrives the next time this phone has signal and a moment spare.'}
+                      ? 'This picture never reached the farm server, so it only ever existed on the handset that took it. If that was this phone, the photograph is gone and this record is what is left of it — a backup file carries records, not pictures.'
+                      : 'The record is here and the picture is still coming — it arrives the next time this phone has signal and a moment spare.'}
                   </Body>
                 )}
 
