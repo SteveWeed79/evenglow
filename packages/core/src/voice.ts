@@ -115,15 +115,61 @@ export function groupPhrase(input: {
   collective: string;
   /** Lowercase and plural: "chickens", "cattle", "guinea fowl". */
   species?: string;
-  count?: number;
+  /** Lowercase and singular: "chicken", "cow", "guinea fowl". */
+  singular?: string;
+  /**
+   * Head count. **Required, and separate from whether it is printed.**
+   *
+   * It settles the grammar whether or not it appears in the words: a group of
+   * one is not a herd, and a group of none is not a flock of nothing. Stock's
+   * cards shipped without passing it at all — the count has its own column
+   * there — so the sentence had no way to know it was describing a single
+   * animal, and a farm with one Angus read "A herd of Angus cattle."
+   */
+  count: number;
   breed?: string;
+  /**
+   * Whether the numeral belongs in the sentence.
+   *
+   * False where the count is already on screen in its own column. It changes
+   * only the plural case: "one" and "no" are carried by the words themselves,
+   * so in those there is no numeral to suppress.
+   */
+  showCount?: boolean;
 }): string {
-  const { collective, species, count, breed } = input;
+  const { collective, species, singular, count, breed, showCount = true } = input;
+
+  const named = (word: string | undefined): string =>
+    [breed ?? null, word ?? null]
+      .filter((part): part is string => part !== null && part !== '')
+      .join(' ');
+
+  /**
+   * A group that has been emptied — sold, processed, or lost — is still a
+   * group, and must not be called a herd of zero. `count` is `nonnegative` in
+   * the schema, so this is a real row rather than a hypothetical one.
+   */
+  if (count === 0) {
+    return species === undefined ? 'Nothing in it yet.' : `No ${species} yet.`;
+  }
+
+  /**
+   * One animal, which is the case a handset found.
+   *
+   * "One Angus cow." rather than "A herd of 1 Angus cattle." The collective
+   * goes entirely: there is no collective noun for one of anything, and
+   * reaching for the plural species word beside it is what made the sentence
+   * wrong to begin with.
+   */
+  if (count === 1) {
+    const one = named(singular);
+    return one === '' ? 'One of them.' : `One ${one}.`;
+  }
 
   // "A group of 2 other" — the `other` species has no word worth saying, so
   // the sentence stops at the count rather than naming a category nobody
   // chose. Same for a breed the library does not know.
-  const tail = [count === undefined ? null : String(count), breed ?? null, species ?? null]
+  const tail = [showCount ? String(count) : null, named(species)]
     .filter((part): part is string => part !== null && part !== '')
     .join(' ');
 

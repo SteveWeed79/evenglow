@@ -15,12 +15,13 @@ import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { Tally } from '../components/Tally';
+import { Touch } from '../components/Touch';
 import { useLive } from '../hooks/useLive';
 import { useNav } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import type { ScreenProps } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
-import { FONTS, TYPE } from '../theme/tokens';
+import { FONTS, SPACE, TAP, TYPE } from '../theme/tokens';
 
 /**
  * What went in, and how much.
@@ -86,6 +87,9 @@ import { FONTS, TYPE } from '../theme/tokens';
 
 type Measure = 'scoop' | 'lb' | 'kg';
 
+/** See `shelfShown` — the tally has to stay reachable. */
+const VISIBLE_FEEDS = 6;
+
 const LABELS: Record<Measure, string> = { scoop: 'Scoops', lb: 'Pounds', kg: 'Kilos' };
 
 /**
@@ -134,11 +138,44 @@ export function FeedScreen({ route }: ScreenProps<'Feed'>): React.ReactElement {
     const suits = (item: (typeof feed)[number]): boolean =>
       item.species === undefined || (group !== null && item.species.includes(group.species));
 
-    const names = [...feed.filter(suits), ...feed.filter((item) => !suits(item))].map(
-      (item) => item.name,
-    );
+    /**
+     * What they had last time, first — ahead even of the species tag.
+     *
+     * A farm gives the same sack every morning, so the last feed is a better
+     * guess than the label on the bag: a keeper feeding the goats their usual
+     * sweet feed should not have to look past three chicken sacks that merely
+     * suit nobody in particular. Matched on name because that is what the
+     * record keeps and what the chip shows.
+     */
+    const previous = lastFed?.get(groupId)?.feedType;
+
+    const rank = (item: (typeof feed)[number]): number =>
+      item.name === previous ? 0 : suits(item) ? 1 : 2;
+
+    const names = [...feed]
+      // Stable within a tier, so the shelf's own order survives inside each
+      // band and the chips do not shuffle between renders.
+      .sort((a, b) => rank(a) - rank(b))
+      .map((item) => item.name);
+
     return [...new Set(names)];
-  }, [shelf, group]);
+  }, [shelf, group, lastFed, groupId]);
+
+  /**
+   * How many sacks are worth drawing before the tally goes below the fold.
+   *
+   * Feed names are long — "Purina Medicated Chick Starter" is a chip that
+   * takes a row on its own — so a shelf wraps to roughly one row per sack.
+   * Six is about where the Tally, which is the thing somebody opened this
+   * screen to use, stops being reachable without scrolling.
+   *
+   * A cap rather than a picker: UX-SPEC §5 rules out a modal wheel that
+   * cannot be read in sunlight, and this screen is used in a barn with a scoop
+   * in one hand. Same shape as `VISIBLE_DUES` on Today and `VISIBLE_DAYS` on
+   * What happened — show the ones that matter, keep the rest one tap away.
+   */
+  const [showAllFeed, setShowAllFeed] = useState(false);
+  const shelfShown = showAllFeed ? fromShelf : fromShelf.slice(0, VISIBLE_FEEDS);
 
   const pick = useCallback(
     (name: string): void => {
@@ -305,11 +342,14 @@ export function FeedScreen({ route }: ScreenProps<'Feed'>): React.ReactElement {
       {fed === undefined ? null : (
         <Panel label="Last fed">
           <Body>
-            {new Date(fed).toLocaleDateString(undefined, {
+            {new Date(fed.at).toLocaleDateString(undefined, {
               weekday: 'long',
               day: 'numeric',
               month: 'long',
             })}
+            {/* The sack, when the record kept one. It is also what sorts the
+                shelf below, so saying it explains the order. */}
+            {fed.feedType === undefined ? '' : ` — ${fed.feedType}`}
             . Every feed is its own record — morning and evening are two, and both are true.
           </Body>
         </Panel>
@@ -319,7 +359,24 @@ export function FeedScreen({ route }: ScreenProps<'Feed'>): React.ReactElement {
         <Field label="From the shelf">
           {/* Empty labels on purpose: `Choice` falls back to the option
               itself, and the option is already the farm's own words for it. */}
-          <Choice options={fromShelf} value={feedType} onChange={pick} labels={{}} />
+          <Choice options={shelfShown} value={feedType} onChange={pick} labels={{}} />
+
+          {/* The shelf sorts and never filters, so the rest is behind a tap
+              rather than gone: a keeper putting scratch in front of the goats
+              because it is the sack that is open is doing an ordinary thing. */}
+          {fromShelf.length > shelfShown.length ? (
+            <Touch
+              affordance="disclose"
+              onPress={() => setShowAllFeed(true)}
+              accessibilityRole="button"
+              testID="feed-show-all"
+              style={({ pressed }) => [styles.more, { opacity: pressed ? 0.7 : 1 }]}
+            >
+              <Text style={[styles.label, { color: colors.lanternInk }]}>
+                Show all {fromShelf.length} on the shelf
+              </Text>
+            </Touch>
+          ) : null}
         </Field>
       ) : null}
 
@@ -402,4 +459,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
+  // Same disclosure shape as "Show all N days" on What happened.
+  more: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs, minHeight: TAP.min },
 });

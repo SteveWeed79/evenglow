@@ -97,7 +97,9 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
           collective: traits.collective,
           // "A group of 2 other" is not a sentence. An unknown species drops
           // the noun and keeps the count.
-          ...(group.species === 'other' ? {} : { species: traits.label.toLowerCase() }),
+          ...(group.species === 'other'
+            ? {}
+            : { species: traits.label.toLowerCase(), singular: traits.singular }),
           count: group.count,
           ...(breed === undefined ? {} : { breed: breed.name }),
         })}
@@ -121,7 +123,15 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
               {weight.sampled === true ? ' — a sample, not the whole group' : ''}.
             </Body>
           ) : null}
-          {fed === undefined ? null : <Body>Last fed {relative(fed)}.</Body>}
+          {/* The sack as well as the day, now that the reader keeps it. "Last
+              fed yesterday" answers half the question somebody standing in
+              front of the trough is actually asking. */}
+          {fed === undefined ? null : (
+            <Body>
+              Last fed {relative(fed.at)}
+              {fed.feedType === undefined ? '' : ` — ${fed.feedType}`}.
+            </Body>
+          )}
           {lost > 0 ? (
             <Body>
               {lost} lost since you started recording. The head count above is what you said is

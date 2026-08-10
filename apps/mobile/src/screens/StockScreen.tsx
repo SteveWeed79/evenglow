@@ -87,14 +87,21 @@ function GroupCard({ group, onPress }: { group: Group; onPress: () => void }): R
       <View style={styles.head}>
         <View style={styles.name}>
           <Text style={[styles.groupName, { color: colors.ink }]}>{group.name}</Text>
-          {/* Said rather than printed — see GroupScreen for the argument. The
-              count is deliberately absent: it has its own column to the right,
-              at display size, because on a list it is the thing being
-              compared between cards. */}
+          {/* Said rather than printed — see GroupScreen for the argument.
+
+              The count is passed and not shown: it has its own column to the
+              right, at display size, because on a list it is the thing being
+              compared between cards. It is still needed here, because it
+              decides whether the sentence is about a herd at all — a card that
+              did not pass it read "A herd of Angus cattle." beside a 1. */}
           <Text style={[styles.lede, { color: colors.inkQuiet }]}>
             {groupPhrase({
               collective: traits.collective,
-              ...(group.species === 'other' ? {} : { species: traits.label.toLowerCase() }),
+              ...(group.species === 'other'
+                ? {}
+                : { species: traits.label.toLowerCase(), singular: traits.singular }),
+              count: group.count,
+              showCount: false,
               ...(breed === undefined ? {} : { breed: breed.name }),
             })}
           </Text>
