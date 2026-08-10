@@ -133,11 +133,11 @@ export function DiagnosticsScreen(): React.ReactElement {
           * to read out. It also names the database file (`db/open.ts`), so it
           * is the first thing worth knowing when a farm looks empty.
           */}
-        <Stat label="Farm id" value={farmId ?? 'not set'} />
+        <Stat label="Farm id" value={farmId ?? 'not set'} whole />
         {/* Which build, so a tester can read it out and a report can name it
             without anybody being asked. */}
         <Stat label="Build" value={APP_BUILD === '' ? APP_VERSION : `${APP_VERSION}+${APP_BUILD}`} />
-        <Stat label="Device id" value={report.deviceId ?? 'not set'} />
+        <Stat label="Device id" value={report.deviceId ?? 'not set'} whole />
         <Stat
           label="Caught up to"
           value={
@@ -201,8 +201,42 @@ export function DiagnosticsScreen(): React.ReactElement {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }): React.ReactElement {
+function Stat({
+  label,
+  value,
+  whole = false,
+}: {
+  label: string;
+  value: string;
+  /**
+   * Show every character, on its own line, and let it be copied.
+   *
+   * **For the values somebody has to reproduce exactly**, which on this screen
+   * means the two identifiers. A ULID is 26 characters and a device id is 36;
+   * beside a label on a phone row they clipped to
+   * `01KYJB4K0KFKTD3K7JSAY5T4…`, and the comment above the farm id says in so
+   * many words that it is "the thing to read out".
+   *
+   * It was read out — into a terminal, ellipsis and all, against a command
+   * that then correctly reported no such farm. The id was never wrong; the
+   * screen only ever showed part of it.
+   */
+  whole?: boolean;
+}): React.ReactElement {
   const { colors } = useTheme();
+
+  if (whole) {
+    return (
+      <View style={styles.wholeStat}>
+        <Text style={[styles.statLabel, { color: colors.muted }]}>{label}</Text>
+        {/* Selectable so it can be long-pressed and copied rather than
+            transcribed from a screen in a barn. */}
+        <Text style={[styles.wholeValue, { color: colors.ink }]} selectable>
+          {value}
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.stat}>
@@ -222,6 +256,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: SPACE.md,
   },
+  wholeStat: { gap: 2 },
   statLabel: { fontFamily: FONTS.data, fontSize: TYPE.label, letterSpacing: 0.6 },
+  // Left, not right: a value on its own line has nothing to align against, and
+  // an id is read left to right whatever else is on the screen.
+  wholeValue: { fontFamily: FONTS.data, fontSize: TYPE.body },
   statValue: { flexShrink: 1, fontFamily: FONTS.data, fontSize: TYPE.body, textAlign: 'right' },
 });

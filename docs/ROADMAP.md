@@ -538,6 +538,14 @@ Small, named so they stop being remembered at the wrong moment.
   `exactOptionalPropertyTypes` is its own piece of work with its own risk, not
   a line in a version-alignment commit. `expo install --check` will keep
   reporting it, which is correct — it is drift, deliberately held.
+
+  **"Check my setup" no longer counts it as missing, and that is the fix this
+  note was short of.** A permanent failure said "1 still to install" on a
+  perfectly set-up machine every single run, and named a cure — run the server
+  — that cannot work, because nothing is absent. A check that is always red is
+  a check nobody reads, and then it is not there on the morning something
+  really is wrong. It reports `[ HELD ]` for TypeScript alone and `[ MISSING ]`
+  for anything else, so the count going above zero still means something.
 - **PR #2** — 134 commits behind, would resurrect the deleted web client, and a
   simulated merge produces 88 conflicts. Close it.
 - ~~**Incubation stage guidance** — the date half only.~~ **Done.**

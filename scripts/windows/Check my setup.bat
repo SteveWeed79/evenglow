@@ -274,15 +274,53 @@ echo n| call npx expo install --check > "%TEMP%\steading-expo-check.txt" 2>&1
 set EXPOFAIL=%errorlevel%
 type "%TEMP%\steading-expo-check.txt"
 
-if not "%EXPOFAIL%"=="0" (
-  set /a MISSING+=1
-  echo.
-  echo   [ MISSING ] packages       - run "Start the farm server" once; it installs them.
-  echo               This window only looks, so it cannot fix this itself.
-  echo               If this line is STILL here afterwards, the project needs a
-  echo               version change - send this window to Claude.
-)
+:: Four goes, then. The fourth is the one that says "always".
+::
+:: TypeScript is held at 5.x ON PURPOSE - Expo SDK 57 wants ~6.0.3, and a major
+:: TypeScript across a strict codebase with `exactOptionalPropertyTypes` is its
+:: own piece of work with its own risk, not a line in a version-alignment
+:: commit. ROADMAP.md says so and says this check will keep reporting it.
+::
+:: What that note did not reckon with is what a PERMANENT failure does to a
+:: window like this. It said "1 still to install" on a perfectly set-up machine
+:: every single time, and named a cure - run the server - that cannot possibly
+:: work, because nothing is missing. A check that is always red is a check
+:: nobody reads, and then it is not there on the morning something really is
+:: wrong. Same fault as `Packages: -72` in _shared.bat, found the same week.
+::
+:: So the held version is reported as HELD and counted as fine, and ANYTHING
+:: ELSE is still MISSING. Written with gotos rather than nested blocks because
+:: findstr inside a parenthesised if is where batch stops being predictable.
+if "%EXPOFAIL%"=="0" goto :packages_done
+
+:: Did it report version drift at all, or fail for some other reason?
+findstr /c:"- expected version:" "%TEMP%\steading-expo-check.txt" >nul 2>&1
+if errorlevel 1 goto :packages_missing
+
+:: Take the deliberate exception out and see whether anything survives it.
+findstr /v /i /c:"typescript@" "%TEMP%\steading-expo-check.txt" > "%TEMP%\steading-expo-rest.txt" 2>nul
+findstr /c:"- expected version:" "%TEMP%\steading-expo-rest.txt" >nul 2>&1
+if errorlevel 1 goto :packages_held
+
+:packages_missing
+set /a MISSING+=1
+echo.
+echo   [ MISSING ] packages       - run "Start the farm server" once; it installs them.
+echo               This window only looks, so it cannot fix this itself.
+echo               If this line is STILL here afterwards, the project needs a
+echo               version change - send this window to Claude.
+goto :packages_done
+
+:packages_held
+echo.
+echo   [ HELD ]    packages       TypeScript is kept at 5.x on purpose.
+echo               Expo asks for 6.x; moving a strict codebase to a new major
+echo               TypeScript is its own job. Nothing is missing - see
+echo               ROADMAP.md. Everything else Expo asked about matches.
+
+:packages_done
 del "%TEMP%\steading-expo-check.txt" >nul 2>&1
+del "%TEMP%\steading-expo-rest.txt" >nul 2>&1
 cd ..\..
 
 echo.
