@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { reportTrouble } from '../hooks/useTrouble';
@@ -646,9 +646,25 @@ export interface Saver {
   saving: boolean;
   /** The last failure, in words, or null. Render it with `<Failure>`. */
   failure: string | null;
-  /** Runs the writes, then `onDone` — or reports why it could not. */
-  save: (run: () => Promise<void>) => Promise<void>;
+  /**
+   * The last success sentence, or null. Render it with `<Confirmation>`.
+   *
+   * Null on every form that navigates away, because nothing passed one.
+   */
+  said: string | null;
+  /**
+   * Runs the writes, then `onDone` — or reports why it could not.
+   *
+   * `say` is the one sentence this form is allowed on success, from
+   * `@steading/core/voice`. Omit it on any form that leaves: the screen
+   * underneath changing is the confirmation, and a sentence rendered onto a
+   * view that unmounts in the same frame is shown to nobody.
+   */
+  save: (run: () => Promise<void>, say?: string) => Promise<void>;
 }
+
+/** Long enough to be read at arm's length, short enough not to become furniture. */
+const SAID_MS = 3_000;
 
 /**
  * The save half of every form on this app, done once.
@@ -658,16 +674,38 @@ export interface Saver {
  * true on a throw makes the button permanently dead with the typed-in work
  * still on screen and nothing said about why. That bug was written twice by
  * hand before it was extracted.
+ *
+ * ## The success branch used to say nothing at all
+ *
+ * It fired a haptic and called `onDone`. On the two-thirds of forms that
+ * navigate away that is complete — the previous screen comes back with the new
+ * row on it. On the third that stay, it meant a farmer pressed Save, felt a
+ * buzz, and looked at a form that appeared not to have done anything. The
+ * haptic is not available to somebody with the phone on a fence post, and it
+ * is the only acknowledgement there was.
  */
 export function useSaver(onDone: () => void): Saver {
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  const [said, setSaid] = useState<string | null>(null);
+
+  // Cleared on unmount, or a form that saves and then leaves would set state
+  // on a view that is gone. `Tally` gets away without this because it is never
+  // the thing being navigated off; a form is.
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (timer.current !== null) clearTimeout(timer.current);
+    },
+    [],
+  );
 
   const save = useCallback(
-    async (run: () => Promise<void>) => {
+    async (run: () => Promise<void>, say?: string) => {
       if (saving) return;
       setSaving(true);
       setFailure(null);
+      setSaid(null);
 
       try {
         await run();
@@ -685,12 +723,19 @@ export function useSaver(onDone: () => void): Saver {
       }
 
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      if (say !== undefined) {
+        setSaid(say);
+        if (timer.current !== null) clearTimeout(timer.current);
+        timer.current = setTimeout(() => setSaid(null), SAID_MS);
+      }
+
       onDone();
     },
     [saving, onDone],
   );
 
-  return { saving, failure, save };
+  return { saving, failure, said, save };
 }
 
 export function Failure({ message }: { message: string | null }): React.ReactElement | null {
@@ -702,7 +747,27 @@ export function Failure({ message }: { message: string | null }): React.ReactEle
   );
 }
 
+/**
+ * The one sentence a form is allowed after it saves (UX-SPEC §6).
+ *
+ * Set in the body face, not the data face: it is read as English rather than
+ * scanned as a value. `polite` so a screen reader finishes what it was saying
+ * first — this is the least urgent text in the app by construction, since
+ * nothing depends on it being heard.
+ */
+export function Confirmation({ message }: { message: string | null }): React.ReactElement | null {
+  const { colors } = useTheme();
+  if (message === null) return null;
+
+  return (
+    <Text style={[styles.said, { color: colors.ink }]} accessibilityLiveRegion="polite">
+      {message}
+    </Text>
+  );
+}
+
 const styles = StyleSheet.create({
+  said: { fontFamily: FONTS.body, fontSize: TYPE.body, lineHeight: TYPE.body * 1.4 },
   field: { gap: SPACE.sm },
   label: {
     fontFamily: FONTS.data,

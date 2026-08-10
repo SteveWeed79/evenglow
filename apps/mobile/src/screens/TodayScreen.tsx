@@ -15,6 +15,7 @@ import { WeatherAlerts } from '../components/WeatherAlerts';
 import { WeatherWarnings } from '../components/WeatherWarnings';
 import { WithdrawalBanner } from '../components/WithdrawalBanner';
 import { useDues } from '../hooks/useDues';
+import { useFarmName } from '../hooks/useFarmName';
 import { useGroups } from '../hooks/useGroups';
 import { useNav } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
@@ -125,6 +126,7 @@ export function TodayScreen(): React.ReactElement {
   const { groups, eggs, produce, withdrawals, loading } = useGroups();
   const { dues } = useDues();
   const { colors } = useTheme();
+  const farmName = useFarmName();
   const nav = useNav();
 
   /**
@@ -190,7 +192,10 @@ export function TodayScreen(): React.ReactElement {
   const now = Date.now();
 
   return (
-    <Screen title="Today">
+    /* The app has held this name since signup and never said it. A farm that
+       never signed in has none, and gets the plain title — D14 is a supported
+       state, not an unfinished one. */
+    <Screen title="Today" {...(farmName === null ? {} : { subtitle: farmName })}>
       {/* What the weather MEANS comes before what it is, and both come before
           the tallies. Warnings are silent on an ordinary day, so this costs
           nothing on the mornings it has nothing to say — see WeatherWarnings.

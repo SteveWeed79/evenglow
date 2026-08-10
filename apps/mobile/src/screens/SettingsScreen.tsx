@@ -2,11 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { readExposure } from '@steading/core/backup/exposure';
 import { readSite } from '@steading/core/read/growing';
-import { Row } from '../components/Form';
+import { Choice, Row } from '../components/Form';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { Touch } from '../components/Touch';
 import { type CachedClaims, readCachedClaims, signOut } from '../auth/session';
+import { useFarmName } from '../hooks/useFarmName';
 import { useLive } from '../hooks/useLive';
 import { useNav } from '../hooks/useNav';
 import { useTheme } from '../theme/ThemeProvider';
@@ -28,9 +29,38 @@ import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
  * the animals now. The shelf went the same way, and it had been in both places
  * at once.
  */
+/**
+ * "Follow the phone" is the absence of an override, which is why this is not
+ * just `ThemeName`.
+ *
+ * Daylight gets its own row even though it looks like the default, because the
+ * lamp in the header can set it: toggling out of lamplight writes `daylight`
+ * as a real override. Without a row for it this control would have to render
+ * that state as "follow the phone" and would then read as the opposite of what
+ * the screen was doing, on a phone whose system theme is dark.
+ */
+const LOOKS = ['system', 'daylight', 'lamplight', 'sun'] as const;
+type Look = (typeof LOOKS)[number];
+
+const LOOK_LABELS: Record<Look, string> = {
+  system: 'Follow the phone',
+  daylight: 'Daylight',
+  lamplight: 'Lamplight',
+  sun: 'Bright sun',
+};
+
 export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): React.ReactElement {
-  const { colors } = useTheme();
+  const { colors, override, setTheme } = useTheme();
   const nav = useNav();
+  const farmName = useFarmName();
+
+  // Reads the override rather than the resolved theme, so "follow the phone"
+  // stays selected at night instead of jumping to Lamplight on its own.
+  const look: Look = override ?? 'system';
+  const chooseLook = useCallback(
+    (next: Look) => setTheme(next === 'system' ? null : next),
+    [setTheme],
+  );
   const site = useLive(readSite);
   const exposure = useLive(readExposure);
 
@@ -71,9 +101,14 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
   return (
     <Screen title="Settings" back>
       <View style={styles.rows}>
-        {/* First, because it decides what the rest of the app even shows. */}
+        {/* First, because it decides what the rest of the app even shows.
+
+            The title is the farm's own name once there is one. This row is the
+            natural place for it — it is the row that means "the thing you
+            run" — and the account row directly below already carries the
+            person's name, so putting the farm's name on both would stutter. */}
         <Row
-          title="My farm"
+          title={farmName ?? 'My farm'}
           detail="What you run — animals, crops, machines"
           testID="go-my-farm"
           onPress={() => nav.navigate('MyFarm')}
@@ -202,6 +237,22 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
           onPress={() => nav.navigate('Licences')}
         />
       </View>
+
+      {/* ## The third theme had no way in
+          `sun` has existed since the tokens were written and `setTheme` had no
+          caller anywhere in the app, so the one theme built for the condition
+          this app is actually used in — a screen in direct light — was
+          unreachable. The lamp in the header deliberately will not reach it
+          (see `otherTheme`): cycling into high contrast by accident at 5am is
+          the opposite of what somebody reaching for that control wants. So it
+          is chosen here, deliberately, and never stumbled into. */}
+      <Panel label="How it looks">
+        <Choice options={LOOKS} value={look} onChange={chooseLook} labels={LOOK_LABELS} />
+        <Body>
+          Bright sun trades the warm ground for contrast, for reading the screen in direct light.
+          It lasts until you close the app.
+        </Body>
+      </Panel>
 
       <Panel label="This device">
         <Body>

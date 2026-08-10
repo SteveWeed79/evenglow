@@ -8,7 +8,8 @@ import {
   listPlantings,
   listVarieties,
 } from '@steading/core/read/growing';
-import { Confirm, Failure, Primary, Secondary, useSaver } from '../components/Form';
+import { saidConfirmation } from '@steading/core/voice';
+import { Confirm, Confirmation, Failure, Primary, Secondary, useSaver } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Notes } from '../components/Notes';
 import { Body, Panel } from '../components/Panel';
@@ -50,14 +51,20 @@ export function PlantingScreen({ route }: ScreenProps<'Planting'>): React.ReactE
 
   const planting = plantings?.find((p) => p.id === plantingId) ?? null;
 
-  const { saving, failure, save } = useSaver(useCallback(() => undefined, []));
+  const { saving, failure, said, save } = useSaver(useCallback(() => undefined, []));
   const pulled = useSaver(useCallback(() => nav.goBack(), [nav]));
 
   const mark = useCallback(
     (payload: Record<string, unknown>) => {
-      void save(async () => {
-        await log({ entity: 'planting', op: 'update', targetId: plantingId, payload });
-      });
+      void save(
+        async () => {
+          await log({ entity: 'planting', op: 'update', targetId: plantingId, payload });
+        },
+        // Every one of these buttons writes a status and leaves the screen
+        // looking the same. Pressing "It is ready" twice was indistinguishable
+        // from pressing it once and having it fail.
+        saidConfirmation('planting'),
+      );
     },
     [save, log, plantingId],
   );
@@ -118,6 +125,7 @@ export function PlantingScreen({ route }: ScreenProps<'Planting'>): React.ReactE
       </View>
 
       <Failure message={failure} />
+      <Confirmation message={said} />
 
       {totals.picks > 0 ? (
         <Panel label="Picked so far">

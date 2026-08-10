@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { formatRange, libraryBreed, SPECIES_TRAITS } from '@steading/contracts';
 import type { Group } from '@steading/core/read/groups';
+import { groupPhrase } from '@steading/core/voice';
 import { Primary } from '../components/Form';
 import { Icon } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
@@ -88,10 +89,16 @@ function GroupCard({ group, onPress }: { group: Group; onPress: () => void }): R
       <View style={styles.head}>
         <View style={styles.name}>
           <Text style={[styles.groupName, { color: colors.ink }]}>{group.name}</Text>
-          <Text style={[styles.label, { color: colors.muted }]}>
-            {/* Herd, drove, gaggle — the species' own word, never "flock". */}
-            {traits.label} · {traits.collective}
-            {breed ? ` · ${breed.name}` : ''}
+          {/* Said rather than printed — see GroupScreen for the argument. The
+              count is deliberately absent: it has its own column to the right,
+              at display size, because on a list it is the thing being
+              compared between cards. */}
+          <Text style={[styles.lede, { color: colors.ink }]}>
+            {groupPhrase({
+              collective: traits.collective,
+              ...(group.species === 'other' ? {} : { species: traits.label.toLowerCase() }),
+              ...(breed === undefined ? {} : { breed: breed.name }),
+            })}
           </Text>
         </View>
 
@@ -140,6 +147,9 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
+  // `label` stays for "head" and "Open" — a unit and a control, which is what
+  // the data face is actually for.
+  lede: { fontFamily: FONTS.body, fontSize: TYPE.body, lineHeight: TYPE.body * 1.35 },
   clock: { fontFamily: FONTS.body, fontSize: TYPE.body, lineHeight: TYPE.body * 1.35 },
   more: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs, alignSelf: 'flex-end' },
 });

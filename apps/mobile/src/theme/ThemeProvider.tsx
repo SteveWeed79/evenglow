@@ -50,6 +50,16 @@ export interface ThemeValue {
   toggle: () => void;
   /** Bright sun is set explicitly, never reached by toggling. */
   setTheme: (theme: ThemeName | null) => void;
+  /**
+   * What was chosen, as opposed to what is being shown — null while the
+   * system decides.
+   *
+   * A control that offers "follow the phone" cannot render its own state from
+   * `theme` alone: at night, following the phone and choosing lamplight both
+   * resolve to lamplight, and the control would show the wrong row selected
+   * for one of them.
+   */
+  override: ThemeName | null;
 }
 
 const ThemeContext = createContext<ThemeValue | null>(null);
@@ -64,8 +74,8 @@ export function ThemeProvider({ children }: { children: ReactNode }): React.Reac
   const toggle = useCallback(() => setOverride(otherTheme(theme)), [theme]);
 
   const value = useMemo<ThemeValue>(
-    () => ({ theme, colors: THEMES[theme], toggle, setTheme: setOverride }),
-    [theme, toggle],
+    () => ({ theme, colors: THEMES[theme], toggle, setTheme: setOverride, override }),
+    [theme, toggle, override],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
