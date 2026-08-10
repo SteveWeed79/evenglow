@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { type Warning, warningsFor } from '@steading/contracts';
+import { hazardsCoveredByAlerts, type Warning, warningsFor } from '@steading/contracts';
 import { useDues } from './useDues';
 import { useGroups } from './useGroups';
 import { useGrowing } from './useGrowing';
@@ -19,7 +19,7 @@ import { useWeather } from './useWeather';
  * without a database. This only gathers.
  */
 export function useWarnings(): { warnings: Warning[]; loading: boolean } {
-  const { weather, loading: weatherLoading } = useWeather();
+  const { weather, alerts, loading: weatherLoading } = useWeather();
   const { groups, loading: groupsLoading } = useGroups();
   const { beds, plantings, loading: growingLoading } = useGrowing();
   const { dues, loading: duesLoading } = useDues();
@@ -94,5 +94,32 @@ export function useWarnings(): { warnings: Warning[]; loading: boolean } {
     [loading, weather, groups, uncoveredPlantings, births, shearings],
   );
 
-  return { warnings, loading };
+  /**
+   * The app's own opinion stands down where a meteorologist has already said
+   * it.
+   *
+   * Reported from a handset: an Extreme Heat Watch, an Extreme Heat Warning
+   * and *"Dangerous heat today and tomorrow for Austies"* — three full-height
+   * cards about one afternoon, filling the screen above the tally the app is
+   * opened for. The watch is dropped in `liveAlerts`; this drops the third.
+   *
+   * **Scoped to the hazard, never the whole strip.** What is lost is the
+   * species detail — which stock, and what to do about it — and that is a real
+   * loss, so it is only accepted where the official product is saying the same
+   * thing about the same weather. A frost warning silences nothing about heat,
+   * and a birth-cold row is never touched by any of it.
+   */
+  const shown = useMemo(() => {
+    const covered = hazardsCoveredByAlerts(alerts);
+    if (covered.size === 0) return warnings;
+
+    return warnings.filter((warning) => {
+      if (warning.kind.startsWith('heat-')) return !covered.has('heat');
+      if (warning.kind === 'freeze') return !covered.has('freeze');
+      if (warning.kind === 'frost') return !covered.has('frost');
+      return true;
+    });
+  }, [warnings, alerts]);
+
+  return { warnings: shown, loading };
 }

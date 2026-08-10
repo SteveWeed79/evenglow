@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  type Alert,
+  liveAlerts,
+  withoutSupersededWatches,
+  hazardsCoveredByAlerts,
   alertCoverage,
   camelidHeatIndex,
   dayStart,
@@ -473,5 +477,79 @@ describe('how much ground an alert covers', () => {
     // Trailing separators and doubled spaces are ordinary in areaDesc.
     expect(alertCoverage('Riley; Geary; ')).toBe('Riley, Geary');
     expect(alertCoverage('')).toBe('');
+  });
+});
+
+
+/**
+ * Three cards about one afternoon, reported from a handset.
+ *
+ * An Extreme Heat Watch, an Extreme Heat Warning, and the app's own "Dangerous
+ * heat today and tomorrow for Austies" - filling the screen above the tally the
+ * app is opened for. The first two are the service upgrading its own product;
+ * the third is this app agreeing with it at length.
+ */
+describe('one weather event, one card', () => {
+  const alert = (id: string, event: string, over: Partial<Alert> = {}): Alert => ({
+    id,
+    event,
+    severity: 'severe',
+    ...over,
+  });
+
+  it('drops a watch the service has already upgraded to a warning', () => {
+    const shown = liveAlerts(
+      [alert('a', 'Extreme Heat Watch'), alert('b', 'Extreme Heat Warning')],
+      1_000,
+    );
+
+    expect(shown.map((a) => a.event)).toEqual(['Extreme Heat Warning']);
+  });
+
+  it('keeps a watch for a hazard nothing has warned about', () => {
+    // A tornado watch beside a flood warning is two real things.
+    const shown = liveAlerts(
+      [alert('a', 'Tornado Watch'), alert('b', 'Flood Warning')],
+      1_000,
+    );
+
+    expect(shown).toHaveLength(2);
+  });
+
+  it('keeps a lone watch, because a maybe is still worth saying', () => {
+    expect(liveAlerts([alert('a', 'Winter Storm Watch')], 1_000)).toHaveLength(1);
+  });
+
+  it('leaves an event it cannot parse alone', () => {
+    // Better a duplicate than a dropped warning: anything not named
+    // "<hazard> <tier>" survives untouched.
+    const shown = withoutSupersededWatches([alert('a', 'Special Weather Statement'), alert('b', 'Air Quality Alert')]);
+    expect(shown).toHaveLength(2);
+  });
+});
+
+describe('what the app stops saying itself', () => {
+  const alert = (event: string): Alert => ({ id: event, event, severity: 'severe' });
+
+  it('stands down on heat when the service has warned about heat', () => {
+    expect(hazardsCoveredByAlerts([alert('Extreme Heat Warning')]).has('heat')).toBe(true);
+  });
+
+  it('does not stand down for a watch, which is only a maybe', () => {
+    // The derived row claims it IS happening. So does a warning; a watch does
+    // not, so the app's own opinion is still worth having beside it.
+    expect(hazardsCoveredByAlerts([alert('Excessive Heat Watch')].filter(Boolean)).size).toBe(0);
+  });
+
+  it('covers only the hazard named, never the whole strip', () => {
+    const covered = hazardsCoveredByAlerts([alert('Frost Advisory')]);
+
+    expect(covered.has('frost')).toBe(true);
+    expect(covered.has('heat')).toBe(false);
+    expect(covered.has('freeze')).toBe(false);
+  });
+
+  it('says nothing is covered when nothing is in force', () => {
+    expect(hazardsCoveredByAlerts([]).size).toBe(0);
   });
 });

@@ -65,6 +65,26 @@ export interface OrgDoc {
    * purchase is worth now, and a hash cannot be presented.
    */
   playPurchaseToken?: string;
+  /**
+   * Sync given away, by whoever runs this server (D13).
+   *
+   * The database half of `FREE_SYNC_ORGS`, and the reason it exists: the
+   * environment variable works and requires a restart to change, so comping a
+   * tester means editing a file and bouncing the service. That is fine when
+   * the farm is your own and actively bad the first time somebody messages you
+   * on a Sunday.
+   *
+   * **Still not requestable, which is the property that mattered.** The
+   * masterplan's argument is against a *route* — "a grant that can be
+   * requested is a grant that can be requested by anybody" — and nothing on
+   * the wire reaches this field. It is written by `pnpm farm:grant`, which
+   * needs a shell on the server, exactly like minting a promotion code does.
+   *
+   * The env list stays and still wins: a farm named there is granted whether
+   * or not this field is set, so an operator locked out of the database can
+   * still let somebody through.
+   */
+  syncGranted?: { at: Date; note?: string };
 }
 
 async function users(): Promise<Collection<UserDoc>> {
@@ -133,6 +153,35 @@ export async function findOrgById(id: string): Promise<OrgDoc | null> {
 
 export async function insertOrg(org: OrgDoc): Promise<void> {
   await (await orgs()).insertOne(org);
+}
+
+/**
+ * Every farm on this server, newest first.
+ *
+ * For the operator commands only — there is no route that reaches it, and
+ * there must not be: this is the one query in the codebase that deliberately
+ * crosses tenants, which is why it lives here beside the other narrow,
+ * purpose-built functions rather than behind a collection handle.
+ */
+export async function listOrgs(limit = 200): Promise<OrgDoc[]> {
+  return (await orgs()).find({}).sort({ createdAt: -1 }).limit(limit).toArray();
+}
+
+/** Everyone on one farm, so `farm:show` can say who would be affected. */
+export async function listUsersInOrg(orgId: string): Promise<UserDoc[]> {
+  return (await users()).find({ orgId }).sort({ createdAt: 1 }).toArray();
+}
+
+/** Gives sync away, or takes it back. Null revokes. */
+export async function setSyncGrant(
+  orgId: string,
+  grant: { at: Date; note?: string } | null,
+): Promise<boolean> {
+  const result = await (await orgs()).updateOne(
+    { _id: orgId },
+    grant === null ? { $unset: { syncGranted: '' } } : { $set: { syncGranted: grant } },
+  );
+  return result.matchedCount === 1;
 }
 
 /**

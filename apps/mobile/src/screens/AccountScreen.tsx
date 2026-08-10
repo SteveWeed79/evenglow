@@ -3,6 +3,7 @@ import { StyleSheet, Text } from 'react-native';
 import { Choice, Failure, Field, Primary, Secondary, TextField, useSaver } from '../components/Form';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
+import { Touch } from '../components/Touch';
 import { GoogleButton } from '../auth/GoogleButton';
 import { GOOGLE_AVAILABLE } from '../auth/google';
 import { ensureLocalOrgId } from '../auth/local-org';
@@ -101,6 +102,9 @@ export function AccountScreen({
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  /** The second box, on the two modes that create a password rather than check one. */
+  const [confirm, setConfirm] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [code, setCode] = useState('');
 
   useEffect(() => {
@@ -280,15 +284,26 @@ export function AccountScreen({
     );
   }
 
+  /**
+   * Both boxes, and it is a hard gate rather than a warning.
+   *
+   * There is no password reset in the app — `pnpm db:password` needs a shell on
+   * the server — so a mistyped password at signup is a farm nobody can open,
+   * with the records already on the phone. Letting it through with a red line
+   * underneath would be offering somebody the chance to make exactly that
+   * mistake.
+   */
+  const matches = mode === 'signin' || password === confirm;
+
   const enough =
-    mode === 'signin'
+    (mode === 'signin'
       ? email.trim() !== '' && password !== ''
       : mode === 'join'
         ? code.trim() !== '' && name.trim() !== '' && email.trim() !== '' && password.length >= MIN_PASSWORD
         : farmName.trim() !== '' &&
           name.trim() !== '' &&
           email.trim() !== '' &&
-          password.length >= MIN_PASSWORD;
+          password.length >= MIN_PASSWORD) && matches;
 
   return (
     <Screen title="Your account" back>
@@ -404,10 +419,67 @@ export function AccountScreen({
           onChangeText={setPassword}
           placeholder="Something only you would say"
           maxLength={200}
-          secret
+          secret={!showPassword}
           testID="account-password"
         />
+        {/**
+          * Let somebody see what they typed.
+          *
+          * A password field on a phone is dots, and the phone is being held in
+          * a barn by somebody wearing gloves who has just typed twelve
+          * characters they invented ten seconds ago. Hiding it protects
+          * against a shoulder, and there is no shoulder — the realistic threat
+          * here is typing it wrong twice and being locked out of a farm.
+          *
+          * Off by default, because the field is still a password and somebody
+          * signing in at a market stall should not have it painted on the
+          * screen without asking.
+          */}
+        <Touch
+          /* Toggles a state and stays put, and the word says which state. */
+          affordance="check"
+          onPress={() => setShowPassword(!showPassword)}
+          accessibilityRole="button"
+          accessibilityLabel={showPassword ? 'Hide the password' : 'Show the password'}
+          testID="account-password-show"
+          style={({ pressed }) => [styles.reveal, { opacity: pressed ? 0.6 : 1 }]}
+        >
+          <Text style={[styles.revealLabel, { color: colors.muted }]}>
+            {showPassword ? 'Hide' : 'Show'}
+          </Text>
+        </Touch>
       </Field>
+
+      {/**
+        * Typed twice, on the two modes that CREATE one.
+        *
+        * Not on sign-in: there the password already exists, a wrong one is
+        * told to you immediately, and a second box would be asking somebody to
+        * prove they can type something they are about to have checked anyway.
+        *
+        * On the other two it is the difference between a farm and a lockout.
+        * There is no password reset in the app — `pnpm db:password` needs a
+        * shell on the server — so a mistyped password at signup is an account
+        * nobody can open, and the records are already on the phone by then.
+        */}
+      {mode === 'signin' ? null : (
+        <Field label="Password again">
+          <TextField
+            value={confirm}
+            onChangeText={setConfirm}
+            placeholder="The same one"
+            maxLength={200}
+            secret={!showPassword}
+            testID="account-password-confirm"
+          />
+        </Field>
+      )}
+
+      {/* Said only once it can be true — a mismatch while somebody is still
+          typing the second box is not a mistake, it is being half way. */}
+      {mode !== 'signin' && confirm !== '' && password !== confirm ? (
+        <Failure message="Those two do not match." />
+      ) : null}
 
       <Failure message={failure} />
 
@@ -441,6 +513,14 @@ export function AccountScreen({
 }
 
 const styles = StyleSheet.create({
+  /** Sits under its field, aligned left with the label above it. */
+  reveal: { alignSelf: 'flex-start', paddingVertical: SPACE.xs },
+  revealLabel: {
+    fontFamily: FONTS.data,
+    fontSize: TYPE.label,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
   note: {
     fontFamily: FONTS.body,
     fontSize: TYPE.body - 1,

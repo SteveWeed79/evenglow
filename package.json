@@ -30,7 +30,10 @@
     "db:password": "pnpm --filter @steading/api db:password",
     "bench:store": "tsx scripts/bench-store.mts",
     "verify:alerts": "tsx scripts/verify-alerts.mts",
-    "promo:new": "pnpm --filter @steading/api promo:new"
+    "promo:new": "pnpm --filter @steading/api promo:new",
+    "farm:ls": "pnpm --filter @steading/api farm:ls",
+    "farm:show": "pnpm --filter @steading/api farm:show",
+    "farm:grant": "pnpm --filter @steading/api farm:grant"
   },
   "dependencies": {
     "@steading/api": "workspace:*",
