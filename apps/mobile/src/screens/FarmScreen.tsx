@@ -121,11 +121,14 @@ export function FarmScreen(): React.ReactElement {
         * beside the machine it belongs to, and two doors to one room is the
         * arrangement this hub already uses for "What you run".
         */}
+      {/* Always here, whatever the farm runs: a gate needs fixing on a market
+          garden too, and this is the only list in the app somebody writes
+          themselves and ticks off. */}
       <Row
-        title="Eggs under"
-        detail="Sets in the incubator or under a broody — candling and hatch dates"
-        testID="go-incubations"
-        onPress={() => nav.navigate('Incubations')}
+        title="Jobs"
+        detail="Fix the gate, ring the vet — the ones nothing else knows about"
+        testID="farm-jobs"
+        onPress={() => nav.navigate('Jobs')}
       />
 
       <Row
@@ -135,15 +138,29 @@ export function FarmScreen(): React.ReactElement {
         onPress={() => nav.navigate('Inventory')}
       />
 
-      {/* Always here, whatever the farm runs: a gate needs fixing on a market
-          garden too, and this is the only list in the app somebody writes
-          themselves. */}
-      <Row
-        title="Jobs"
-        detail="Fix the gate, ring the vet — the ones nothing else knows about"
-        testID="farm-jobs"
-        onPress={() => nav.navigate('Jobs')}
-      />
+      {/**
+        * Below the two year-round rows, and only for a farm that keeps stock.
+        *
+        * **It led them both, and it is the most seasonal row on the hub.** A
+        * set is under for three weeks, once or twice in a spring, on a farm
+        * that hatches at all — while the shelf is read whenever a sack runs
+        * low and Jobs is written in continuously. Same fault as "Log a feed"
+        * being fifth on the group hub, found in the same pass.
+        *
+        * **And it was drawn for everybody**, including a market gardener with
+        * animals switched off — a row they can never use, above the two they
+        * use every week, on every visit. The three hub rows above are gated on
+        * `useEnterprises`; this one was not, because it is written here rather
+        * than in `PLACES`.
+        */}
+      {enterprises.includes('stock') ? (
+        <Row
+          title="Eggs under"
+          detail="Sets in the incubator or under a broody — candling and hatch dates"
+          testID="go-incubations"
+          onPress={() => nav.navigate('Incubations')}
+        />
+      ) : null}
 
       <Row
         title="What you run"
