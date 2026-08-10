@@ -102,13 +102,6 @@ export async function transferPhotos(): Promise<TransferResult> {
   let pending = 0;
 
   /**
-   * Newest first, which is what `listPhotos` already gives.
-   *
-   * The photo somebody took this morning is the one they might want on the
-   * other phone this afternoon. A backlog of last year's receipts can wait,
-   * and with a per-pass cap the order is the whole policy.
-   */
-  /**
    * Records this device still owes the server, so a photo is offered only once
    * its own record has landed.
    *
@@ -123,6 +116,10 @@ export async function transferPhotos(): Promise<TransferResult> {
    * deleted, so "absent from the outbox" meant applied OR never written;
    * invariant 7 keeps them as `applied`, so a row that is still `queued` or
    * `sending` is now a positive fact rather than an inference.
+   *
+   * `rejected` is deliberately not owed. That record is never going to land,
+   * so waiting on it would hold the bytes for ever; the PUT 404s once, costs
+   * one request, and the photo stays exactly where it is.
    */
   const owed = new Set(
     (await localStore().readOutboxBySeq())
@@ -130,6 +127,13 @@ export async function transferPhotos(): Promise<TransferResult> {
       .map((mutation) => mutation.targetId),
   );
 
+  /**
+   * Newest first, which is what `listPhotos` already gives.
+   *
+   * The photo somebody took this morning is the one they might want on the
+   * other phone this afternoon. A backlog of last year's receipts can wait,
+   * and with a per-pass cap the order is the whole policy.
+   */
   const toUpload: string[] = [];
   const toDownload: string[] = [];
 
