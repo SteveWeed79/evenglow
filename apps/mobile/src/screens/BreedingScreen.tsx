@@ -4,7 +4,8 @@ import { BREEDING_METHODS, GESTATION_DAYS, newId } from '@steading/contracts';
 import { listAnimals, possibleDams } from '@steading/core/read/animals';
 import { listBreedings } from '@steading/core/read/breeding';
 import { listGroups } from '@steading/core/read/groups';
-import { Choice, Confirm, DayPick, Failure, Field, Primary, Stepper, TextField, useSaver } from '../components/Form';
+import { saidConfirmation } from '@steading/core/voice';
+import { Choice, Confirm, Confirmation, DayPick, Failure, Field, Primary, Stepper, TextField, useSaver } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
@@ -52,24 +53,28 @@ export function BreedingScreen({ route }: ScreenProps<'Breeding'>): React.ReactE
   const [method, setMethod] = useState<(typeof BREEDING_METHODS)[number]>('natural');
   const [sireNote, setSireNote] = useState('');
 
-  const { saving, failure, save } = useSaver(useCallback(() => setDamId(null), []));
+  const { saving, failure, said, save } = useSaver(useCallback(() => setDamId(null), []));
 
   const commit = useCallback(() => {
     if (group === null || damId === null) return;
-    void save(async () => {
-      await log({
-        entity: 'breeding',
-        op: 'create',
-        targetId: newId(),
-        payload: {
-          species: group.species,
-          damId,
-          bredAt,
-          method,
-          ...(sireNote.trim() === '' ? {} : { sireNote: sireNote.trim() }),
-        },
-      });
-    });
+    void save(
+      async () => {
+        await log({
+          entity: 'breeding',
+          op: 'create',
+          targetId: newId(),
+          payload: {
+            species: group.species,
+            damId,
+            bredAt,
+            method,
+            ...(sireNote.trim() === '' ? {} : { sireNote: sireNote.trim() }),
+          },
+        });
+      },
+      // The dam picker resets and nothing else on screen moves.
+      saidConfirmation('mating'),
+    );
   }, [save, log, group, damId, bredAt, method, sireNote]);
 
   if (groups === null) return <Loading title="Breeding" />;
@@ -172,6 +177,7 @@ export function BreedingScreen({ route }: ScreenProps<'Breeding'>): React.ReactE
           )}
 
           <Failure message={failure} />
+          <Confirmation message={said} />
 
           <Primary
             label="Record the mating"

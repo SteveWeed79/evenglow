@@ -25,11 +25,21 @@ import { FONTS, SPACE, TAP, TYPE } from '../theme/tokens';
  */
 export function Screen({
   title,
+  subtitle,
   children,
   contentStyle,
   back = false,
 }: {
   title: string;
+  /**
+   * A line under the hero, in the body face.
+   *
+   * For a proper noun the app should be saying out loud — the farm's name —
+   * rather than for metadata. Deliberately *not* the data face: setting
+   * "Sunnyside" in tracked caps is the same mistake as printing a species'
+   * collective noun as telemetry, and it would undo the point of showing it.
+   */
+  subtitle?: string;
   children: React.ReactNode;
   contentStyle?: ViewStyle;
   /** Shows a back chevron instead of the date. Pushed screens only. */
@@ -117,7 +127,15 @@ export function Screen({
         // keyboard dismissed first.
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={[styles.hero, { color: colors.ink }]}>{title}</Text>
+        {/* One block, so the title and the name under it are not separated by
+            the content gap that separates whole panels. */}
+        <View style={styles.heading}>
+          <Text style={[styles.hero, { color: colors.ink }]}>{title}</Text>
+
+          {subtitle === undefined ? null : (
+            <Text style={[styles.subtitle, { color: colors.ink }]}>{subtitle}</Text>
+          )}
+        </View>
 
         {/* A read that failed, said out loud.
             Above the content because the content is the thing that is missing:
@@ -170,7 +188,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   content: { padding: SPACE.lg, gap: SPACE.md, paddingBottom: SPACE.xl },
-  hero: { fontFamily: FONTS.display, fontSize: TYPE.hero, marginBottom: SPACE.xs },
+  // Carries the margin the hero used to, so a screen with no subtitle sits
+  // exactly where it did before.
+  heading: { gap: 2, marginBottom: SPACE.xs },
+  hero: { fontFamily: FONTS.display, fontSize: TYPE.hero },
+  subtitle: { fontFamily: FONTS.body, fontSize: TYPE.body },
   label: {
     fontFamily: FONTS.data,
     fontSize: TYPE.label,

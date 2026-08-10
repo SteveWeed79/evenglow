@@ -12,7 +12,8 @@ import {
   type IncubationEntry,
   listIncubations,
 } from '@steading/core/read/breeding';
-import { Failure, Field, Primary, Stepper, useSaver } from '../components/Form';
+import { saidConfirmation } from '@steading/core/voice';
+import { Confirmation, Failure, Field, Primary, Stepper, useSaver } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Notes } from '../components/Notes';
 import { Body, Panel } from '../components/Panel';
@@ -90,14 +91,19 @@ function Detail({ incubation }: { incubation: IncubationEntry }): React.ReactEle
       : null;
 
   const recordCandling = useCallback(() => {
-    void candled.save(async () => {
-      await log({
-        entity: 'incubation',
-        op: 'update',
-        targetId: incubation.id,
-        payload: { candledAt: Date.now(), fertile },
-      });
-    });
+    void candled.save(
+      async () => {
+        await log({
+          entity: 'incubation',
+          op: 'update',
+          targetId: incubation.id,
+          payload: { candledAt: Date.now(), fertile },
+        });
+      },
+      // Sets a stored date. The stepper keeps its number and the panel stays
+      // exactly as it was, so without this nothing on screen moved at all.
+      saidConfirmation('candling'),
+    );
   }, [candled, log, incubation.id, fertile]);
 
   const recordHatch = useCallback(() => {
@@ -175,6 +181,7 @@ function Detail({ incubation }: { incubation: IncubationEntry }): React.ReactEle
             <Stepper value={fertile} onChange={setFertile} steps={[1, 6]} suffix="eggs" />
           </Field>
           <Failure message={candled.failure} />
+          <Confirmation message={candled.said} />
           <Primary
             label="Record the candling"
             disabled={candled.saving}
