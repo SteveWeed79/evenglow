@@ -227,3 +227,72 @@ export const pullResponseSchema = z
   .strict();
 
 export type PullResponse = z.infer<typeof pullResponseSchema>;
+
+/**
+ * What each entity is called to the person who typed it, rather than on the
+ * wire.
+ *
+ * Server refusals reach a screen — "Your role cannot update a eggLog" was
+ * shipped, and it is two mistakes in five words: a schema name a farmer has
+ * never seen, behind the wrong article. Both come from building a sentence out
+ * of an enum.
+ *
+ * Here rather than in the app because the sentence is built on the server and
+ * read on the device, which is exactly what `contracts` is for. No articles —
+ * a noun is usable in more sentences than "a noun" is, and `aOrAn` supplies
+ * one where a sentence needs it.
+ */
+export const ENTITY_NOUNS: Record<Entity, string> = {
+  flock: 'group',
+  animal: 'animal',
+  medication: 'treatment',
+  eggLog: 'egg count',
+  productionLog: 'production record',
+  feedLog: 'feeding',
+  mortality: 'loss',
+  predator: 'predator sighting',
+  equipment: 'machine',
+  hourReading: 'hour reading',
+  maintenance: 'service',
+  task: 'job',
+  inventory: 'shelf item',
+  photo: 'photograph',
+  site: 'ground',
+  bed: 'bed',
+  variety: 'variety',
+  planting: 'planting',
+  harvest: 'harvest',
+  breeding: 'mating',
+  incubation: 'set of eggs',
+  weight: 'weight',
+  shearing: 'shearing',
+  feedPlan: 'ration',
+  careLog: 'job done',
+  note: 'note',
+};
+
+export function entityNoun(entity: Entity): string {
+  return ENTITY_NOUNS[entity];
+}
+
+/** "an egg count", "a group". Vowel rule only — no word here needs more. */
+export function aOrAn(noun: string): string {
+  return `${/^[aeiou]/i.test(noun) ? 'an' : 'a'} ${noun}`;
+}
+
+/** What each op is called in a sentence, which is not what it is called in code. */
+const OP_VERBS: Record<Op, string> = {
+  create: 'record',
+  update: 'change',
+  delete: 'remove',
+};
+
+/**
+ * The sentence a farmer reads when their role will not let them do something.
+ *
+ * Plain, specific, and no apology (UX-SPEC §6) — and no schema name, which is
+ * the part that was actually wrong.
+ */
+export function roleRefusal(op: Op, entity: Entity): string {
+  return `Your role cannot ${OP_VERBS[op]} ${aOrAn(entityNoun(entity))}.`;
+}

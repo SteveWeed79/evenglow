@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  aOrAn,
+  entityNoun,
+  OPS,
+  roleRefusal,
   appendOnlyIsNeverEdited,
   canMutate,
   eggLogCreateSchema,
@@ -178,6 +182,47 @@ describe('inventory authorization', () => {
       expect(canMutate('hand', 'inventory', op)).toBe(false);
       expect(canMutate('owner', 'inventory', op)).toBe(true);
       expect(canMutate('admin', 'inventory', op)).toBe(true);
+    }
+  });
+});
+
+
+/**
+ * The sentence a farmer reads when their role will not let them do something.
+ *
+ * `pnpm db:verify` printed "Your role cannot update a eggLog." against a real
+ * database - two mistakes in five words, both from building a sentence out of
+ * an enum: a schema name nobody has ever seen, behind the wrong article.
+ */
+describe('what a refusal says out loud', () => {
+  it('uses the farm word, never the schema name', () => {
+    expect(roleRefusal('update', 'eggLog')).toBe('Your role cannot change an egg count.');
+    expect(roleRefusal('create', 'flock')).toBe('Your role cannot record a group.');
+    expect(roleRefusal('delete', 'medication')).toBe('Your role cannot remove a treatment.');
+  });
+
+  it('gets the article right in front of a vowel', () => {
+    expect(aOrAn('egg count')).toBe('an egg count');
+    expect(aOrAn('animal')).toBe('an animal');
+    expect(aOrAn('group')).toBe('a group');
+  });
+
+  it('has a word for every entity, so no sentence can fall back to an enum', () => {
+    for (const entity of ENTITIES) {
+      const noun = entityNoun(entity);
+      expect(noun.length).toBeGreaterThan(0);
+      // A schema name would give itself away with a capital in the middle.
+      expect(noun).toBe(noun.toLowerCase());
+    }
+  });
+
+  it('never leaks a camelCase schema name into a sentence', () => {
+    for (const entity of ENTITIES) {
+      for (const op of OPS) {
+        const said = roleRefusal(op, entity);
+        expect(said).not.toMatch(/[a-z][A-Z]/);
+        expect(said.endsWith('.')).toBe(true);
+      }
     }
   });
 });

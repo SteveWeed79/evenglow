@@ -270,6 +270,21 @@ export interface LocalStore {
   getLastBackupAt(): Promise<number | null>;
   setLastBackupAt(at: number): Promise<void>;
 
+  /**
+   * Official weather alerts this device has been told about, by service id.
+   *
+   * NOT a dismissal, and the distinction is the whole design — an acknowledged
+   * alert still draws, still opens, still carries its full text. It collapses
+   * to a line. See `metaSchemas.readAlerts` for why that makes device-local
+   * storage the right answer here and the wrong one for silence.
+   *
+   * The setter takes the ids still in force alongside, and stores only the
+   * intersection, so a device that has been running for a year is not holding
+   * a list of every warning it has ever seen.
+   */
+  getReadAlerts(): Promise<string[]>;
+  markAlertRead(id: string, live: readonly string[]): Promise<void>;
+
   // ── Support tickets ───────────────────────────────────────────────────────
 
   /**

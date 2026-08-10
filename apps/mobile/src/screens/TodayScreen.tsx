@@ -385,6 +385,7 @@ function ProductTally({
   onToggle: () => void;
 }): React.ReactElement {
   const log = useLog();
+  const nav = useNav();
   const { colors } = useTheme();
   const units = useUnits();
   const { group, product } = item;
@@ -494,6 +495,34 @@ function ProductTally({
             {...(product === 'eggs' ? { confirm: basketConfirmation } : {})}
             onCommit={commit}
           />
+
+          {/**
+            * The way back out, at the place the mistake is visible.
+            *
+            * Taking a produce record back has existed since the day it was
+            * asked for, on "What happened" — and the farm that asked for it
+            * reported not being able to find it, from a handset. That is a
+            * fair verdict: this screen shows a TOTAL, so the wrong twelve eggs
+            * are visible here and the individual record that caused them is
+            * two taps away on a screen behind a different tab.
+            *
+            * Only when something has actually been logged today, because on a
+            * tally of nothing there is nothing to put right and the line would
+            * be furniture.
+            */}
+          {today > 0 ? (
+            <Touch
+              affordance="chevron"
+              onPress={() => nav.navigate('Tabs', { screen: 'History' })}
+              accessibilityRole="button"
+              testID={`tally-fix-${item.key}`}
+              style={({ pressed }) => [styles.fix, { opacity: pressed ? 0.7 : 1 }]}
+            >
+              <Text style={[styles.label, { color: colors.muted }]}>
+                Logged the wrong one? Put it right in What happened
+              </Text>
+            </Touch>
+          ) : null}
         </>
       ) : null}
     </View>
@@ -501,6 +530,7 @@ function ProductTally({
 }
 
 const styles = StyleSheet.create({
+  fix: { alignSelf: 'flex-start', paddingVertical: SPACE.xs, paddingHorizontal: SPACE.md },
   dues: { gap: SPACE.sm, marginBottom: SPACE.sm },
   duesBelow: { gap: SPACE.sm, marginTop: SPACE.md },
   bundle: { gap: SPACE.xs },

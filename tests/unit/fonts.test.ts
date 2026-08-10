@@ -25,6 +25,7 @@ const EXPECTED: Record<string, string> = {
   [FONTS.body]: 'AlegreyaSans-Regular.ttf',
   [FONTS.bodyBold]: 'AlegreyaSans-Bold.ttf',
   [FONTS.data]: 'IBMPlexMono-Regular.ttf',
+  [FONTS.dataBold]: 'IBMPlexMono-Bold.ttf',
 };
 
 describe('the type ramp has faces behind it', () => {

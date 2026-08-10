@@ -57,6 +57,7 @@ export const FONT_ASSETS = {
   [FONTS.body]: require('../../assets/fonts/AlegreyaSans-Regular.ttf'),
   [FONTS.bodyBold]: require('../../assets/fonts/AlegreyaSans-Bold.ttf'),
   [FONTS.data]: require('../../assets/fonts/IBMPlexMono-Regular.ttf'),
+  [FONTS.dataBold]: require('../../assets/fonts/IBMPlexMono-Bold.ttf'),
 } as const;
 /* eslint-enable @typescript-eslint/no-require-imports */
 

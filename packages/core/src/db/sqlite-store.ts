@@ -850,6 +850,25 @@ export async function openSqliteStore(
       await writeMeta(driver, META.lastBackupAt, at);
     },
 
+    async getReadAlerts(): Promise<string[]> {
+      return parseMeta('readAlerts', await readMeta(driver, 'readAlerts')) ?? [];
+    },
+
+    async markAlertRead(id, live): Promise<void> {
+      const held = parseMeta('readAlerts', await readMeta(driver, 'readAlerts')) ?? [];
+      /**
+       * Kept to what is still in force, so the list cannot grow for ever.
+       *
+       * An alert the service has withdrawn will never be drawn again, so
+       * remembering that somebody read it is dead weight — and the schema caps
+       * the array, so dead weight would eventually push out a live id and
+       * silently un-acknowledge something.
+       */
+      const stillReal = new Set(live);
+      const next = [...new Set([...held.filter((seen) => stillReal.has(seen)), id])];
+      await writeMeta(driver, META.readAlerts, next);
+    },
+
     /**
      * The forecast cache. Outside the record system entirely — see the port.
      *

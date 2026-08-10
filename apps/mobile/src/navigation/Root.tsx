@@ -1,3 +1,4 @@
+import type { NavigatorScreenParams } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { CachedClaims } from '../auth/session';
@@ -49,7 +50,7 @@ import { TreatmentsScreen } from '../screens/TreatmentsScreen';
 import { TrendScreen } from '../screens/TrendScreen';
 import { WeatherScreen } from '../screens/WeatherScreen';
 import { WeighScreen } from '../screens/WeighScreen';
-import { Tabs } from './Tabs';
+import { Tabs, type TabParamList } from './Tabs';
 
 /**
  * The stack the tabs live inside.
@@ -75,7 +76,16 @@ import { Tabs } from './Tabs';
  */
 
 export type RootParamList = {
-  Tabs: undefined;
+  /**
+   * The tab bar, and which tab to land on.
+   *
+   * `undefined` until something needed to send somebody to a *particular* tab
+   * — Today's tally pointing at "What happened" so a mis-logged total can be
+   * put right where it is visible. `NavigatorScreenParams` is React
+   * Navigation's own shape for that, and typing it keeps the nested route name
+   * checked rather than a string nobody validates.
+   */
+  Tabs: NavigatorScreenParams<TabParamList> | undefined;
   Settings: undefined;
   /** Verb first, subject second — see QuickAddScreen. */
   QuickAdd: undefined;
