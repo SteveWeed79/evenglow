@@ -230,6 +230,28 @@ async function tick(transport?: SyncTransport): Promise<void> {
 
   if (consecutiveFailures === 0) await pull();
 
+  /**
+   * Photos move even when the queue has not emptied, and this is the half that
+   * was missing.
+   *
+   * `movePhotos` used to run ONLY in the idle branch above, which requires an
+   * empty outbox — so the farms whose pictures were most at risk were exactly
+   * the ones that never uploaded any. A farm held on 402 never drains its
+   * queue, so it never reached that branch; and `PUT /photos/:id` is not
+   * billing-gated, so the server would have taken the bytes the whole time.
+   * The same is true of any farm behind on a bad connection.
+   *
+   * Safe because the per-photo gate replaced the whole-queue one: a photo is
+   * offered only once its own record is off this device (see `sync/photos.ts`),
+   * which is the condition a PUT actually needs.
+   *
+   * After the flush and after the pull, never inside them. Twenty-five
+   * megabytes of JPEG must not delay a morning's tallies, and a photo that
+   * fails must not take them with it — that reasoning was right and is
+   * untouched. `PER_PASS` bounds a tick.
+   */
+  await movePhotos();
+
   const next = nextDelay({
     consecutiveFailures,
     remaining: await queueDepth(),

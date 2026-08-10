@@ -3,6 +3,7 @@ import { newId } from '@steading/contracts';
 import { resetApiBase, setAccessToken, setApiBase } from '@steading/core/api';
 import { listPhotos } from '@steading/core/read/photos';
 import { setPhotoBytes, transferPhotos } from '@steading/core/sync/photos';
+import { localStore } from '@steading/core/db/store';
 import { enqueue } from '@steading/core/sync/queue';
 import { freshStore } from '../support/store';
 
@@ -50,9 +51,20 @@ function server(options: { status?: number; body?: Uint8Array } = {}): void {
   });
 }
 
-/** A photo record, as `/sync` and the capture screen would have written it. */
-async function photo(id: string, uploadedAt?: number): Promise<void> {
-  await enqueue({
+/**
+ * A photo record, as `/sync` and the capture screen would have written it —
+ * and then acknowledged, because the bytes are not offered until it has been.
+ *
+ * **The acknowledgement is the point rather than test scaffolding.** A PUT for
+ * a photo the server has never heard of is a 404, so the transfer waits until
+ * that record is off this device. It used to wait for the WHOLE outbox to
+ * empty, which was sufficient and far too blunt: a farm that was behind never
+ * emptied it and therefore never uploaded a picture. The gate is per photo
+ * now, so a test that wants an upload has to do what a real device does and
+ * get the record acknowledged first.
+ */
+async function photo(id: string, uploadedAt?: number, sent = true): Promise<void> {
+  const queued = await enqueue({
     entity: 'photo',
     op: 'create',
     targetId: id,
@@ -64,6 +76,8 @@ async function photo(id: string, uploadedAt?: number): Promise<void> {
       ...(uploadedAt === undefined ? {} : { uploadedAt }),
     },
   });
+
+  if (sent) await localStore().resolveBatch([queued], [{ id: queued.id, status: 'applied' }]);
 }
 
 beforeEach(async () => {
@@ -236,5 +250,48 @@ describe('a farm with a backlog', () => {
 
     expect(moved.uploaded).toBe(5);
     expect(moved.pending).toBe(3);
+  });
+});
+
+
+/**
+ * The half that was silently broken, and the reason a picture went missing.
+ *
+ * `movePhotos` ran only on the idle tick, which needs an empty outbox. A farm
+ * held on 402, or simply behind on a bad connection, never empties one — so
+ * the devices whose pictures were most at risk were exactly the devices that
+ * never uploaded any, while `PUT /photos/:id` sat there ungated, willing to
+ * take them the whole time.
+ */
+describe('a farm that is behind', () => {
+  it('still sends a photo whose own record has landed', async () => {
+    server();
+    const id = newId();
+    await photo(id);
+    files.set(id, PIXELS);
+
+    // Something else entirely, still waiting to go. The old gate refused every
+    // photo on the strength of this one row.
+    await enqueue({
+      entity: 'eggLog',
+      op: 'create',
+      targetId: newId(),
+      payload: { occurredAt: Date.now(), flockId: SUBJECT, count: 12 },
+    });
+
+    const moved = await transferPhotos();
+    expect(moved.uploaded).toBe(1);
+  });
+
+  it('holds back a photo whose own record has not', async () => {
+    server();
+    // Enqueued and never acknowledged: the server has no record to attach
+    // bytes to, so a PUT would be a 404.
+    const id = newId();
+    await photo(id, undefined, false);
+    files.set(id, PIXELS);
+
+    const moved = await transferPhotos();
+    expect(moved.uploaded).toBe(0);
   });
 });

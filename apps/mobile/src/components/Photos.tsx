@@ -207,16 +207,50 @@ export function Photos({
             .map((photo) => (
               <View key={photo.id} style={styles.opened} testID={`photo-open-${photo.id}`}>
                 {hasBytes(photo.id) ? (
-                  /* Full width and square-ish: a receipt at 128px is not a
-                     receipt, it is a thumbnail of one. `contain` because these
-                     are documents as often as they are pictures, and cropping
-                     a receipt loses the total. */
-                  <Image
-                    source={{ uri: photoUri(photo.id) }}
-                    resizeMode="contain"
-                    style={[styles.large, { borderColor: colors.border }]}
-                    accessibilityLabel={`Photo of ${what}, ${taken(photo)}`}
-                  />
+                  <>
+                    {/* Full width and square-ish: a receipt at 128px is not a
+                        receipt, it is a thumbnail of one. `contain` because
+                        these are documents as often as they are pictures, and
+                        cropping a receipt loses the total. */}
+                    <Image
+                      source={{ uri: photoUri(photo.id) }}
+                      resizeMode="contain"
+                      style={[styles.large, { borderColor: colors.border }]}
+                      accessibilityLabel={`Photo of ${what}, ${taken(photo)}`}
+                    />
+                    {/**
+                      * Said while the picture still exists, which is the only
+                      * time saying it is any use.
+                      *
+                      * A photograph is the one thing in this app that can be
+                      * lost for good. Records are safe three ways over — they
+                      * are in SQLite, they go to the server as mutations, and
+                      * the backup file carries them. Bytes have exactly one
+                      * copy until they upload, and `BACKUP_EXCLUDES` means a
+                      * backup will not save them: `buildBackup` writes records,
+                      * and twenty megabytes of JPEG in a JSON file is not a
+                      * backup anybody can send anywhere.
+                      *
+                      * So a farm with no account, or one that has not synced
+                      * since taking this, is holding the only copy and had no
+                      * way to know. That is how a picture goes missing and the
+                      * app looks perfectly healthy — reported exactly that way,
+                      * from a phone that had wiped its own storage between the
+                      * photo being taken and being looked for.
+                      *
+                      * `uploadedAt` is set by `sync/photos.ts` once the bytes
+                      * are on the server, so its absence is precisely "this is
+                      * the only copy". Muted, one line, no colour: it is a fact
+                      * worth knowing, not an alarm, and the alarming version
+                      * would be a badge on every photo of a farm that has
+                      * chosen to stay on one phone.
+                      */}
+                    {photo.uploadedAt === undefined ? (
+                      <Text style={[styles.label, { color: colors.muted }]}>
+                        Only on this phone — a backup file will not carry it
+                      </Text>
+                    ) : null}
+                  </>
                 ) : (
                   /**
                    * Two different facts wore one sentence, and a restore is
