@@ -39,8 +39,6 @@ export function IronScreen(): React.ReactElement {
     <Screen title="Iron" back>
       {machines.length === 0 ? (
         <Panel label="No equipment yet">
-          <View style={styles.spot}>
-          </View>
           {/* Empty screens invite (UX-SPEC §6). */}
           <Body>Add your tractor and its service schedule comes with it.</Body>
         </Panel>
@@ -138,7 +136,6 @@ function MachineCard({
 }
 
 const styles = StyleSheet.create({
-  spot: { alignItems: 'center', paddingVertical: SPACE.md },
   card: {
     padding: SPACE.lg,
     borderRadius: RADII.softHead,

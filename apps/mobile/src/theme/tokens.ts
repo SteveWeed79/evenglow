@@ -48,12 +48,47 @@ export interface Theme {
    * what it is for: a stat label, a unit, a divider, a timestamp. It is the
    * wrong value for anything somebody has to *read*.
    *
-   * Secondary sentences take `ink` and earn their quietness from size and
-   * position instead. `tests/unit/contrast.test.ts` holds the floors; it
-   * cannot tell a label from a sentence, so that part is a rule rather than a
-   * gate.
+   * Secondary sentences take {@link inkQuiet}, not this and not `ink`.
+   * `tests/unit/contrast.test.ts` holds the floors; it cannot tell a label
+   * from a sentence, so that part is a rule rather than a gate.
    */
   muted: string;
+  /**
+   * Prose that is secondary and still prose.
+   *
+   * ## The gap this fills
+   *
+   * There were two text tokens and a rule that `muted` may never carry a
+   * sentence — so every sentence in the app, from the hero subtitle to a field
+   * hint to a confirmation, rendered at `ink`'s 12.6–18.9:1. One volume for
+   * all prose. The instruction to "earn quietness from size and position
+   * instead" is real advice and it is not enough on its own: at one colour,
+   * every screen reads equally loud, which is a large part of what
+   * `docs/DESIGN-BRIEF.md` §4 calls "everything is one shape and one speed".
+   *
+   * ## Why this does not touch R7
+   *
+   * R7 is a 7:1 **floor** on body text, and `ink` sits at 1.8–2.7× it. There
+   * was always room for a second sentence tier underneath — nothing in the
+   * rule asked for a two-colour palette, and nothing here lowers the floor.
+   * These measure 7.8–13.4:1 on the worse of the two surfaces, so this is
+   * secondary prose that is still comfortably AAA.
+   *
+   * ## Why these exact values
+   *
+   * Each is its own theme's `ink` walked toward its own `ground` until the
+   * worse surface reaches the **geometric mean of that theme's `ink` and
+   * `muted`** — the perceptual midpoint between the tier above and the tier
+   * below. Derived along that line rather than picked, so the tier keeps the
+   * palette's hue instead of dropping neutral grey into a warm interface.
+   *
+   * A fixed number would have been wrong, and the test caught it. Bright sun's
+   * `muted` is **9.70:1** — that theme raises every tier, so a flat 7.2 target
+   * put "quiet prose" *below* the label tier and would have rendered a hint
+   * fainter than the word labelling it. Deriving from each theme's own pair
+   * keeps `ink` > `inkQuiet` > `muted` true in all three.
+   */
+  inkQuiet: string;
   /**
    * Primary action, lit lamp, current tab — as a FILL or a lit surface.
    *
@@ -144,6 +179,8 @@ const LEAF = { daylight: '#61824b', lamplight: '#6b8f52', sun: '#6b8f52' } as co
 export const THEMES: Record<ThemeName, Theme> = {
   daylight: {
     ground: '#ede6d2', raised: '#f5f0e1', ink: '#241c14', muted: '#6e6152',
+    /** 8.08:1 on ground, 8.84:1 on raised — between ink's 13.47 and muted's 4.82. */
+    inkQuiet: '#484136',
     lantern: '#e9b23c',
     /** 5.15:1 on raised, 4.71:1 on ground. */
     lanternInk: '#8a5b00',
@@ -157,6 +194,8 @@ export const THEMES: Record<ThemeName, Theme> = {
   },
   lamplight: {
     ground: '#201913', raised: '#2c2319', ink: '#f0e7d5', muted: '#9c8e7a',
+    /** 8.81:1 on ground, 7.83:1 on raised — between ink's 12.56 and muted's 4.82. */
+    inkQuiet: '#c0b8a8',
     lantern: '#e9b23c',
     /** 8:1 on raised — brass on a dark wall needs no darkening. */
     lanternInk: '#e9b23c',
@@ -170,6 +209,8 @@ export const THEMES: Record<ThemeName, Theme> = {
   },
   sun: {
     ground: '#fffdf6', raised: '#ffffff', ink: '#14100a', muted: '#4a4238',
+    /** 13.44:1 on ground, 13.68:1 on raised — between ink's 18.62 and muted's 9.70. */
+    inkQuiet: '#312d27',
     /**
      * Darkened deliberately: brass on white does not hold 7:1, and a fill that
      * cannot be told from the ground is not a button.

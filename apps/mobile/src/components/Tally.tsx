@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Animated, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { describeLogFailure } from '@steading/core/sync/failure';
 import { loggedConfirmation } from '@steading/core/voice';
@@ -7,6 +7,7 @@ import { Arch } from './Arch';
 import { NumberField } from './Form';
 import { Touch } from './Touch';
 import { tallySize } from '../theme/tally';
+import { useFade } from '../theme/motion';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
 
@@ -85,6 +86,7 @@ export function Tally({
   const [armed, setArmed] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [typing, setTyping] = useState(false);
+  const saidOpacity = useFade(confirmation !== null);
 
   /**
    * A fraction of the shorter edge, bounded by the column it has to share and
@@ -263,9 +265,26 @@ export function Tally({
         </Text>
       ) : null}
 
-      <Text style={[styles.confirmation, { color: colors.leaf }]} accessibilityLiveRegion="polite">
+      {/* ## Two things were wrong with this line
+          It was set in `leaf`, which measures **3.51:1 on the daylight
+          ground** — an accent token, floor 3:1, doing the job of body text.
+          `Tally`'s *failure* line had exactly this bug in rowan and was moved
+          to `ink` when `contrast.test.ts` was written; the success line six
+          rows below it was missed. It is the one sentence a farmer reads every
+          morning, and it was the least legible text in the app.
+
+          `inkQuiet` rather than `ink` because it is an exhale — nothing
+          depends on it being read — and that tier is what the app now has for
+          exactly this. 3.51:1 to 8.08:1.
+
+          The height was already reserved, so the fade touches no layout and
+          rides the native driver. The commit is durable before this runs. */}
+      <Animated.Text
+        style={[styles.confirmation, { color: colors.inkQuiet, opacity: saidOpacity }]}
+        accessibilityLiveRegion="polite"
+      >
         {confirmation ?? ' '}
-      </Text>
+      </Animated.Text>
     </Arch>
   );
 }

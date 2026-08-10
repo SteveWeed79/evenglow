@@ -120,8 +120,6 @@ export function BreedingScreen({ route }: ScreenProps<'Breeding'>): React.ReactE
 
       {dams.length === 0 ? (
         <Panel label="Name her first">
-          <View style={styles.spot}>
-          </View>
           <Body>
             A mating is recorded against one animal, so the dam has to have a name before there
             is anything to record it on.
@@ -295,7 +293,6 @@ function startOfDay(at: number): number {
 }
 
 const styles = StyleSheet.create({
-  spot: { alignItems: 'center', paddingVertical: SPACE.md },
   list: { gap: SPACE.sm },
   card: {
     padding: SPACE.lg,

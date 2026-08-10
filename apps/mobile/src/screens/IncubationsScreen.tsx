@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import { incubationStage } from '@steading/contracts';
 import { listIncubations } from '@steading/core/read/breeding';
 import { Primary, Row } from '../components/Form';
@@ -38,8 +38,6 @@ export function IncubationsScreen(): React.ReactElement {
     <Screen title="Eggs under" back>
       {incubations.length === 0 ? (
         <Panel label="Nothing set">
-          <View style={styles.spot}>
-          </View>
           {/* Empty screens invite (UX-SPEC §6). */}
           <Body>
             Put a date on a set of eggs and the candling day and the hatch day arrive on Today by
@@ -96,7 +94,6 @@ export function IncubationsScreen(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
-  spot: { alignItems: 'center', paddingVertical: SPACE.md },
   heading: {
     fontFamily: FONTS.data,
     fontSize: TYPE.label,

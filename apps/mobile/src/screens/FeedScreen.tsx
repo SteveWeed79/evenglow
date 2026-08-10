@@ -348,7 +348,7 @@ export function FeedScreen({ route }: ScreenProps<'Feed'>): React.ReactElement {
         * about to happen costs one line and removes both surprises.
         */}
       {drawnFrom !== null ? (
-        <Text style={[styles.note, { color: colors.muted }]} testID="feed-shelf-note">
+        <Text style={[styles.note, { color: colors.inkQuiet }]} testID="feed-shelf-note">
           Comes off the shelf — {drawnFrom.name} has {drawnFrom.quantity} {drawnFrom.unit} left.
         </Text>
       ) : sack !== null && measure === 'scoop' && (sack.unit === 'lb' || sack.unit === 'kg') ? (
@@ -373,7 +373,7 @@ export function FeedScreen({ route }: ScreenProps<'Feed'>): React.ReactElement {
           />
         </Field>
       ) : sack !== null ? (
-        <Text style={[styles.note, { color: colors.muted }]} testID="feed-shelf-note">
+        <Text style={[styles.note, { color: colors.inkQuiet }]} testID="feed-shelf-note">
           {sack.name} is counted in {sack.unit}, which says nothing about what goes in a
           trough — so the shelf stays as it is.
         </Text>

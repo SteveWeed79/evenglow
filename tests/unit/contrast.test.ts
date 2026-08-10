@@ -18,9 +18,15 @@ import { THEMES, type Theme, type ThemeName } from '@steading/mobile/theme/token
  *
  * | Tier | Floor | What it is for |
  * |---|---|---|
- * | `ink` | **7:1** | Anything somebody reads. R7's own number. |
+ * | `ink` | **7:1** | Prose that leads. R7's own number. |
+ * | `inkQuiet` | **7:1** | Prose that follows — a subtitle, a hint, a confirmation. |
  * | `muted` | 4.5:1 | Labels, units, dividers, timestamps — never a sentence. |
  * | accents, `lanternInk` | 3:1 | Graphical objects: rules, bars, dots, marks. |
+ *
+ * **Two tiers share R7's floor, and that is the point.** R7 sets a floor, not
+ * a target, and `ink` clears it by 1.8–2.7×. Reading it as "one colour for all
+ * prose" is what left the app with a single volume for every sentence it says.
+ * `inkQuiet` is quieter *and* still AAA; the rule did not have to move.
  *
  * What this cannot check is *usage* — whether a sentence was set in `muted`,
  * or a heading tinted to match its own rule. Two of those existed when this
@@ -62,6 +68,63 @@ describe('R7 — body text at 7:1, because the screen is in the sun', () => {
     for (const { on, ratio } of pairs(theme, 'ink')) {
       expect(ratio, `ink on ${on}`).toBeGreaterThanOrEqual(7);
     }
+  });
+});
+
+/**
+ * The second sentence tier, and the reason it is checked at 7:1 like the first.
+ *
+ * `inkQuiet` exists so prose can be quiet without becoming a label. R7 is a
+ * floor rather than a target, and `ink` sits at 1.8–2.7× it, so there was
+ * always room underneath for a second tier that is still AAA. Nothing here
+ * lowers the floor; this asserts the new tier clears the same one.
+ *
+ * It is also checked from *above*: a quiet tier that drifts up to `ink` is a
+ * tier that has stopped doing its job, and nothing else in this file would
+ * notice. That is the failure mode this token was added to prevent.
+ */
+describe('R7 — secondary prose is quieter and still AAA', () => {
+  it.each(themes)('%s reads', (_name, theme) => {
+    for (const { on, ratio } of pairs(theme, 'inkQuiet')) {
+      expect(ratio, `inkQuiet on ${on}`).toBeGreaterThanOrEqual(7);
+    }
+  });
+
+  /**
+   * Ordering, which is the assertion that caught the first attempt.
+   *
+   * Bright sun raises every tier — its `muted` is 9.70:1 — so a quiet-prose
+   * value picked as a flat number landed *below* the label tier and would have
+   * set a hint fainter than the word labelling it.
+   */
+  it.each(themes)('%s keeps ink louder and muted quieter', (_name, theme) => {
+    const worst = (t: 'ink' | 'inkQuiet' | 'muted'): number =>
+      Math.min(...pairs(theme, t).map((p) => p.ratio));
+
+    expect(worst('ink')).toBeGreaterThan(worst('inkQuiet'));
+    expect(worst('inkQuiet')).toBeGreaterThan(worst('muted'));
+  });
+
+  /**
+   * The step down from `ink` matches the step up from `muted`.
+   *
+   * This is the derivation itself, asserted rather than described: each value
+   * is the geometric mean of its own theme's pair. A fixed separation would be
+   * the wrong test — sun's two tiers are only 1.9× apart where daylight's are
+   * 2.8×, so the achievable gap differs per theme and a single number would
+   * either fail sun or wave daylight through.
+   */
+  it.each(themes)('%s sits at the perceptual midpoint', (_name, theme) => {
+    const worst = (t: 'ink' | 'inkQuiet' | 'muted'): number =>
+      Math.min(...pairs(theme, t).map((p) => p.ratio));
+
+    const stepDown = worst('ink') / worst('inkQuiet');
+    const stepUp = worst('inkQuiet') / worst('muted');
+    expect(stepDown).toBeCloseTo(stepUp, 1);
+
+    // And a backstop: a tier this close to `ink` would be two names for one
+    // colour, however evenly it divided the gap.
+    expect(stepDown).toBeGreaterThan(1.3);
   });
 });
 

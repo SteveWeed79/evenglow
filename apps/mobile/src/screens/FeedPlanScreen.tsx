@@ -228,7 +228,7 @@ export function FeedPlanScreen({ route }: ScreenProps<'FeedPlan'>): React.ReactE
       </Field>
 
       {dailyUg === null ? null : (
-        <Text style={[styles.note, { color: colors.muted }]} testID="plan-total">
+        <Text style={[styles.note, { color: colors.inkQuiet }]} testID="plan-total">
           {formatMass(dailyUg, units)} a day for {group.count}
           {group.count === 1 ? '' : ' of them'}.
         </Text>

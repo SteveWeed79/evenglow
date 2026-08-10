@@ -97,8 +97,6 @@ export function InboxScreen(): React.ReactElement {
     <Screen title="Needs a look" back>
       {rejected.length === 0 ? (
         <Panel label="Nothing to look at">
-          <View style={styles.spot}>
-          </View>
           <Body>
             Everything you have logged has either been sent or is waiting to be. Nothing has
             been refused.
@@ -206,7 +204,6 @@ function Action({
 }
 
 const styles = StyleSheet.create({
-  spot: { alignItems: 'center', paddingVertical: SPACE.md },
   card: {
     padding: SPACE.lg,
     borderRadius: RADII.softHead,

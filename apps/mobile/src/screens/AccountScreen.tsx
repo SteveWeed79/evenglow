@@ -505,7 +505,7 @@ export function AccountScreen({
         <GoogleButton disabled={saving} onToken={withGoogle} />
       ) : null}
 
-      <Text style={[styles.note, { color: colors.muted }]}>
+      <Text style={[styles.note, { color: colors.inkQuiet }]}>
         Been sent an invitation link? Open it instead — it brings the farm with it.
       </Text>
     </Screen>
