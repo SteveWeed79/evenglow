@@ -18,11 +18,23 @@
 import { MongoClient } from 'mongodb';
 import { ulid } from 'ulid';
 import { applyIndexes, INDEXES, leadingKey } from './indexes.ts';
-import { COLLECTIONS, scopedOn } from './scoped.ts';
+import { COLLECTIONS, scopedOn, type Tenanted } from './scoped.ts';
 import { applyBatch } from '../sync/apply.ts';
 import { MUTATION_SCHEMA_VERSION } from '@steading/contracts';
 
 const VERIFY_DB = 'steading_verify';
+
+/**
+ * A projected record, as much of it as the checks below read back.
+ *
+ * `col<T>` is constrained to `Tenanted` on purpose — a shape without `_id` and
+ * `orgId` is not a document this layer will hand out, which is the type system
+ * carrying the tenancy rule rather than a comment doing it.
+ */
+interface Projected extends Tenanted {
+  archivedAt?: Date | null;
+  count?: number;
+}
 
 const uri = process.env.MONGODB_URI;
 if (!uri) {
@@ -206,7 +218,106 @@ try {
     low[0]?.reason,
   );
 
-  // ── 10. Role enforcement ───────────────────────────────────────────────────
+  // ── 10. Taking an append-only record back (D3 as amended, §4 A10) ──────────
+  //
+  // Immutable in VALUE, removable in WHOLE. The update above stays rejected —
+  // that is what makes these unable to conflict — and a delete archives, which
+  // is repeatable and so cannot conflict either.
+  const mistake = eggLog({ clientSeq: 20 });
+  await applyBatch(a, claims(ORG_A), [mistake]);
+
+  const removal = {
+    ...eggLog({ clientSeq: 21 }),
+    targetId: mistake.targetId,
+    op: 'delete' as const,
+    payload: {},
+  };
+
+  const removed = await applyBatch(a, claims(ORG_A), [removal]);
+  check(
+    'An append-only record can be taken back',
+    removed[0]?.status === 'applied',
+    removed[0]?.reason,
+  );
+
+  const gone = await a
+    .col<Projected>('eggLogs')
+    .findOne({ _id: mistake.targetId });
+  check(
+    'Removing archives rather than deleting (P13)',
+    gone !== null && gone.archivedAt instanceof Date,
+  );
+  // Archived is not erased: the tally it held is still on the document.
+  check('The archived record keeps the value it held', gone?.count === 18);
+
+  const replayedRemoval = await applyBatch(a, claims(ORG_A), [removal]);
+  const stillGone = await a
+    .col<Projected>('eggLogs')
+    .findOne({ _id: mistake.targetId });
+  check(
+    'A replayed removal is a duplicate, not a second archive',
+    replayedRemoval[0]?.status === 'duplicate',
+    replayedRemoval[0]?.status,
+  );
+  // The same instant, so archiving twice is genuinely archiving once — which
+  // is why two devices cannot disagree about a removal.
+  check(
+    'Archiving twice leaves the same instant',
+    stillGone?.archivedAt?.getTime() === gone?.archivedAt?.getTime(),
+  );
+
+  // Out-of-order arrival across devices: the delete beat its own create here.
+  // The intent is satisfied — there is nothing to archive — and it must not be
+  // an error, or a farm's inbox fills with refusals for work it did correctly.
+  const orphanRemoval = await applyBatch(a, claims(ORG_A), [
+    { ...eggLog({ clientSeq: 22 }), op: 'delete' as const, payload: {} },
+  ]);
+  check(
+    'A removal that arrives before its record is a no-op, not an error',
+    orphanRemoval[0]?.status === 'applied',
+    orphanRemoval[0]?.reason,
+  );
+
+  // ── 11. The hour meter's way out ───────────────────────────────────────────
+  //
+  // The reason `hourReading` is removable rather than exempt, proven end to
+  // end. Its own monotonic rule refuses the correction as readily as it
+  // refuses nothing at all, so a fat-fingered reading locks the machine out of
+  // its own log — permanently, unless the bad reading can be taken back AND
+  // `highestHours` stops counting it. That second half is a Mongo query, so
+  // this is the only place it can be proven.
+  const typo = reading(9999, 30);
+  const typoApplied = await applyBatch(a, claims(ORG_A), [typo]);
+  check(
+    'A mistyped hour reading applies — nothing above it exists to refuse it',
+    typoApplied[0]?.status === 'applied',
+    typoApplied[0]?.reason,
+  );
+
+  const blocked = await applyBatch(a, claims(ORG_A), [reading(500, 31)]);
+  check(
+    'Every true reading below the typo is now refused',
+    blocked[0]?.status === 'rejected',
+    blocked[0]?.reason,
+  );
+
+  const untyped = await applyBatch(a, claims(ORG_A), [
+    { ...reading(0, 32), targetId: typo.targetId, op: 'delete' as const, payload: {} },
+  ]);
+  check(
+    'The mistyped reading can be taken back',
+    untyped[0]?.status === 'applied',
+    untyped[0]?.reason,
+  );
+
+  const recovered = await applyBatch(a, claims(ORG_A), [reading(500, 33)]);
+  check(
+    'The machine can be logged again — highestHours skips archived rows',
+    recovered[0]?.status === 'applied',
+    recovered[0]?.reason,
+  );
+
+  // ── 12. Role enforcement ───────────────────────────────────────────────────
   const hand = { userId: ulid(), orgId: ORG_A, role: 'hand' as const };
   const forbidden = await applyBatch(a, hand, [
     {
@@ -216,6 +327,63 @@ try {
     },
   ]);
   check('A hand cannot create a flock', forbidden[0]?.status === 'rejected', forbidden[0]?.reason);
+
+  /**
+   * A hand may take back what a hand may write.
+   *
+   * The person who mis-logged the tally is standing at the coop holding the
+   * phone. Sending them to find an owner, who then removes a record they never
+   * saw from a description given hours later, is worse for the data than
+   * letting them fix it.
+   */
+  const handTally = eggLog({ clientSeq: 40 });
+  const handWrote = await applyBatch(a, hand, [handTally]);
+  check('A hand can record a tally', handWrote[0]?.status === 'applied', handWrote[0]?.reason);
+
+  const handRemoved = await applyBatch(a, hand, [
+    {
+      ...eggLog({ clientSeq: 41 }),
+      targetId: handTally.targetId,
+      op: 'delete' as const,
+      payload: {},
+    },
+  ]);
+  check(
+    'A hand can take back what a hand recorded',
+    handRemoved[0]?.status === 'applied',
+    handRemoved[0]?.reason,
+  );
+
+  const handEdit = await applyBatch(a, hand, [
+    {
+      ...eggLog({ clientSeq: 42 }),
+      targetId: handTally.targetId,
+      op: 'update' as const,
+      payload: { count: 99 },
+    },
+  ]);
+  check('A hand still cannot edit one', handEdit[0]?.status === 'rejected', handEdit[0]?.reason);
+
+  // ── 13. Isolation of the removal path ──────────────────────────────────────
+  //
+  // The archive is an update, and an update is the operation a tenancy guard is
+  // easiest to get wrong on — `assertSafeUpdate` exists for exactly this.
+  const foreignRemoval = await applyBatch(b, claims(ORG_B), [
+    {
+      ...eggLog({ clientSeq: 50 }),
+      targetId: mistake.targetId,
+      op: 'delete' as const,
+      payload: {},
+    },
+  ]);
+  const untouched = await a
+    .col<Projected>('eggLogs')
+    .findOne({ _id: mistake.targetId });
+  check(
+    "Another org's removal cannot reach this farm's record",
+    untouched?.archivedAt?.getTime() === gone?.archivedAt?.getTime(),
+    foreignRemoval[0]?.status,
+  );
 } catch (error) {
   await fail('Data path', error);
 }
