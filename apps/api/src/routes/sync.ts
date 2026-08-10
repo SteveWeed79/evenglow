@@ -66,8 +66,25 @@ export async function syncRoutes(app: FastifyInstance, env: Env): Promise<void> 
      * Read from the server's own environment; nothing on the wire reaches it.
      */
     if (env.playConfig !== null && !env.freeSyncOrgs.has(claims.orgId)) {
-      const entitlement = entitlementOf((await findOrgById(claims.orgId))?.subscription, Date.now());
-      if (!entitlement.syncing && entitlement.refusal !== null) {
+      const org = await findOrgById(claims.orgId);
+
+      /**
+       * The same grant, written where it can be changed without a restart.
+       *
+       * `FREE_SYNC_ORGS` is read once at startup, so comping a tester meant
+       * editing a file and bouncing the service. This is the same decision
+       * made by the same authority — a shell on the server, via
+       * `pnpm farm:grant` — and it takes effect on the next request.
+       *
+       * Checked here rather than folded into `entitlementOf`, because that
+       * function is shared with the client and answers "what has this farm
+       * paid for". A grant is not a payment; it is this server choosing not to
+       * ask, and the two must not come to look like the same thing.
+       */
+      const granted = org?.syncGranted !== undefined;
+
+      const entitlement = entitlementOf(org?.subscription, Date.now());
+      if (!granted && !entitlement.syncing && entitlement.refusal !== null) {
         // The reason travels beside the sentence so the client can persist
         // which state it is in without parsing prose. The sentence is for a
         // person; the code is for the chip.
