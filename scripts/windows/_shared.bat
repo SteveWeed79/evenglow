@@ -110,19 +110,78 @@ exit /b 0
 ::
 :: node_modules records which linker built it, so the mismatch is detectable
 :: rather than guessable. When it differs, rebuild rather than asking.
+::
+:: **The manifest is not enough, and trusting it cost a second evening.**
+:: `.modules.yaml` records the linker pnpm was CONFIGURED with, not the tree it
+:: actually left behind. A machine that had built under the old layout came
+:: through this check reporting "Packages - ready", still holding
+:: `node_modules\.pnpm\react-native@0.86.2_...\` — half pruned, so Metro served
+:: the app and then 404'd on an asset inside it:
+::
+::   ENOENT: no such file or directory, scandir
+::     'C:\steading\node_modules\.pnpm\react-native@0.86.2_...\
+::      node_modules\react-native\Libraries\LogBox\UI\LogBoxImages'
+::
+:: A correctly hoisted tree has NO `.pnpm\react-native@*` directory at all —
+:: verified against a clean install — so its presence is a fact about the disk
+:: rather than an inference, and it is the one worth checking. `Packages: -72`
+:: in the install output is the same event seen from the other side.
+set "layout_wrong="
 if exist "node_modules\.modules.yaml" (
   findstr /r /c:"nodeLinker.*hoisted" "node_modules\.modules.yaml" >nul 2>&1
-  if errorlevel 1 (
-    echo   The package layout has changed - rebuilding it.
-    echo   This takes a couple of minutes and only happens once.
-    rd /s /q "node_modules" 2>nul
-    rd /s /q "apps\mobile\node_modules" 2>nul
-    rd /s /q "apps\api\node_modules" 2>nul
-    rd /s /q "packages\contracts\node_modules" 2>nul
-    rd /s /q "packages\core\node_modules" 2>nul
-    :: The generated Android project has the old paths compiled into it, and
-    :: Gradle will happily reuse them. `expo prebuild` makes it again.
-    rd /s /q "apps\mobile\android" 2>nul
+  if errorlevel 1 set "layout_wrong=1"
+)
+
+:: Leftovers from an isolated install, whatever the manifest claims.
+:: `dir /b` rather than `if exist`, which does not match a directory wildcard
+:: reliably. Errorlevel 0 means it found one, and finding one is the fault.
+dir /b "node_modules\.pnpm\react-native@*" >nul 2>&1
+if not errorlevel 1 set "layout_wrong=1"
+
+if defined layout_wrong (
+  echo   The package layout has changed - rebuilding it.
+  echo   This takes a couple of minutes and only happens once.
+  rd /s /q "node_modules" 2>nul
+  rd /s /q "apps\mobile\node_modules" 2>nul
+  rd /s /q "apps\api\node_modules" 2>nul
+  rd /s /q "packages\contracts\node_modules" 2>nul
+  rd /s /q "packages\core\node_modules" 2>nul
+  :: The generated Android project has the old paths compiled into it, and
+  :: Gradle will happily reuse them. `expo prebuild` makes it again.
+  rd /s /q "apps\mobile\android" 2>nul
+  :: And Metro's cache, which is the part that survived the last rebuild and
+  :: produced the failure above. It stores RESOLVED ABSOLUTE PATHS, so a tree
+  :: rebuilt underneath it is still asked for at the old `.pnpm` location — the
+  :: app bundles, then 404s on an asset, and nothing says why.
+  for /d %%D in ("%TEMP%\metro-*") do rd /s /q "%%D" 2>nul
+  for /d %%D in ("%TEMP%\haste-map-*") do rd /s /q "%%D" 2>nul
+)
+
+:: The native build caches a fingerprint of every CMakeLists it configured
+:: against, and a reinstall replaces those files underneath it. AGP then fails
+:: mid-check rather than reconfiguring:
+::
+::   [bug 255965912] ... CMakeLists.txt was modified during checks for C/C++
+::   configuration invalidation. Before [DELETED], after [LAST_MODIFIED_CHANGED]
+::
+:: The rebuild branch above already deletes `apps\mobile\android`, so it cannot
+:: happen there. It happens when somebody reinstalls BY HAND — which is exactly
+:: what the previous failure told them to do — and then the stale `.cxx`
+:: survives into the next build and blames a file it cannot see change.
+::
+:: `.modules.yaml` is written by every install, so it being newer than `.cxx`
+:: means the tree moved after the last native configure. That is a comparison
+:: rather than a guess, and node is already required above.
+if exist "apps\mobile\android\app\.cxx" (
+  :: `%%R` rather than a variable, because delayed expansion is per batch file
+  :: and this one is reached through `call`. And no angle brackets anywhere in
+  :: the node snippet: cmd parses this line before node ever sees it, and a
+  :: bare `-` would become a redirect. `Math.max` says the same thing.
+  for /f %%R in ('node -e "const{statSync:t}=require('fs');const m=t('node_modules/.modules.yaml').mtimeMs,c=t('apps/mobile/android/app/.cxx').mtimeMs;process.stdout.write(Math.max(m,c)===m?'stale':'ok')" 2^>nul') do (
+    if "%%R"=="stale" (
+      echo   The packages moved since the last native build - clearing its cache.
+      rd /s /q "apps\mobile\android\app\.cxx" 2>nul
+    )
   )
 )
 

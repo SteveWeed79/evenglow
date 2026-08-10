@@ -369,10 +369,82 @@ export function alertLive(alert: Alert, now: number): boolean {
   return alert.endsAt === undefined || alert.endsAt > now;
 }
 
+/**
+ * The tier word an NWS event name ends with, and the hazard in front of it.
+ *
+ * "Extreme Heat Watch" is `{ hazard: 'extreme heat', tier: 'watch' }`. Every
+ * NWS product is named this way — Tornado Warning, Frost Advisory, Winter
+ * Storm Watch — so the split is a fact about the feed rather than a guess.
+ */
+function tierOf(event: string): { hazard: string; tier: string } | null {
+  const match = /^(.*)\s+(watch|warning|advisory|statement)$/i.exec(event.trim());
+  if (match === null) return null;
+  return { hazard: match[1]!.toLowerCase(), tier: match[2]!.toLowerCase() };
+}
+
+/**
+ * A watch that has become a warning is one product, not two.
+ *
+ * NWS upgrades a watch to a warning for the same hazard and leaves both in
+ * `/alerts/active` until the watch expires on its own — so a farm gets two
+ * full-height cards about one heat event, the first of which says, in its own
+ * words, *"The Extreme Heat Watch has been replaced."* Reported from a handset
+ * with exactly that on screen, twice.
+ *
+ * Dropping the watch hides nothing: a warning is strictly the more serious of
+ * the two, covers the same ground, and is drawn immediately above it. This is
+ * the app agreeing with the service rather than deciding for the farm.
+ *
+ * **Only ever the lesser tier, and only for the same hazard.** A Tornado Watch
+ * standing beside a Flood Warning is two real things and both survive.
+ */
+export function withoutSupersededWatches(alerts: readonly Alert[]): Alert[] {
+  const warned = new Set<string>();
+  for (const alert of alerts) {
+    const named = tierOf(alert.event);
+    if (named !== null && named.tier === 'warning') warned.add(named.hazard);
+  }
+
+  return alerts.filter((alert) => {
+    const named = tierOf(alert.event);
+    return named === null || named.tier !== 'watch' || !warned.has(named.hazard);
+  });
+}
+
+/**
+ * Hazards an official alert already covers, as the app's own warning kinds.
+ *
+ * The strip below the alerts is this app's opinion — *"Dangerous heat today
+ * and tomorrow for Austies"* — and it is worth having, because nobody at the
+ * weather service knows which stock is in which field. It is NOT worth having
+ * underneath a meteorologist saying the same thing about the same afternoon.
+ *
+ * So when an official product covers the hazard, the derived row for it stands
+ * down. The specific loss is the species detail, and it is a real one — which
+ * is why this is scoped to the hazard rather than clearing the strip.
+ */
+export function hazardsCoveredByAlerts(alerts: readonly Alert[]): Set<string> {
+  const covered = new Set<string>();
+
+  for (const alert of alerts) {
+    const named = tierOf(alert.event);
+    // A watch is a maybe. Only a warning or an advisory is the service saying
+    // it is happening, which is what the derived row also claims.
+    if (named === null || named.tier === 'watch' || named.tier === 'statement') continue;
+
+    if (/heat/.test(named.hazard)) covered.add('heat');
+    if (/freeze|hard freeze/.test(named.hazard)) covered.add('freeze');
+    if (/frost/.test(named.hazard)) covered.add('frost');
+  }
+
+  return covered;
+}
+
 /** The live ones, worst first. Ties keep their id order so a list holds still. */
 export function liveAlerts(alerts: readonly Alert[], now: number): Alert[] {
-  return alerts
-    .filter((alert) => alertLive(alert, now))
+  // A watch the service has already upgraded is not a second thing that is
+  // happening — see `withoutSupersededWatches`.
+  return withoutSupersededWatches(alerts.filter((alert) => alertLive(alert, now)))
     .sort((a, b) => {
       const bySeverity = SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity];
       if (bySeverity !== 0) return bySeverity;
