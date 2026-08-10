@@ -163,9 +163,21 @@ export function Photos({
   const [expanded, setExpanded] = useState(false);
 
   if (!expanded) {
-    // Only the ones this device can actually draw. A frame that says "on the
-    // other phone" is worth a panel and is not worth a thumbnail.
+    // Only the ones this device can actually draw. A frame that says the bytes
+    // are absent is worth a panel and is not worth a thumbnail.
     const shown = mine.filter((photo) => hasBytes(photo.id)).slice(0, PREVIEW);
+
+    /**
+     * The closed row is a third place this fact gets stated, and it inherited
+     * the sentence the other two had already been corrected out of.
+     *
+     * Reaching this line means `mine` is non-empty and *none* of it has bytes
+     * here, so "not on this phone" is unconditionally true of every one of
+     * them. "Still coming" is the stronger claim and is only made when the
+     * server holds all of them — one photo with no `uploadedAt` in the set is
+     * one that may be gone, and a summary line has no room to say which.
+     */
+    const coming = mine.every((photo) => photo.uploadedAt !== undefined);
 
     return (
       <Touch
@@ -212,7 +224,11 @@ export function Photos({
             </View>
           ) : (
             <Text style={[styles.preview, { color: colors.ink }]} numberOfLines={1}>
-              {mine.length === 0 ? 'A receipt, a manual, or evidence' : 'On the other phone'}
+              {mine.length === 0
+                ? 'A receipt, a manual, or evidence'
+                : coming
+                  ? 'Still coming'
+                  : 'Not on this phone'}
             </Text>
           )}
         </View>
@@ -224,11 +240,16 @@ export function Photos({
 
   return (
     <Panel label={mine.length === 0 ? 'Photos' : `Photos (${mine.length})`}>
+      {/* The empty state used to promise every photo was "shared with the
+          farm's other phones when there is signal" — unconditionally, to a
+          farm that may have no account at all and whose bytes therefore never
+          leave the handset. The same overpromise the tile made, in the one
+          place somebody reads before deciding to rely on it. */}
       {!read ? null : mine.length === 0 ? (
         <Body>
           A receipt, a manual, or something you want to remember the look of — a wound, a kill,
-          a leaf. Shrunk to save space, and shared with the farm&rsquo;s other phones when
-          there is signal.
+          a leaf. Shrunk to save space, and copied to the farm server once this farm is
+          syncing — until then this phone holds the only one.
         </Body>
       ) : (
         <>
@@ -264,7 +285,23 @@ export function Photos({
                       { borderColor: open === photo.id ? colors.lanternInk : colors.border },
                     ]}
                   >
-                    <Text style={[styles.label, { color: colors.muted }]}>On the other phone</Text>
+                    {/**
+                      * "On the other phone" - and there was not another phone.
+                      *
+                      * Reported from a one-handset farm looking at a photo it
+                      * had taken itself. The label asserted a second device
+                      * that has never existed on that farm, which is not a
+                      * thing this app can know: what it knows is that the
+                      * bytes are not here.
+                      *
+                      * `uploadedAt` separates the two real cases and the
+                      * opened row below already branches on it correctly. The
+                      * thumbnail did not, so the tile and the sentence under
+                      * it disagreed.
+                      */}
+                    <Text style={[styles.label, { color: colors.muted }]}>
+                      {photo.uploadedAt === undefined ? 'Not on this phone' : 'Still coming'}
+                    </Text>
                   </View>
                 )}
               </Touch>
@@ -276,16 +313,50 @@ export function Photos({
             .map((photo) => (
               <View key={photo.id} style={styles.opened} testID={`photo-open-${photo.id}`}>
                 {hasBytes(photo.id) ? (
-                  /* Full width and square-ish: a receipt at 128px is not a
-                     receipt, it is a thumbnail of one. `contain` because these
-                     are documents as often as they are pictures, and cropping
-                     a receipt loses the total. */
-                  <Image
-                    source={{ uri: photoUri(photo.id) }}
-                    resizeMode="contain"
-                    style={[styles.large, { borderColor: colors.border }]}
-                    accessibilityLabel={`Photo of ${what}, ${taken(photo)}`}
-                  />
+                  <>
+                    {/* Full width and square-ish: a receipt at 128px is not a
+                        receipt, it is a thumbnail of one. `contain` because
+                        these are documents as often as they are pictures, and
+                        cropping a receipt loses the total. */}
+                    <Image
+                      source={{ uri: photoUri(photo.id) }}
+                      resizeMode="contain"
+                      style={[styles.large, { borderColor: colors.border }]}
+                      accessibilityLabel={`Photo of ${what}, ${taken(photo)}`}
+                    />
+                    {/**
+                      * Said while the picture still exists, which is the only
+                      * time saying it is any use.
+                      *
+                      * A photograph is the one thing in this app that can be
+                      * lost for good. Records are safe three ways over — they
+                      * are in SQLite, they go to the server as mutations, and
+                      * the backup file carries them. Bytes have exactly one
+                      * copy until they upload, and `BACKUP_EXCLUDES` means a
+                      * backup will not save them: `buildBackup` writes records,
+                      * and twenty megabytes of JPEG in a JSON file is not a
+                      * backup anybody can send anywhere.
+                      *
+                      * So a farm with no account, or one that has not synced
+                      * since taking this, is holding the only copy and had no
+                      * way to know. That is how a picture goes missing and the
+                      * app looks perfectly healthy — reported exactly that way,
+                      * from a phone that had wiped its own storage between the
+                      * photo being taken and being looked for.
+                      *
+                      * `uploadedAt` is set by `sync/photos.ts` once the bytes
+                      * are on the server, so its absence is precisely "this is
+                      * the only copy". Muted, one line, no colour: it is a fact
+                      * worth knowing, not an alarm, and the alarming version
+                      * would be a badge on every photo of a farm that has
+                      * chosen to stay on one phone.
+                      */}
+                    {photo.uploadedAt === undefined ? (
+                      <Text style={[styles.label, { color: colors.muted }]}>
+                        Only on this phone — a backup file will not carry it
+                      </Text>
+                    ) : null}
+                  </>
                 ) : (
                   /**
                    * Two different facts wore one sentence, and a restore is
@@ -302,11 +373,21 @@ export function Photos({
                    * the record since it was written. Telling somebody a
                    * photograph is on its way when it is gone is the worst
                    * version of this screen being wrong.
+                   *
+                   * **Neither sentence may claim a second phone.** Both did,
+                   * and a farm with one handset reported it: "there is not
+                   * another phone." Whether one exists is not something this
+                   * app can know — a record with no `uploadedAt` is a picture
+                   * the server never received, and where it is now depends on
+                   * which device took it, which is exactly the fact that is
+                   * absent. So the copy says what is true of this phone and
+                   * names the loss as conditional, rather than inventing a
+                   * handset to put the blame on.
                    */
                   <Body>
                     {photo.uploadedAt === undefined
-                      ? 'This picture is not on this phone. It was only ever on the handset that took it — a backup file carries the record, not the photograph.'
-                      : 'Taken on another phone. The record is here and the picture is still coming — it arrives the next time this phone has signal and a moment spare.'}
+                      ? 'This picture never reached the farm server, so it only ever existed on the handset that took it. If that was this phone, the photograph is gone and this record is what is left of it — a backup file carries records, not pictures.'
+                      : 'The record is here and the picture is still coming — it arrives the next time this phone has signal and a moment spare.'}
                   </Body>
                 )}
 

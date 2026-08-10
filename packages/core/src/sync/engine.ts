@@ -169,12 +169,15 @@ async function tick(transport?: SyncTransport): Promise<void> {
     await pull();
 
     /**
-     * Photo bytes move on the idle tick, and only there.
+     * Photo bytes move here, and — since the per-photo gate landed — on a
+     * working tick below as well.
      *
-     * An empty queue is the one moment this device is certain every metadata
-     * record it holds has reached the server — which is what a PUT needs, since
-     * bytes for a photo the server has never heard of are a 404. It is also
-     * when there is bandwidth going spare.
+     * This call used to be the only one, on the reasoning that an empty queue
+     * is the one moment this device is certain every metadata record it holds
+     * has reached the server, which is what a PUT needs: bytes for a photo the
+     * server has never heard of are a 404. True, and far stronger than
+     * necessary — the condition is about one record, not all of them. See the
+     * second call site.
      *
      * Never inside the flush: twenty-five megabytes of JPEG must not be able
      * to delay a morning's egg tallies, and a photo that fails must not take
@@ -228,7 +231,36 @@ async function tick(transport?: SyncTransport): Promise<void> {
     return;
   }
 
-  if (consecutiveFailures === 0) await pull();
+  /**
+   * Photos move on a working tick too, not only on an idle one — and they move
+   * under the same guard as the pull, for a reason a photo makes sharper.
+   *
+   * `movePhotos` used to run ONLY in the idle branch above, which requires an
+   * empty outbox. That left out the farm this is for: one that is simply
+   * behind. A backlog over the hundred-per-batch cap, or a morning of dropped
+   * connections, means the queue is never empty at the moment a tick ends —
+   * and its photos were held hostage by unrelated rows, indefinitely, while
+   * the server was willing to take them the whole time.
+   *
+   * The per-photo gate is what makes that safe: a photo is offered once its
+   * OWN record is off this device (see `sync/photos.ts`), which is the
+   * condition a PUT actually needs.
+   *
+   * **Guarded like the pull rather than run unconditionally.** A mutation
+   * batch is kilobytes; five photos are tens of megabytes. Firing those at a
+   * connection that just failed to carry a JSON POST spends a farm's data
+   * allowance to fail slower, and the deferral that looks most like an
+   * exception here is not one — a farm held on 402 keeps every mutation
+   * queued, so its photo records never reach the server, so a PUT would 404
+   * on arrival. There is nothing this can usefully do until the flush works.
+   *
+   * After the flush and after the pull, never inside them, for the reason
+   * above the idle call. `PER_PASS` bounds a tick.
+   */
+  if (consecutiveFailures === 0) {
+    await pull();
+    await movePhotos();
+  }
 
   const next = nextDelay({
     consecutiveFailures,

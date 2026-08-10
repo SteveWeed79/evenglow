@@ -346,7 +346,11 @@ describe('a picture that is not here', () => {
     await screen.press(`photo-${id}`);
 
     expect(screen.text()).not.toContain('still coming');
-    expect(screen.text()).toContain('only ever on the handset that took it');
+    // The wording changed and the distinction did not: a record the server
+    // never received. It no longer blames "the handset that took it", because
+    // a one-phone farm reported being told about a phone it does not have.
+    expect(screen.text()).toContain('never reached the farm server');
+    expect(screen.text()).not.toContain('another phone');
     screen.unmount();
   });
 });

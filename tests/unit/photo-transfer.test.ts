@@ -3,6 +3,9 @@ import { newId } from '@steading/contracts';
 import { resetApiBase, setAccessToken, setApiBase } from '@steading/core/api';
 import { listPhotos } from '@steading/core/read/photos';
 import { setPhotoBytes, transferPhotos } from '@steading/core/sync/photos';
+import { startSync, stopSync } from '@steading/core/sync/engine';
+import type { SyncTransport } from '@steading/core/sync/flush';
+import { localStore } from '@steading/core/db/store';
 import { enqueue } from '@steading/core/sync/queue';
 import { freshStore } from '../support/store';
 
@@ -50,9 +53,20 @@ function server(options: { status?: number; body?: Uint8Array } = {}): void {
   });
 }
 
-/** A photo record, as `/sync` and the capture screen would have written it. */
-async function photo(id: string, uploadedAt?: number): Promise<void> {
-  await enqueue({
+/**
+ * A photo record, as `/sync` and the capture screen would have written it —
+ * and then acknowledged, because the bytes are not offered until it has been.
+ *
+ * **The acknowledgement is the point rather than test scaffolding.** A PUT for
+ * a photo the server has never heard of is a 404, so the transfer waits until
+ * that record is off this device. It used to wait for the WHOLE outbox to
+ * empty, which was sufficient and far too blunt: a farm that was behind never
+ * emptied it and therefore never uploaded a picture. The gate is per photo
+ * now, so a test that wants an upload has to do what a real device does and
+ * get the record acknowledged first.
+ */
+async function photo(id: string, uploadedAt?: number, acknowledged = true): Promise<void> {
+  const queued = await enqueue({
     entity: 'photo',
     op: 'create',
     targetId: id,
@@ -64,6 +78,10 @@ async function photo(id: string, uploadedAt?: number): Promise<void> {
       ...(uploadedAt === undefined ? {} : { uploadedAt }),
     },
   });
+
+  if (acknowledged) {
+    await localStore().resolveBatch([queued], [{ id: queued.id, status: 'applied' }]);
+  }
 }
 
 beforeEach(async () => {
@@ -236,5 +254,162 @@ describe('a farm with a backlog', () => {
 
     expect(moved.uploaded).toBe(5);
     expect(moved.pending).toBe(3);
+  });
+});
+
+
+/**
+ * The half that was silently broken, and the reason a picture went missing.
+ *
+ * `movePhotos` ran only on the idle tick, which needs an empty outbox. A farm
+ * with a backlog over the hundred-per-batch cap, or a morning of dropped
+ * connections, never has one at the moment a tick ends — so its photos were
+ * held by unrelated rows indefinitely, while the server was willing to take
+ * them the whole time.
+ *
+ * Note which farm is NOT rescued by this: one held on 402 keeps every mutation
+ * queued, so its photo records never reach the server, so its own record is
+ * always owed and a PUT would 404 anyway. The gate is honest about that rather
+ * than trying — see the guard in `sync/engine.ts`.
+ */
+describe('a farm that is behind', () => {
+  it('still sends a photo whose own record has landed', async () => {
+    server();
+    const id = newId();
+    await photo(id);
+    files.set(id, PIXELS);
+
+    // Something else entirely, still waiting to go. The old gate refused every
+    // photo on the strength of this one row.
+    await enqueue({
+      entity: 'eggLog',
+      op: 'create',
+      targetId: newId(),
+      payload: { occurredAt: Date.now(), flockId: SUBJECT, count: 12 },
+    });
+
+    const moved = await transferPhotos();
+    expect(moved.uploaded).toBe(1);
+  });
+
+  it('holds back a photo whose own record has not', async () => {
+    server();
+    // Enqueued and never acknowledged: the server has no record to attach
+    // bytes to, so a PUT would be a 404.
+    const id = newId();
+    await photo(id, undefined, false);
+    files.set(id, PIXELS);
+
+    const moved = await transferPhotos();
+    expect(moved.uploaded).toBe(0);
+  });
+});
+
+
+/**
+ * The engine's half, which is where the defect actually lived.
+ *
+ * Every test above calls `transferPhotos` directly, and every one of them
+ * passed the whole time photos were not moving — because the thing that was
+ * broken was not the transfer, it was `tick` deciding whether to run it.
+ * `movePhotos` was reachable only from the idle branch, which needs an empty
+ * outbox, so a farm with anything queued never reached it. A unit test of the
+ * function being skipped cannot notice that it is being skipped.
+ *
+ * So these drive the loop rather than the transfer, and assert on what the
+ * device actually sent.
+ */
+describe('the tick that carries photos', () => {
+  /** Answers `/snapshot` as JSON and everything else as bytes. */
+  function farmServer(flush: { fails: boolean }): void {
+    vi.stubGlobal('fetch', async (url: string, init?: RequestInit): Promise<Response> => {
+      sent.push({ url, method: init?.method ?? 'GET' });
+      if (url.includes('/snapshot')) {
+        return new Response(JSON.stringify({ changes: [], serverTs: Date.now(), more: false }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(PIXELS as BodyInit, { status: flush.fails ? 500 : 200 });
+    });
+  }
+
+  function puts(): { url: string; method: string }[] {
+    return sent.filter((request) => request.method === 'PUT');
+  }
+
+  /**
+   * One pass of the loop, then stop it.
+   *
+   * The photo pass is awaited inside the same tick, after the flush, so the
+   * flush landing is not proof the tick has finished. The settle is for that
+   * continuation — and it is also what makes the negative case meaningful,
+   * since "nothing was sent" needs to be checked after the moment it would
+   * have been sent rather than before it.
+   */
+  async function oneTick(transport: SyncTransport): Promise<void> {
+    let flushed = false;
+    startSync(async (mutations) => {
+      const answer = await transport(mutations);
+      flushed = true;
+      return answer;
+    });
+
+    await vi.waitFor(() => {
+      expect(flushed).toBe(true);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    stopSync();
+  }
+
+  const applied: SyncTransport = (mutations) =>
+    Promise.resolve({
+      status: 200,
+      body: {
+        results: mutations.map((m) => ({ id: m.id, status: 'applied' as const })),
+        serverTs: Date.now(),
+      },
+    });
+
+  it('sends a photo on a tick that had work to flush', async () => {
+    farmServer({ fails: false });
+    const id = newId();
+    // Unacknowledged, exactly as a real capture leaves it: the record and the
+    // bytes are both this device's to send, and the flush in this same tick is
+    // what makes the PUT legal.
+    await photo(id, undefined, false);
+    files.set(id, PIXELS);
+
+    await oneTick(applied);
+
+    expect(puts()).toHaveLength(1);
+    expect(puts()[0]?.url).toContain(id);
+  });
+
+  /**
+   * The guard, and why it is the same one the pull uses.
+   *
+   * A mutation batch is kilobytes and five photos are tens of megabytes. A
+   * connection that could not carry the first will not carry the second, and
+   * trying spends a farm's data allowance to fail slower.
+   */
+  it('sends no bytes at a server that just refused the flush', async () => {
+    farmServer({ fails: true });
+    const id = newId();
+    // Acknowledged, so nothing but the guard is stopping this one — the point
+    // is a photo that is genuinely ready, on a farm whose queue is not.
+    await photo(id);
+    files.set(id, PIXELS);
+
+    await enqueue({
+      entity: 'eggLog',
+      op: 'create',
+      targetId: newId(),
+      payload: { occurredAt: Date.now(), flockId: SUBJECT, count: 12 },
+    });
+
+    await oneTick(() => Promise.resolve({ status: 500, body: null }));
+
+    expect(puts()).toHaveLength(0);
   });
 });

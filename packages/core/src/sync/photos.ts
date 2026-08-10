@@ -1,4 +1,5 @@
 import { photoUrl, syncHeaders } from '../api';
+import { localStore } from '../db/store';
 import { listPhotos } from '../read/photos';
 import { enqueue } from './queue';
 
@@ -101,6 +102,32 @@ export async function transferPhotos(): Promise<TransferResult> {
   let pending = 0;
 
   /**
+   * Records this device still owes the server, so a photo is offered only once
+   * its own record has landed.
+   *
+   * **This replaces "the whole outbox is empty" as the safety condition**, and
+   * the swap is what lets photos move at all on a farm that is behind. A PUT
+   * for a photo the server has never heard of is a 404 — that is the real
+   * constraint, and it is about ONE record. An empty queue was a proxy for it:
+   * cheap, always sufficient, and never satisfied on the farms that most need
+   * their pictures off the handset.
+   *
+   * Knowing this per photo is newly possible. Acknowledged rows used to be
+   * deleted, so "absent from the outbox" meant applied OR never written;
+   * invariant 7 keeps them as `applied`, so a row that is still `queued` or
+   * `sending` is now a positive fact rather than an inference.
+   *
+   * `rejected` is deliberately not owed. That record is never going to land,
+   * so waiting on it would hold the bytes for ever; the PUT 404s once, costs
+   * one request, and the photo stays exactly where it is.
+   */
+  const owed = new Set(
+    (await localStore().readOutboxBySeq())
+      .filter((mutation) => mutation.status === 'queued' || mutation.status === 'sending')
+      .map((mutation) => mutation.targetId),
+  );
+
+  /**
    * Newest first, which is what `listPhotos` already gives.
    *
    * The photo somebody took this morning is the one they might want on the
@@ -114,7 +141,7 @@ export async function transferPhotos(): Promise<TransferResult> {
     if (photo.uploadedAt === undefined) {
       // Only what this device actually holds. A record whose bytes live on
       // somebody else's phone is not this device's to upload.
-      if (await store.has(photo.id)) toUpload.push(photo.id);
+      if (!owed.has(photo.id) && (await store.has(photo.id))) toUpload.push(photo.id);
       continue;
     }
 
