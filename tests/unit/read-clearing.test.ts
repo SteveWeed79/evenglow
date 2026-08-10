@@ -387,7 +387,7 @@ describe('the rest of what a group produces', () => {
       payload: { occurredAt: T0 - DAY, flockId: GROUP, amountGrams: 900 },
     });
 
-    expect((await lastFedByGroup()).get(GROUP)).toBe(T0);
+    expect((await lastFedByGroup()).get(GROUP)?.at).toBe(T0);
   });
 });
 
