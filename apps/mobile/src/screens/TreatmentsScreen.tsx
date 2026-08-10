@@ -74,7 +74,6 @@ export function TreatmentsScreen({ route }: ScreenProps<'Treatments'>): React.Re
       {treatments.length === 0 ? (
         <Panel label="Nothing recorded yet">
           {/* Empty screens invite (UX-SPEC §6). */}
-          <View style={styles.spot} />
           <Body>
             Every wormer, jab and spray you record lands here with the day it was given and how
             long it holds the produce for. It is the answer to &ldquo;what has this lot had&rdquo;
@@ -132,7 +131,6 @@ function detailFor(treatment: Treatment): string {
 
 const styles = StyleSheet.create({
   rows: { gap: SPACE.sm },
-  spot: { alignItems: 'center', paddingVertical: SPACE.md },
   subject: {
     fontFamily: FONTS.data,
     fontSize: TYPE.label,

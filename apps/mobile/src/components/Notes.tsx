@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { mayChangeNote, newId, type NoteSubject, type Role } from '@steading/contracts';
 import { listNotes, type Note, notesOn } from '@steading/core/read/notes';
-import { Confirm, Failure, Primary, Secondary, TextField, useSaver } from './Form';
+import { saidConfirmation } from '@steading/core/voice';
+import { Confirm, Confirmation, Failure, Primary, Secondary, TextField, useSaver } from './Form';
 import { Icon } from './Icon';
 import { Body, Panel } from './Panel';
 import { Touch } from './Touch';
@@ -76,27 +77,32 @@ export function Notes({
     };
   }, []);
 
-  const { saving, failure, save } = useSaver(useCallback(() => setBody(''), []));
+  const { saving, failure, said, save } = useSaver(useCallback(() => setBody(''), []));
 
   const add = useCallback(() => {
     const written = body.trim();
     if (written === '') return;
 
-    void save(async () => {
-      await log({
-        entity: 'note',
-        op: 'create',
-        targetId: newId(),
-        payload: {
-          occurredAt: Date.now(),
-          subjectEntity,
-          subjectId,
-          body: written,
-          ...(author === undefined ? {} : { authorName: author }),
-          ...(me === null ? {} : { authorId: me.userId }),
-        },
-      });
-    });
+    void save(
+      async () => {
+        await log({
+          entity: 'note',
+          op: 'create',
+          targetId: newId(),
+          payload: {
+            occurredAt: Date.now(),
+            subjectEntity,
+            subjectId,
+            body: written,
+            ...(author === undefined ? {} : { authorName: author }),
+            ...(me === null ? {} : { authorId: me.userId }),
+          },
+        });
+      },
+      // The field empties on success, which on its own is exactly what a
+      // failed save looks like.
+      saidConfirmation('note'),
+    );
   }, [save, log, body, subjectEntity, subjectId, author, me]);
 
   const thread = all === null ? [] : notesOn(all, subjectEntity, subjectId);
@@ -184,6 +190,7 @@ export function Notes({
       />
 
       <Failure message={failure} />
+      <Confirmation message={said} />
 
       <Primary
         label="Leave a note"

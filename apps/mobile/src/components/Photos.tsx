@@ -4,12 +4,13 @@ import { newId } from '@steading/contracts';
 import { listPhotos, type Photo } from '@steading/core/read/photos';
 import { capture, forgetBytes, hasBytes, photoUri } from '../photos/store';
 import { Confirm, Failure, Secondary } from './Form';
+import { Icon } from './Icon';
 import { Body, Panel } from './Panel';
 import { Touch } from './Touch';
 import { useLive } from '../hooks/useLive';
 import { useLog } from '../hooks/useSync';
 import { useTheme } from '../theme/ThemeProvider';
-import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
+import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
 
 /**
  * The photos kept against one thing.
@@ -56,6 +57,9 @@ import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
  * which described a peer-to-peer transfer this app has never done and now
  * definitely does not — the bytes go via the server like everything else.
  */
+
+/** How many thumbnails the closed row shows before the badge does the talking. */
+const PREVIEW = 3;
 
 export function Photos({
   subjectId,
@@ -137,8 +141,89 @@ export function Photos({
   const read = all !== null;
   const mine = (all ?? []).filter((photo) => photo.subjectId === subjectId);
 
+  /**
+   * Closed until asked for, which is a ranking rather than a preference.
+   *
+   * This panel was the only attachment on the screen that stayed open, and it
+   * was **largest when it had nothing in it** — an empty well plus two buttons,
+   * roughly 200px, sitting above `Log a feed`, `Log a job done` and `Record a
+   * treatment`. Three of the four daily acts pushed toward the fold by an
+   * occasional one.
+   *
+   * `GroupScreen`'s own comment already sets the rule this now follows: the
+   * split is "by how often a thing is done", which is why weighing, produce,
+   * the named animals and the breeding book sit behind one tap. Photographs are
+   * evidence — a wound, a kill, a receipt — and evidence is occasional by
+   * definition. Notes, directly above, has been a single row all along; this is
+   * the same shape for the same reason.
+   *
+   * The cost is one tap before the camera, and R1 is untouched by it: the
+   * five-second rule is about a daily *log*, and a photograph is not one.
+   */
+  const [expanded, setExpanded] = useState(false);
+
+  if (!expanded) {
+    // Only the ones this device can actually draw. A frame that says "on the
+    // other phone" is worth a panel and is not worth a thumbnail.
+    const shown = mine.filter((photo) => hasBytes(photo.id)).slice(0, PREVIEW);
+
+    return (
+      <Touch
+        affordance="disclose"
+        onPress={() => setExpanded(true)}
+        accessibilityRole="button"
+        accessibilityLabel={
+          mine.length === 0
+            ? `Add a photo of ${what}`
+            : `${mine.length} photos of ${what}. Tap to open them.`
+        }
+        testID={`photos-open-${subjectId}`}
+        style={({ pressed }) => [
+          styles.collapsed,
+          {
+            backgroundColor: colors.raised,
+            borderColor: colors.border,
+            opacity: pressed ? 0.8 : 1,
+          },
+        ]}
+      >
+        <View style={styles.collapsedWords}>
+          <View style={styles.head}>
+            <Text style={[styles.label, { color: colors.muted }]}>Photos</Text>
+            {mine.length > 0 ? (
+              <View style={[styles.badge, { backgroundColor: colors.lantern }]}>
+                <Text style={[styles.badgeCount, { color: colors.lanternOn }]}>{mine.length}</Text>
+              </View>
+            ) : null}
+          </View>
+
+          {/* Silent until the store answers, for the reason above: a row that
+              says "add a photo" to a group that has four is a lie told every
+              time the screen opens. */}
+          {!read ? null : shown.length > 0 ? (
+            <View style={styles.previewStrip}>
+              {shown.map((photo) => (
+                <Image
+                  key={photo.id}
+                  source={{ uri: photoUri(photo.id) }}
+                  style={[styles.thumb, { borderColor: colors.border }]}
+                />
+              ))}
+            </View>
+          ) : (
+            <Text style={[styles.preview, { color: colors.ink }]} numberOfLines={1}>
+              {mine.length === 0 ? 'A receipt, a manual, or evidence' : 'On the other phone'}
+            </Text>
+          )}
+        </View>
+
+        <Icon name="forward" size={20} color={colors.muted} />
+      </Touch>
+    );
+  }
+
   return (
-    <Panel label="Photos">
+    <Panel label={mine.length === 0 ? 'Photos' : `Photos (${mine.length})`}>
       {!read ? null : mine.length === 0 ? (
         <Body>
           A receipt, a manual, or something you want to remember the look of — a wound, a kill,
@@ -325,6 +410,33 @@ function taken(photo: Photo): string {
 }
 
 const styles = StyleSheet.create({
+  // The closed row, shaped exactly like `Notes` — two attachments to the same
+  // record should not be two different kinds of thing on the same screen.
+  collapsed: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACE.md,
+    minHeight: TAP.min,
+    padding: SPACE.md,
+    borderRadius: RADII.softHead,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  collapsedWords: { flex: 1, gap: 2 },
+  head: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  badge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: RADII.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: SPACE.xs,
+  },
+  badgeCount: { fontFamily: FONTS.data, fontSize: TYPE.label, fontVariant: ['tabular-nums'] },
+  preview: { fontFamily: FONTS.body, fontSize: TYPE.body },
+  previewStrip: { flexDirection: 'row', gap: SPACE.xs, paddingTop: 2 },
+  // Small enough that the row stays a row. The strip inside the open panel is
+  // 128 and is for looking at; these are for knowing there is something there.
+  thumb: { width: 32, height: 32, borderRadius: RADII.softHead, borderWidth: StyleSheet.hairlineWidth },
   strip: { gap: SPACE.md, paddingVertical: SPACE.xs },
   opened: { gap: SPACE.sm, marginTop: SPACE.sm },
   large: {

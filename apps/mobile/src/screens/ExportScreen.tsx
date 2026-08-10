@@ -6,6 +6,7 @@ import { Choice, Failure, Field, Row } from '../components/Form';
 import { Loading } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
+import { useFarmName } from '../hooks/useFarmName';
 import { useLive } from '../hooks/useLive';
 
 /**
@@ -59,6 +60,9 @@ const readAll = (): Promise<Sheet[]> => buildExport();
 
 export function ExportScreen(): React.ReactElement {
   const everything = useLive(readAll, 'your records');
+  // Whose records these are. A file handed to a vet or an accountant is the
+  // one moment the app's contents leave the farm and get read by a stranger.
+  const farm = useFarmName();
 
   const [range, setRange] = useState<RangeKey>('all');
   const [busy, setBusy] = useState<string | null>(null);
@@ -113,7 +117,7 @@ export function ExportScreen(): React.ReactElement {
 
   if (everything.length === 0) {
     return (
-      <Screen title="Get your records out" back>
+      <Screen title="Get your records out" back {...(farm === null ? {} : { subtitle: farm })}>
         <Panel label="Nothing to send yet">
           <Body>
             Once you have logged something it can be sent from here as a spreadsheet — one file

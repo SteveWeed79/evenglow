@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Animated, StyleSheet, Text, View } from 'react-native';
 import { type HistoryDay, type HistoryEvent, listHistory } from '@steading/core/read/history';
 import { Confirm, Failure, useSaver } from '../components/Form';
 import { Icon } from '../components/Icon';
@@ -10,6 +10,7 @@ import { Touch } from '../components/Touch';
 import { useLive } from '../hooks/useLive';
 import { useLog } from '../hooks/useSync';
 import { useUnits } from '../hooks/useUnits';
+import { useReveal } from '../theme/motion';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
 
@@ -81,8 +82,6 @@ export function HistoryScreen(): React.ReactElement {
       <Screen title="What happened">
         <Panel label="Nothing logged yet">
           {/* Empty screens invite (UX-SPEC §6). */}
-          <View style={styles.spot}>
-          </View>
           <Body>
             Every tally, feed, treatment and loss you record lands here, oldest kept for as long
             as you keep the app. Log something today and this fills itself in.
@@ -133,6 +132,7 @@ function DayBlock({
   onToggle: () => void;
 }): React.ReactElement {
   const { colors } = useTheme();
+  const reveal = useReveal();
 
   /**
    * Which row is showing its options, if any.
@@ -177,16 +177,21 @@ function DayBlock({
         <Icon name={open ? 'minus' : 'plus'} size={20} color={colors.muted} />
       </Touch>
 
-      {open
-        ? day.events.map((event) => (
+      {/* The rows settle in rather than appearing whole. The day's height
+          still changes in one frame; see `useReveal` for why that is the half
+          worth leaving alone. */}
+      {open ? (
+        <Animated.View style={[styles.events, reveal]}>
+          {day.events.map((event) => (
             <EventRow
               key={event.id}
               event={event}
               selected={selected === event.id}
               onSelect={() => setSelected(selected === event.id ? null : event.id)}
             />
-          ))
-        : null}
+          ))}
+        </Animated.View>
+      ) : null}
     </View>
   );
 }
@@ -285,6 +290,10 @@ function EventRow({
 
 const styles = StyleSheet.create({
   day: { gap: SPACE.xs },
+  // The rows used to be direct children of `day` and inherited its gap. They
+  // sit in a wrapper now so they can be animated as one, so it repeats here —
+  // the wrapper keeps `day`'s gap to the header above it.
+  events: { gap: SPACE.xs },
   head: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -305,7 +314,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.md,
   },
   actions: { gap: SPACE.sm, paddingHorizontal: SPACE.md, paddingBottom: SPACE.sm },
-  spot: { alignItems: 'center', paddingVertical: SPACE.md },
   more: { alignSelf: 'flex-start', paddingVertical: SPACE.xs, paddingHorizontal: SPACE.sm },
   heading: { fontFamily: FONTS.display, fontSize: TYPE.title },
   title: { fontFamily: FONTS.body, fontSize: TYPE.body },

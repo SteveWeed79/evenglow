@@ -2,13 +2,14 @@ import { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import {
   formatMass,
+  formatProduce,
   formatRange,
-
   libraryBreed,
   productsOf,
   longestWithdrawal,
   SPECIES_TRAITS,
 } from '@steading/contracts';
+import { groupPhrase } from '@steading/core/voice';
 import { latestWeightBySubject, listWeights } from '@steading/core/read/breeding';
 import { lastFedByGroup, listGroups, lossesByGroup, produceToday } from '@steading/core/read/groups';
 import { withdrawalsBySubject } from '@steading/core/read/withdrawals';
@@ -85,10 +86,23 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
 
   return (
     <Screen title={group.name} back>
-      <Text style={[styles.label, { color: colors.muted }]}>
-        {/* Herd, drove, gaggle — the species' own word, never "flock". */}
-        {traits.label} · {traits.collective} · {group.count} head
-        {breed ? ` · ${breed.name}` : ''}
+      {/* ## Said, not printed
+          This line had the species' own word in it all along — herd, drove,
+          gaggle — and rendered it as `CHICKENS · FLOCK · 10 HEAD ·
+          AUSTRALORP`: tracked caps in the data face, the register this app
+          reserves for section labels and units. A farm's own word for its own
+          animals, formatted as telemetry. Same facts, said as English. */}
+      <Text style={[styles.lede, { color: colors.inkQuiet }]}>
+        {groupPhrase({
+          collective: traits.collective,
+          // "A group of 2 other" is not a sentence. An unknown species drops
+          // the noun and keeps the count.
+          ...(group.species === 'other'
+            ? {}
+            : { species: traits.label.toLowerCase(), singular: traits.singular }),
+          count: group.count,
+          ...(breed === undefined ? {} : { breed: breed.name }),
+        })}
       </Text>
 
       {/* Informs, does not interrupt (R10). */}
@@ -109,15 +123,28 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
               {weight.sampled === true ? ' — a sample, not the whole group' : ''}.
             </Body>
           ) : null}
-          {fed === undefined ? null : <Body>Last fed {relative(fed)}.</Body>}
+          {/* The sack as well as the day, now that the reader keeps it. "Last
+              fed yesterday" answers half the question somebody standing in
+              front of the trough is actually asking. */}
+          {fed === undefined ? null : (
+            <Body>
+              Last fed {relative(fed.at)}
+              {fed.feedType === undefined ? '' : ` — ${fed.feedType}`}.
+            </Body>
+          )}
           {lost > 0 ? (
             <Body>
               {lost} lost since you started recording. The head count above is what you said is
               there — it is not reduced automatically.
             </Body>
           ) : null}
-          {milked ? <Body>Milked {milked.amount} ml today.</Body> : null}
-          {shorn ? <Body>Took {shorn.amount} g of fibre today.</Body> : null}
+          {/* In the farm's own units. These two printed raw storage units for
+              as long as they have existed, so an imperial farm read "3785 ml"
+              here and the same milking as gallons on the produce screen. */}
+          {milked ? <Body>Milked {formatProduce(milked.amount, milked.unit, units)} today.</Body> : null}
+          {shorn ? (
+            <Body>Took {formatProduce(shorn.amount, shorn.unit, units)} of fibre today.</Body>
+          ) : null}
         </Panel>
       ) : null}
 
@@ -353,12 +380,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
-  label: {
-    fontFamily: FONTS.data,
-    fontSize: TYPE.label,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
+  lede: { fontFamily: FONTS.body, fontSize: TYPE.body, lineHeight: TYPE.body * 1.4 },
   rows: { gap: SPACE.sm },
 });
 

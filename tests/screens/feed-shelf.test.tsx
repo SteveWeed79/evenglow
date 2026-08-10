@@ -251,3 +251,106 @@ describe('what is written', () => {
     expect(events.some((one) => one.entity === 'feedLog')).toBe(true);
   });
 });
+
+/**
+ * A shelf a farm can actually reach past.
+ *
+ * Feed names are long — "Purina Medicated Chick Starter" is a chip that takes
+ * a row on its own — so the list wraps to roughly one row per sack and the
+ * Tally, which is the control somebody opened this screen to use, goes below
+ * the fold at about six. A cap rather than a picker: UX-SPEC §5 rules out a
+ * modal wheel that cannot be read in sunlight, and this screen is used in a
+ * barn with a scoop in one hand.
+ */
+describe('a shelf with a lot on it', () => {
+  async function stock(names: string[], over: Record<string, unknown> = {}): Promise<void> {
+    for (const name of names) await shelfItem(newId(), { name, ...over });
+  }
+
+  it('shows the first few and keeps the rest one tap away', async () => {
+    await stock(['Feed A', 'Feed B', 'Feed C', 'Feed D', 'Feed E', 'Feed F', 'Feed G', 'Feed H']);
+    const screen = await mount(<FeedScreen {...routeProps({ groupId: GROUP })} />);
+
+    expect(screen.text()).toContain('Feed A');
+    // Eight on the shelf, six drawn.
+    expect(screen.text()).not.toContain('Feed H');
+    // Collapsed, because the harness joins interpolated JSX with spaces.
+    expect(screen.text().replace(/\s+/g, ' ')).toContain('Show all 8 on the shelf');
+
+    await screen.press('feed-show-all');
+
+    expect(screen.text()).toContain('Feed H');
+    screen.unmount();
+  });
+
+  it('does not offer a disclosure for a shelf that already fits', async () => {
+    await stock(['Feed A', 'Feed B']);
+    const screen = await mount(<FeedScreen {...routeProps({ groupId: GROUP })} />);
+
+    expect(screen.text()).toContain('Feed B');
+    expect(screen.has('feed-show-all')).toBe(false);
+    screen.unmount();
+  });
+
+  /**
+   * The tag sorts and never filters — a keeper putting scratch in front of the
+   * goats because it is the sack that is open is doing an ordinary thing. So
+   * another species' feed goes behind the cap rather than out of existence.
+   */
+  it('puts another species feed behind the cap rather than hiding it', async () => {
+    await stock(['Feed A', 'Feed B', 'Feed C', 'Feed D', 'Feed E', 'Feed F']);
+    await shelfItem(newId(), { name: 'Sweet Feed', species: ['goat'] });
+
+    const screen = await mount(<FeedScreen {...routeProps({ groupId: GROUP })} />);
+
+    // Feeding chickens, so the goat sack sorts last and falls past six.
+    expect(screen.text()).not.toContain('Sweet Feed');
+
+    await screen.press('feed-show-all');
+
+    expect(screen.text()).toContain('Sweet Feed');
+    screen.unmount();
+  });
+});
+
+/**
+ * What they had last time, first.
+ *
+ * A farm gives the same sack every morning, so the previous feed is a better
+ * guess than the label on the bag. `feedType` has been on the record since the
+ * schema was written and the reader threw it away.
+ */
+describe('the sack they had last time', () => {
+  it('is named on the screen rather than only dated', async () => {
+    await shelfItem(PELLETS);
+    await feed(3, 'Pounds');
+
+    const screen = await mount(<FeedScreen {...routeProps({ groupId: GROUP })} />);
+
+    expect(screen.text()).toContain('Layer pellets');
+    screen.unmount();
+  });
+
+  it('sorts ahead of a sack that merely suits the species', async () => {
+    // Six chicken-suitable sacks would push a seventh past the cap. The one
+    // they actually had last stays visible because it sorts to the front.
+    await shelfItem(newId(), { name: 'Sweet Feed', species: ['goat'] });
+    for (const name of ['Feed A', 'Feed B', 'Feed C', 'Feed D', 'Feed E', 'Feed F']) {
+      await shelfItem(newId(), { name });
+    }
+
+    // Feed the goat sack to these chickens — unusual, allowed, and recorded.
+    const first = await mount(<FeedScreen {...routeProps({ groupId: GROUP })} />);
+    await first.press('feed-show-all');
+    await first.pressLabel('Sweet Feed');
+    await first.press('tally-plus-1');
+    await first.press('tally-commit');
+    first.unmount();
+
+    const screen = await mount(<FeedScreen {...routeProps({ groupId: GROUP })} />);
+
+    // Without the recency tier it would sort last and sit behind the cap.
+    expect(screen.text()).toContain('Sweet Feed');
+    screen.unmount();
+  });
+});

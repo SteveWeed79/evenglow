@@ -16,6 +16,7 @@ import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { ensureLocalOrgId } from '../auth/local-org';
 import { readCachedClaims } from '../auth/session';
+import { useFarmName } from '../hooks/useFarmName';
 import { useNav } from '../hooks/useNav';
 import { APP_VERSION } from '../version';
 
@@ -86,6 +87,9 @@ interface Ready {
 
 export function BackupScreen(): React.ReactElement {
   const nav = useNav();
+  // Which farm this copy is of. It matters most on the screen that produces a
+  // file destined to sit in a drive next to somebody else's.
+  const farm = useFarmName();
 
   const [ready, setReady] = useState<Ready | null>(null);
   const [busy, setBusy] = useState(false);
@@ -274,7 +278,7 @@ export function BackupScreen(): React.ReactElement {
    */
   if (plan !== null) {
     return (
-      <Screen title="A copy of your farm" back>
+      <Screen title="A copy of your farm" back {...(farm === null ? {} : { subtitle: farm })}>
         <Planned
           plan={plan}
           busy={busy}
@@ -288,7 +292,7 @@ export function BackupScreen(): React.ReactElement {
   }
 
   return (
-    <Screen title="A copy of your farm" back>
+    <Screen title="A copy of your farm" back {...(farm === null ? {} : { subtitle: farm })}>
       {/**
         * Taking a copy is offered when there is something to copy. Putting one
         * back is offered **always**, and that is a correction.

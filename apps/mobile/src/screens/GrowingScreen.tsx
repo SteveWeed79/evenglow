@@ -37,8 +37,6 @@ export function GrowingScreen(): React.ReactElement {
     return (
       <Screen title="Growing" back>
         <Panel label="First, where are you?">
-          <View style={styles.spot}>
-          </View>
           <Body>
             Every sowing date is counted from your last spring frost, and every autumn crop is
             counted back from your first. Two dates, once, and the rest of this tab works out
@@ -162,7 +160,6 @@ function BedCard({
 }
 
 const styles = StyleSheet.create({
-  spot: { alignItems: 'center', paddingVertical: SPACE.md },
   season: {
     flexDirection: 'row',
     alignItems: 'center',

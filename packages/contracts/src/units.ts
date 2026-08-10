@@ -252,6 +252,34 @@ export function volumeIn(ul: Microlitres, system: UnitSystem): Measure {
   return volumeParts(ul, system);
 }
 
+/**
+ * A `productionLog` amount, in the farm's own units.
+ *
+ * `productionLog` is the one entity that stores two different quantities under
+ * one shape — millilitres for milk, grams for fibre and honey — so every
+ * screen that renders one has to switch on `unit` before it can format. That
+ * switch was written twice and forgotten once: the group screen printed
+ * `Milked 3785 ml today.` directly above a produce screen showing the same
+ * figure in gallons, on an imperial farm, and the two disagreed because only
+ * one of them had been converted.
+ *
+ * Here rather than in a screen because the next surface that renders produce
+ * will reach for the amount and the unit sitting right next to each other in
+ * the record, and the conversion has to be the thing that is easier to find
+ * than the raw number.
+ */
+export function formatProduce(
+  amount: number,
+  unit: string,
+  system: UnitSystem,
+): string {
+  if (unit === 'ml') return formatVolume(mlToUl(amount), system);
+  if (unit === 'g') return formatMass(gramsToUg(amount), system);
+  // A unit the schema does not know is shown as recorded rather than silently
+  // scaled by the wrong factor — wrong-and-confident is the worse failure.
+  return `${amount} ${unit}`;
+}
+
 // ── entry ────────────────────────────────────────────────────────────────────
 
 /**

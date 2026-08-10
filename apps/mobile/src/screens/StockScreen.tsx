@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { formatRange, libraryBreed, SPECIES_TRAITS } from '@steading/contracts';
 import type { Group } from '@steading/core/read/groups';
+import { groupPhrase } from '@steading/core/voice';
 import { Primary } from '../components/Form';
 import { Icon } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
@@ -32,8 +33,6 @@ export function StockScreen(): React.ReactElement {
     <Screen title="Stock" back>
       {groups.length === 0 ? (
         <Panel label="Nothing here yet">
-          <View style={styles.spot}>
-          </View>
           {/* Empty screens invite (UX-SPEC §6). */}
           <Body>
             Add what you keep and the morning&rsquo;s tally, the withdrawal windows and the
@@ -88,10 +87,23 @@ function GroupCard({ group, onPress }: { group: Group; onPress: () => void }): R
       <View style={styles.head}>
         <View style={styles.name}>
           <Text style={[styles.groupName, { color: colors.ink }]}>{group.name}</Text>
-          <Text style={[styles.label, { color: colors.muted }]}>
-            {/* Herd, drove, gaggle — the species' own word, never "flock". */}
-            {traits.label} · {traits.collective}
-            {breed ? ` · ${breed.name}` : ''}
+          {/* Said rather than printed — see GroupScreen for the argument.
+
+              The count is passed and not shown: it has its own column to the
+              right, at display size, because on a list it is the thing being
+              compared between cards. It is still needed here, because it
+              decides whether the sentence is about a herd at all — a card that
+              did not pass it read "A herd of Angus cattle." beside a 1. */}
+          <Text style={[styles.lede, { color: colors.inkQuiet }]}>
+            {groupPhrase({
+              collective: traits.collective,
+              ...(group.species === 'other'
+                ? {}
+                : { species: traits.label.toLowerCase(), singular: traits.singular }),
+              count: group.count,
+              showCount: false,
+              ...(breed === undefined ? {} : { breed: breed.name }),
+            })}
           </Text>
         </View>
 
@@ -102,13 +114,13 @@ function GroupCard({ group, onPress }: { group: Group; onPress: () => void }): R
       </View>
 
       {grow ? (
-        <Text style={[styles.clock, { color: colors.muted }]}>
+        <Text style={[styles.clock, { color: colors.inkQuiet }]}>
           Ready to process at {formatRange(grow.weeks, 'weeks')} old.
         </Text>
       ) : null}
 
       {lay ? (
-        <Text style={[styles.clock, { color: colors.muted }]}>
+        <Text style={[styles.clock, { color: colors.inkQuiet }]}>
           Expect first eggs at {formatRange(lay.weeks, 'weeks')} old.
         </Text>
       ) : null}
@@ -122,7 +134,6 @@ function GroupCard({ group, onPress }: { group: Group; onPress: () => void }): R
 }
 
 const styles = StyleSheet.create({
-  spot: { alignItems: 'center', paddingVertical: SPACE.md },
   card: {
     padding: SPACE.lg,
     borderRadius: RADII.softHead,
@@ -140,6 +151,9 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
+  // `label` stays for "head" and "Open" — a unit and a control, which is what
+  // the data face is actually for.
+  lede: { fontFamily: FONTS.body, fontSize: TYPE.body, lineHeight: TYPE.body * 1.35 },
   clock: { fontFamily: FONTS.body, fontSize: TYPE.body, lineHeight: TYPE.body * 1.35 },
   more: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs, alignSelf: 'flex-end' },
 });

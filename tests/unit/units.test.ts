@@ -4,6 +4,7 @@ import {
   fluidOuncesToUl,
   formatLength,
   formatMass,
+  formatProduce,
   formatTemperature,
   formatVolume,
   gramsToUg,
@@ -208,5 +209,30 @@ describe('threshold slack', () => {
     // the point here is that the unit did not change.
     expect(formatVolume(mlToUl(946), 'imperial')).toBe('1 qt');
     expect(formatVolume(mlToUl(945), 'imperial')).toBe('32 fl oz');
+  });
+});
+
+/**
+ * The group screen printed `Milked 3785 ml today.` directly above a produce
+ * screen showing the same milking as gallons, because only one of the two had
+ * been converted. `productionLog` is the one entity storing two different
+ * quantities under one shape, so the switch on `unit` has to live next to the
+ * conversion rather than being rewritten per screen.
+ */
+describe('produce reads in the farm own units', () => {
+  it('scales millilitres for an imperial farm', () => {
+    expect(formatProduce(3785, 'ml', 'imperial')).toBe('1 gal');
+    expect(formatProduce(3785, 'ml', 'metric')).toBe('3.8 L');
+  });
+
+  it('scales grams for an imperial farm', () => {
+    expect(formatProduce(1000, 'g', 'imperial')).toBe('2.2 lb');
+    expect(formatProduce(1000, 'g', 'metric')).toBe('1 kg');
+  });
+
+  it('shows a unit it does not know as recorded rather than scaling it wrongly', () => {
+    // Wrong-and-confident is the worse failure: a number silently multiplied
+    // by the wrong factor reads exactly like a correct one.
+    expect(formatProduce(3, 'supers', 'imperial')).toBe('3 supers');
   });
 });

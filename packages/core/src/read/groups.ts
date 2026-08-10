@@ -265,9 +265,36 @@ export async function lastShornByGroup(
 }
 
 /** When each group was last fed, so a screen can say "fed this morning". */
-export async function lastFedByGroup(): Promise<Map<string, number>> {
+/** When a group was last fed, and what they were given. */
+export interface LastFed {
+  at: number;
+  /**
+   * What the sack was called, when the record says.
+   *
+   * Optional in the schema and often absent — a feed can be logged with the
+   * text field left empty, and every record written before the shelf existed
+   * has nothing here.
+   */
+  feedType?: string;
+}
+
+/**
+ * The last feed for each group.
+ *
+ * **`feedType` has been on the record since the schema was written and this
+ * threw it away**, returning a bare timestamp. So the feed screen could say
+ * *"Last fed Monday, August 10"* and not which sack — while sorting a shelf of
+ * chips it had no memory of.
+ *
+ * That matters most on a big shelf. A farm feeds the same thing every day, so
+ * what a group had last time is the strongest guess available about what they
+ * are about to get, stronger than which species the sack is labelled for. It
+ * costs nothing to keep: the record was already parsed and the field already
+ * read past.
+ */
+export async function lastFedByGroup(): Promise<Map<string, LastFed>> {
   const records = await localStore().readRecordsByEntity('feedLog');
-  const latest = new Map<string, number>();
+  const latest = new Map<string, LastFed>();
 
   for (const record of records) {
     if (record.deleted) continue;
@@ -275,8 +302,11 @@ export async function lastFedByGroup(): Promise<Map<string, number>> {
     if (!parsed.success) continue;
 
     const seen = latest.get(parsed.data.flockId);
-    if (seen === undefined || parsed.data.occurredAt > seen) {
-      latest.set(parsed.data.flockId, parsed.data.occurredAt);
+    if (seen === undefined || parsed.data.occurredAt > seen.at) {
+      latest.set(parsed.data.flockId, {
+        at: parsed.data.occurredAt,
+        ...(parsed.data.feedType === undefined ? {} : { feedType: parsed.data.feedType }),
+      });
     }
   }
 
