@@ -97,7 +97,9 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
           collective: traits.collective,
           // "A group of 2 other" is not a sentence. An unknown species drops
           // the noun and keeps the count.
-          ...(group.species === 'other' ? {} : { species: traits.label.toLowerCase() }),
+          ...(group.species === 'other'
+            ? {}
+            : { species: traits.label.toLowerCase(), singular: traits.singular }),
           count: group.count,
           ...(breed === undefined ? {} : { breed: breed.name }),
         })}

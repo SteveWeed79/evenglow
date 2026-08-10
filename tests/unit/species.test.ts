@@ -58,6 +58,35 @@ describe('collective nouns', () => {
   });
 });
 
+/**
+ * A group of one is not a herd, and `label` and `collective` between them
+ * could only ever describe several — which is how a farm with one Angus came
+ * to read "A herd of Angus cattle." on its own Stock screen.
+ */
+describe('the word for one of them', () => {
+  it('is written down for every species, because English will not derive it', () => {
+    for (const species of SPECIES) {
+      const { singular } = SPECIES_TRAITS[species];
+      expect(singular, species).toBeTruthy();
+      // Lowercase, because it is dropped into the middle of a sentence.
+      expect(singular, species).toBe(singular.toLowerCase());
+      // No naive de-pluralising: a trailing "s" here is almost always a label
+      // that was copied across rather than a singular that was chosen.
+      expect(singular.endsWith('s'), species).toBe(false);
+    }
+  });
+
+  it('is not the plural label with the s knocked off', () => {
+    // The four that prove the point. A de-pluraliser gives "cattle", "geese",
+    // "sheep" and "guinea fowl" for one animal, and two of those are wrong.
+    expect(SPECIES_TRAITS.cattle.singular).toBe('cow');
+    expect(SPECIES_TRAITS.goose.singular).toBe('goose');
+    // And the two where the plural genuinely is the singular.
+    expect(SPECIES_TRAITS.sheep.singular).toBe('sheep');
+    expect(SPECIES_TRAITS.guineafowl.singular).toBe('guinea fowl');
+  });
+});
+
 describe('egg-laying', () => {
   const layers: Species[] = ['chicken', 'duck', 'goose', 'quail', 'emu', 'ostrich'];
   const nonLayers: Species[] = ['goat', 'cattle', 'sheep', 'pig', 'horse', 'alpaca'];
