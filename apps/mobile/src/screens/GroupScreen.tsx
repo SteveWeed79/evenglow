@@ -211,12 +211,6 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
           testID="go-treatments"
           onPress={() => nav.navigate('Treatments', { groupId })}
         />
-        <Row
-          title="Routine jobs"
-          detail="How often each one asks, or turn it off"
-          testID="go-care-routine"
-          onPress={() => nav.navigate('CareRoutine', { groupId })}
-        />
         {/* The season, which is what a year of logging is FOR. Everything else
             on this screen is about today. */}
         <Row
@@ -224,6 +218,18 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
           detail="What they have produced over a season, against what they have eaten"
           testID="go-trend"
           onPress={() => nav.navigate('Trend', { groupId })}
+        />
+        {/* Last of the three, because it is the only one that is a SETTING.
+            Intervals are chosen when a group is made and revisited about
+            yearly; the two above are opened whenever somebody wonders. An
+            earlier draft ordered these as a sentence — "what was given, how
+            often it comes round, what it added up to" — which reads well and
+            is not a frequency. */}
+        <Row
+          title="Routine jobs"
+          detail="How often each one asks, or turn it off"
+          testID="go-care-routine"
+          onPress={() => nav.navigate('CareRoutine', { groupId })}
         />
       </View>
 

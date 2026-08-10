@@ -87,7 +87,7 @@ export function Screen({
               onPress={() => navigation.navigate('QuickAdd')}
               accessibilityRole="button"
               accessibilityLabel="Log something"
-              accessibilityHint="Records a treatment, a job, a feed or a loss against any group"
+              accessibilityHint="Records a feed, a job, a treatment or a loss against any group"
               hitSlop={12}
               testID="quick-add"
               style={styles.control}

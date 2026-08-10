@@ -59,26 +59,39 @@ interface Act {
 }
 
 /**
- * The four daily acts, and deliberately only those.
+ * The four daily acts, in the order a week contains them.
  *
- * The same four that lead the group hub. Weighing, produce and the breeding
- * book are occasional and stay where they are — a quick-add that offers
- * everything is a menu, and a menu is what this replaces.
+ * **Feeding leads, and this screen had it third.** That is worse here than on
+ * the group hub, where the same fault was reported: this is the fast path,
+ * reached from the `+` in every tab header, and its whole reason for existing
+ * is bringing a non-egg record inside the three-tap budget (R1). The act it
+ * was built to accelerate sat below two done a handful of times a year, and
+ * the rarest of the four — a treatment — led the list.
+ *
+ * The order matches `GroupScreen` exactly, and that is a requirement rather
+ * than a tidiness: these are the two surfaces the same records are logged
+ * from, and a hand that learns "feed is first" in one must not have to unlearn
+ * it in the other. Muscle memory is the only thing making this faster than a
+ * menu.
+ *
+ * Weighing, produce and the breeding book are occasional and stay where they
+ * are — a quick-add that offers everything is a menu, and a menu is what this
+ * replaces.
  */
 const ACTS: readonly Act[] = [
-  {
-    key: 'treatment',
-    title: 'Record a treatment',
-    detail: 'Starts the withdrawal clock',
-    route: 'Treatment',
-  },
+  { key: 'feed', title: 'Log a feed', detail: 'What went in, and how much', route: 'Feed' },
   {
     key: 'care',
     title: 'Log a job done',
     detail: 'Worming, feet, minerals, a look-over',
     route: 'CareLog',
   },
-  { key: 'feed', title: 'Log a feed', detail: 'What went in, and how much', route: 'Feed' },
+  {
+    key: 'treatment',
+    title: 'Record a treatment',
+    detail: 'Starts the withdrawal clock',
+    route: 'Treatment',
+  },
   {
     key: 'loss',
     title: 'Record a loss',
