@@ -10,6 +10,7 @@ import {
 import { redeemPromoCode } from '../db/promo-codes';
 import { requireClaims, requireMutationClaims } from '../auth/require';
 import { readPlaySubscription } from '../billing/play';
+import { syncAccess } from '../billing/access';
 import { findOrgById, findOrgIdByPurchaseToken, setSubscription } from '../db/identity';
 import type { Env } from '../env';
 import { errorBody, HttpError } from '../http';
@@ -58,14 +59,19 @@ export async function billingRoutes(app: FastifyInstance, env: Env): Promise<voi
     try {
       const claims = await requireClaims(request.headers.authorization, env.AUTH_SECRET);
       const org = await findOrgById(claims.orgId);
-      const entitlement = entitlementOf(org?.subscription, Date.now());
+      /**
+       * The same DECISION the sync route makes, not merely the same function.
+       *
+       * This called `entitlementOf` directly and disagreed with `/sync` on
+       * every server that takes no payments — telling a farm that had just
+       * synced that nothing is sent anywhere. See `billing/access.ts`.
+       */
+      const entitlement = syncAccess(env, org);
 
       return reply.send({
         state: org?.subscription?.state ?? 'none',
         expiresAt: org?.subscription?.expiresAt ?? null,
         syncing: entitlement.syncing,
-        // The same sentence the sync route sends, from the same function, so
-        // the account screen and the chip cannot come to disagree.
         message: entitlement.refusal === null ? null : syncRefusalMessage(entitlement.refusal),
       });
     } catch (error) {
