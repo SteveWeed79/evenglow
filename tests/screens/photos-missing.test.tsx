@@ -45,6 +45,7 @@ describe('a picture whose bytes are not here', () => {
   it('never claims another phone when the server never had it', async () => {
     const id = await aPhoto();
     const screen = await mount(<Photos subjectId={SUBJECT} what="The hens" />);
+    await screen.press(`photos-open-${SUBJECT}`);
     await screen.press(`photo-${id}`);
 
     const said = screen.text();
@@ -60,6 +61,7 @@ describe('a picture whose bytes are not here', () => {
   it('says the picture is gone if this was the phone that took it', async () => {
     const id = await aPhoto();
     const screen = await mount(<Photos subjectId={SUBJECT} what="The hens" />);
+    await screen.press(`photos-open-${SUBJECT}`);
     await screen.press(`photo-${id}`);
 
     expect(screen.text()).toContain('never reached the farm server');
@@ -71,18 +73,54 @@ describe('a picture whose bytes are not here', () => {
   it('promises the picture only when the server actually holds it', async () => {
     const id = await aPhoto({ uploadedAt: Date.now() });
     const screen = await mount(<Photos subjectId={SUBJECT} what="The hens" />);
+    await screen.press(`photos-open-${SUBJECT}`);
     await screen.press(`photo-${id}`);
 
     expect(screen.text()).toContain('still coming');
     screen.unmount();
   });
 
-  /** The tile and the sentence under it must not disagree. */
-  it('labels the tile from the same fact as the sentence', async () => {
-    await aPhoto();
+  /**
+   * The tile and the sentence under it must not disagree — and neither may the
+   * closed row, which is where this correction was lost once already.
+   *
+   * `Photos` gained a collapsed row in parallel with this fix, and the new row
+   * shipped carrying the old sentence. Two edits to one component, each right
+   * on its own, merging without a textual conflict and putting `On the other
+   * phone` back on the first thing anybody sees. Every surface that states
+   * this fact is asserted here for that reason, closed row first.
+   */
+  it('labels every surface from the same fact as the sentence', async () => {
+    const id = await aPhoto();
     const screen = await mount(<Photos subjectId={SUBJECT} what="The hens" />);
 
     expect(screen.text()).toContain('Not on this phone');
+    expect(screen.text()).not.toContain('other phone');
+
+    await screen.press(`photos-open-${SUBJECT}`);
+    expect(screen.text()).toContain('Not on this phone');
+
+    await screen.press(`photo-${id}`);
+    expect(screen.text()).toContain('Not on this phone');
     screen.unmount();
+  });
+
+  /**
+   * The closed row has one line for a set, so it makes the stronger claim only
+   * when every photo in that set has earned it. One record with no
+   * `uploadedAt` among three is one that may be gone for good, and a summary
+   * has no room to say which — so it falls back to the thing true of all of
+   * them rather than promising for the majority.
+   */
+  it('promises the closed row nothing the server is not holding', async () => {
+    await aPhoto({ uploadedAt: Date.now() });
+    const screen = await mount(<Photos subjectId={SUBJECT} what="The hens" />);
+    expect(screen.text()).toContain('Still coming');
+    screen.unmount();
+
+    await aPhoto();
+    const mixed = await mount(<Photos subjectId={SUBJECT} what="The hens" />);
+    expect(mixed.text()).toContain('Not on this phone');
+    mixed.unmount();
   });
 });

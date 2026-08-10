@@ -163,9 +163,21 @@ export function Photos({
   const [expanded, setExpanded] = useState(false);
 
   if (!expanded) {
-    // Only the ones this device can actually draw. A frame that says "on the
-    // other phone" is worth a panel and is not worth a thumbnail.
+    // Only the ones this device can actually draw. A frame that says the bytes
+    // are absent is worth a panel and is not worth a thumbnail.
     const shown = mine.filter((photo) => hasBytes(photo.id)).slice(0, PREVIEW);
+
+    /**
+     * The closed row is a third place this fact gets stated, and it inherited
+     * the sentence the other two had already been corrected out of.
+     *
+     * Reaching this line means `mine` is non-empty and *none* of it has bytes
+     * here, so "not on this phone" is unconditionally true of every one of
+     * them. "Still coming" is the stronger claim and is only made when the
+     * server holds all of them — one photo with no `uploadedAt` in the set is
+     * one that may be gone, and a summary line has no room to say which.
+     */
+    const coming = mine.every((photo) => photo.uploadedAt !== undefined);
 
     return (
       <Touch
@@ -212,7 +224,11 @@ export function Photos({
             </View>
           ) : (
             <Text style={[styles.preview, { color: colors.ink }]} numberOfLines={1}>
-              {mine.length === 0 ? 'A receipt, a manual, or evidence' : 'On the other phone'}
+              {mine.length === 0
+                ? 'A receipt, a manual, or evidence'
+                : coming
+                  ? 'Still coming'
+                  : 'Not on this phone'}
             </Text>
           )}
         </View>
@@ -224,11 +240,16 @@ export function Photos({
 
   return (
     <Panel label={mine.length === 0 ? 'Photos' : `Photos (${mine.length})`}>
+      {/* The empty state used to promise every photo was "shared with the
+          farm's other phones when there is signal" — unconditionally, to a
+          farm that may have no account at all and whose bytes therefore never
+          leave the handset. The same overpromise the tile made, in the one
+          place somebody reads before deciding to rely on it. */}
       {!read ? null : mine.length === 0 ? (
         <Body>
           A receipt, a manual, or something you want to remember the look of — a wound, a kill,
-          a leaf. Shrunk to save space, and shared with the farm&rsquo;s other phones when
-          there is signal.
+          a leaf. Shrunk to save space, and copied to the farm server once this farm is
+          syncing — until then this phone holds the only one.
         </Body>
       ) : (
         <>
