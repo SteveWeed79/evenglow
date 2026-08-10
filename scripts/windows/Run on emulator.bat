@@ -58,13 +58,14 @@ if errorlevel 1 (
 echo   Found it.
 echo.
 
-echo   [1 of 2] Getting everything the app needs ready.
-call pnpm install
-if errorlevel 1 (
-  echo.
-  echo   That did not work. Copy everything above and send it to Claude.
-  goto :failed
-)
+echo   [1 of 2] Everything the app needs is ready.
+::
+:: The install happened in the preflight above, and this used to run a SECOND
+:: one. Two installs of the same tree in one window is not merely waste: the
+:: second printed `Packages: -72` on a perfectly clean checkout, which is the
+:: line a comment in _shared.bat had named as the signature of a broken
+:: layout. A diagnostic that fires on healthy machines is worse than none, and
+:: it sent a real debugging session after the wrong fault.
 
 :: Expo Go is gone, and losing a farm twice is why.
 ::

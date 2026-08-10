@@ -99,14 +99,17 @@ exit /b 0
 :: complete under pnpm's default layout on Windows — see the file for the
 :: arithmetic. Switching linkers means deleting and rebuilding node_modules,
 :: and pnpm asks before doing that. There is no console to ask on, so a script
-:: install answers nothing and **quietly leaves the old layout in place**:
+:: install answers nothing and **quietly leaves the old layout in place**,
+:: after which the build fails on `.pnpm` paths that should not exist any more
+:: and the window says nothing about why. Cost a real evening.
 ::
-::   Lockfile is up to date, resolution step is skipped
-::   Packages: -72
-::   Done in 2.2s
-::
-:: — after which the build fails on `.pnpm` paths that should not exist any
-:: more, and the window says nothing about why. Cost a real evening.
+:: **`Packages: -72` was named here as the signature of that, and it is not.**
+:: The run scripts used to install twice - once here and once again in their
+:: own step - and the second install prints that line on a perfectly clean
+:: checkout. It was in the output of the original failure, so it looked
+:: diagnostic; it fires on healthy machines too, and it sent a later debugging
+:: session after the wrong fault. The duplicate installs are gone and the line
+:: means nothing. What does mean something is the directory check below.
 ::
 :: node_modules records which linker built it, so the mismatch is detectable
 :: rather than guessable. When it differs, rebuild rather than asking.
@@ -181,6 +184,11 @@ if exist "apps\mobile\android\app\.cxx" (
     if "%%R"=="stale" (
       echo   The packages moved since the last native build - clearing its cache.
       rd /s /q "apps\mobile\android\app\.cxx" 2>nul
+      :: Metro's too, for the same reason and from the same event: it stores
+      :: resolved ABSOLUTE paths, so a tree replaced underneath it is still
+      :: asked for where it used to be.
+      for /d %%M in ("%TEMP%\metro-*") do rd /s /q "%%M" 2>nul
+      for /d %%M in ("%TEMP%\haste-map-*") do rd /s /q "%%M" 2>nul
     )
   )
 )

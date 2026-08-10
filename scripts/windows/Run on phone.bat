@@ -37,15 +37,10 @@ if errorlevel 1 goto :failed
 
 call "%~dp0_shared.bat" :set_lan_address
 
-echo   [1 of 2] Getting everything the app needs ready.
-echo            The first time this takes a few minutes. Later runs are quick.
+echo   [1 of 2] Everything the app needs is ready.
 echo.
-call pnpm install
-if errorlevel 1 (
-  echo.
-  echo   That did not work. Copy everything above and send it to Claude.
-  goto :failed
-)
+:: Installed in the preflight above. A second install here printed
+:: `Packages: -72` on a clean checkout - see the note in Run on emulator.
 
 echo.
 echo   [2 of 2] Starting the app.

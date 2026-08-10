@@ -25,15 +25,8 @@ call "%~dp0_shared.bat" :update_code
 call "%~dp0_shared.bat" :ensure_packages
 if errorlevel 1 goto :failed
 
-echo   Getting everything ready. The first time this
-echo   takes a few minutes.
-echo.
-call pnpm install
-if errorlevel 1 (
-  echo.
-  echo   That did not work. Copy everything above and send it to Claude.
-  goto :failed
-)
+:: Installed in the preflight above. A second install here printed
+:: `Packages: -72` on a clean checkout - see the note in Run on emulator.
 
 call pnpm farm
 
