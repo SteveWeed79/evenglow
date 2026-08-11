@@ -1,0 +1,75 @@
+# The API, on a host that supplies TLS and a public name.
+#
+# `fly deploy` builds `apps/api/Dockerfile` and runs it at
+# `https://<app>.fly.dev`. That address is what goes into `eas.json`'s
+# `preview-farm` and `production` profiles — it is compiled into the APK, so
+# changing it means another build (`boot/config.ts` has no runtime setting, by
+# design: a server address a stranger can change is a phishing surface).
+#
+# Nothing here is a decision against `ACCESS-AND-BILLING.md` §4.1a. That
+# section picks an Oracle Always Free box carrying Fastify AND MongoDB for $0,
+# and it still does. This is the same service, on a host that hands over TLS,
+# a certificate and a DNS name in exchange for a few dollars a month — which
+# is the trade worth making while the database lives in Atlas and the box
+# would be running one Node process.
+#
+#   fly launch --no-deploy --copy-config     # once — names the app
+#   fly secrets set AUTH_SECRET=… MONGODB_URI=…
+#   fly deploy
+#
+# `fly secrets` is where the two required values go. They are NOT in this file
+# and must never be: it is committed.
+
+app = "steading-api"
+
+# Set at `fly launch` to whatever is nearest the farm. Sync is a background
+# flush of small payloads, so a hundred milliseconds either way is invisible —
+# but photos stream through this service and those are worth being near.
+primary_region = "ord"
+
+[build]
+  dockerfile = "apps/api/Dockerfile"
+
+[env]
+  PORT = "3001"
+
+  # **Required here, and the reason is the rate limiter.**
+  #
+  # Fly terminates TLS and forwards, appending the real client address to
+  # `X-Forwarded-For`. Fastify's `trustProxy` is off unless this is set, so
+  # `request.ip` would be Fly's proxy for every request on the machine — and
+  # every rate limiter in this service keys on `request.ip`. The auth limiter
+  # would then throttle the world as one caller: a farm signing in locked out
+  # by somebody else's failed attempt.
+  #
+  # One, not `true`. A number tells Fastify to take the address that many hops
+  # from the right, which a caller cannot forge past by adding headers of
+  # their own. See TRUSTED_PROXY_HOPS in `apps/api/src/env.ts`.
+  TRUSTED_PROXY_HOPS = "1"
+
+[http_service]
+  internal_port = 3001
+  force_https = true
+  auto_start_machines = true
+
+  # **One machine stays up.** Scaling to zero saves a couple of dollars and
+  # spends them on a cold start in front of somebody signing in — the one flow
+  # that cannot be done offline (A2.5), so the one that must not be slow.
+  # Logging is unaffected either way: mutations queue and flush later.
+  auto_stop_machines = "off"
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    # `/health` touches nothing — it does not open a database connection — so
+    # a red check means the process is down rather than that Atlas is slow.
+    path = "/health"
+    method = "GET"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "15s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  # Fastify, the Mongo driver and one argon2 at a time. Argon2 is the only
+  # thing here with a real memory appetite and it is bounded per hash.
+  memory = "512mb"

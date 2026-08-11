@@ -173,10 +173,18 @@ Ranked by what blocks "fully functional" first.
 6. **No launcher icon and no splash.** An APK handed to anyone today wears the
    default Expo icon.
 
-7. **No deployment target.** No container image, no process supervisor, no TLS, no
-   reverse-proxy config. `pnpm --filter @steading/api start` runs TypeScript source
-   through `tsx`, which is a devDependency. (Backup and self-hosted launchers do
-   exist — the gap is the hosting layer specifically.)
+7. ~~**No deployment target.**~~ **Closed for a hosted target; still open for a
+   box.** `apps/api/Dockerfile` builds the service and `fly.toml` runs it, which
+   is where the process supervisor and the TLS come from — the host supplies
+   both, and that is most of the argument for using one. `tsx` moved to
+   dependencies rather than being compiled away: this service imports
+   extensionless under `moduleResolution: bundler`, which neither Node's type
+   stripping nor `tsc` output can load without rewriting every import in it.
+   The install-to-`/health` path is verified; the image build itself is not,
+   because no container runtime was available where it was written.
+   **What remains is the self-hosted half** — a `mongod` beside it, systemd, and
+   a reverse proxy — which `ACCESS-AND-BILLING.md` §4.1a still describes as the
+   $0 answer once there are farms to amortise it over.
 
 8. **Nothing in CI compiles Android.** The native build is unverified by any
    automation, which is how the long-path failure reached a person instead of a
