@@ -1,0 +1,88 @@
+# The farm API, as a service that comes back.
+#
+#   sudo cp scripts/deploy/steading-api.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now steading-api
+#
+# `DESIGN-BRIEF.md` gap 7 listed "no process supervisor" beside the missing
+# container image. This is the supervisor: systemd restarts the service when it
+# dies and starts it when the box reboots, which is the whole job. Oracle
+# reboots instances for maintenance, and a farm should not discover that.
+
+[Unit]
+Description=Steading farm API
+Documentation=https://github.com/SteveWeed79/steading/blob/main/docs/OPERATOR.md
+# `network-online`, not `network`. The latter fires when the interface exists,
+# which on a cloud instance is before it has an address — and the service would
+# come up, fail to resolve Atlas, and be restarted five seconds later for no
+# reason anybody could see in the logs.
+After=network-online.target
+Wants=network-online.target
+
+# A service that cannot start must not spin: five restarts inside a minute
+# stops it and leaves the reason in `systemctl status` instead of burying it in
+# a scrolling log. A bad MONGODB_URI is exactly this shape.
+#
+# **These belong in [Unit], and the first draft had them in [Service].**
+# systemd moved them in 229 and now ignores them there with a warning nobody
+# reads — so the guard was decorative and the restart storm it exists to stop
+# would have happened anyway. Found by `systemd-analyze verify`, which is worth
+# running against this file after any edit:
+#
+#   systemd-analyze verify scripts/deploy/steading-api.service
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+[Service]
+Type=simple
+User=steading
+Group=steading
+
+# The checkout, not the deploy tree. `pnpm install` at the repo root with
+# `node-linker=hoisted` (see .npmrc) puts tsx in the root node_modules, and the
+# service runs the TypeScript source directly — see the Dockerfile for why
+# there is no compile step and why that is not laziness.
+WorkingDirectory=/opt/steading/apps/api
+ExecStart=/usr/bin/node /opt/steading/node_modules/tsx/dist/cli.mjs src/server.ts
+
+# AUTH_SECRET and MONGODB_URI live here, mode 0600, and nowhere else. Not in
+# the unit file, which is world-readable in /etc/systemd/system.
+EnvironmentFile=/etc/steading/api.env
+
+Restart=always
+RestartSec=5s
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=steading-api
+
+# ── hardening ───────────────────────────────────────────────────────────────
+#
+# This process is reachable from the internet and holds a database credential.
+# None of the below costs anything at this scale, and each one removes a way a
+# remote-code bug turns into a compromised box.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+# `ProtectSystem=strict` makes the whole filesystem read-only, and nothing here
+# needs to write: SQLite is on the handset, photos are in Mongo, and the logs
+# go to the journal. If that ever stops being true — a local upload directory,
+# a cache — this is the line that has to name it, deliberately.
+#
+# MemoryDenyWriteExecute stays FALSE on purpose. V8 is a JIT: it maps memory
+# writable and then executable, so setting it true kills Node at startup with a
+# SIGSEGV that looks like a crash in the app rather than a policy denial.
+
+[Install]
+WantedBy=multi-user.target

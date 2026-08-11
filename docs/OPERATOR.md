@@ -225,6 +225,115 @@ The API alone, watching for changes, against whatever `.env.local` says.
 
 ---
 
+## 4a. Putting the API somewhere phones can reach
+
+Everything above assumes a shell on a machine that already runs the service.
+This is how it gets there in the first place.
+
+**The thing that forces this is a second person.** A phone on your own wifi can
+reach a laptop, and a tethered one can reach it over `adb reverse`. Neither
+works for somebody else's phone in somebody else's house, and neither survives
+the laptop closing. A tester is what turns "runs locally" into "needs an
+address".
+
+### What the API actually needs
+
+Two environment values, and nothing else is required:
+
+| | |
+|---|---|
+| `AUTH_SECRET` | 32 characters or more. Signs access and refresh tokens |
+| `MONGODB_URI` | Atlas, or a `mongod` on the same box |
+
+Everything else in `apps/api/src/env.ts` has a default, and the features they
+switch on — Google sign-in, Play billing, the support loop — each stay off and
+say so rather than half-working.
+
+**One value is not required and should be set anyway: `TRUSTED_PROXY_HOPS=1`,
+behind any host that terminates TLS for you.** Fly, Render, a reverse proxy —
+all of them forward the request and append the caller to `X-Forwarded-For`.
+Fastify does not believe that header unless told how far to look, so
+`request.ip` becomes the proxy's address for every request. Every rate limiter
+in this service keys on `request.ip`, so the auth limiter would count the whole
+internet as one caller and lock a farm out over somebody else's typo. The
+number is how many proxies are actually in front; `true` would let a caller
+forge past it by sending the header themselves.
+
+### The box, start to finish
+
+**`docs/DEPLOY-THE-SERVER.md` is the step-by-step**, from a fresh Oracle
+Always Free instance to `https://api.swbuild.dev/health`. Three consoles that
+cannot be scripted (DNS, Oracle's ingress rule, Atlas's IP allowlist), then one
+script:
+
+```
+sudo git clone https://github.com/SteveWeed79/steading /opt/steading
+sudo /opt/steading/scripts/deploy/setup-box.sh api.swbuild.dev
+```
+
+`scripts/deploy/` holds what it installs: a systemd unit, a Caddyfile that
+obtains and renews the certificate by itself, and `deploy.sh` for every
+version after the first.
+
+The one thing worth repeating out of that document, because it costs an
+evening: **there are two firewalls in front of an Oracle box.** The VCN
+security list in the cloud console, and the instance's own iptables — which
+ships with a REJECT rule allowing only SSH, and which `ufw` does not manage, so
+`ufw allow 443` reports success and changes nothing.
+
+### The image, for a host that wants one
+
+`apps/api/Dockerfile`. Two stages: a filtered `pnpm install`, then
+`pnpm deploy --legacy --prod` into a self-contained tree, copied into a
+runtime stage with nothing else in it. `fly.toml` at the repo root runs it.
+
+Not needed on the box above, which runs from a checkout under systemd — easier
+to read the logs of and easier to fix at 6am.
+
+Three things about it are not obvious and each one cost a failed build:
+
+- **All four workspace manifests must be in the build context**, including
+  `apps/mobile/package.json`, even though the install is filtered to the API.
+  `pnpm deploy` re-resolves the whole workspace and the root `package.json`
+  names `@steading/mobile`. Omit it and the deploy step fails *after* a
+  successful install, which is a confusing place to land.
+- **`tsx` is a production dependency**, deliberately. This service imports
+  extensionless (`from './env'`) under `moduleResolution: bundler`, which
+  neither Node's own type stripping nor `tsc` output can load — both need the
+  specifiers rewritten across every file in the service. So the source ships
+  and `tsx` runs it, exactly as `pnpm dev:api` always has.
+- **`.npmrc` has to be copied in.** Its reasoning is about Windows path
+  lengths, but the `node-linker=hoisted` it sets is also what lets
+  `pnpm deploy` run at all without `inject-workspace-packages`.
+
+### Fly, as the alternative
+
+`fly.toml` is at the repo root and points at that Dockerfile.
+
+```
+fly launch --no-deploy --copy-config      # once. names the app, picks a region
+fly secrets set AUTH_SECRET=… MONGODB_URI=…
+fly deploy
+```
+
+Kept because the answer could change, and because it is the fastest way to put
+this somewhere when the box is unavailable. It costs a couple of dollars a
+month, which is exactly what the Oracle instance exists to avoid.
+
+### Then the app has to be told
+
+`EXPO_PUBLIC_API_URL` is **compiled into the APK**. `boot/config.ts` reads it
+once and there is no runtime setting, on purpose: a server address a stranger
+can talk somebody into changing is a phishing surface, and this app is
+offline-first precisely so it never has to ask.
+
+So the origin goes into `eas.json`'s `preview-farm` and `production` profiles,
+and pointing at a different server means another build. A build with the value
+empty is not broken — it is the free tier, and the sync chip says **Not set
+up**.
+
+---
+
 ## 5. When this should become a portal
 
 Not yet, and the trigger is worth naming rather than feeling:
