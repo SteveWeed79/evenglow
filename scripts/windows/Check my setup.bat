@@ -103,11 +103,46 @@ if exist "%LOCALAPPDATA%\Android\Sdk\emulator\emulator.exe" (
 
 echo.
 echo   --- Phones or emulators connected right now ---
+rem The raw `adb devices` list, and then what it MEANS.
+rem
+rem Reported as "my tablet is attached" alongside output listing only
+rem `emulator-5554`. The list was correct and it did not answer the question
+rem somebody was asking, because a real device and an emulator sit in it
+rem looking alike, and a device that is absent looks like nothing at all.
 where adb >nul 2>&1
 if errorlevel 1 (
   echo   Cannot check without Android Studio.
 ) else (
   adb devices
+  set "REALDEVICE="
+  set "UNTRUSTED="
+  for /f "skip=1 tokens=1,2" %%D in ('adb devices') do (
+    if "%%E"=="device" (
+      echo %%D | findstr /b /c:"emulator-" >nul
+      if errorlevel 1 set "REALDEVICE=%%D"
+    )
+    if "%%E"=="unauthorized" set "UNTRUSTED=%%D"
+  )
+  echo.
+  if defined REALDEVICE (
+    echo   [ OK ]      a real phone or tablet is connected: !REALDEVICE!
+  ) else if defined UNTRUSTED (
+    echo   [ NOTE ]    a device is plugged in but has not trusted this
+    echo               computer. Look at it and tap ALLOW on the
+    echo               "USB debugging" prompt, then run this again.
+  ) else (
+    echo   [ NOTE ]    no phone or tablet is visible - only an emulator,
+    echo               or nothing at all.
+    echo.
+    echo               If one IS plugged in, the usual causes in order:
+    echo               a charge-only cable; the USB mode set to "No data
+    echo               transfer" rather than "File transfer"; USB
+    echo               debugging off; or Windows missing the driver
+    echo               ^(SDK Manager ^> SDK Tools ^> Google USB Driver^).
+    echo.
+    echo               "Run on phone" needs one of these. The emulator
+    echo               has its own window.
+  )
 )
 
 echo.

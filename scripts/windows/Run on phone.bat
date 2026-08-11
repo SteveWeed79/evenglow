@@ -88,12 +88,21 @@ for /f "skip=1 tokens=1,2" %%D in ('adb devices') do (
   if "%%E"=="unauthorized" set "WAITING=%%D"
 )
 
+rem An emulator is NOT a fallback for this window, and offering it as one was
+rem a mistake made and caught within the hour. Building for the emulator from a
+rem window called "Run on phone" is the same fault as the QR: it does something
+rem adjacent to what was asked, it looks like it worked, and the tablet in your
+rem hand is untouched. "Run on emulator" is one double-click away and says so
+rem in its name.
 if not defined PHONE if defined FALLBACK (
   echo.
-  echo   NOTE: no phone or tablet is attached, but the emulator is
-  echo   running, so this will use the emulator instead.
+  echo   PROBLEM: the emulator is running, but no phone or tablet
+  echo   is visible to this computer.
   echo.
-  set "PHONE=!FALLBACK!"
+  echo   This window only installs to a real device. To use the
+  echo   emulator, close this and open "Run on emulator".
+  echo.
+  goto :nodevice
 )
 
 if not defined PHONE if defined WAITING (
@@ -108,21 +117,44 @@ if not defined PHONE if defined WAITING (
   goto :failed
 )
 
-if not defined PHONE (
-  echo.
-  echo   PROBLEM: no phone or tablet is connected.
-  echo.
-  echo   Plug it in with a USB cable and turn on USB debugging:
-  echo     Settings ^> About ^> tap "Build number" seven times,
-  echo     then Settings ^> Developer options ^> USB debugging.
-  echo   Answer "Allow" on the phone when it asks.
-  echo.
-  echo   If Steading is ALREADY installed and you only want to
-  echo   reconnect it over wifi, you can close this and use the
-  echo   app's own "cannot find this computer" screen to scan.
-  echo.
-  goto :failed
-)
+if not defined PHONE goto :nodevice
+
+goto :found
+
+rem Reported as "my tablet is attached" with `adb devices` listing only the
+rem emulator — so the cable was in and Windows was not presenting the device at
+rem all. Not even as `unauthorized`, which is what a trust prompt looks like.
+rem Four causes, in the order they actually happen, because "turn on USB
+rem debugging" is the advice everybody has already followed by the time they
+rem are reading this.
+:nodevice
+echo.
+echo   The computer cannot see a phone or tablet. In order of
+echo   how often each one is the answer:
+echo.
+echo   1. THE CABLE. Many are charge-only and look identical to
+echo      a data one. Try a different cable before anything else.
+echo.
+echo   2. THE USB MODE. Unlock the tablet, swipe down, find the
+echo      "Charging this device via USB" notification and change
+echo      it to "File transfer". On "No data transfer" the tablet
+echo      is invisible to this computer no matter what else is on.
+echo.
+echo   3. USB DEBUGGING. Settings ^> About ^> tap "Build number"
+echo      seven times, then Settings ^> Developer options ^>
+echo      USB debugging. If a prompt appears on the tablet asking
+echo      to allow this computer, tap ALLOW.
+echo.
+echo   4. THE WINDOWS DRIVER. Open Device Manager and look for a
+echo      device with a warning triangle, or an "Other device".
+echo      Android Studio ^> SDK Manager ^> "SDK Tools" tab ^>
+echo      tick "Google USB Driver", then unplug and replug.
+echo.
+echo   After any of those, run this window again.
+echo.
+goto :failed
+
+:found
 
 echo   Connected: !PHONE!
 
