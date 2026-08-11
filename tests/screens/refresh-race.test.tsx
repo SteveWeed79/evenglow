@@ -225,3 +225,83 @@ describe('a rotation this device cannot fully read', () => {
     await expect(refreshSession()).resolves.not.toBeNull();
   });
 });
+
+/**
+ * "Should some of the screens show the farm name?"
+ *
+ * They were built to. `TodayScreen` has rendered it as a subtitle all along,
+ * `useFarmName` reads `claims.orgName`, and `claimFarm` and `googleSignIn`
+ * both take an `orgName` and send it to the server.
+ *
+ * **Nothing ever wrote it to the cache.** `establish` built the claims from
+ * the access token plus the user's display name and dropped the farm's, so
+ * `useFarmName` has returned null since the day it was written and that
+ * subtitle has never once appeared. Wired at one end.
+ *
+ * `runRefresh` had the matching hole: it rebuilds from the token, which
+ * carries `sub`, `orgId` and `role` and nothing else, and carried forward only
+ * `name` — so even a cache that somehow had `orgName` would lose it on the
+ * first refresh, which is the next launch.
+ */
+describe('the farm’s own name', () => {
+  /** As the server sends it now: the pair, and the farm beside it. */
+  function serverNaming(name: string | null): void {
+    let issued = 0;
+    vi.stubGlobal('fetch', async (): Promise<Response> => {
+      issued += 1;
+      return new Response(
+        JSON.stringify({
+          accessToken: accessToken(),
+          refreshToken: `rotated-${issued}`,
+          ...(name === null ? {} : { org: { name } }),
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+  }
+
+  it('survives the refresh that used to drop it', async () => {
+    serverNaming('Weed Family Farm');
+
+    await refreshSession();
+    expect((await readCachedClaims())?.orgName).toBe('Weed Family Farm');
+  });
+
+  /**
+   * The device that has one cached and a server too old to send it. Keeping it
+   * is right — the farm has not been renamed, this response simply did not
+   * mention it — and it is the case that made the bug invisible for so long.
+   */
+  it('is carried forward when the response does not repeat it', async () => {
+    seedSecureStore({
+      'steading.refreshToken': 'the-stored-token',
+      'steading.claims': JSON.stringify({
+        userId: 'u1',
+        orgId: ORG,
+        role: 'owner',
+        orgName: 'Weed Family Farm',
+      }),
+    });
+    serverNaming(null);
+
+    await refreshSession();
+    expect((await readCachedClaims())?.orgName).toBe('Weed Family Farm');
+  });
+
+  /** A rename reaches every device on its next rotation, not on its next sign-in. */
+  it('takes the server’s name over the cached one', async () => {
+    seedSecureStore({
+      'steading.refreshToken': 'the-stored-token',
+      'steading.claims': JSON.stringify({
+        userId: 'u1',
+        orgId: ORG,
+        role: 'owner',
+        orgName: 'The old name',
+      }),
+    });
+    serverNaming('Weed Family Farm');
+
+    await refreshSession();
+    expect((await readCachedClaims())?.orgName).toBe('Weed Family Farm');
+  });
+});

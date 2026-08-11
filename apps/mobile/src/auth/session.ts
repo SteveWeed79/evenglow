@@ -33,6 +33,17 @@ const pairSchema = z
      * forward rather than being lost.
      */
     user: z.object({ name: z.string().max(80) }).partial().optional(),
+    /**
+     * The farm's own name, sent by sign-in and by every refresh.
+     *
+     * Not in the access token deliberately — it is not authorization, and a
+     * token re-verified on every request is the wrong place for a label. But
+     * the client rebuilds its cached claims FROM that token, so anything the
+     * cache holds beyond `sub`, `orgId` and `role` must arrive beside it or be
+     * carried forward, or it is silently dropped on the first refresh. It was:
+     * see `runRefresh`.
+     */
+    org: z.object({ name: z.string().max(120) }).partial().optional(),
   })
   .passthrough();
 
@@ -174,10 +185,21 @@ async function establish(body: unknown): Promise<CachedClaims> {
     throw new SignInError(`The server sent a session we could not read — ${read.problem}.`);
   }
 
-  // The name is not in the token and is not authorization — it is the label a
-  // note carries so the other person's phone can say who wrote it offline.
-  const named: CachedClaims =
-    pair.user?.name === undefined ? read.claims : { ...read.claims, name: pair.user.name };
+  /**
+   * Neither name is in the token and neither is authorization.
+   *
+   * The person's name is the label a note carries, so the other phone can say
+   * who wrote it offline. The **farm's** name is what every screen was built to
+   * show and never did: `claimFarm` and `googleSignIn` take an `orgName` and
+   * send it to the server, and nothing ever put it in the cache — so
+   * `useFarmName` has returned null since it was written, and `TodayScreen`'s
+   * subtitle has never once rendered. Built, wired at one end only.
+   */
+  const named: CachedClaims = {
+    ...read.claims,
+    ...(pair.user?.name === undefined ? {} : { name: pair.user.name }),
+    ...(pair.org?.name === undefined ? {} : { orgName: pair.org.name }),
+  };
 
   await writeRefreshToken(pair.refreshToken);
   await writeCachedClaims(named);
@@ -457,11 +479,31 @@ async function runRefresh(): Promise<CachedClaims | null> {
     return readCachedClaims();
   }
 
-  // Refresh does not repeat the display name, so it is carried forward rather
-  // than being quietly dropped on the first resume after a sign-in.
+  /**
+   * Everything the cache holds that the access token does not carry.
+   *
+   * `readClaims` rebuilds from the token, which has `sub`, `orgId` and `role`
+   * and nothing else — so every other cached field is dropped here unless it is
+   * put back. The display name was already being carried; **the farm's name was
+   * not**, so it survived exactly until the first refresh and then vanished for
+   * good. That is the next launch, since `start.ts` refreshes at boot.
+   *
+   * The visible half was "why does no screen show the farm name" — `TodayScreen`
+   * has rendered it as a subtitle all along and was reading a field that a farm
+   * only ever had for one session.
+   *
+   * Server first, cache second: a farm that renames itself should see the new
+   * name, and `/auth/refresh` now sends it on every rotation for that reason.
+   */
   const previous = await readCachedClaims();
   const name = pair.user?.name ?? previous?.name;
-  const named: CachedClaims = name === undefined ? claims : { ...claims, name };
+  const orgName = pair.org?.name ?? previous?.orgName;
+
+  const named: CachedClaims = {
+    ...claims,
+    ...(name === undefined ? {} : { name }),
+    ...(orgName === undefined ? {} : { orgName }),
+  };
 
   await writeCachedClaims(named);
   setAccessToken(pair.accessToken);
