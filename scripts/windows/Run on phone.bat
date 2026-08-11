@@ -158,8 +158,32 @@ goto :failed
 
 echo   Connected: !PHONE!
 
+set "NEEDBUILD="
 adb -s !PHONE! shell pm list packages 2>nul | findstr /c:"com.steading.app" >nul
-if errorlevel 1 (
+if errorlevel 1 set "NEEDBUILD=1"
+
+rem Checked out here rather than inside the branch below, because `goto` out of
+rem a parenthesised block is the kind of thing that works until it does not.
+if defined NEEDBUILD goto :build
+goto :connect
+
+:build
+rem The app is COMPILED by this window now, which it never used to be — it only
+rem ever started Metro and handed over a QR. So it needs the two things the
+rem emulator window has always set up before a build, and neither came across
+rem with the install step:
+rem
+rem   SDK location not found. Define a valid SDK location with an ANDROID_HOME
+rem   environment variable ...
+rem
+rem Gradle finds the SDK through ANDROID_HOME; `:check_adb` above already
+rem proved the path exists. Java is Gradle's own requirement.
+call "%~dp0_shared.bat" :check_java
+if errorlevel 1 goto :failed
+
+if exist "%LOCALAPPDATA%\Android\Sdk" set "ANDROID_HOME=%LOCALAPPDATA%\Android\Sdk"
+
+if 1==1 (
   echo.
   echo   Steading is not on this device yet, so it is being built
   echo   and installed now. This takes several minutes the first
@@ -204,6 +228,7 @@ if errorlevel 1 (
   goto :stopped
 )
 
+:connect
 echo.
 echo   [2 of 2] Starting the app.
 echo.
