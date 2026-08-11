@@ -157,7 +157,62 @@ export interface Filed {
   created: boolean;
 }
 
-export async function fileTicket(
+/**
+ * One filing at a time per fingerprint.
+ *
+ * **The first real use of this loop opened two issues for one fault.** Two
+ * reports had been held on a device and were retried together when the support
+ * screen opened; they reached here a second apart, both searched for the label,
+ * both found nothing — because neither had created its issue yet — and both
+ * created one. Issues #95 and #96: same fingerprint, same title, one second
+ * between them.
+ *
+ * Check-then-act, and the check is a network round trip, so the window is wide
+ * enough to drive a bus through. Serialising per fingerprint closes it: the
+ * second filing waits for the first to finish, then does its own search, finds
+ * the issue that now exists, and comments on it — which is what a second report
+ * was always supposed to do.
+ *
+ * Chained rather than shared, and the difference matters. Handing the second
+ * caller the first one's promise would return the right URL and silently drop
+ * the second bundle, and a second bundle is evidence: it says the fix is still
+ * wanted, and it may differ in the field that explains the fault.
+ *
+ * Keyed by repository as well as fingerprint, so one server filing for two
+ * repositories does not serialise them against each other.
+ *
+ * This is the same single-flight shape as `pullOnce`, `flushOnce` and
+ * `refreshSession`, and it has the same limit: one process. There is one
+ * server, and a second one would want the tracker itself to enforce this —
+ * which it cannot, since GitHub has no unique constraint to lean on.
+ */
+const filing = new Map<string, Promise<unknown>>();
+
+export function fileTicket(
+  config: SupportConfig,
+  bundle: SupportBundle,
+  records: string | undefined,
+): Promise<Filed> {
+  const key = `${config.owner}/${config.repo}#${bundle.fingerprint}`;
+  const previous = filing.get(key) ?? Promise.resolve();
+
+  // A failed filing must not poison the ones behind it: the next report is
+  // entitled to its own attempt at a tracker that may have come back.
+  const mine = previous.then(
+    () => runFileTicket(config, bundle, records),
+    () => runFileTicket(config, bundle, records),
+  );
+
+  filing.set(key, mine);
+  void mine.catch(() => undefined).finally(() => {
+    // Only if nothing queued behind it, or the tail would be dropped.
+    if (filing.get(key) === mine) filing.delete(key);
+  });
+
+  return mine;
+}
+
+async function runFileTicket(
   config: SupportConfig,
   bundle: SupportBundle,
   records: string | undefined,
