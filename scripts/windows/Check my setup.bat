@@ -103,11 +103,46 @@ if exist "%LOCALAPPDATA%\Android\Sdk\emulator\emulator.exe" (
 
 echo.
 echo   --- Phones or emulators connected right now ---
+rem The raw `adb devices` list, and then what it MEANS.
+rem
+rem Reported as "my tablet is attached" alongside output listing only
+rem `emulator-5554`. The list was correct and it did not answer the question
+rem somebody was asking, because a real device and an emulator sit in it
+rem looking alike, and a device that is absent looks like nothing at all.
 where adb >nul 2>&1
 if errorlevel 1 (
   echo   Cannot check without Android Studio.
 ) else (
   adb devices
+  set "REALDEVICE="
+  set "UNTRUSTED="
+  for /f "skip=1 tokens=1,2" %%D in ('adb devices') do (
+    if "%%E"=="device" (
+      echo %%D | findstr /b /c:"emulator-" >nul
+      if errorlevel 1 set "REALDEVICE=%%D"
+    )
+    if "%%E"=="unauthorized" set "UNTRUSTED=%%D"
+  )
+  echo.
+  if defined REALDEVICE (
+    echo   [ OK ]      a real phone or tablet is connected: !REALDEVICE!
+  ) else if defined UNTRUSTED (
+    echo   [ NOTE ]    a device is plugged in but has not trusted this
+    echo               computer. Look at it and tap ALLOW on the
+    echo               "USB debugging" prompt, then run this again.
+  ) else (
+    echo   [ NOTE ]    no phone or tablet is visible - only an emulator,
+    echo               or nothing at all.
+    echo.
+    echo               If one IS plugged in, the usual causes in order:
+    echo               a charge-only cable; the USB mode set to "No data
+    echo               transfer" rather than "File transfer"; USB
+    echo               debugging off; or Windows missing the driver
+    echo               ^(SDK Manager ^> SDK Tools ^> Google USB Driver^).
+    echo.
+    echo               "Run on phone" needs one of these. The emulator
+    echo               has its own window.
+  )
 )
 
 echo.
@@ -222,16 +257,38 @@ if "%LONGPATHS%"=="0x1" (
 )
 
 echo.
-echo   --- Is the app installed on the device? ---
+echo   --- Is the app installed? ---
 :: The single most useful line this window can print now. Under Expo Go the
 :: answer was always "Expo Go is"; with a development build, "no" explains a
 :: QR code nobody can scan and a phone that never opens anything.
-adb shell pm list packages 2>nul | findstr /c:"com.steading.app" >nul
+::
+:: **Asked once PER DEVICE, and that is a correction.** A bare `adb shell`
+:: fails with "more than one device/emulator" the moment two things are
+:: attached — which is the ordinary state for anybody testing on a tablet with
+:: the emulator still open. Its stderr went to `nul`, findstr matched nothing,
+:: and the window reported "not installed" without knowing anything of the
+:: kind. Seen on a machine where the emulator HAD it and the tablet had not:
+:: one answer, wrong for one of them, and no way to tell which it meant.
+where adb >nul 2>&1
 if errorlevel 1 (
-  echo   [ NOTE ]    Steading is not installed on the attached device.
-  echo               Run "Run on emulator" once - it builds and installs it.
+  echo   Cannot check without Android Studio.
 ) else (
-  echo   [ OK ]      Steading is installed
+  set "ANYDEVICE="
+  for /f "skip=1 tokens=1,2" %%D in ('adb devices') do (
+    if "%%E"=="device" (
+      set "ANYDEVICE=1"
+      adb -s %%D shell pm list packages 2>nul | findstr /c:"com.steading.app" >nul
+      if errorlevel 1 (
+        echo   [ NOTE ]    not installed on %%D
+      ) else (
+        echo   [ OK ]      installed on %%D
+      )
+    )
+  )
+  if not defined ANYDEVICE echo   [ NOTE ]    nothing is connected to install onto.
+  echo.
+  echo               "Run on phone" installs to a plugged-in phone or
+  echo               tablet; "Run on emulator" installs to the emulator.
 )
 
 echo.

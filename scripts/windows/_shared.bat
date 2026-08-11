@@ -287,17 +287,73 @@ echo   Finding this computer's address on your wifi...
 set "LANIP="
 for /f "usebackq tokens=*" %%i in (`powershell -NoProfile -Command "Get-NetIPAddress -AddressFamily IPv4 ^| Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' } ^| Sort-Object -Property InterfaceMetric ^| Select-Object -First 1 -ExpandProperty IPAddress"`) do set "LANIP=%%i"
 
+rem `Get-NetIPAddress` came back empty on a real machine, and the fallback for
+rem that was a shrug. It cannot be one: this value is BAKED INTO THE APK, so
+rem giving up leaves 10.0.2.2 in place and builds a tablet app pointed at the
+rem emulator's loopback — an address that device can never reach, with nothing
+rem on screen to say why.
+rem
+rem `ipconfig` is on every Windows there has ever been and needs no module, so
+rem it is asked second.
+if "%LANIP%"=="" (
+  for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /c:"IPv4 Address"') do (
+    set "CANDIDATE=%%a"
+    call :trim_ip
+    if not defined LANIP set "LANIP=!CANDIDATE!"
+  )
+)
+
+rem And if the computer still will not say, ask. A number somebody reads off
+rem their own router beats a build that is silently pointed at nothing.
 if "%LANIP%"=="" (
   echo.
-  echo   Could not work out this computer's address by itself.
-  echo   The app will still open and still save everything you log,
-  echo   it just will not sync until the address is set.
+  echo   This computer will not say what its address is on your wifi.
+  echo.
+  echo   Find it: press the Windows key, type "cmd", press Enter, then
+  echo   type   ipconfig   and look for "IPv4 Address" - it usually
+  echo   starts 192.168. or 10.
+  echo.
+  set /p "LANIP=Type it here and press Enter (or press Enter to skip): "
+)
+
+if "%LANIP%"=="" (
+  echo.
+  echo   Carrying on without it. The app will open and will save
+  echo   everything you log - it just will not sync, and the address
+  echo   is compiled in, so fixing it later means building again.
   echo.
   exit /b 0
 )
 
 powershell -NoProfile -Command "(Get-Content 'apps\mobile\.env') -replace 'EXPO_PUBLIC_API_URL=.*', 'EXPO_PUBLIC_API_URL=http://%LANIP%:3001' | Set-Content 'apps\mobile\.env'"
 echo   Server address - set to %LANIP%.
+echo.
+rem Said here rather than after it fails, because it fails as "cannot reach the
+rem farm server" — which reads as a bug in the app and is a rule in Windows.
+rem
+rem The server already listens on 0.0.0.0, so nothing about it needs changing.
+rem What stops a tablet is the inbound rule: Windows asks once, the first time
+rem Node opens a port, and a prompt dismissed months ago on some other project
+rem is a silent block today with no second prompt coming.
+echo   NOTE: the first time the farm server runs, Windows may ask
+echo   whether to allow Node.js through the firewall. Say ALLOW,
+echo   and make sure "Private networks" is ticked - the tablet
+echo   reaches this computer over your own wifi.
+echo.
+echo   If it never asks and the tablet cannot reach the server,
+echo   open Command Prompt AS ADMINISTRATOR and paste this once:
+echo.
+echo     netsh advfirewall firewall add rule name="Steading farm server" dir=in action=allow protocol=TCP localport=3001
+echo.
+exit /b 0
+
+:trim_ip
+rem `ipconfig` indents its values, and a leading space in an address is a URL
+rem nothing will parse. Called rather than inlined because a for-loop body is
+rem the one place delayed expansion makes this awkward to do in place.
+for /f "tokens=* delims= " %%v in ("!CANDIDATE!") do set "CANDIDATE=%%v"
+if "!CANDIDATE:~0,4!"=="127." set "CANDIDATE="
+if "!CANDIDATE:~0,8!"=="169.254." set "CANDIDATE="
 exit /b 0
 
 :check_java

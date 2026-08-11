@@ -61,6 +61,18 @@ sandbox. It still connects to Metro, so a code change still reloads in a second
 — what changes is that the records survive it. `Run on phone` and `Run on
 emulator` both build one; `npx expo run:android` is the same thing by hand.
 
+### A tablet also has to be able to reach the server
+
+The API listens on `0.0.0.0`, so nothing about it needs changing for a device
+on the same wifi. What stops one is Windows Firewall: it asks once, the first
+time Node opens a port, and a prompt dismissed months ago on some other project
+is a silent block today with no second prompt coming.
+
+It surfaces as *"cannot reach the farm server"*, which reads as a fault in the
+app and is a rule in the operating system. `Run on phone` says so at the moment
+it sets the address, and prints the one-line `netsh` rule for the case where the
+prompt never appears.
+
 ### The QR code is not an Expo Go QR code
 
 Worth its own line, because it is the trap that follows from the paragraph

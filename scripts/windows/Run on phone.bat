@@ -88,12 +88,21 @@ for /f "skip=1 tokens=1,2" %%D in ('adb devices') do (
   if "%%E"=="unauthorized" set "WAITING=%%D"
 )
 
+rem An emulator is NOT a fallback for this window, and offering it as one was
+rem a mistake made and caught within the hour. Building for the emulator from a
+rem window called "Run on phone" is the same fault as the QR: it does something
+rem adjacent to what was asked, it looks like it worked, and the tablet in your
+rem hand is untouched. "Run on emulator" is one double-click away and says so
+rem in its name.
 if not defined PHONE if defined FALLBACK (
   echo.
-  echo   NOTE: no phone or tablet is attached, but the emulator is
-  echo   running, so this will use the emulator instead.
+  echo   PROBLEM: the emulator is running, but no phone or tablet
+  echo   is visible to this computer.
   echo.
-  set "PHONE=!FALLBACK!"
+  echo   This window only installs to a real device. To use the
+  echo   emulator, close this and open "Run on emulator".
+  echo.
+  goto :nodevice
 )
 
 if not defined PHONE if defined WAITING (
@@ -108,21 +117,44 @@ if not defined PHONE if defined WAITING (
   goto :failed
 )
 
-if not defined PHONE (
-  echo.
-  echo   PROBLEM: no phone or tablet is connected.
-  echo.
-  echo   Plug it in with a USB cable and turn on USB debugging:
-  echo     Settings ^> About ^> tap "Build number" seven times,
-  echo     then Settings ^> Developer options ^> USB debugging.
-  echo   Answer "Allow" on the phone when it asks.
-  echo.
-  echo   If Steading is ALREADY installed and you only want to
-  echo   reconnect it over wifi, you can close this and use the
-  echo   app's own "cannot find this computer" screen to scan.
-  echo.
-  goto :failed
-)
+if not defined PHONE goto :nodevice
+
+goto :found
+
+rem Reported as "my tablet is attached" with `adb devices` listing only the
+rem emulator — so the cable was in and Windows was not presenting the device at
+rem all. Not even as `unauthorized`, which is what a trust prompt looks like.
+rem Four causes, in the order they actually happen, because "turn on USB
+rem debugging" is the advice everybody has already followed by the time they
+rem are reading this.
+:nodevice
+echo.
+echo   The computer cannot see a phone or tablet. In order of
+echo   how often each one is the answer:
+echo.
+echo   1. THE CABLE. Many are charge-only and look identical to
+echo      a data one. Try a different cable before anything else.
+echo.
+echo   2. THE USB MODE. Unlock the tablet, swipe down, find the
+echo      "Charging this device via USB" notification and change
+echo      it to "File transfer". On "No data transfer" the tablet
+echo      is invisible to this computer no matter what else is on.
+echo.
+echo   3. USB DEBUGGING. Settings ^> About ^> tap "Build number"
+echo      seven times, then Settings ^> Developer options ^>
+echo      USB debugging. If a prompt appears on the tablet asking
+echo      to allow this computer, tap ALLOW.
+echo.
+echo   4. THE WINDOWS DRIVER. Open Device Manager and look for a
+echo      device with a warning triangle, or an "Other device".
+echo      Android Studio ^> SDK Manager ^> "SDK Tools" tab ^>
+echo      tick "Google USB Driver", then unplug and replug.
+echo.
+echo   After any of those, run this window again.
+echo.
+goto :failed
+
+:found
 
 echo   Connected: !PHONE!
 
@@ -137,9 +169,38 @@ if errorlevel 1 (
   echo   one shared sandbox that wipes itself when it updates, and
   echo   it took a farm's records with it twice.
   echo.
+  rem `expo run:android --device` wants the device's NAME, not its serial.
+  rem
+  rem Passing the serial produced `CommandError: Could not find device with
+  rem name: 98780005E5AA274` — `resolveFromNameAsync` matches strictly on
+  rem `device.name`, and for a physical device Expo builds that from the
+  rem `model:` field of `adb devices -l`. The serial is what adb wants and the
+  rem model is what Expo wants, and they are never the same string.
+  rem
+  rem So the model is read for the serial already chosen. If it cannot be read,
+  rem `--device` is left off entirely rather than guessed: with one device
+  rem attached Expo picks the right thing anyway, and a wrong name is a hard
+  rem stop where no name is a sensible default.
+  set "MODEL="
+  for /f "usebackq tokens=*" %%L in (`adb devices -l ^| findstr /b /c:"!PHONE!"`) do (
+    for %%T in (%%L) do (
+      echo %%T | findstr /b /c:"model:" >nul
+      if not errorlevel 1 set "MODEL=%%T"
+    )
+  )
+  if defined MODEL set "MODEL=!MODEL:model:=!"
+
   rem `--no-install` because the preflight above already ran `pnpm install`.
   rem Left alone, `expo run:android` runs its own from apps/mobile.
-  call pnpm mobile:android --no-install --device !PHONE!
+  if defined MODEL (
+    echo   Building for !MODEL! ^(!PHONE!^).
+    echo.
+    call pnpm mobile:android --no-install --device !MODEL!
+  ) else (
+    echo   Building for the attached device.
+    echo.
+    call pnpm mobile:android --no-install
+  )
   goto :stopped
 )
 
