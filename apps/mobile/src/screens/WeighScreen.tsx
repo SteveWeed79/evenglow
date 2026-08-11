@@ -20,7 +20,6 @@ import {
   Row,
   Secondary,
   TextField,
-  Toggle,
   useSaver,
 } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
@@ -79,6 +78,37 @@ const TO_UG: Record<Unit, (value: number) => number> = {
   g: gramsToUg,
 };
 
+/**
+ * A typed box to micrograms, or null when there is no number in it.
+ *
+ * One parser for the single field and for every per-animal box, so an empty
+ * box, a stray letter and a zero are the same non-answer everywhere. Zero is
+ * excluded deliberately: a scale reading zero is a scale nobody has put an
+ * animal on.
+ */
+function toMass(raw: string, unit: Unit): number | null {
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? Math.round(TO_UG[unit](value)) : null;
+}
+
+type Mode = 'each' | 'queue' | 'averaged';
+
+const MODE_LABELS: Record<Mode, string> = {
+  each: 'A box each',
+  queue: 'One at a time',
+  averaged: 'One average',
+};
+
+/**
+ * Above this many, a box per animal stops being a form and becomes a scroll.
+ *
+ * Twenty-four is about a screen and a half on a handset — enough for a pen of
+ * layers or a drove of weaners, and short of the point where finding the box
+ * you have not filled yet is its own job. Past it the loop is kinder, and the
+ * picker still offers it either way.
+ */
+const BOXES_MAX = 24;
+
 export function WeighScreen({ route }: ScreenProps<'Weigh'>): React.ReactElement {
   const { groupId } = route.params;
   const nav = useNav();
@@ -121,13 +151,31 @@ export function WeighScreen({ route }: ScreenProps<'Weigh'>): React.ReactElement
   const [chosen, setChosen] = useState<Unit | null>(null);
   const [animalId, setAnimalId] = useState<string | null>(null);
   /**
-   * Off by default now, and that is the change.
+   * A box each, one at a time, or one figure for the lot.
    *
-   * One figure standing for the whole group is a real thing a farm does — a
-   * pen of forty broilers is not going on a scale one at a time — so it stays.
-   * It is the fallback rather than the assumption.
+   * `null` is "hasn't chosen", same as `chosen` above and for the same reason:
+   * the group read lands a frame after mount, so the default has to be derived
+   * from the head count once it arrives rather than fixed at mount.
+   *
+   * **A box per animal is the default for a group you could actually carry to
+   * a scale**, asked for in those words: *"shouldn't there be a spot to enter
+   * the weight of each bird in the group? or a toggle to turn that on if it's
+   * a large group?"* Seven boxes you can see and fill in any order beats seven
+   * trips through one box — you can tell at a glance which you have done, and
+   * there is no button between one bird and the next.
+   *
+   * It stops being the default above `BOXES_MAX`, because forty boxes is not a
+   * form, it is a scroll. The picker still offers the loop at any size.
    */
-  const [averaged, setAveraged] = useState(false);
+  const [mode, setMode] = useState<Mode | null>(null);
+  /**
+   * The per-animal boxes, held raw.
+   *
+   * Sparse and unsized: `boxes[i] ?? ''`, so nothing has to be allocated before
+   * the group's head count is known, and a farm that weighs the third and the
+   * fifth bird and no others gets exactly two records.
+   */
+  const [boxes, setBoxes] = useState<readonly string[]>([]);
   const [note, setNote] = useState('');
 
   const { saving, failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
@@ -138,12 +186,27 @@ export function WeighScreen({ route }: ScreenProps<'Weigh'>): React.ReactElement
   // picker with nothing selected.
   const unit: Unit = chosen !== null && choices.includes(chosen) ? chosen : choices[0];
 
-  const value = Number(amount);
-  const massUg =
-    Number.isFinite(value) && value > 0 ? Math.round(TO_UG[unit](value)) : null;
+  const massUg = toMass(amount, unit);
 
-  /** Several readings, or the one that is standing in for all of them. */
-  const weighing = animalId === null && !averaged;
+  /** How many are in this group, when that is more than one. */
+  const herd = group !== null && group.count > 1 ? group.count : null;
+
+  /**
+   * A named animal is one number by definition — no mode, no boxes, no loop.
+   * Otherwise the farm's choice, or the default the head count implies.
+   */
+  const active: Mode =
+    animalId !== null
+      ? 'averaged'
+      : (mode ?? (herd !== null && herd <= BOXES_MAX ? 'each' : 'queue'));
+
+  /** The per-animal figures, in order, skipping every box left empty. */
+  const boxed: readonly number[] =
+    herd === null
+      ? []
+      : Array.from({ length: herd }, (_, i) => toMass(boxes[i] ?? '', unit)).filter(
+          (mass): mass is number => mass !== null,
+        );
 
   /**
    * Everything that will be written if the button is pressed now.
@@ -157,13 +220,17 @@ export function WeighScreen({ route }: ScreenProps<'Weigh'>): React.ReactElement
    * unpressed.
    */
   const pending: readonly number[] =
-    weighing
-      ? massUg === null
-        ? entries
-        : [...entries, massUg]
-      : massUg === null
-        ? []
-        : [massUg];
+    active === 'each'
+      ? boxed
+      : active === 'queue'
+        ? massUg === null
+          ? entries
+          : [...entries, massUg]
+        : massUg === null
+          ? []
+          : [massUg];
+
+  const weighing = active === 'queue';
 
   const add = useCallback(() => {
     if (massUg === null) return;
@@ -198,13 +265,13 @@ export function WeighScreen({ route }: ScreenProps<'Weigh'>): React.ReactElement
             // Only for the figure that really is a group average. An unnamed
             // bird on a scale is one animal weighed, not a sample of itself —
             // which is what this flag said about every group weighing before.
-            ...(animalId === null && averaged ? { sampled: true } : {}),
+            ...(animalId === null && active === 'averaged' ? { sampled: true } : {}),
             ...(note.trim() === '' ? {} : { note: note.trim() }),
           },
         });
       }
     });
-  }, [save, log, pending, animalId, groupId, averaged, note]);
+  }, [save, log, pending, animalId, groupId, active, note]);
 
   if (groups === null) return <Loading title="Weight" />;
   if (group === null) return <Missing title="Weight" what="That group" />;
@@ -231,34 +298,106 @@ export function WeighScreen({ route }: ScreenProps<'Weigh'>): React.ReactElement
         </Field>
       ) : null}
 
-      <Field
-        label={weighing && entries.length > 0 ? `Next one (${entries.length} done)` : 'How much?'}
-      >
-        <NumberField
-          value={amount}
-          onChangeText={setAmount}
-          placeholder="6.4"
-          suffix={unit}
-          accessibilityLabel="Weight"
-          testID="weight-amount"
-        />
-      </Field>
+      {/**
+        * The head count is the frame, and leaving it out was the whole fault.
+        *
+        * Reported twice: *"I thought you fixed the weight being only a single
+        * measurement?"*, then **"there are 7 birds in that flock… 1 weight
+        * makes little sense."** The second is the sharper one. Everything was
+        * already there — one field, an "Add and weigh another" button, the
+        * average demoted to a toggle — and the screen still asked "How much?"
+        * as though one number were the answer, because it never mentioned that
+        * it knew there were seven.
+        *
+        * It has known all along: `group.count` is right there. So the label
+        * counts against it — "2 of 7 weighed" — and the empty state says what
+        * is being asked for rather than leaving somebody to infer it from a
+        * button that is disabled until they type.
+        *
+        * A group of one gets neither, because "1 of 1" is a screen being
+        * pleased with itself.
+        */}
+      {/**
+        * How this group is being weighed, said before anything is typed.
+        *
+        * Asked for directly — *"shouldn't there be a spot to enter the weight
+        * of each bird in the group? or a toggle to turn that on if it's a
+        * large group?"* — and it replaces the single "averaged" toggle, which
+        * could only ever say what this screen was NOT doing.
+        *
+        * Three named things beat two toggles: a box each, one at a time, or
+        * one figure for the lot. A group of one has nothing to choose between.
+        */}
+      {animalId === null && herd !== null ? (
+        <Field label="How are you weighing them?">
+          <Choice
+            options={herd <= BOXES_MAX ? (['each', 'queue', 'averaged'] as const) : (['queue', 'averaged'] as const)}
+            value={active}
+            onChange={(next) => {
+              setMode(next);
+              // Nothing carries between modes. An average logged alongside six
+              // individuals would double every total that sums either, and a
+              // box left filled behind a mode nobody can see is worse.
+              setEntries([]);
+              setBoxes([]);
+              setAmount('');
+            }}
+            labels={MODE_LABELS}
+          />
+        </Field>
+      ) : null}
 
       <Field label="In">
         <Choice options={choices} value={unit} onChange={setChosen} labels={UNIT_LABELS} />
       </Field>
 
-      {/* Add, then the next one, without leaving the screen. A group of seven
-          is seven numbers and six of these taps — the whole reason this is not
-          a single field any more. */}
-      {weighing ? (
-        <Secondary
-          label="Add and weigh another"
-          disabled={massUg === null}
-          onPress={add}
-          testID="weight-add"
-        />
-      ) : null}
+      {/**
+        * One box per animal, numbered, and every one of them optional.
+        *
+        * Numbered rather than named because these animals have no names — a
+        * flock of seven is seven birds, not seven records. The number is a
+        * place on the screen so somebody can see which they have done, and it
+        * is deliberately not stored: nothing claims bird 3 is the same bird as
+        * bird 3 last month, because nothing knows that.
+        */}
+      {active === 'each' && herd !== null ? (
+        <Field
+          label={boxed.length > 0 ? `${boxed.length} of ${herd} weighed` : `All ${herd}, or as many as you weigh`}
+          hint="Leave the ones you did not weigh empty."
+        >
+          {Array.from({ length: herd }, (_, index) => (
+            <NumberField
+              key={index}
+              value={boxes[index] ?? ''}
+              onChangeText={(next) =>
+                setBoxes((held) => {
+                  const copy = [...held];
+                  while (copy.length <= index) copy.push('');
+                  copy[index] = next;
+                  return copy;
+                })
+              }
+              placeholder={`${index + 1}`}
+              suffix={unit}
+              accessibilityLabel={`Weight ${index + 1} of ${herd}`}
+              testID={`weight-box-${index}`}
+            />
+          ))}
+        </Field>
+      ) : (
+        <Field label={weighLabel(weighing, entries.length, herd)} {...weighHint(weighing, entries.length, herd)}>
+          <NumberField
+            value={amount}
+            onChangeText={setAmount}
+            placeholder="6.4"
+            suffix={unit}
+            accessibilityLabel="Weight"
+            testID="weight-amount"
+          />
+        </Field>
+      )}
+
+
 
       {weighing && entries.length > 0 ? (
         <Panel label={`On the scale so far — ${describeSpread(entries, units)}`}>
@@ -276,21 +415,10 @@ export function WeighScreen({ route }: ScreenProps<'Weigh'>): React.ReactElement
         </Panel>
       ) : null}
 
-      {animalId === null ? (
-        /* Last, and off by default. It is a real thing a farm does — forty
-           broilers are not going on a scale one at a time — but it is the
-           fallback, not the assumption, and turning it on says what it costs. */
-        <Toggle
-          label="One figure, averaged across the whole group"
-          value={averaged}
-          onChange={(on) => {
-            setAveraged(on);
-            // Switching modes must not carry readings across: an average is
-            // one record, and silently logging six individuals alongside it
-            // would double every total.
-            if (on) setEntries([]);
-          }}
-        />
+      {active === 'each' && boxed.length > 1 ? (
+        <Panel label={`So far — ${describeSpread(boxed, units)}`}>
+          <Body>The average and the spread, which one figure could never have given you.</Body>
+        </Panel>
       ) : null}
 
       {previous ? (
@@ -312,14 +440,72 @@ export function WeighScreen({ route }: ScreenProps<'Weigh'>): React.ReactElement
 
       <Failure message={failure} />
 
-      <Primary
-        label={buttonLabel(pending, units)}
-        disabled={saving || pending.length === 0}
-        onPress={commit}
-        testID="save-weight"
-      />
+      {/**
+        * Carrying on is the green button; finishing is the quiet one.
+        *
+        * **This ranking was the wrong way round and it ejected people.**
+        * "Add and weigh another" was the secondary control and the commit was
+        * the Primary, so somebody with seven birds typed the first weight,
+        * pressed the obvious green button, and was returned to Today having
+        * logged one — reported exactly that way, alongside *"is the user
+        * expected to open and use the screen for each bird? That seems lazy on
+        * our end."*
+        *
+        * It was. On a group, weighing the next one is what happens six times
+        * out of seven and finishing happens once, so the loud control is the
+        * loop and the exit is deliberate. R1 is untouched: the five-second
+        * rule is about how fast a log can be *started*, and this makes the
+        * repeated act cheaper rather than dearer.
+        *
+        * A named animal, or an averaged figure, is one number by definition —
+        * there is no loop, so it keeps the single commit it always had.
+        */}
+      {weighing ? (
+        <>
+          <Primary
+            label="Add and weigh the next"
+            disabled={saving || massUg === null}
+            onPress={add}
+            testID="weight-add"
+          />
+          {pending.length === 0 ? null : (
+            <Secondary
+              label={finishLabel(pending, units)}
+              onPress={commit}
+              testID="save-weight"
+            />
+          )}
+        </>
+      ) : active === 'each' ? (
+        /* No loop to carry on with: every box is already on screen, so the
+           only button is the one that writes them. */
+        <Primary
+          label={buttonLabel(pending, units)}
+          disabled={saving || pending.length === 0}
+          onPress={commit}
+          testID="save-weight"
+        />
+      ) : (
+        <Primary
+          label={buttonLabel(pending, units)}
+          disabled={saving || pending.length === 0}
+          onPress={commit}
+          testID="save-weight"
+        />
+      )}
     </Screen>
   );
+}
+
+/**
+ * The exit, which says both what it writes and that it is the end.
+ *
+ * "Done" leads, because the thing somebody needs to know about this button is
+ * that it stops the loop — the count is the confirmation, not the invitation.
+ */
+function finishLabel(pending: readonly number[], units: UnitSystem): string {
+  if (pending.length === 1) return `Done — log ${formatMass(pending[0]!, units)}`;
+  return `Done — log ${pending.length} weights`;
 }
 
 /** What is about to be written, counted rather than guessed at. */
@@ -366,3 +552,28 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
 });
+
+/**
+ * What the box is asking for, counted against the group.
+ *
+ * "2 of 7 weighed" rather than "2 done": the denominator is the fact that
+ * makes a single reading look wrong, and it is the one the screen was keeping
+ * to itself.
+ */
+function weighLabel(weighing: boolean, done: number, herd: number | null): string {
+  if (!weighing) return 'How much?';
+  if (herd === null) return done > 0 ? `Next one (${done} done)` : 'How much?';
+  return done > 0 ? `Next one — ${done} of ${herd} weighed` : `How much? (${herd} in this group)`;
+}
+
+/** Said once, on the empty box, and then the count above carries it. */
+function weighHint(weighing: boolean, done: number, herd: number | null): { hint?: string } {
+  if (!weighing || done > 0) return {};
+  return {
+    hint:
+      herd === null
+        ? 'Add each one and the box clears for the next.'
+        : `Weigh them one at a time — add each and the box clears for the next. ` +
+          `You do not have to do all ${herd}.`,
+  };
+}

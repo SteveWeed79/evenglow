@@ -546,17 +546,49 @@ export function Secondary({
       accessibilityRole="button"
       accessibilityState={{ disabled }}
       {...(testID === undefined ? {} : { testID })}
+      /**
+       * Disabled dims the WORDS, not the frame — and the difference is the
+       * whole of whether this still reads as a button.
+       *
+       * `Primary` fades to 0.4 and survives it, because underneath is a solid
+       * `lantern` fill: at 40% over plaster that is still a pale gold shape you
+       * can see is a button. This has no fill. Its only edge is a hairline
+       * `border`, and a hairline at 40% over plaster is gone — so a disabled
+       * Secondary stopped looking like a control at all and became a line of
+       * grey text floating between two panels.
+       *
+       * Reported on the weighing screen, where "Add and weigh another" is
+       * disabled until a number is typed: it read as a caption, so the farm
+       * concluded the screen still took one measurement. A control that cannot
+       * be seen to be a control cannot be seen to be waiting for you either.
+       *
+       * `danger` keeps the old treatment: it has a `rowan` fill, so it is in
+       * `Primary`'s situation rather than this one.
+       */
       style={({ pressed }) => [
         styles.secondary,
         {
           backgroundColor: danger ? colors.rowan : colors.ground,
           borderColor: danger ? colors.rowan : colors.border,
-          opacity: disabled ? 0.4 : pressed ? 0.75 : 1,
+          opacity: danger && disabled ? 0.55 : pressed ? 0.75 : 1,
         },
       ]}
     >
-      {icon === undefined ? null : <Icon name={icon} size={20} color={danger ? '#fff' : colors.ink} />}
-      <Text style={[styles.secondaryLabel, { color: danger ? '#fff' : colors.ink }]}>{label}</Text>
+      {icon === undefined ? null : (
+        <Icon
+          name={icon}
+          size={20}
+          color={danger ? '#fff' : disabled ? colors.muted : colors.ink}
+        />
+      )}
+      <Text
+        style={[
+          styles.secondaryLabel,
+          { color: danger ? '#fff' : disabled ? colors.muted : colors.ink },
+        ]}
+      >
+        {label}
+      </Text>
     </Touch>
   );
 }

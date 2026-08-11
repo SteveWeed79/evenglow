@@ -154,7 +154,9 @@ describe('what a scale is asked for', () => {
     await farm('metric');
 
     const screen = await mount(<WeighScreen {...routeProps({ groupId: GROUP })} />);
-    await screen.type('weight-amount', '2.2');
+    // Twelve in this group, so it opens with a box per animal — the unit
+    // applies to all of them, which is the point being asserted.
+    await screen.type('weight-box-0', '2.2');
 
     // The button says what will be logged, which is the only place the number
     // is legible before it is committed.
