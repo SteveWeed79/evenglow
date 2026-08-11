@@ -47,10 +47,11 @@ The server itself is an Oracle Cloud Always Free ARM instance, settled in
 `Steading-Masterplan.md` §5 and costed in `ACCESS-AND-BILLING.md` §4.1; the
 commands do not have to run there and mostly will not.
 
-What does not exist yet is the deployment *mechanism* — no container image, no
-process supervisor, no TLS termination, and `start` runs TypeScript through
-`tsx`, which is a devDependency. The host is decided; getting the API onto it is
-still a job.
+The deployment mechanism now exists, and §4a is the short version of it: a
+systemd unit for supervision, Caddy for TLS, `setup-box.sh` for the first run and
+`deploy.sh` for every one after. `tsx` is a production dependency of
+`apps/api` — deliberately, for the reason §4a gives — so running the TypeScript
+source under systemd is the intended arrangement rather than a shortcut.
 
 ---
 

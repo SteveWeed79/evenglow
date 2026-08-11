@@ -4,7 +4,8 @@ From a fresh Oracle Always Free instance to `https://api.swbuild.dev/health`
 answering `{"ok":true}`, and then to two phones syncing one farm.
 
 Follow it in order. Steps 1–3 are three different consoles and none of them can
-be scripted from the box; steps 4–6 are one script; steps 7–8 are the app.
+be scripted from the box; steps 4–6 are the box, and only step 5b is not the
+script; steps 7–8 are the app.
 
 ---
 
@@ -156,6 +157,36 @@ says so rather than half-working.
 
 **`AUTH_SECRET` signs every token. Changing it later signs every device out.**
 
+**If your data is not in a database called `steading`, add `MONGODB_DB=` too.**
+`env.ts` defaults it to `steading`, and the template above does not mention it —
+so a cluster whose records live under another name connects successfully, serves
+an empty database, and reports nothing wrong.
+
+---
+
+## 5b. The indexes, which nothing applies for you
+
+```
+pnpm db:indexes
+```
+
+**Run this once against the database, before the first real sign-up.** Nothing
+in the service does it at boot — `applyIndexes` is only reached from
+`pnpm db:indexes`, `pnpm db:seed` and `pnpm db:verify`, so a database that was
+never seeded has no indexes at all and the service starts happily without them.
+
+Two of them carry behaviour rather than speed, and both fail silently:
+
+- **`users.email` is unique** — it is the duplicate-signup guard. Without it two
+  accounts can hold one address.
+- **The TTL indexes on `refreshTokens.expiresAt` and `invites.expiresAt`** are
+  what make expired tokens and join codes delete themselves. Without them
+  nothing expires and nothing complains.
+
+It is idempotent, so run it again after any release that adds a collection.
+Run it from a checkout with `MONGODB_URI` pointing at the cluster — the box, or
+your own machine. `docs/OPERATOR.md` §4 has the rest.
+
 ---
 
 ## 6. Start it, and check from somewhere else
@@ -218,10 +249,22 @@ local-only — it has never had a server to reach — so an uninstall takes it.
 wants it on two devices — which is also a real cross-tenant test with two live
 farms, and the isolation suite has never had that.
 
-### Billing will stop you, and there is a switch
+### Billing will not stop you, and this section used to say it would
 
-Writing is the paid thing (D13), so a second device syncing is exactly what the
-402 gate refuses. Comp both farms:
+Writing is the paid thing (D13), so a second device syncing looks like exactly
+what the 402 gate refuses. On this server it is not, and the reason is one line
+in `apps/api/src/billing/access.ts`:
+
+```ts
+if (env.playConfig === null) return { syncing: true, refusal: null };
+```
+
+`playConfig` is `null` until `GOOGLE_PLAY_SERVICE_ACCOUNT` is set, so **a server
+with no Play configuration never refuses sync to anybody** — which is the state
+this box is in and the correct state for a self-hosted farm. There is nothing
+for a grant to unlock, and `pnpm farm:grant` against it does nothing observable.
+
+Once a payment rail *is* configured, the comp is how testers stay free:
 
 ```
 pnpm farm:ls                    # find the ids
@@ -231,7 +274,8 @@ pnpm farm:grant <farmId> --note "tester"
 
 Run on the box, or from anywhere with `MONGODB_URI` pointing at the same Atlas
 cluster — it writes to the farm's own document and takes effect on the next
-request. `docs/OPERATOR.md` §2 has the rest.
+request. `docs/OPERATOR.md` §2 has the rest, including why `FREE_SYNC_ORGS` and
+this are two different mechanisms on purpose.
 
 ---
 
@@ -271,6 +315,8 @@ the free M0 tier has no automated backups either.
 | `{"ok":true}` but everything else fails | Atlas Network Access (step 3), or a wrong `MONGODB_URI` |
 | Service will not start | `systemctl status steading-api` then `journalctl -u steading-api -n 50`. Usually an empty `AUTH_SECRET` |
 | Restarting in a loop | It stops itself after five in a minute. The reason is in `systemctl status` |
+| Connects fine, but the farm is empty | `MONGODB_DB`. The default is `steading`; a cluster holding records under another name serves an empty one without complaining (step 5) |
+| Two accounts on one email address, or nothing ever expires | `pnpm db:indexes` was never run (step 5b). Run it — it is idempotent |
 | App says **Not set up** | The APK was built without an origin — that is `preview`, not `preview-farm` |
-| Sync refused with a 402 | Billing. `pnpm farm:grant` above |
+| Sync refused with a 402 | Billing, and only possible once `GOOGLE_PLAY_SERVICE_ACCOUNT` is set. With no Play config `access.ts` returns `syncing: true` for every farm, so a 402 here means something else |
 | One farm sees another's records | Stop and report it. That is the invariant everything else is built on |
