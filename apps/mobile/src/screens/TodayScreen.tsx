@@ -136,6 +136,17 @@ export function TodayScreen(): React.ReactElement {
    * A due row says what is wanted and this says where it happens — a service
    * on its schedule, a hatch on its set of eggs, a husbandry job on its group.
    * `subject` is already on every `Due` for exactly this.
+   *
+   * ## Kind before entity, and why the order was wrong
+   *
+   * This read `subject.entity` first and sent every flock row to the group
+   * screen. That is a hub, not a destination: a row whose whole content is a
+   * weight, or a fleece, landed on a summary and made somebody find the
+   * action among eight others and tap again. The row already knew what was
+   * wanted — the app made the person say it a second time.
+   *
+   * So the kinds that name one act go straight to it, and `entity` is the
+   * fallback for the rows that genuinely are "go and look at this thing".
    */
   const openDue = useCallback(
     (due: Due): (() => void) | undefined => {
@@ -144,8 +155,36 @@ export function TodayScreen(): React.ReactElement {
       if (due.kind === 'candle' || due.kind === 'hatch') {
         return () => nav.navigate('Incubation', { incubationId: id });
       }
+      /**
+       * A row about weight opens the scale; a row about fleece opens the
+       * shearing form; a birth opens the breeding book.
+       *
+       * "Roasters reach processing weight" asks one question and there is
+       * exactly one way to answer it. Landing on the group screen made
+       * somebody read a summary, find "Weigh them" among eight other rows and
+       * tap again — for a row whose entire content is a weight. The same was
+       * true of the clip.
+       */
+      if (due.kind === 'processing') return () => nav.navigate('Weigh', { groupId: id });
+      if (due.kind === 'shearing') return () => nav.navigate('Shearing', { groupId: id });
+      if (due.kind === 'birth') return () => nav.navigate('Breeding', { groupId: id });
       if (entity === 'flock') return () => nav.navigate('Group', { groupId: id });
-      if (entity === 'animal') return () => nav.navigate('Animals', { groupId: id });
+      /**
+       * No builder produces an animal subject any more, and this stays
+       * deliberately.
+       *
+       * `birthDue` did, and this branch passed that animal's id into `Animals`
+       * as a `groupId` — which found no group and rendered "That group —
+       * Missing". A dead end on a live row. The due carries the dam's GROUP
+       * now, so it never reaches here.
+       *
+       * Kept because the trap is in the shape rather than in that one builder:
+       * `Animals` takes a groupId, an animal id is the same kind of string,
+       * and nothing would complain. If a future due really is about one
+       * animal, it must carry the group it lives in — not be routed by id
+       * shape and hope.
+       */
+      if (entity === 'animal') return undefined;
       if (entity === 'equipment') return () => nav.navigate('Machine', { machineId: id });
       if (entity === 'planting') return () => nav.navigate('Planting', { plantingId: id });
       // A withdrawal names the medication and there is no medication screen —

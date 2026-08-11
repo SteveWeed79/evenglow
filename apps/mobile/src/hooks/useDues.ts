@@ -237,8 +237,15 @@ export function useDues(): DuesView {
     // ── birthing and hatching ────────────────────────────────────────────────
 
     const animalNames = new Map(animals.map((a) => [a.id, a.name]));
+    // The dam's group as well as her name — see `birthDue` for why the row
+    // could not be opened without it.
+    const animalGroups = new Map(animals.map((a) => [a.id, a.flockId]));
     for (const breeding of breedings) {
-      const due = birthDue(breeding, animalNames.get(breeding.damId) ?? 'One of yours');
+      const due = birthDue(
+        breeding,
+        animalNames.get(breeding.damId) ?? 'One of yours',
+        animalGroups.get(breeding.damId),
+      );
       if (due) rows.push(due);
     }
 

@@ -274,14 +274,36 @@ export interface BreedingRecord {
  * animal to move, and someone who needs to be around. A row that appeared the
  * week before would be information arriving after it was useful.
  */
-export function birthDue(breeding: BreedingRecord, damName: string): Due | null {
+export function birthDue(
+  breeding: BreedingRecord,
+  damName: string,
+  /**
+   * The dam's group, when the caller knows it — and it always does.
+   *
+   * **`subject` is what opens the row**, not merely what the row is about:
+   * `TodayScreen` navigates from it and nothing else. This due named the dam
+   * (`entity: 'animal'`), and the screen's animal branch passes that id
+   * straight into `Animals` as a `groupId` — so tapping "Bramble due" looked
+   * up a group whose id is an animal's, found none, and rendered **"That group
+   * — Missing"**. A dead end on a live row, reachable the moment any farm
+   * records a breeding.
+   *
+   * The dam's group is where a birth is actually discharged: the Breeding
+   * screen hangs off it, and the title already carries the dam's name, so
+   * nothing is lost by pointing the subject at something the app can open.
+   */
+  damFlockId?: string,
+): Due | null {
   const days = GESTATION_DAYS[breeding.species];
   if (days === undefined || breeding.bornAt !== undefined) return null;
 
   return {
     key: `${breeding.id}:birth`,
     kind: 'birth',
-    subject: { entity: 'animal', id: breeding.damId },
+    subject:
+      damFlockId === undefined
+        ? { entity: 'animal', id: breeding.damId }
+        : { entity: 'flock', id: damFlockId },
     title: `${damName} due`,
     at: breeding.bredAt + days * DAY_MS,
     atReading: null,
