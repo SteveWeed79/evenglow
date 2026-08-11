@@ -58,8 +58,23 @@ app.
 
 A **development build** is Steading's own APK, `com.steading.app`, with its own
 sandbox. It still connects to Metro, so a code change still reloads in a second
-— what changes is that the records survive it. `Run on emulator` builds one
-now; `npx expo run:android` is the same thing by hand.
+— what changes is that the records survive it. `Run on phone` and `Run on
+emulator` both build one; `npx expo run:android` is the same thing by hand.
+
+### The QR code is not an Expo Go QR code
+
+Worth its own line, because it is the trap that follows from the paragraph
+above and it looks nothing like a refusal. Metro prints a big square QR, and
+**only Steading's own development build can open it** — the code carries the
+`steading://` scheme from `app.json`. Scanning it with Expo Go does nothing.
+Scanning it with the phone's camera does nothing. Reported exactly that way,
+from a tablet with Expo Go installed and a USB cable plugged in: *"when I scan
+the qr code nothing happens."*
+
+Nothing was broken. The device simply did not have the app the code is for, and
+the window handed over a QR without ever checking. `Run on phone` now looks
+first — if `com.steading.app` is not on the attached device it builds and
+installs it, and only offers the code to a device that can read it.
 
 The price is the first build: Gradle, five to fifteen minutes, and it needs
 Android Studio's toolchain rather than just its emulator. Every run after is as
