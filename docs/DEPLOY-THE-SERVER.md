@@ -249,33 +249,64 @@ local-only — it has never had a server to reach — so an uninstall takes it.
 wants it on two devices — which is also a real cross-tenant test with two live
 farms, and the isolation suite has never had that.
 
-### Billing will not stop you, and this section used to say it would
+### Billing does not stop you *yet*, and the day it does has an order
 
-Writing is the paid thing (D13), so a second device syncing looks like exactly
-what the 402 gate refuses. On this server it is not, and the reason is one line
-in `apps/api/src/billing/access.ts`:
+Writing is the paid thing (D13) and the paywall is built — the sync gate, the
+entitlement rules and both comp mechanisms are all in the tree. What decides
+whether it is *on* is configuration, and `apps/api/src/billing/access.ts` asks
+in this order:
 
 ```ts
 if (env.playConfig === null) return { syncing: true, refusal: null };
+if (org !== null && env.freeSyncOrgs.has(org._id)) return { syncing: true, refusal: null };
+if (org?.syncGranted !== undefined) return { syncing: true, refusal: null };
+return entitlementOf(org?.subscription, Date.now());
 ```
 
-`playConfig` is `null` until `GOOGLE_PLAY_SERVICE_ACCOUNT` is set, so **a server
-with no Play configuration never refuses sync to anybody** — which is the state
-this box is in and the correct state for a self-hosted farm. There is nothing
-for a grant to unlock, and `pnpm farm:grant` against it does nothing observable.
+**Today the first line answers.** `readPlayConfig` returns `null` unless *both*
+`GOOGLE_PLAY_SERVICE_ACCOUNT` and `GOOGLE_PLAY_PACKAGE` are set, so this box
+refuses sync to nobody, and `pnpm farm:grant` against it does nothing
+observable. Note that a half-configured rail — one variable set, not the other —
+leaves the paywall silently off rather than half-on.
 
-Once a payment rail *is* configured, the comp is how testers stay free:
+#### The switch, and the trap in it
+
+Setting both Play variables turns the gate on for **every farm at once**, and
+`entitlementOf` refuses a farm with no subscription as `unsubscribed`. That
+includes yours and every tester's. So the order is not optional:
 
 ```
-pnpm farm:ls                    # find the ids
-pnpm farm:grant <farmId> --note "my farm"
-pnpm farm:grant <farmId> --note "tester"
+pnpm farm:ls                                        # find the ids first
+pnpm farm:grant <yourFarmId> --note "my farm"
+pnpm farm:grant <testerFarmId> --note "tester"
 ```
 
-Run on the box, or from anywhere with `MONGODB_URI` pointing at the same Atlas
-cluster — it writes to the farm's own document and takes effect on the next
-request. `docs/OPERATOR.md` §2 has the rest, including why `FREE_SYNC_ORGS` and
-this are two different mechanisms on purpose.
+**Comp the farms before the Play config reaches the box**, or the first restart
+after configuring it stops your own sync — and it will read as the deploy having
+broken something.
+
+Nothing is lost when the gate does refuse: the handset's SQLite is untouched by
+definition, the queue accumulates rather than dropping, and a farm that
+subscribes later flushes everything it recorded meanwhile. A refusal is a 402
+carrying a sentence, not a deletion.
+
+#### Which comp to use
+
+| | `FREE_SYNC_ORGS` | `pnpm farm:grant` |
+|---|---|---|
+| Lives in | the server's environment | the farm's own document |
+| Takes effect | on restart | on the next request |
+| Survives a database restore | yes | only if the backup has it |
+| Use it for | you, permanently | testers, support, anyone temporary |
+
+The env list is checked first, so an operator locked out of the database can
+still let somebody through. Neither is reachable from the wire — *a grant that
+can be requested is a grant that can be requested by anybody.*
+
+`pnpm promo:new` is the third route and the only one a farm redeems itself: it
+writes a real subscription with `source: 'promo'` rather than punching a hole in
+the gate, so nothing downstream learns that promotions exist.
+`docs/OPERATOR.md` §2 has the rest.
 
 ---
 
