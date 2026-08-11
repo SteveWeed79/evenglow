@@ -257,16 +257,38 @@ if "%LONGPATHS%"=="0x1" (
 )
 
 echo.
-echo   --- Is the app installed on the device? ---
+echo   --- Is the app installed? ---
 :: The single most useful line this window can print now. Under Expo Go the
 :: answer was always "Expo Go is"; with a development build, "no" explains a
 :: QR code nobody can scan and a phone that never opens anything.
-adb shell pm list packages 2>nul | findstr /c:"com.steading.app" >nul
+::
+:: **Asked once PER DEVICE, and that is a correction.** A bare `adb shell`
+:: fails with "more than one device/emulator" the moment two things are
+:: attached — which is the ordinary state for anybody testing on a tablet with
+:: the emulator still open. Its stderr went to `nul`, findstr matched nothing,
+:: and the window reported "not installed" without knowing anything of the
+:: kind. Seen on a machine where the emulator HAD it and the tablet had not:
+:: one answer, wrong for one of them, and no way to tell which it meant.
+where adb >nul 2>&1
 if errorlevel 1 (
-  echo   [ NOTE ]    Steading is not installed on the attached device.
-  echo               Run "Run on emulator" once - it builds and installs it.
+  echo   Cannot check without Android Studio.
 ) else (
-  echo   [ OK ]      Steading is installed
+  set "ANYDEVICE="
+  for /f "skip=1 tokens=1,2" %%D in ('adb devices') do (
+    if "%%E"=="device" (
+      set "ANYDEVICE=1"
+      adb -s %%D shell pm list packages 2>nul | findstr /c:"com.steading.app" >nul
+      if errorlevel 1 (
+        echo   [ NOTE ]    not installed on %%D
+      ) else (
+        echo   [ OK ]      installed on %%D
+      )
+    )
+  )
+  if not defined ANYDEVICE echo   [ NOTE ]    nothing is connected to install onto.
+  echo.
+  echo               "Run on phone" installs to a plugged-in phone or
+  echo               tablet; "Run on emulator" installs to the emulator.
 )
 
 echo.
