@@ -1,3 +1,4 @@
+import { randomUUID as nodeRandomUUID, getRandomValues as nodeGetRandomValues } from 'node:crypto';
 import { createElement, forwardRef, type ReactNode } from 'react';
 
 /**
@@ -441,4 +442,49 @@ export function useIdTokenAuthRequest(): [
       return { type: 'dismiss', params: {} };
     },
   ];
+}
+
+// ── expo-splash-screen ───────────────────────────────────────────────────────
+
+/**
+ * The native splash, as a pair of counters.
+ *
+ * Both calls are fire-and-forget in the app and neither returns anything it
+ * uses, so there is nothing to observe from the outside — which is precisely
+ * why the one that matters went missing without a test noticing. `hidden`
+ * standing at 0 is an app sitting under its own logo.
+ */
+export const splash = { prevented: 0, hidden: 0 };
+
+export function resetSplash(): void {
+  splash.prevented = 0;
+  splash.hidden = 0;
+}
+
+export async function preventAutoHideAsync(): Promise<boolean> {
+  splash.prevented += 1;
+  return true;
+}
+
+export async function hideAsync(): Promise<boolean> {
+  splash.hidden += 1;
+  return true;
+}
+
+// ── expo-crypto ──────────────────────────────────────────────────────────────
+
+/**
+ * The device's random source, which is Node's here.
+ *
+ * Aliased because importing the real one drags in `expo-modules-core`, whose
+ * top-level logger setup reads `__DEV__` — a Metro global that does not exist
+ * under vitest. Nothing about this module needs a device; it needs entropy,
+ * and Node has the same primitive.
+ */
+export function randomUUID(): string {
+  return nodeRandomUUID();
+}
+
+export function getRandomValues<T extends ArrayBufferView>(array: T): T {
+  return nodeGetRandomValues(array);
 }

@@ -159,13 +159,19 @@ if (!res.upsertedCount) return { id: m.id, status: 'duplicate' };
 pnpm farm             # dev back end from nothing: database, first account, API
 pnpm dev:api          # Fastify with watch
 pnpm mobile           # Metro for the development build (install it first)
-pnpm mobile:android   # prebuild, compile, deploy to a device or emulator
+pnpm mobile:android   # compile and deploy — does NOT re-run prebuild (see below)
+pnpm mobile:prebuild  # regenerate android/ from app.json — required for native config
 pnpm mobile:export    # Metro bundle — the quickest check that resolution is sound
 pnpm test             # vitest, all packages
 pnpm typecheck        # both programs: root, and apps/mobile
 pnpm lint
 pnpm check:icons      # the icon set against its manifest
+pnpm check:assets     # launcher icon and splash against the adaptive safe zone
 ```
+
+**Anything in `app.json` needs `pnpm mobile:prebuild` before it reaches a handset.** `expo run:android` prebuilds only when `android/` is *absent* — `ensureNativeProjectAsync` returns early otherwise — so an existing native project is compiled as-is and every icon, splash, permission and plugin change is silently ignored. The symptom is an app that builds fine and wears the old icon. `mobile:prebuild` passes `--clean` because `android/` is generated and gitignored, so there is nothing to preserve and stale resources are the whole failure mode.
+
+**The splash cannot be judged in a development build.** `expo-dev-client` ships its own, and Expo's own guidance is to use a preview or release build to see the real one. Icons are fine to check in a dev build; launchers cache them, so uninstall first if one looks stale.
 
 **Verify on a real device before calling any storage, camera, haptics, or sync task done.** The bundler is not a handset, and every serious bug in this project so far has been one only a device could show.
 

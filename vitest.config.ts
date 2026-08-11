@@ -85,6 +85,8 @@ export default defineConfig({
         replacement: here('./tests/support/native/modules.tsx'),
       },
       { find: /^expo-secure-store$/, replacement: here('./tests/support/native/modules.tsx') },
+      { find: /^expo-splash-screen$/, replacement: here('./tests/support/native/modules.tsx') },
+      { find: /^expo-crypto$/, replacement: here('./tests/support/native/modules.tsx') },
       { find: /^expo-file-system$/, replacement: here('./tests/support/native/modules.tsx') },
       { find: /^expo-sqlite$/, replacement: here('./tests/support/native/modules.tsx') },
       { find: /^expo-sharing$/, replacement: here('./tests/support/native/modules.tsx') },
