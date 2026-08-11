@@ -258,7 +258,39 @@ echo   Settings file - created.
 exit /b 0
 
 :set_emulator_address
-:: The inverse of :set_lan_address, and it did not used to be needed.
+:: The inverse of rem ── the tethered address ─────────────────────────────────────────────────────
+rem
+rem `adb reverse` makes the DEVICE's own localhost reach this computer, back
+rem down the USB cable it is already plugged into. React Native has always done
+rem this for Metro on 8081; doing it for the farm server too deletes a whole
+rem class of failure rather than handling it better:
+rem
+rem   - finding this computer's address on the wifi, which picked a Tailscale
+rem     adapter on a real machine and compiled it into an apk;
+rem   - Windows Firewall and inbound 3001, which fails as "cannot reach the
+rem     farm server" and reads as a bug in the app;
+rem   - needing the tablet and the computer on the same network at all.
+rem
+rem The cost is stated rather than hidden: the address is compiled in, so this
+rem is a TETHERED build. Unplug the cable and it stops reaching the server —
+rem everything still opens and still saves, and syncing comes back when it is
+rem plugged in again. A build to carry round the farm wants the wifi address,
+rem which is what `:set_lan_address` is still for.
+:set_usb_address
+adb -s %2 reverse tcp:3001 tcp:3001 >nul 2>&1
+if errorlevel 1 (
+  echo   Could not open the USB route to the server - falling back to wifi.
+  call "%~dp0_shared.bat" :set_lan_address
+  exit /b 0
+)
+
+powershell -NoProfile -Command "(Get-Content 'apps\mobile\.env') -replace 'EXPO_PUBLIC_API_URL=.*', 'EXPO_PUBLIC_API_URL=http://localhost:3001' | Set-Content 'apps\mobile\.env'"
+echo   Server address - reaching this computer down the USB cable.
+echo   ^(No wifi and no firewall rule needed. Unplugging stops sync
+echo    until it is plugged in again.^)
+exit /b 0
+
+:set_lan_address, and it did not used to be needed.
 ::
 :: Under Expo Go, Metro re-read this value on every start, so a wifi address
 :: left behind by the phone script was live configuration and swapping back
@@ -277,15 +309,39 @@ exit /b 0
 ::
 :: Baked into the apk now rather than re-read every start, so `Run on
 :: emulator` calls :set_emulator_address to put it back before it builds.
-findstr /c:"10.0.2.2" "apps\mobile\.env" >nul 2>&1
-if errorlevel 1 (
-  echo   Server address - already set.
+rem "Already set" used to mean "anything other than 10.0.2.2", and that made a
+rem wrong address permanent: the Tailscale value this routine picked once was
+rem then protected from ever being reconsidered. A stored address is now only
+rem trusted when it is one a home network actually hands out.
+set "STORED="
+for /f "usebackq tokens=2 delims==" %%v in (`findstr /b "EXPO_PUBLIC_API_URL" "apps\mobile\.env"`) do set "STORED=%%v"
+set "STORED=!STORED:http://=!"
+for /f "tokens=1 delims=:" %%v in ("!STORED!") do set "STORED=%%v"
+
+set "TRUSTED="
+if "!STORED:~0,8!"=="192.168." set "TRUSTED=1"
+if "!STORED:~0,3!"=="10." set "TRUSTED=1"
+rem The emulator's loopback lives in 10.* and is never right for a phone.
+if "!STORED!"=="10.0.2.2" set "TRUSTED="
+
+if defined TRUSTED (
+  echo   Server address - already set to !STORED!.
   exit /b 0
 )
 
 echo   Finding this computer's address on your wifi...
+rem **Sorted by interface metric, this picked a VPN.** On a machine running
+rem Tailscale it returned 100.102.40.56 — the CGNAT range Tailscale hands out,
+rem which is a real address this computer really has and is not reachable from
+rem a tablet on the wifi. The value is compiled into the apk, so that is a
+rem build that can never sync, produced without a single error.
+rem
+rem So the ranges a home network actually uses are preferred, in the order they
+rem are likely: 192.168, then 10, then 172.16-31. Anything else — VPN, CGNAT,
+rem a public address — is taken only when there is nothing better, because a
+rem machine that genuinely has only one of those should still get an answer.
 set "LANIP="
-for /f "usebackq tokens=*" %%i in (`powershell -NoProfile -Command "Get-NetIPAddress -AddressFamily IPv4 ^| Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' } ^| Sort-Object -Property InterfaceMetric ^| Select-Object -First 1 -ExpandProperty IPAddress"`) do set "LANIP=%%i"
+for /f "usebackq tokens=*" %%i in (`powershell -NoProfile -Command "$a = Get-NetIPAddress -AddressFamily IPv4 ^| Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' } ^| Sort-Object InterfaceMetric ^| Select-Object -ExpandProperty IPAddress; $p = $a ^| Where-Object { $_ -like '192.168.*' }; if (-not $p) { $p = $a ^| Where-Object { $_ -like '10.*' } }; if (-not $p) { $p = $a ^| Where-Object { $_ -match '^^172\.(1[6-9]^|2[0-9]^|3[01])\.' } }; if (-not $p) { $p = $a }; $p ^| Select-Object -First 1"`) do set "LANIP=%%i"
 
 rem `Get-NetIPAddress` came back empty on a real machine, and the fallback for
 rem that was a shrug. It cannot be one: this value is BAKED INTO THE APK, so
@@ -296,11 +352,20 @@ rem
 rem `ipconfig` is on every Windows there has ever been and needs no module, so
 rem it is asked second.
 if "%LANIP%"=="" (
+  rem Same preference as above, and for the same reason: `ipconfig` lists the
+  rem VPN adapter too, and taking the first line is how a Tailscale address
+  rem ends up compiled into a tablet build.
+  set "ANYIP="
   for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /c:"IPv4 Address"') do (
     set "CANDIDATE=%%a"
     call :trim_ip
-    if not defined LANIP set "LANIP=!CANDIDATE!"
+    if defined CANDIDATE (
+      if not defined ANYIP set "ANYIP=!CANDIDATE!"
+      if "!CANDIDATE:~0,8!"=="192.168." if not defined LANIP set "LANIP=!CANDIDATE!"
+      if "!CANDIDATE:~0,3!"=="10." if not defined LANIP set "LANIP=!CANDIDATE!"
+    )
   )
+  if not defined LANIP if defined ANYIP set "LANIP=!ANYIP!"
 )
 
 rem And if the computer still will not say, ask. A number somebody reads off

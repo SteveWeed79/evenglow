@@ -36,8 +36,6 @@ if errorlevel 1 goto :failed
 call "%~dp0_shared.bat" :ensure_env
 if errorlevel 1 goto :failed
 
-call "%~dp0_shared.bat" :set_lan_address
-
 echo   [1 of 2] Everything the app needs is ready.
 echo.
 :: Installed in the preflight above. A second install here printed
@@ -158,8 +156,37 @@ goto :failed
 
 echo   Connected: !PHONE!
 
+rem Addressed AFTER the device is known, which it could not be before: the
+rem tethered route needs a serial to reverse a port onto. It used to run in the
+rem preflight, where the only answer available was a guess about the wifi.
+call "%~dp0_shared.bat" :set_usb_address !PHONE!
+
+set "NEEDBUILD="
 adb -s !PHONE! shell pm list packages 2>nul | findstr /c:"com.steading.app" >nul
-if errorlevel 1 (
+if errorlevel 1 set "NEEDBUILD=1"
+
+rem Checked out here rather than inside the branch below, because `goto` out of
+rem a parenthesised block is the kind of thing that works until it does not.
+if defined NEEDBUILD goto :build
+goto :connect
+
+:build
+rem The app is COMPILED by this window now, which it never used to be — it only
+rem ever started Metro and handed over a QR. So it needs the two things the
+rem emulator window has always set up before a build, and neither came across
+rem with the install step:
+rem
+rem   SDK location not found. Define a valid SDK location with an ANDROID_HOME
+rem   environment variable ...
+rem
+rem Gradle finds the SDK through ANDROID_HOME; `:check_adb` above already
+rem proved the path exists. Java is Gradle's own requirement.
+call "%~dp0_shared.bat" :check_java
+if errorlevel 1 goto :failed
+
+if exist "%LOCALAPPDATA%\Android\Sdk" set "ANDROID_HOME=%LOCALAPPDATA%\Android\Sdk"
+
+if 1==1 (
   echo.
   echo   Steading is not on this device yet, so it is being built
   echo   and installed now. This takes several minutes the first
@@ -204,6 +231,7 @@ if errorlevel 1 (
   goto :stopped
 )
 
+:connect
 echo.
 echo   [2 of 2] Starting the app.
 echo.
