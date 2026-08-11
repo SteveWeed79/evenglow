@@ -258,7 +258,39 @@ echo   Settings file - created.
 exit /b 0
 
 :set_emulator_address
-:: The inverse of :set_lan_address, and it did not used to be needed.
+:: The inverse of rem ── the tethered address ─────────────────────────────────────────────────────
+rem
+rem `adb reverse` makes the DEVICE's own localhost reach this computer, back
+rem down the USB cable it is already plugged into. React Native has always done
+rem this for Metro on 8081; doing it for the farm server too deletes a whole
+rem class of failure rather than handling it better:
+rem
+rem   - finding this computer's address on the wifi, which picked a Tailscale
+rem     adapter on a real machine and compiled it into an apk;
+rem   - Windows Firewall and inbound 3001, which fails as "cannot reach the
+rem     farm server" and reads as a bug in the app;
+rem   - needing the tablet and the computer on the same network at all.
+rem
+rem The cost is stated rather than hidden: the address is compiled in, so this
+rem is a TETHERED build. Unplug the cable and it stops reaching the server —
+rem everything still opens and still saves, and syncing comes back when it is
+rem plugged in again. A build to carry round the farm wants the wifi address,
+rem which is what `:set_lan_address` is still for.
+:set_usb_address
+adb -s %2 reverse tcp:3001 tcp:3001 >nul 2>&1
+if errorlevel 1 (
+  echo   Could not open the USB route to the server - falling back to wifi.
+  call "%~dp0_shared.bat" :set_lan_address
+  exit /b 0
+)
+
+powershell -NoProfile -Command "(Get-Content 'apps\mobile\.env') -replace 'EXPO_PUBLIC_API_URL=.*', 'EXPO_PUBLIC_API_URL=http://localhost:3001' | Set-Content 'apps\mobile\.env'"
+echo   Server address - reaching this computer down the USB cable.
+echo   ^(No wifi and no firewall rule needed. Unplugging stops sync
+echo    until it is plugged in again.^)
+exit /b 0
+
+:set_lan_address, and it did not used to be needed.
 ::
 :: Under Expo Go, Metro re-read this value on every start, so a wifi address
 :: left behind by the phone script was live configuration and swapping back
