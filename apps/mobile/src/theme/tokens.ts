@@ -275,6 +275,37 @@ export const TAP = { min: 56, primary: 64, gap: 12 } as const;
 export const SPACE = { xs: 4, sm: 8, md: 12, lg: 20, xl: 32 } as const;
 
 /**
+ * The widest the reading column is allowed to get.
+ *
+ * ## Why this is not a nice-to-have
+ *
+ * `orientation: "portrait"` in `app.json` **does not hold on a tablet.** Expo
+ * SDK 57 targets Android SDK 36, and an app targeting 36 has its orientation,
+ * aspect-ratio and resizability restrictions *ignored* on any display whose
+ * smallest width is 600dp or more. So the app already rotates freely on every
+ * Android tablet in the world, and Android 17 removes the opt-out that would
+ * put it back. The lock still works on phones, which is the only reason this
+ * has not been noticed.
+ *
+ * Nothing else in the app bounded its width. A row that reads
+ * "Chickens · EGGS · 6 HEAD · 4" at 430dp becomes the same words at 1280dp
+ * with a metre of plaster between them — not broken, just no longer a design.
+ *
+ * ## Why 600
+ *
+ * The screens were drawn at 375–430dp. 600 is ~1.4× that: wide enough that a
+ * tablet is visibly using its room, narrow enough that the proportions the app
+ * was designed in survive. It is also the exact figure Android uses to decide
+ * a display is "large", which makes the two numbers say the same thing — below
+ * it the app fills the screen, at or above it the column stops growing.
+ *
+ * Applied to the status bar as well as the content, and that pairing is the
+ * point: capping only the content would leave the lamp and the settings gear
+ * out at the far edge of a 1280dp screen, pointing at a column in the middle.
+ */
+export const LAYOUT = { column: 600 } as const;
+
+/**
  * The arch's geometry — used by `<Arch>`, which draws it. NOT a border radius.
  *
  * `spring` is the vertical radius of the head; the horizontal radius is always

@@ -10,7 +10,7 @@ import { Touch } from './Touch';
 import { useTrouble } from '../hooks/useTrouble';
 import type { RootParamList } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
-import { FONTS, SPACE, TAP, TYPE } from '../theme/tokens';
+import { FONTS, LAYOUT, SPACE, TAP, TYPE } from '../theme/tokens';
 
 /**
  * The wall every screen is drawn on.
@@ -121,12 +121,20 @@ export function Screen({
         </View>
       </View>
 
+      {/* The scroll surface stays full-bleed and only centres what is on it, so
+          a thumb can drag anywhere on a tablet rather than only inside the
+          column. `alignItems` here with the cap on the view inside, rather than
+          `alignSelf` + `maxWidth` on this container: the container is a
+          `NativeScrollContentView` whose width the native scroll view has a
+          hand in, so centring it is a bet on internals. Centring a plain child
+          inside it is ordinary flexbox and cannot be anything else. */}
       <ScrollView
-        contentContainerStyle={[styles.content, contentStyle]}
+        contentContainerStyle={styles.scroll}
         // Tapping a field then reaching for a stepper should not need the
         // keyboard dismissed first.
         keyboardShouldPersistTaps="handled"
       >
+       <View style={[styles.content, contentStyle]}>
         {/* One block, so the title and the name under it are not separated by
             the content gap that separates whole panels. */}
         <View style={styles.heading}>
@@ -161,6 +169,7 @@ export function Screen({
           </View>
         )}
         {children}
+       </View>
       </ScrollView>
     </View>
   );
@@ -172,12 +181,27 @@ const styles = StyleSheet.create({
   troubleBody: { fontFamily: FONTS.body, fontSize: TYPE.body, lineHeight: TYPE.body * 1.4 },
   troubleAt: { fontFamily: FONTS.data, fontSize: TYPE.label - 1 },
   ground: { flex: 1 },
+  /**
+   * The wall fills the screen; the column does not.
+   *
+   * `width: '100%'` with a `maxWidth` rather than a bare `maxWidth`, because a
+   * flex child that is only capped shrinks to its content on a narrow screen —
+   * which would break every full-width row on the phones this is drawn for.
+   * The pair reads as min(100%, column).
+   *
+   * Capped here as well as on the content, and the pairing is the point: the
+   * lamp and the settings gear left at the far edge of a 1280dp screen would
+   * be pointing at a column in the middle of it.
+   */
   status: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SPACE.lg,
     minHeight: TAP.min / 2,
+    width: '100%',
+    maxWidth: LAYOUT.column,
+    alignSelf: 'center',
   },
   controls: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   date: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
@@ -187,7 +211,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  content: { padding: SPACE.lg, gap: SPACE.md, paddingBottom: SPACE.xl },
+  /**
+   * `flexGrow: 1` so a short screen still fills the scroll view — without it a
+   * container that centres its child also collapses to that child's height,
+   * and anything relying on the full height loses it.
+   */
+  scroll: { flexGrow: 1, alignItems: 'center' },
+  content: {
+    padding: SPACE.lg,
+    gap: SPACE.md,
+    paddingBottom: SPACE.xl,
+    width: '100%',
+    maxWidth: LAYOUT.column,
+  },
   // Carries the margin the hero used to, so a screen with no subtitle sits
   // exactly where it did before.
   heading: { gap: 2, marginBottom: SPACE.xs },
