@@ -137,7 +137,15 @@ export async function capture(
  * with the recovery path, which starts here because its picker call already
  * happened in a process that no longer exists.
  */
-async function store(id: string, asset: ImagePickerAsset): Promise<Captured> {
+async function store(id: string, source: ImagePickerAsset | string): Promise<Captured> {
+  const uri = typeof source === 'string' ? source : source.uri;
+  /**
+   * Dimensions are the picker's when it gave any, and unknown on the recovery
+   * path — where there is no asset, only a file. Unknown means the resize is
+   * skipped and the compression still runs, which is the right trade: a photo
+   * kept at full size is a photo kept.
+   */
+  const asset = typeof source === 'string' ? null : source;
   /**
    * Resized on the long edge, whichever that is.
    *
@@ -146,9 +154,9 @@ async function store(id: string, asset: ImagePickerAsset): Promise<Captured> {
    * the same worst-case size. A photo already smaller than the limit is left
    * alone rather than being upscaled into a bigger file.
    */
-  const longest = Math.max(asset.width, asset.height);
+  const longest = asset === null ? 0 : Math.max(asset.width, asset.height);
   const resize =
-    longest > MAX_EDGE
+    asset !== null && longest > MAX_EDGE
       ? [
           asset.width >= asset.height
             ? { resize: { width: MAX_EDGE } }
@@ -156,7 +164,7 @@ async function store(id: string, asset: ImagePickerAsset): Promise<Captured> {
         ]
       : [];
 
-  const shrunk = await manipulateAsync(asset.uri, resize, {
+  const shrunk = await manipulateAsync(uri, resize, {
     compress: QUALITY,
     format: SaveFormat.JPEG,
   });
@@ -205,14 +213,67 @@ export async function recoverPendingPhoto(): Promise<
   await localStore().setPendingPhoto(null).catch(() => undefined);
 
   try {
-    const result = await getPendingResultAsync();
-    if (result === null || !("assets" in result) || result.canceled) return null;
+    const result = await getPendingResultAsync().catch(() => null);
+    const asset =
+      result !== null && 'assets' in result && !result.canceled ? result.assets?.[0] : undefined;
 
-    const asset = result.assets?.[0];
-    if (asset === undefined) return null;
+    const uri = asset?.uri ?? abandonedCapture(pending.at);
+    if (uri === null || uri === undefined) return null;
 
-    const kept = await store(pending.id, asset);
+    const kept = await store(pending.id, uri);
     return { id: pending.id, subjectId: pending.subjectId, ...kept };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The photograph itself, found on disk after the process that asked for it was
+ * killed.
+ *
+ * `getPendingResultAsync` recovers a picture only when the ACTIVITY was
+ * destroyed and the process lived — its store is a field on the module
+ * (`private var pendingMediaPickingResult`), not SharedPreferences, so a
+ * process death takes it with everything else. On a tablet that is the common
+ * case rather than the exotic one: the camera app is the most memory-hungry
+ * thing on the device, and Android takes the memory from whatever is in the
+ * background, which is us.
+ *
+ * But the picture is not in memory. `CameraContract` passes the camera an
+ * `EXTRA_OUTPUT` file made by `createOutputFile(cacheDirectory, "jpg")`, and
+ * the camera app writes the JPEG there itself, before returning. So the file
+ * has already landed on disk by the time we are killed — in
+ * `<cache>/ImagePicker/`, which is a constant in the module
+ * (`CACHE_DIR_NAME = "ImagePicker"`).
+ *
+ * Newer than the moment the camera was opened, so a leftover from some earlier
+ * capture is never adopted as this one. Newest first, because two files inside
+ * one pending window means the camera was opened twice and the last is the one
+ * somebody was looking at.
+ */
+function abandonedCapture(openedAt: number): string | null {
+  try {
+    const dir = new Directory(Paths.cache, 'ImagePicker');
+    if (!dir.exists) return null;
+
+    const shots = dir
+      .list()
+      .filter((entry): entry is File => entry instanceof File)
+      /**
+       * Milliseconds since the epoch, which `File.modificationTime` documents.
+       *
+       * This was briefly written to accept `at > openedAt || at * 1000 >
+       * openedAt`, in case some platform reported seconds — and that second
+       * clause is true for **every** file ever written, because any plausible
+       * seconds-value multiplied by a thousand exceeds any plausible
+       * milliseconds-value. It did not make the check tolerant, it deleted it,
+       * and a stale capture from last week would have been adopted as this
+       * one. Defensive code that cannot fail is not defensive.
+       */
+      .filter((file) => (file.modificationTime ?? 0) > openedAt)
+      .sort((a, b) => (b.modificationTime ?? 0) - (a.modificationTime ?? 0));
+
+    return shots[0]?.uri ?? null;
   } catch {
     return null;
   }
