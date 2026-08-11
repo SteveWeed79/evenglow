@@ -171,13 +171,13 @@ if defined layout_wrong (
   rd /s /q "apps\api\node_modules" 2>nul
   rd /s /q "packages\contracts\node_modules" 2>nul
   rd /s /q "packages\core\node_modules" 2>nul
-  :: The generated Android project has the old paths compiled into it, and
-  :: Gradle will happily reuse them. `expo prebuild` makes it again.
+  rem The generated Android project has the old paths compiled into it, and
+  rem Gradle will happily reuse them. `expo prebuild` makes it again.
   rd /s /q "apps\mobile\android" 2>nul
-  :: And Metro's cache, which is the part that survived the last rebuild and
-  :: produced the failure above. It stores RESOLVED ABSOLUTE PATHS, so a tree
-  :: rebuilt underneath it is still asked for at the old `.pnpm` location — the
-  :: app bundles, then 404s on an asset, and nothing says why.
+  rem And Metro's cache, which is the part that survived the last rebuild and
+  rem produced the failure above. It stores RESOLVED ABSOLUTE PATHS, so a tree
+  rem rebuilt underneath it is still asked for at the old `.pnpm` location — the
+  rem app bundles, then 404s on an asset, and nothing says why.
   for /d %%D in ("%TEMP%\metro-*") do rd /s /q "%%D" 2>nul
   for /d %%D in ("%TEMP%\haste-map-*") do rd /s /q "%%D" 2>nul
 )
@@ -217,9 +217,9 @@ if exist "apps\mobile\android\app\.cxx" (
   if errorlevel 1 (
     echo   The packages moved since the last native build - clearing its cache.
     rd /s /q "apps\mobile\android\app\.cxx" 2>nul
-    :: Metro's too, for the same reason and from the same event: it stores
-    :: resolved ABSOLUTE paths, so a tree replaced underneath it is still
-    :: asked for where it used to be.
+    rem Metro's too, for the same reason and from the same event: it stores
+    rem resolved ABSOLUTE paths, so a tree replaced underneath it is still
+    rem asked for where it used to be.
     for /d %%M in ("%TEMP%\metro-*") do rd /s /q "%%M" 2>nul
     for /d %%M in ("%TEMP%\haste-map-*") do rd /s /q "%%M" 2>nul
   )

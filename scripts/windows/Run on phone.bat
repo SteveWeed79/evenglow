@@ -60,13 +60,40 @@ echo.
 call "%~dp0_shared.bat" :check_adb
 if errorlevel 1 goto :failed
 
+::
+:: A real device beats a running emulator, and this window has to say which.
+::
+:: Anybody testing on a tablet has probably had the emulator open all morning,
+:: so `adb devices` lists both. Taking the first would install the app to the
+:: emulator from a window called "Run on phone" - and it would look like it
+:: worked, because something did start, just not on the thing in your hand.
+::
+:: Emulator serials are `emulator-5554`; a USB device's is its own. So the
+:: emulator is only used when nothing else is attached, and the chosen serial
+:: is passed to the build rather than left to be resolved again.
 set "PHONE="
+set "FALLBACK="
 set "WAITING="
 for /f "skip=1 tokens=1,2" %%D in ('adb devices') do (
-  if "%%E"=="device" if not defined PHONE set "PHONE=%%D"
-  :: Plugged in and not yet trusted. The single most common first-time state,
-  :: and it looks identical to "nothing connected" unless it is named.
+  if "%%E"=="device" (
+    echo %%D | findstr /b /c:"emulator-" >nul
+    if errorlevel 1 (
+      if not defined PHONE set "PHONE=%%D"
+    ) else (
+      if not defined FALLBACK set "FALLBACK=%%D"
+    )
+  )
+  rem Plugged in and not yet trusted. The single most common first-time state,
+  rem and it looks identical to "nothing connected" unless it is named.
   if "%%E"=="unauthorized" set "WAITING=%%D"
+)
+
+if not defined PHONE if defined FALLBACK (
+  echo.
+  echo   NOTE: no phone or tablet is attached, but the emulator is
+  echo   running, so this will use the emulator instead.
+  echo.
+  set "PHONE=!FALLBACK!"
 )
 
 if not defined PHONE if defined WAITING (
@@ -110,9 +137,9 @@ if errorlevel 1 (
   echo   one shared sandbox that wipes itself when it updates, and
   echo   it took a farm's records with it twice.
   echo.
-  :: `--no-install` because the preflight above already ran `pnpm install`.
-  :: Left alone, `expo run:android` runs its own from apps/mobile.
-  call pnpm mobile:android --no-install
+  rem `--no-install` because the preflight above already ran `pnpm install`.
+  rem Left alone, `expo run:android` runs its own from apps/mobile.
+  call pnpm mobile:android --no-install --device !PHONE!
   goto :stopped
 )
 

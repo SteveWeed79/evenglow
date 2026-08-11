@@ -26,9 +26,9 @@ if errorlevel 1 (
 
 where pnpm >nul 2>&1
 if errorlevel 1 (
-  :: Counted like the rest. It was the one MISSING line that did not add to the
-  :: total, so a machine whose only gap was pnpm read "Nothing missing" with a
-  :: MISSING line above it.
+  rem Counted like the rest. It was the one MISSING line that did not add to the
+  rem total, so a machine whose only gap was pnpm read "Nothing missing" with a
+  rem MISSING line above it.
   echo   [ MISSING ] pnpm           - the run scripts install this for you
   set /a MISSING+=1
 ) else (
