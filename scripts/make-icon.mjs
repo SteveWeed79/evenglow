@@ -22,6 +22,18 @@
  * Plaster with ink for daylight, loam with brass for lamplight — `tokens.ts`'s
  * own `ground`, `ink` and `lantern`, not colours picked to look like them.
  *
+ * The lamplight splash goes one step further and is *backlit*: the letter in
+ * the theme's `ink`, with the lantern burning behind it. That is the app's
+ * whole motif — a lit sign on a dark building, which is what a steading is
+ * after dark — and lamplight already carries the haze as a token,
+ * `glow: rgba(233,178,60,0.30)`, used behind the lit lamp and under the
+ * tally's brass. The splash is the first place a farm sees it.
+ *
+ * Flat brass on loam was the alternative and it is the weaker one: brass on
+ * loam is a *coloured* letter, and every other dark surface in the app is lit
+ * rather than tinted. It also puts the mark's own colour on the one screen
+ * that has no interface to place it against.
+ *
  * ## The safe zone is the whole reason this is arithmetic
  *
  * Android masks an adaptive icon to a shape the OEM chooses, and only the
@@ -35,6 +47,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { glyphCoverage } from './lib/glyph.mjs';
+import { halo, over } from './lib/glow.mjs';
 import { compose, encodePng } from './lib/png-write.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -63,7 +76,30 @@ const FOREGROUND_SPAN = Math.round(SIZE * 0.56);
 const DAYLIGHT_GROUND = '#ede6d2';
 const DAYLIGHT_INK = '#241c14';
 const LAMPLIGHT_GROUND = '#201913';
+const LAMPLIGHT_INK = '#f0e7d5';
 const LANTERN = '#e9b23c';
+
+/**
+ * The backlight, in the two numbers that decide whether it reads as light.
+ *
+ * `RADIUS` is wide on purpose. A tight bloom hugs the outline and reads as a
+ * stroke somebody added to the letter — a sticker. A broad one has no edge to
+ * find, so the eye takes it for a source behind the mark, which is the thing
+ * being drawn. A fourteenth of the canvas puts the falloff well outside the
+ * letter without reaching the edges of a 1024 square.
+ *
+ * `STRENGTH` then lifts it, because blurring a shape this far spreads its
+ * coverage thin — the peak inside the stroke lands near 0.5 and a halo at half
+ * alpha is a smudge. Multiplying and clamping saturates the core, which is
+ * exactly where the opaque letter covers it, and leaves the falloff intact.
+ */
+const GLOW_RADIUS = Math.round(SIZE / 14);
+const GLOW_STRENGTH = 2.4;
+
+/** The lantern behind the mark: the glyph's own coverage, spread and lifted. */
+function backlight(coverage, size) {
+  return compose(halo(coverage, size, GLOW_RADIUS, GLOW_STRENGTH), size, LANTERN, null);
+}
 
 const assets = [
   {
@@ -103,10 +139,14 @@ const assets = [
     ground: null,
   },
   {
+    // The lit one. Ink rather than brass for the letter — the brass is the
+    // light *behind* it, and a brass letter on a brass haze has nothing to
+    // separate the two.
     file: 'assets/splash/steading-lamplight.png',
     span: FULL_SPAN,
-    ink: LANTERN,
+    ink: LAMPLIGHT_INK,
     ground: null,
+    glow: true,
   },
 ];
 
@@ -118,10 +158,13 @@ for (const asset of assets) {
     span: asset.span,
   });
 
+  const mark = compose(coverage, SIZE, asset.ink, asset.ground);
+  const pixels = asset.glow === true ? over(backlight(coverage, SIZE), mark, SIZE) : mark;
+
   const file = path.join(MOBILE, asset.file);
   mkdirSync(path.dirname(file), { recursive: true });
-  writeFileSync(file, encodePng(SIZE, SIZE, compose(coverage, SIZE, asset.ink, asset.ground)));
-  console.log(`wrote ${asset.file}`);
+  writeFileSync(file, encodePng(SIZE, SIZE, pixels));
+  console.log(`wrote ${asset.file}${asset.glow === true ? ' (backlit)' : ''}`);
 }
 
 console.log(`\nGrounds: daylight ${DAYLIGHT_GROUND}, lamplight ${LAMPLIGHT_GROUND}.`);
