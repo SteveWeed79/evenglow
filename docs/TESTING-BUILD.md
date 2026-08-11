@@ -29,8 +29,8 @@ No Play Console, no $25, no signing keys to manage, no review.
 |---|---|---|
 | `development` | empty | A dev-client APK built in the cloud — for when the local Gradle toolchain is the problem |
 | `preview` | empty | **A tester.** The whole app, no server, nothing to set up |
-| `preview-farm` | your API origin | The same, plus sync and accounts |
-| `production` | your API origin | An AAB for the Play Store |
+| `preview-farm` | `https://api.swbuild.dev` | The same, plus sync and accounts |
+| `production` | `https://api.swbuild.dev` | An AAB for the Play Store |
 
 **Start with `preview`.** The free tier is the whole app on one device (D13), so
 a build with no server is not a crippled demo — it is the product, and it needs
@@ -40,7 +40,9 @@ dues, treatments, weather, photos, export.
 
 Move to `preview-farm` only once the API is deployed somewhere a phone can
 reach. An APK pointed at `localhost` is an APK that cannot sync from anywhere
-but the machine that built it.
+but the machine that built it. **`docs/DEPLOY-THE-SERVER.md` is how it gets
+there** — a fresh Oracle box to a working `https://` address, and then the two
+devices.
 
 ---
 

@@ -259,11 +259,36 @@ internet as one caller and lock a farm out over somebody else's typo. The
 number is how many proxies are actually in front; `true` would let a caller
 forge past it by sending the header themselves.
 
-### The image
+### The box, start to finish
+
+**`docs/DEPLOY-THE-SERVER.md` is the step-by-step**, from a fresh Oracle
+Always Free instance to `https://api.swbuild.dev/health`. Three consoles that
+cannot be scripted (DNS, Oracle's ingress rule, Atlas's IP allowlist), then one
+script:
+
+```
+sudo git clone https://github.com/SteveWeed79/steading /opt/steading
+sudo /opt/steading/scripts/deploy/setup-box.sh api.swbuild.dev
+```
+
+`scripts/deploy/` holds what it installs: a systemd unit, a Caddyfile that
+obtains and renews the certificate by itself, and `deploy.sh` for every
+version after the first.
+
+The one thing worth repeating out of that document, because it costs an
+evening: **there are two firewalls in front of an Oracle box.** The VCN
+security list in the cloud console, and the instance's own iptables — which
+ships with a REJECT rule allowing only SSH, and which `ufw` does not manage, so
+`ufw allow 443` reports success and changes nothing.
+
+### The image, for a host that wants one
 
 `apps/api/Dockerfile`. Two stages: a filtered `pnpm install`, then
 `pnpm deploy --legacy --prod` into a self-contained tree, copied into a
-runtime stage with nothing else in it.
+runtime stage with nothing else in it. `fly.toml` at the repo root runs it.
+
+Not needed on the box above, which runs from a checkout under systemd — easier
+to read the logs of and easier to fix at 6am.
 
 Three things about it are not obvious and each one cost a failed build:
 
@@ -281,7 +306,7 @@ Three things about it are not obvious and each one cost a failed build:
   lengths, but the `node-linker=hoisted` it sets is also what lets
   `pnpm deploy` run at all without `inject-workspace-packages`.
 
-### Fly
+### Fly, as the alternative
 
 `fly.toml` is at the repo root and points at that Dockerfile.
 
@@ -289,17 +314,11 @@ Three things about it are not obvious and each one cost a failed build:
 fly launch --no-deploy --copy-config      # once. names the app, picks a region
 fly secrets set AUTH_SECRET=… MONGODB_URI=…
 fly deploy
-curl https://<app>.fly.dev/health         # {"ok":true}
 ```
 
-`fly secrets` is the only place those two values belong. They are not in
-`fly.toml`, which is committed.
-
-One machine is left running rather than scaling to zero. That costs a couple of
-dollars a month and buys the one flow that cannot be done offline: signing in
-on a new device (A2.5). Logging never waits on the server either way — mutations
-queue and flush later — so a cold start would be invisible everywhere except the
-one screen where it would look like the app was broken.
+Kept because the answer could change, and because it is the fastest way to put
+this somewhere when the box is unavailable. It costs a couple of dollars a
+month, which is exactly what the Oracle instance exists to avoid.
 
 ### Then the app has to be told
 

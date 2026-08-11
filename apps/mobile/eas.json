@@ -29,7 +29,7 @@
     "preview-farm": {
       "extends": "preview",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://REPLACE-ME.example.com"
+        "EXPO_PUBLIC_API_URL": "https://api.swbuild.dev"
       }
     },
     "production": {
@@ -39,7 +39,7 @@
       "distribution": "store",
       "channel": "production",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://REPLACE-ME.example.com"
+        "EXPO_PUBLIC_API_URL": "https://api.swbuild.dev"
       }
     }
   },

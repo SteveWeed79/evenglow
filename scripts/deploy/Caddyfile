@@ -1,0 +1,61 @@
+# TLS, and the third of `DESIGN-BRIEF.md` gap 7's four missing pieces.
+#
+#   sudo cp scripts/deploy/Caddyfile /etc/caddy/Caddyfile
+#   sudo sed -i "s/api.example.com/api.swbuild.dev/" /etc/caddy/Caddyfile
+#   sudo systemctl reload caddy
+#
+# Caddy obtains and renews the certificate by itself — there is no certbot, no
+# cron job and no renewal that expires quietly eighteen months from now. That
+# is the whole reason it is here rather than nginx.
+#
+# ## Why the app cannot simply talk to :3001
+#
+# Android blocks cleartext HTTP by default for anything targeting SDK 28 or
+# later, and `app.json` sets no `usesCleartextTraffic` — so `http://<ip>:3001`
+# fails from the handset with no useful message. Which is correct: access
+# tokens, refresh tokens and passwords are on that wire.
+#
+# A certificate needs a NAME. Let's Encrypt will not issue for a bare IP, which
+# is why a subdomain is the cheap part of this and the box's address is not
+# enough on its own.
+#
+# ## The DNS half, which has to be done first
+#
+# One A record, at whoever hosts the zone:
+#
+#   api    A    <the box's public IP>
+#
+# It does not touch the apex or `www`, so a portfolio on the same domain is
+# unaffected — different record, different host, different certificate.
+#
+# **If the zone is on Cloudflare, leave this record grey (DNS only).** An
+# orange-clouded record proxies through Cloudflare, which terminates TLS
+# itself — so Caddy's challenge cannot complete, and if it did, the hop count
+# below would be wrong.
+
+api.example.com {
+	# The API binds 127.0.0.1 through this proxy rather than being exposed
+	# directly, so the only thing on a public port is Caddy.
+	reverse_proxy 127.0.0.1:3001 {
+		# Photos stream through this service. The default 60s is plenty for a
+		# 400KB image on a barn's signal, but a phone that spent 30s uploading
+		# and got cut off has a rejected mutation and no idea why.
+		transport http {
+			response_header_timeout 120s
+		}
+	}
+
+	# Caddy sets X-Forwarded-For itself. The service must be told to believe
+	# exactly one hop — `TRUSTED_PROXY_HOPS=1` in /etc/steading/api.env — or
+	# `request.ip` is 127.0.0.1 for every request and every rate limiter in the
+	# service counts the whole internet as one caller. See env.ts.
+
+	encode zstd gzip
+
+	log {
+		output file /var/log/caddy/steading.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}
