@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import * as SplashScreen from 'expo-splash-screen';
 import { startSync } from '@steading/core/sync/engine';
 import { setStorageBacking } from '@steading/core/sync/storage';
 import { setEngineReporter } from '@steading/core/sync/report';
@@ -156,6 +157,32 @@ export function Boot({
    * anything.
    */
   const onSignedOut = useCallback(() => setState({ kind: 'ready' }), []);
+
+  /**
+   * The splash comes down when there is something to read — **including bad news.**
+   *
+   * `index.ts` holds it open past the first frame so the mark covers the store
+   * opening and the faces loading, which is the whole of a cold start. This is
+   * the other half: without it the splash is held for the life of the process.
+   *
+   * The failure branch hides it too, and that is the part worth being careful
+   * about. An app that cannot open its database has one job — say so in words
+   * — and a splash left up is a farm staring at a logo while the only screen
+   * that could explain anything sits behind it. Same reasoning as this file's
+   * refusal to render an empty list on that branch: silence is the one thing
+   * this app must not do about lost records.
+   *
+   * `state.kind === 'opening'` recurs mid-run when a farm signs in to a
+   * different org. The splash is long gone by then and `hideAsync` is a no-op,
+   * so it costs nothing to leave the condition simple.
+   */
+  const settled = fonts.ready && state.kind !== 'opening';
+  useEffect(() => {
+    if (!settled) return;
+    SplashScreen.hideAsync().catch(() => {
+      // Already hidden. Nothing to do, and nothing a farmer could act on.
+    });
+  }, [settled]);
 
   // Both gates, and the font one never turns into a failure branch.
   if (!fonts.ready) {

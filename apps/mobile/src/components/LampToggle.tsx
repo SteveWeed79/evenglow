@@ -29,14 +29,25 @@ export function LampToggle(): React.ReactElement {
       hitSlop={12}
       style={styles.lamp}
     >
-      {/* A ring, filled when lit. The pair differs by the fill and nothing
-          else, which is what makes the state readable at this size — and is
-          all that survived of a lamp that could never be drawn well at 24px.
-          See `Icon.tsx`. */}
+      {/**
+       * A lantern, lit or not — one object in two states, which a ring and a
+       * filled ring never were. The ring said *on/off* and said nothing about
+       * what was being switched; on the one control whose subject is the app's
+       * own motif, that was the whole of what it had to say.
+       *
+       * **40, not 24, and the mark is not 40 wide.** `LANTERN_32` spans 26 of
+       * its 32 units so the halo has somewhere to sit inside the viewBox, so a
+       * 40px box draws a ~32px lantern — the size at which the hood, the ribs
+       * and the flame read as separate things rather than closing into a warm
+       * lozenge. Checked against the real header at 16, 24, 32 and 40.
+       *
+       * The tap target is unchanged: `hitSlop` already carries it past 44.
+       */}
       <Icon
         name={theme === 'lamplight' ? 'lamp-lit' : 'lamp-unlit'}
-        size={24}
-        color={theme === 'lamplight' ? colors.lanternInk : colors.muted}
+        size={40}
+        color={theme === 'lamplight' ? colors.lanternInk : colors.inkQuiet}
+        {...(theme === 'lamplight' ? { glow: colors.lantern } : {})}
       />
     </Touch>
   );

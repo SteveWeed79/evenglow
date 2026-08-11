@@ -10,7 +10,7 @@
   "scripts": {
     "start": "expo start --dev-client",
     "android": "pnpm stamp && expo run:android",
-    "prebuild": "expo prebuild --platform android",
+    "prebuild": "expo prebuild --platform android --clean",
     "export": "pnpm stamp && expo export --platform android --output-dir .expo-export",
     "stamp": "node ../../scripts/stamp-build.mjs",
     "eas-build-post-install": "node ../../scripts/stamp-build.mjs",
