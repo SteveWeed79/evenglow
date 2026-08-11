@@ -169,9 +169,38 @@ if errorlevel 1 (
   echo   one shared sandbox that wipes itself when it updates, and
   echo   it took a farm's records with it twice.
   echo.
+  rem `expo run:android --device` wants the device's NAME, not its serial.
+  rem
+  rem Passing the serial produced `CommandError: Could not find device with
+  rem name: 98780005E5AA274` — `resolveFromNameAsync` matches strictly on
+  rem `device.name`, and for a physical device Expo builds that from the
+  rem `model:` field of `adb devices -l`. The serial is what adb wants and the
+  rem model is what Expo wants, and they are never the same string.
+  rem
+  rem So the model is read for the serial already chosen. If it cannot be read,
+  rem `--device` is left off entirely rather than guessed: with one device
+  rem attached Expo picks the right thing anyway, and a wrong name is a hard
+  rem stop where no name is a sensible default.
+  set "MODEL="
+  for /f "usebackq tokens=*" %%L in (`adb devices -l ^| findstr /b /c:"!PHONE!"`) do (
+    for %%T in (%%L) do (
+      echo %%T | findstr /b /c:"model:" >nul
+      if not errorlevel 1 set "MODEL=%%T"
+    )
+  )
+  if defined MODEL set "MODEL=!MODEL:model:=!"
+
   rem `--no-install` because the preflight above already ran `pnpm install`.
   rem Left alone, `expo run:android` runs its own from apps/mobile.
-  call pnpm mobile:android --no-install --device !PHONE!
+  if defined MODEL (
+    echo   Building for !MODEL! ^(!PHONE!^).
+    echo.
+    call pnpm mobile:android --no-install --device !MODEL!
+  ) else (
+    echo   Building for the attached device.
+    echo.
+    call pnpm mobile:android --no-install
+  )
   goto :stopped
 )
 
