@@ -247,3 +247,42 @@ routes on the existing API:
   to.
 - **It must never accept a farm access token.** Separate credentials, separate
   audience, separate revocation.
+
+---
+
+## Turning on "Something is wrong"
+
+The app's report button posts a bundle to the farm server, which files it as a
+GitHub issue. Until a token and a repo are set the route answers 501 and the
+app falls back to its share sheet — which works, and is not the loop.
+
+**One-time setup.**
+
+1. Make a fine-grained token at
+   <https://github.com/settings/personal-access-tokens/new>:
+   - **Repository access** → Only select repositories → `steading`
+   - **Permissions** → Repository permissions → **Issues: Read and write**
+   - Nothing else. It files issues and that is all it can do.
+2. Add two lines to `.env.local` **on the machine running the server**:
+
+   ```
+   SUPPORT_GITHUB_TOKEN=github_pat_...
+   SUPPORT_REPO=SteveWeed79/steading
+   ```
+
+3. Restart the farm server. `Check my setup` will say where reports go.
+
+`.env.local` is gitignored and the token is read only by the server — it never
+reaches the app, which is why the route is unauthenticated and the token is not.
+
+### Leave `SUPPORT_ACCEPT_RECORDS` alone while the repository is public
+
+It is off by default and it must stay off. It controls the **opt-in second
+half** — the farm's actual records, as CSV — and a public tracker is a public
+place to put them. The route refuses them on the server rather than trusting
+the app not to offer, and tells the farm plainly that they were not sent.
+
+The lean bundle is safe in public by construction, which is the point of S1:
+**structure and counts, never content.** No email, no farm name, no animal
+names. The farm id is a hash rather than the id, so two reports from one farm
+can be recognised as the same farm without the ticket naming a customer.
