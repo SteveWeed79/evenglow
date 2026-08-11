@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SPACE, TAP, TYPE } from '../../apps/mobile/src/theme/tokens';
 import { TALLY, tallySize } from '../../apps/mobile/src/theme/tally';
+import { rotationFor } from '../../apps/mobile/src/theme/rotation';
 
 /**
  * What fits above the fold, once the app is allowed to rotate.
@@ -9,6 +10,13 @@ import { TALLY, tallySize } from '../../apps/mobile/src/theme/tally';
  * question it never had to before: **is the commit button reachable without
  * scrolling?** R1 says a daily log is three taps from a cold launch, and it is
  * not three taps if the first one is a scroll.
+ *
+ * **The answer this file arrived at is the reason `theme/rotation.ts` exists.**
+ * The sums below say a phone in landscape is ~84dp under and a tablet is fine
+ * in both orientations, and that is exactly the line the runtime lock now
+ * draws: unlocked at 600dp and up, held upright below it. So the shortfall
+ * asserted here is no longer something the app ships — it is the constraint on
+ * ever lifting the lock, which is why every number in it stays.
  *
  * ## Why this is arithmetic rather than a screenshot
  *
@@ -70,6 +78,11 @@ describe('the fold, now that the app rotates', () => {
    * asserts the *shortfall* rather than just the failure, so whoever attempts
    * the fix has a number to beat and this test says how close they got.
    *
+   * It is not a shipped defect any more — `theme/rotation.ts` holds a phone
+   * upright, so this configuration does not occur. It stays because it is the
+   * price of unlocking one, and the price should be a number rather than a
+   * memory.
+   *
    * The deficit is **not** structural, which is worth stating because the
    * first draft of this file asserted that it was and was wrong. The stack
    * itself is smaller than a landscape phone; what does not fit is the stack
@@ -99,6 +112,30 @@ describe('the fold, now that the app rotates', () => {
     // bar — is enough on its own.
     const trimmed = budget(932, 430) - (SPACE.xl + SPACE.lg);
     expect(trimmed).toBeLessThan(usable(430, { tabs: 0 }));
+  });
+
+  /**
+   * The two files agree, and this is what makes them stay agreed.
+   *
+   * `rotation.ts` picks its threshold from Android's own idea of a large
+   * display; this file picks its verdicts from the token stack. They happen to
+   * draw the same line, and nothing enforced that until here. Raise
+   * `ROTATES_AT`, or lower it far enough to let a phone turn, and one of these
+   * two assertions goes red with the reason attached.
+   */
+  it('locks exactly the screens that cannot fit the fold', () => {
+    for (const [w, h] of [
+      [430, 932],
+      [360, 640],
+      [412, 915],
+    ] as const) {
+      const landscape = budget(h, w) > usable(w);
+      expect(rotationFor(w, h) === 'portrait_up', `${w}x${h}`).toBe(landscape);
+    }
+
+    // And the converse: a tablet is let go because it genuinely fits sideways.
+    expect(budget(1280, 800)).toBeLessThan(usable(800));
+    expect(rotationFor(800, 1280)).toBe('default');
   });
 
   it('keeps the numeral itself inside its share of a landscape screen', () => {

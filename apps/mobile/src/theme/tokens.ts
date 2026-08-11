@@ -289,8 +289,10 @@ export const SPACE = { xs: 4, sm: 8, md: 12, lg: 20, xl: 32 } as const;
  * a tablet running anything earlier honoured `orientation: "portrait"` in full.
  * The tablet this was found on reports API 35 and would not turn at all.
  *
- * It turns now — `theme/rotation.ts` unlocks the manifest and re-locks compact
- * screens at runtime — so the cap below has gone from insurance to load-bearing.
+ * It turns now: the manifest no longer locks, and `theme/rotation.ts` puts the
+ * lock back at runtime for screens under 600dp only — so a phone is upright and
+ * a tablet is not. Which means the cap below has gone from insurance to
+ * load-bearing, and it is the tablet it is bearing.
  *
  * Nothing else in the app bounded its width. A row that reads
  * "Chickens · EGGS · 6 HEAD · 4" at 430dp becomes the same words at 1280dp

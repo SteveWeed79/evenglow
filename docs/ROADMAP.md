@@ -382,12 +382,23 @@ level's, so the tablet it was tried on (API 35) honoured the lock completely.
 Both comments asserted the app already rotated freely on every Android tablet
 in the world. It rotated on none of them.
 
-Fixed in `theme/rotation.ts`: the manifest stops locking and the lock is
-re-applied at runtime to screens under 600dp, so a phone is unchanged and a
-tablet turns. No new dependency — the navigator's own `orientation` option
-reaches `react-native-screens`, which is already here. **Needs a device to
-close:** the manifest change only takes effect after a prebuild, and whether
-the screens read well at 1280dp is a question for eyes, not for a test.
+Fixed in two halves, from two directions. The manifest stopped locking, and
+`tests/unit/landscape-fold.test.ts` arrived with it carrying the bill: added up
+from the tokens the tally screen is built from, **a phone in landscape is ~84dp
+short of showing its commit button**, while a tablet fits either way up. That
+was recorded as a debt. `theme/rotation.ts` pays it instead of deferring it —
+the lock comes back at runtime for screens under 600dp, which is the same line
+the arithmetic drew, so a phone is exactly as it was and only a tablet turns.
+The two files now assert that they agree, so neither number can move alone.
+
+No new dependency: the navigator's own `orientation` option reaches
+`react-native-screens`, which is here because the navigator requires it. The
+manifest could not have expressed this — `screenOrientation` is an enum
+resolved at build time and takes no resource qualifier.
+
+**Needs a device to close:** it is native config, so nothing takes effect until
+a prebuild, and whether the screens read well at 1280dp is a question for eyes
+rather than for a test.
 
 ---
 

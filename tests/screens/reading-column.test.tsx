@@ -14,8 +14,9 @@ import { seedSecureStore } from '../support/native/modules';
  * targeting Android SDK 36 has its orientation restrictions ignored on displays
  * 600dp and wider — true, and Android 16's behaviour rather than the target
  * level's, so a tablet on API 35 honoured the portrait lock completely and did
- * not turn at all. `theme/rotation.ts` is what unlocks it now, and the cap
- * asserted here is what the unlocking depends on.
+ * not turn at all. The manifest has stopped locking and `theme/rotation.ts`
+ * re-locks phones only, so a tablet turns for real now — and the cap asserted
+ * here is what stands between that and a metre of plaster.
  *
  * Nothing else in the app bounded its width, so a row that reads as a design
  * at 430dp reads as two words at opposite ends of a metre of plaster at

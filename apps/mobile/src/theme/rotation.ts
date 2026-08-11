@@ -1,14 +1,14 @@
 /**
  * Which way up the app is allowed to be.
  *
- * ## The bug this fixes
+ * ## The bug
  *
+ * Reported from a handset: "rotation is busted on the tablet". It was.
  * `app.json` said `"orientation": "portrait"`, which `@expo/config-plugins`
- * writes onto the main activity as `android:screenOrientation="portrait"`. On
- * a tablet that is a hard lock: turn the thing sideways and Android pillarboxes
- * a portrait app in the middle of a landscape screen, or simply refuses.
- * Reported from a handset as "rotation is busted on the tablet", which is
- * exactly what it was.
+ * writes onto the main activity as `android:screenOrientation="portrait"` — a
+ * hard lock on a tablet exactly as much as on a phone. Turn the thing sideways
+ * and Android pillarboxes a portrait app in the middle of a landscape screen,
+ * or simply refuses.
  *
  * `tokens.ts` and `tests/screens/reading-column.test.tsx` both asserted the
  * opposite — that the lock "does not hold on a tablet" because an app targeting
@@ -18,16 +18,23 @@
  * running anything earlier honours the lock completely. The one this was found
  * on reports API 35. Both comments have been corrected.
  *
- * ## Why not simply unlock everything
+ * ## Why the manifest change was not the whole fix
  *
- * Because portrait on a phone is not an oversight. A phone is held one-handed
- * over a nest box at an angle auto-rotate reads as landscape, and R1 wants a
- * daily log three taps from a cold launch — which it is not when the commit
- * button has just gone below the fold. `tally.ts` already carries the arithmetic
- * for how badly a 430dp-tall screen goes, and calls it "the real defect".
+ * `orientation: "default"` in `app.json` — already on main — unlocks the
+ * activity, and `tests/unit/landscape-fold.test.ts` landed with it saying what
+ * that costs: adding up the tokens the tally screen is built from, **a phone in
+ * landscape is about 84dp short of showing its commit button**, and a tablet
+ * fits in either orientation. R1 wants a daily log three taps from a cold
+ * launch, and it is not three taps when the first one is a scroll. That file
+ * recorded the shortfall as a debt to be paid later.
  *
- * So: the manifest stops locking, and the lock is re-applied at runtime to
- * compact screens only. A phone behaves exactly as it did; a tablet turns.
+ * Nor is portrait on a phone only an R1 problem. It is held one-handed over a
+ * nest box, at an angle auto-rotate reads as landscape.
+ *
+ * So the lock comes back at runtime, for compact screens only, at the width the
+ * arithmetic already put the line at. A phone behaves exactly as it did before
+ * any of this; a tablet turns; the 84dp is not a debt the app ships with, it is
+ * the price of ever lifting the lock.
  *
  * ## Why this needs no new dependency
  *
@@ -48,6 +55,10 @@
  * that is not a coincidence worth collapsing: one is where the app stops
  * growing, the other is where it starts turning, and either could move without
  * the other.
+ *
+ * It also happens to be the line the fold arithmetic draws, arrived at from
+ * completely different premises — `landscape-fold.test.ts` asserts the two
+ * agree, so moving this number without answering that sum turns a test red.
  */
 export const ROTATES_AT = 600;
 
