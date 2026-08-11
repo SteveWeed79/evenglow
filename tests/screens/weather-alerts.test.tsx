@@ -152,14 +152,28 @@ describe('an alert in force', () => {
     expect(screen.text()).toContain('TAKE COVER NOW');
   });
 
-  /** It polls over a network that may not be there, and says so. */
-  it('says where it came from and what it is not', async () => {
+  /**
+   * The provenance line is deliberately NOT on Today any more.
+   *
+   * It used to sit under the strip permanently — where the alerts come from,
+   * and that this is not a weather radio — and it was removed at the farm's
+   * request. This asserts the removal rather than leaving it to drift back,
+   * because the argument for putting it there was a good one and somebody
+   * reading only the old comment would restore it.
+   *
+   * What replaced it is not nothing: the alert opens to the service's own text
+   * (the test above), and `WeatherScreen` names the source in full. The two
+   * lines were the only part of this strip that could not be collapsed, on the
+   * screen a farm looks at every morning, saying something the alert itself
+   * says when opened.
+   */
+  it('does not spend Today on a disclaimer', async () => {
     service([tornado()]);
     await farm();
 
     const screen = await mount(<TodayScreen />);
-    expect(screen.text()).toContain('National Weather Service');
-    expect(screen.text()).toContain('Not a substitute for a weather radio');
+    expect(screen.text()).not.toContain('Not a substitute for a weather radio');
+    expect(screen.text()).not.toContain('checked when this app has signal');
   });
 });
 

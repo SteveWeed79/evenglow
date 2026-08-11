@@ -64,12 +64,23 @@ import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
  * fresh warning, is a different id and arrives at full size. The reflex that
  * taps things away cannot reach next week's tornado.
  *
- * ## Not a weather radio, and it says so
+ * ## The provenance line is gone from here
  *
- * This polls every fifteen minutes over a network that may not be there. A
- * farm must not be left believing an app on a phone in a barn is what stands
- * between them and a tornado, so the strip says where it came from and how it
- * is meant to be used.
+ * Two fixed lines used to sit under the strip — where the alerts come from,
+ * and that this is not a weather radio. Removed at the farm's request, and
+ * worth recording rather than just deleting.
+ *
+ * The argument for them was that a farm must not believe a phone in a barn is
+ * what stands between them and a tornado. That is still true and is still
+ * said: an alert opens to the National Weather Service's own text, headline
+ * and instruction included, and `WeatherScreen` names the source in full. What
+ * this strip was doing was repeating it on Today, permanently, above the
+ * groups — the same complaint that shrank the rows and added marking read, and
+ * the two lines were the part that could never be collapsed.
+ *
+ * A disclaimer nobody can dismiss is one nobody reads by the second week, and
+ * it was costing the most valuable space on the screen every day to say
+ * something the alert itself says when opened.
  */
 
 /** Stable identity, because `useLive` resubscribes on an unstable reader. */
@@ -82,7 +93,6 @@ function loud(severity: AlertSeverity): boolean {
 
 export function WeatherAlerts(): React.ReactElement | null {
   const { alerts } = useWeather();
-  const { colors } = useTheme();
   const [open, setOpen] = useState<string | null>(null);
 
   const stored = useLive(readAlertsSeen, 'which warnings you have read');
@@ -128,11 +138,6 @@ export function WeatherAlerts(): React.ReactElement | null {
           onMarkRead={() => markRead(alert.id)}
         />
       ))}
-
-      <Text style={[styles.source, { color: colors.muted }]}>
-        From the National Weather Service, checked when this app has signal. Not a substitute for
-        a weather radio.
-      </Text>
     </View>
   );
 }
@@ -276,5 +281,4 @@ const styles = StyleSheet.create({
   instruction: { fontFamily: FONTS.body, fontSize: TYPE.body, lineHeight: TYPE.body * 1.35 },
   detail: { fontFamily: FONTS.body, fontSize: TYPE.body, lineHeight: TYPE.body * 1.35 },
   where: { fontFamily: FONTS.data, fontSize: TYPE.label, letterSpacing: 0.4 },
-  source: { fontFamily: FONTS.body, fontSize: TYPE.label, lineHeight: TYPE.label * 1.4 },
 });

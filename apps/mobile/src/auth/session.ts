@@ -401,9 +401,61 @@ async function runRefresh(): Promise<CachedClaims | null> {
 
   if (!res.ok) return readCachedClaims();
 
-  const pair = pairSchema.parse(await res.json());
+  /**
+   * **From here the old refresh token is already spent.**
+   *
+   * The server rotated the moment it answered 200 and retired what this device
+   * sent. So every line below is running with no valid credential on disk until
+   * the new one is written, and any path that returns before writing it leaves
+   * the device holding a dead token. The next launch presents that token, the
+   * server sees a spent one, `revokeFamily` does exactly what it should — and
+   * somebody is asked for a password having done nothing but open the app.
+   *
+   * `establish` states this rule for sign-in: *the refresh token is durable
+   * before the access token is live*. This is a second copy of that sequence
+   * and it did not follow it — the claim parse came first and returned `null`
+   * on failure, before the write. Both reported symptoms fall out of that one
+   * ordering: null claims send `start.ts` to `ensureLocalOrgId`, so the app
+   * opens the device's own farm instead of the real one, **and** the spent
+   * token bricks the next launch for real.
+   *
+   * So: parse the envelope, store the rotation, and only then worry about
+   * whether the access token can be read.
+   */
+  let pair: z.infer<typeof pairSchema>;
+  try {
+    pair = pairSchema.parse(await res.json());
+  } catch {
+    /**
+     * A 200 whose body is not a token pair. The rotation is spent and its
+     * replacement is unreadable, so this session cannot be saved — but it must
+     * not throw either: `start.ts` awaits this on the boot path with no catch,
+     * and a rejected promise there is a farm looking at a start-up error over
+     * a database that is sitting right beside it, intact.
+     *
+     * The cached claims keep the right farm open. The next refresh gets the
+     * 401 this one could not, and that is where the session properly ends.
+     */
+    return readCachedClaims();
+  }
+
+  await writeRefreshToken(pair.refreshToken);
+
   const claims = readClaims(pair.accessToken);
-  if (claims === null) return null;
+  if (claims === null) {
+    /**
+     * The session is alive on the server — it just handed over a rotation —
+     * and this device cannot read the access token that came with it. That is
+     * a client-side fault, and answering it by opening a different farm is the
+     * worst available response.
+     *
+     * The cached claims name the right org, so every screen is right and every
+     * log is durable. No access token is set, so the flush 401s and the engine
+     * keeps the work queued, which is what it does in a barn. Nothing is lost
+     * and nothing is wrongly claimed.
+     */
+    return readCachedClaims();
+  }
 
   // Refresh does not repeat the display name, so it is carried forward rather
   // than being quietly dropped on the first resume after a sign-in.
@@ -411,9 +463,6 @@ async function runRefresh(): Promise<CachedClaims | null> {
   const name = pair.user?.name ?? previous?.name;
   const named: CachedClaims = name === undefined ? claims : { ...claims, name };
 
-  // Rotation: the server issues a new refresh token and retires the old one,
-  // so failing to store this would sign the device out on the next launch.
-  await writeRefreshToken(pair.refreshToken);
   await writeCachedClaims(named);
   setAccessToken(pair.accessToken);
 
