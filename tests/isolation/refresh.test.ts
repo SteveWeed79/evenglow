@@ -75,51 +75,84 @@ describeDb('refresh token rotation', () => {
     expect(second.refreshToken).not.toBe(first.refreshToken);
   });
 
-  it('refuses the old token once it has been exchanged', async () => {
+  /**
+   * A token presented twice inside the grace window is this app, not a thief.
+   *
+   * **This assertion is the reverse of what it used to be**, and the reversal
+   * is the fix. Reuse detection with no tolerance signed a farm out for things
+   * no client can avoid: a process killed between the server rotating and the
+   * device writing the replacement, and a request that timed out after the
+   * server had already handled it. Both present a spent token on the next try,
+   * through no fault of anyone's, and both ended in a password prompt.
+   *
+   * Thirty seconds, which is Okta's default for the same problem. See
+   * `REUSE_GRACE_MS`.
+   */
+  it('honours a token presented again inside the grace window', async () => {
     const { rotateSession, startSession } = await import('@steading/api/auth/refresh');
 
     const first = await startSession(CLAIMS, SECRET);
     await rotateSession(first.refreshToken, SECRET);
 
-    await expect(rotateSession(first.refreshToken, SECRET)).rejects.toThrow(/expired/i);
+    // The retry a killed process makes on its next launch.
+    const retried = await rotateSession(first.refreshToken, SECRET);
+    expect(retried.refreshToken).not.toBe(first.refreshToken);
   });
 
   /**
    * The theft case, and the reason families exist.
    *
-   * An honest client exchanges a token exactly once. A second presentation
-   * means two parties hold it and there is no way to tell which is the thief,
-   * so both are logged out: the user signs in again, the attacker's token is
-   * worthless.
+   * An honest client re-presents a token within seconds or not at all. Minutes
+   * later means two parties hold it and there is no way to tell which is the
+   * thief, so both are logged out: the user signs in again, the attacker's
+   * token is worthless.
    */
-  it('revokes the whole family when a used token is presented again', async () => {
+  it('revokes the whole family when a used token comes back after the window', async () => {
     const { rotateSession, startSession } = await import('@steading/api/auth/refresh');
 
     const first = await startSession(CLAIMS, SECRET);
     const second = await rotateSession(first.refreshToken, SECRET);
     const third = await rotateSession(second.refreshToken, SECRET);
 
-    // The attacker replays a token from earlier in the chain.
-    await expect(rotateSession(first.refreshToken, SECRET)).rejects.toThrow(/expired/i);
+    // Well past the grace: the attacker replays a token from earlier in the
+    // chain, hours after the legitimate exchange.
+    const later = new Date(Date.now() + 60 * 60 * 1000);
+    await expect(rotateSession(first.refreshToken, SECRET, later)).rejects.toThrow(/expired/i);
 
     // And the legitimate client's current token is dead too — that is the point.
-    await expect(rotateSession(third.refreshToken, SECRET)).rejects.toThrow(/expired/i);
+    await expect(rotateSession(third.refreshToken, SECRET, later)).rejects.toThrow(/expired/i);
   });
 
-  it('cannot be exchanged twice concurrently', async () => {
-    const { rotateSession, startSession } = await import('@steading/api/auth/refresh');
+  /**
+   * Two exchanges of one token in the same instant both succeed now, and the
+   * thing that mattered still holds: they land in the SAME family.
+   *
+   * The atomic consume was never protecting against a second token existing —
+   * it was protecting against two live families from one login, because a
+   * family is what revocation acts on. `issue` takes the family off the row it
+   * was handed, so a concurrent pair cannot split one login in two, and
+   * revoking still reaches every token either of them minted.
+   */
+  it('keeps a concurrent pair inside one family', async () => {
+    const { endSession, rotateSession, startSession } = await import(
+      '@steading/api/auth/refresh'
+    );
 
     const first = await startSession(CLAIMS, SECRET);
 
-    // A read-then-write would let both of these through, minting two live
-    // families from one token.
     const results = await Promise.allSettled([
       rotateSession(first.refreshToken, SECRET),
       rotateSession(first.refreshToken, SECRET),
     ]);
 
-    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
-    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
+    const issued = results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
+    expect(issued).toHaveLength(2);
+
+    // One sign-out must kill both, which is only true if they share a family.
+    await endSession(issued[0]!.refreshToken);
+    for (const pair of issued) {
+      await expect(rotateSession(pair.refreshToken, SECRET)).rejects.toThrow(/expired/i);
+    }
   });
 
   it('refuses an unknown token without disclosing anything', async () => {

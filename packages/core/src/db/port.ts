@@ -1,6 +1,11 @@
 import type { SyncRefusal } from '@steading/contracts';
 import type { Entity, MutationResult, Op, PulledMutation } from '@steading/contracts';
 import type { LocalRecord, Quarantined, QueuedMutation } from './records';
+import type { metaSchemas } from './schema';
+import type { z } from 'zod';
+
+/** Why a device stopped being signed in — see `metaSchemas.sessionEnd`. */
+export type SessionEnd = z.infer<(typeof metaSchemas)['sessionEnd']>;
 
 /**
  * The storage port.
@@ -284,6 +289,17 @@ export interface LocalStore {
    */
   getReadAlerts(): Promise<string[]>;
   markAlertRead(id: string, live: readonly string[]): Promise<void>;
+
+  /**
+   * Why this device stopped being signed in — see `metaSchemas.sessionEnd`.
+   *
+   * On the local store rather than in secure storage because it is not a
+   * credential: it is one sentence about something that already happened, and
+   * it has to survive being read on the Diagnostics screen by somebody who is
+   * currently signed out.
+   */
+  getSessionEnd(): Promise<SessionEnd | null>;
+  recordSessionEnd(end: SessionEnd | null): Promise<void>;
 
   // ── Support tickets ───────────────────────────────────────────────────────
 
