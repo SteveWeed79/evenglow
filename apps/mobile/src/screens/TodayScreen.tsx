@@ -188,15 +188,39 @@ export function TodayScreen(): React.ReactElement {
   // A farm with one thing to log should not have to tap to reach it.
   const open = loggable.length === 1 ? loggable[0]!.key : opened;
 
-  if (loading) return <Screen title="Today">{null}</Screen>;
+  if (loading) return <Screen title={farmName ?? 'Today'}>{null}</Screen>;
 
   const now = Date.now();
 
   return (
-    /* The app has held this name since signup and never said it. A farm that
-       never signed in has none, and gets the plain title — D14 is a supported
-       state, not an unfinished one. */
-    <Screen title="Today" {...(farmName === null ? {} : { subtitle: farmName })}>
+    /**
+     * ## The farm's name is the hero, and "Today" is the fallback
+     *
+     * It sat under the title first, which was half a fix: the app finally said
+     * the name and still said it second.
+     *
+     * **"Today" was the word with nothing to say.** The tab bar labels this
+     * screen "Today" in the focused state, and the status row above already
+     * reads "Sat 10 Aug" — so the same fact was stated three ways in one
+     * viewport while the thing that makes the screen *this farm's* was the
+     * small line. Every other tab already diverges from its label rather than
+     * echoing it: History's tab says History and its hero says "What
+     * happened". Today was the only one repeating itself word for word.
+     *
+     * That is the same rule `Icon.tsx` records the set learning when
+     * sixty-four marks became sixteen — a mark beside a word that already says
+     * the same thing is drawn twice — applied to type instead of drawing.
+     *
+     * And the positive half, which is the better argument: a farm's name is
+     * not incidental to the person keeping it. It belongs in the best slot on
+     * the screen they open first every morning, the way a name belongs on the
+     * cover of a well-kept notebook.
+     *
+     * A farm with no account has no name, and there "Today" is the only thing
+     * available and earns its place. D14 is a supported permanent state, not
+     * an unfinished one.
+     */
+    <Screen title={farmName ?? 'Today'}>
       {/* What the weather MEANS comes before what it is, and both come before
           the tallies. Warnings are silent on an ordinary day, so this costs
           nothing on the mornings it has nothing to say — see WeatherWarnings.
