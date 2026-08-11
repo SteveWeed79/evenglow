@@ -20,8 +20,27 @@ configureIds(() => {
   return byte / 256;
 });
 
+import * as SplashScreen from 'expo-splash-screen';
 import { registerRootComponent } from 'expo';
 import { App } from './src/App';
+
+/**
+ * Hold the splash until the app has something real behind it.
+ *
+ * Without this the native splash comes down at the *first React Native frame*,
+ * which is well before this app is ready to be looked at: `Boot` is still
+ * opening the database and `useAppFonts` is still reading four faces out of
+ * the APK. So the mark would appear for a few frames, vanish into a spinner,
+ * and the farm would reasonably report never having seen a splash at all.
+ *
+ * At module scope, and above `registerRootComponent`, because the thing it
+ * has to beat is the first render — an effect is already too late.
+ */
+SplashScreen.preventAutoHideAsync().catch(() => {
+  // Rejects rather than resolves when the splash is already gone, which is the
+  // ordinary case on a fast warm start. There is nothing to hold and nothing
+  // worth reporting.
+});
 
 // registerRootComponent rather than AppRegistry directly: it also sets up the
 // Expo dev client and error overlay, which is the difference between a red
