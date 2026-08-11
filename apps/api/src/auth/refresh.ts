@@ -98,6 +98,31 @@ export async function startSession(
  * treated as reuse — which, from the server's position, is exactly what it
  * cannot be distinguished from.
  */
+/**
+ * What a presented token's `usedAt` means, given the clock.
+ *
+ * Pulled out as a pure function so it can be tested without a database. The
+ * suites that exercise `rotateSession` need a real mongod, and the machine this
+ * was written on cannot reach one — so the arithmetic that decides whether a
+ * farm keeps its session lives where an ordinary unit test can reach it, and
+ * only the wiring depends on CI.
+ *
+ * `stolen` is a verdict about evidence, not about intent: it means a token
+ * turned up again long enough after its exchange that no honest retry explains
+ * it. What follows is family revocation, which is severe, so the boundary is
+ * worth being able to assert on directly.
+ */
+export function reuseVerdict(
+  usedAt: Date | undefined,
+  now: Date,
+): 'fresh' | 'within-grace' | 'stolen' {
+  if (usedAt === undefined) return 'fresh';
+  // Negative elapsed means a clock that went backwards — NTP stepping, a
+  // container resuming. Treated as inside the window: a skewed clock must not
+  // be able to sign a farm out.
+  return now.getTime() - usedAt.getTime() > REUSE_GRACE_MS ? 'stolen' : 'within-grace';
+}
+
 export async function rotateSession(
   presented: string,
   secret: string,
@@ -141,12 +166,12 @@ export async function rotateSession(
    * farm being asked for a password in a yard because a lorry went past a mast
    * at the wrong moment.
    */
-  if (existing.usedAt) {
-    if (now.getTime() - existing.usedAt.getTime() > REUSE_GRACE_MS) {
-      await revokeFamily(existing.familyId, now);
-      throw lapsed;
-    }
-  } else if (!(await consumeRefreshToken(existing._id, now))) {
+  if (reuseVerdict(existing.usedAt, now) === 'stolen') {
+    await revokeFamily(existing.familyId, now);
+    throw lapsed;
+  }
+
+  if (existing.usedAt === undefined && !(await consumeRefreshToken(existing._id, now))) {
     /**
      * Lost the race to mark it used, which means another exchange of this same
      * token won by microseconds. That is the concurrent case the window exists
