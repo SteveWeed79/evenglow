@@ -371,6 +371,35 @@ waiting.**
 - **The tallies, on a phone, with a glove.** Haptics, camera, signal loss and
   regain, doze. An emulator reaches none of it.
 
+**And then a tablet found a ninth, which is the argument for §6 in one line.**
+The app would not rotate. `app.json` said `orientation: "portrait"`, which
+lands on the main activity as `android:screenOrientation="portrait"` and locks
+a tablet exactly as hard as it locks a phone. Two places in the codebase had
+already reasoned about this and reached the wrong answer — an app targeting
+Android SDK 36 does have its orientation restrictions ignored on displays
+600dp and wider, but that is **Android 16's** behaviour rather than the target
+level's, so the tablet it was tried on (API 35) honoured the lock completely.
+Both comments asserted the app already rotated freely on every Android tablet
+in the world. It rotated on none of them.
+
+Fixed in two halves, from two directions. The manifest stopped locking, and
+`tests/unit/landscape-fold.test.ts` arrived with it carrying the bill: added up
+from the tokens the tally screen is built from, **a phone in landscape is ~84dp
+short of showing its commit button**, while a tablet fits either way up. That
+was recorded as a debt. `theme/rotation.ts` pays it instead of deferring it —
+the lock comes back at runtime for screens under 600dp, which is the same line
+the arithmetic drew, so a phone is exactly as it was and only a tablet turns.
+The two files now assert that they agree, so neither number can move alone.
+
+No new dependency: the navigator's own `orientation` option reaches
+`react-native-screens`, which is here because the navigator requires it. The
+manifest could not have expressed this — `screenOrientation` is an enum
+resolved at build time and takes no resource qualifier.
+
+**Needs a device to close:** it is native config, so nothing takes effect until
+a prebuild, and whether the screens read well at 1280dp is a question for eyes
+rather than for a test.
+
 ---
 
 ## 7 — Getting in without an account — **built, except the billing**

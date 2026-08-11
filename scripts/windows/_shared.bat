@@ -237,6 +237,29 @@ if errorlevel 1 (
 echo   Packages - ready.
 exit /b 0
 
+rem ── Metro's cache after a Node upgrade ──────────────────────────────────────
+rem
+rem Metro's disk cache is V8-serialized, and that format belongs to the V8 that
+rem wrote it. Upgrade Node and the old cache is unreadable:
+rem
+rem   Error while reading cache, falling back to a full crawl:
+rem    Error: Unable to deserialize cloned data due to invalid or unsupported
+rem    version.
+rem
+rem Fifteen frames of stack for something Metro then recovers from by itself.
+rem Nothing is broken — but it costs a full crawl on every start until the cache
+rem is replaced, and it prints a wall of red that looks exactly like a fault.
+rem Reported from a real machine on Node 25 reading a cache written by an older
+rem one, and it would have printed that every morning until somebody guessed.
+:clear_stale_metro
+node "%~dp0metro-stale.mjs"
+if errorlevel 1 (
+  echo   Node has changed since the last run - clearing Metro's cache.
+  for /d %%D in ("%TEMP%\metro-*") do rd /s /q "%%D" 2>nul
+  for /d %%D in ("%TEMP%\haste-map-*") do rd /s /q "%%D" 2>nul
+)
+exit /b 0
+
 :ensure_env
 :: The settings file is deliberately not in git (it differs per machine), so a
 :: fresh clone has none and the app opens with nowhere to sync to. Making it

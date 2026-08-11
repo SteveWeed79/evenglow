@@ -30,6 +30,8 @@ if errorlevel 1 goto :failed
 
 call "%~dp0_shared.bat" :update_code
 
+call "%~dp0_shared.bat" :clear_stale_metro
+
 call "%~dp0_shared.bat" :ensure_packages
 if errorlevel 1 goto :failed
 

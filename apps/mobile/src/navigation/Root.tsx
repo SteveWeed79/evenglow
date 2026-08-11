@@ -2,6 +2,7 @@ import type { NavigatorScreenParams } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { CachedClaims } from '../auth/session';
+import { useRotation } from '../hooks/useRotation';
 import { AddAnimalScreen } from '../screens/AddAnimalScreen';
 import { AddBedScreen } from '../screens/AddBedScreen';
 import { AddGroupScreen } from '../screens/AddGroupScreen';
@@ -196,8 +197,21 @@ export function Root({
   onSignedIn: (claims: CachedClaims) => void;
   onSignedOut: () => void;
 }): React.ReactElement {
+  /**
+   * Where the app decides whether it may turn.
+   *
+   * `app.json` no longer locks it — that attribute is a hard lock on a tablet
+   * too — so the lock is re-applied here, to compact screens only. On the
+   * whole stack rather than per screen: every screen in the app is in it, and
+   * a rule that held on some of them would rotate under a push.
+   *
+   * See `theme/rotation.ts` for why this is not `expo-screen-orientation` and
+   * why the manifest cannot express it.
+   */
+  const orientation = useRotation();
+
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator screenOptions={{ headerShown: false, orientation }}>
       <Stack.Screen name="Tabs" component={Tabs} />
 
       <Stack.Screen name="Settings">

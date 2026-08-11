@@ -23,6 +23,7 @@
  * through this file: `pnpm --filter @steading/api start` is that, against a
  * real database whose URI somebody chose deliberately.
  */
+import net from 'node:net';
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { createInterface } from 'node:readline/promises';
@@ -115,6 +116,64 @@ async function withClient(uri, fn) {
     return null;
   } finally {
     await client.close().catch(() => undefined);
+  }
+}
+
+/**
+ * Whether anything holds a TCP port on this machine.
+ *
+ * A connect rather than a bind: binding to find out would leave a socket of
+ * our own on the port for as long as the check took, which is a race against
+ * the thing we are about to start.
+ */
+async function portInUse(port) {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    socket.setTimeout(400);
+
+    const done = (answer) => {
+      socket.destroy();
+      resolve(answer);
+    };
+
+    socket.once('connect', () => done(true));
+    // Refused is the answer we want: nothing is listening.
+    socket.once('error', () => done(false));
+    socket.once('timeout', () => done(false));
+    socket.connect(port, '127.0.0.1');
+  });
+}
+
+/**
+ * Which program is on a port, when the platform will say.
+ *
+ * Named rather than described, because "something else has port 3001" sends
+ * somebody hunting and "node.exe (PID 7724)" ends the hunt. Best effort and
+ * silent on failure: this runs while reporting a different problem, and a
+ * diagnostic that throws inside an error message helps nobody.
+ *
+ * Windows only, which is where the run scripts are.
+ */
+async function whoHasPort(port) {
+  if (process.platform !== 'win32') return null;
+
+  try {
+    const { execFileSync } = await import('node:child_process');
+    const lines = execFileSync('netstat', ['-ano'], { encoding: 'utf8' })
+      .split('\n')
+      .filter((line) => line.includes(`:${port}`) && line.includes('LISTENING'));
+
+    const pid = lines[0]?.trim().split(/\s+/).pop();
+    if (pid === undefined || !/^\d+$/.test(pid)) return null;
+
+    const task = execFileSync('tasklist', ['/FI', `PID eq ${pid}`, '/NH', '/FO', 'CSV'], {
+      encoding: 'utf8',
+    });
+    const name = task.split(',')[0]?.replace(/"/g, '').trim();
+
+    return name === undefined || name === '' ? `PID ${pid}` : `${name} (PID ${pid})`;
+  } catch {
+    return null;
   }
 }
 
@@ -340,6 +399,34 @@ if (!resetting && knownEmail !== '' && (await accountExists(env.MONGODB_URI, dbN
 // ── 4. the server ────────────────────────────────────────────────────────────
 
 console.log('');
+
+/**
+ * Somebody else is already on 3001, and saying so is the whole job.
+ *
+ * Starting a second one fails with a raw Node stack — `Error: listen
+ * EADDRINUSE`, four frames of `node:net`, and a version banner — which is not
+ * an error message, it is a core dump with punctuation. Reported from a real
+ * machine after restarting the server without closing the first window, which
+ * is the ordinary way this happens and will keep happening.
+ *
+ * The database probe above has done this since it was written; the server
+ * never asked the same question about its own port.
+ */
+if (await portInUse(3001)) {
+  console.error('\n  The farm server is already running.\n');
+  console.error('  Something else has port 3001, and two servers cannot');
+  console.error('  share one. Nothing was changed and nothing is wrong -');
+  console.error('  this stopped rather than half-starting.\n');
+
+  const holder = await whoHasPort(3001);
+  if (holder !== null) console.error(`  Port 3001 is held by ${holder}.\n`);
+
+  console.error('  It is usually a farm server left open from earlier.');
+  console.error('  Look for a window titled "Steading - farm server" and');
+  console.error('  close it, then run this one again.\n');
+  process.exit(1);
+}
+
 say('[4/4]', 'Starting the server on port 3001.');
 console.log('\n  Leave this window OPEN while you use the app.');
 console.log('  The emulator reaches this computer at 10.0.2.2:3001.\n');
