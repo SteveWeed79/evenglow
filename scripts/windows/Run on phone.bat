@@ -8,17 +8,18 @@ echo   ============================================
 echo     STEADING - run the app on your phone
 echo   ============================================
 echo.
-echo   You need STEADING already installed on your phone,
-echo   and your phone on the same wifi as this computer.
+echo   Plug the phone or tablet in with a USB cable and turn
+echo   on USB debugging. If Steading is not on it yet, this
+echo   window installs it; if it is, this window connects it.
 echo.
-echo   Not installed yet? Plug the phone in with a USB cable,
-echo   turn on USB debugging, and run "Run on emulator" once -
-echo   it installs to whatever is plugged in. Or ask Claude for
-echo   a download link and install that.
+echo   Steading installs as its OWN app. It does not run inside
+echo   Expo Go and cannot be opened by scanning a code with Expo
+echo   Go or with the camera - Expo Go is one shared sandbox that
+echo   wipes itself when it updates, and it took a farm's records
+echo   with it twice.
 echo.
-echo   This used to say "Expo Go" and no longer does. Expo Go is
-echo   one shared app that wipes itself whenever it updates, and
-echo   it took a farm's records with it twice.
+echo   For the wifi step afterwards, the phone and this computer
+echo   have to be on the same network.
 echo.
 
 call "%~dp0_shared.bat" :check_node
@@ -42,18 +43,124 @@ echo.
 :: Installed in the preflight above. A second install here printed
 :: `Packages: -72` on a clean checkout - see the note in Run on emulator.
 
+::
+:: Is Steading actually ON the phone? Ask, rather than assume.
+::
+:: This window used to go straight to the QR code, on the strength of a
+:: sentence in its own header saying the app had to be installed first. A
+:: tablet arrived with Expo Go on it, a USB cable plugged in, and this script
+:: run - and the QR did nothing, because the QR is for Steading's own dev
+:: client and NOTHING else can open it. Not the camera app, not Expo Go.
+::
+:: The capability was here the whole time: `expo run:android` installs to
+:: whatever adb can see, USB phone included. It was behind a script called
+:: "Run on emulator", which is the last place somebody holding a tablet looks.
+:: So this one now finishes the job it is named for.
+::
+call "%~dp0_shared.bat" :check_adb
+if errorlevel 1 goto :failed
+
+::
+:: A real device beats a running emulator, and this window has to say which.
+::
+:: Anybody testing on a tablet has probably had the emulator open all morning,
+:: so `adb devices` lists both. Taking the first would install the app to the
+:: emulator from a window called "Run on phone" - and it would look like it
+:: worked, because something did start, just not on the thing in your hand.
+::
+:: Emulator serials are `emulator-5554`; a USB device's is its own. So the
+:: emulator is only used when nothing else is attached, and the chosen serial
+:: is passed to the build rather than left to be resolved again.
+set "PHONE="
+set "FALLBACK="
+set "WAITING="
+for /f "skip=1 tokens=1,2" %%D in ('adb devices') do (
+  if "%%E"=="device" (
+    echo %%D | findstr /b /c:"emulator-" >nul
+    if errorlevel 1 (
+      if not defined PHONE set "PHONE=%%D"
+    ) else (
+      if not defined FALLBACK set "FALLBACK=%%D"
+    )
+  )
+  rem Plugged in and not yet trusted. The single most common first-time state,
+  rem and it looks identical to "nothing connected" unless it is named.
+  if "%%E"=="unauthorized" set "WAITING=%%D"
+)
+
+if not defined PHONE if defined FALLBACK (
+  echo.
+  echo   NOTE: no phone or tablet is attached, but the emulator is
+  echo   running, so this will use the emulator instead.
+  echo.
+  set "PHONE=!FALLBACK!"
+)
+
+if not defined PHONE if defined WAITING (
+  echo.
+  echo   PROBLEM: the device is plugged in but has not allowed
+  echo   this computer yet.
+  echo.
+  echo   Look at the phone. There is a prompt asking whether to
+  echo   allow USB debugging from this computer - tap ALLOW, tick
+  echo   "always allow" if it offers, then run this window again.
+  echo.
+  goto :failed
+)
+
+if not defined PHONE (
+  echo.
+  echo   PROBLEM: no phone or tablet is connected.
+  echo.
+  echo   Plug it in with a USB cable and turn on USB debugging:
+  echo     Settings ^> About ^> tap "Build number" seven times,
+  echo     then Settings ^> Developer options ^> USB debugging.
+  echo   Answer "Allow" on the phone when it asks.
+  echo.
+  echo   If Steading is ALREADY installed and you only want to
+  echo   reconnect it over wifi, you can close this and use the
+  echo   app's own "cannot find this computer" screen to scan.
+  echo.
+  goto :failed
+)
+
+echo   Connected: !PHONE!
+
+adb -s !PHONE! shell pm list packages 2>nul | findstr /c:"com.steading.app" >nul
+if errorlevel 1 (
+  echo.
+  echo   Steading is not on this device yet, so it is being built
+  echo   and installed now. This takes several minutes the first
+  echo   time and is quick afterwards.
+  echo.
+  echo   It installs as its OWN app, not inside Expo Go. Expo Go is
+  echo   one shared sandbox that wipes itself when it updates, and
+  echo   it took a farm's records with it twice.
+  echo.
+  rem `--no-install` because the preflight above already ran `pnpm install`.
+  rem Left alone, `expo run:android` runs its own from apps/mobile.
+  call pnpm mobile:android --no-install --device !PHONE!
+  goto :stopped
+)
+
 echo.
 echo   [2 of 2] Starting the app.
 echo.
 echo   A big square QR CODE will appear below in a moment.
-echo   Open STEADING on your phone and scan it from the
-echo   screen it shows when it cannot find this computer.
+echo.
+echo   Open STEADING ITSELF on the phone and scan from the screen
+echo   it shows when it cannot find this computer. The phone's
+echo   camera app will not open it, and neither will Expo Go -
+echo   this code is for Steading's own app and nothing else can
+echo   read it.
 echo.
 echo   Leave this window OPEN while you use the app.
 echo   To stop, close this window.
 echo.
 
 call pnpm mobile
+
+:stopped
 
 echo.
 echo   The app server has stopped.

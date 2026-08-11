@@ -193,69 +193,111 @@ describe('husbandry', () => {
 });
 
 describe('what comes off them', () => {
-  it('weighs a group in pounds and stores micrograms', async () => {
-    await aGroup();
+  /**
+   * How a group gets weighed, and it took four reports to get here.
+   *
+   *  1. "weigh them on a flock of 7 only has 1 input; average is okay but it's
+   *     a secondary option" — one field, defaulted to an average.
+   *  2. "I thought you fixed the weight being only a single measurement?" — the
+   *     add-one-at-a-time loop was there and looked exactly like the old screen.
+   *  3. "there are 7 birds in that flock… 1 weight makes little sense" — the
+   *     head count was known and never said.
+   *  4. "shouldn't there be a spot to enter the weight of each bird? or a
+   *     toggle to turn that on if it's a large group?" — which is this.
+   *
+   * A box each is the default for a group you could carry to a scale. Seven
+   * boxes you can see and fill in any order beats seven trips through one box.
+   */
+  it('gives a group a box per animal, and writes only the filled ones', async () => {
+    await aGroup({ count: 6 });
     const screen = await mount(<WeighScreen {...routeProps({ groupId: GROUP })} />);
 
-    await screen.type('weight-amount', '6.4');
+    // Every box present, and none of them compulsory.
+    expect(screen.has('weight-box-5')).toBe(true);
+    await screen.type('weight-box-0', '6.4');
+    await screen.type('weight-box-2', '5.9');
     await screen.press('save-weight');
 
-    const [weight] = await listWeights();
-    expect(weight?.massUg).toBe(Math.round(6.4 * 453_592_370));
-    expect(weight?.flockId).toBe(GROUP);
+    const weights = await listWeights();
+    expect(weights).toHaveLength(2);
+    expect(weights.every((w) => w.flockId === GROUP)).toBe(true);
     /**
-     * NOT sampled, and this assertion is the fix rather than a consequence of
-     * it. `sampled` means "a group average rather than one animal on a scale",
-     * and it used to default to on — so one bird lifted onto a scale out of
-     * seven was stored as the average of all seven, and every growth curve
-     * read it that way.
+     * NOT sampled, and this is the assertion that started it all. `sampled`
+     * means "a group average rather than one animal on a scale" and used to
+     * default to on, so one bird lifted onto a scale out of six was stored as
+     * the average of all six and every growth curve read it that way.
      */
-    expect(weight?.sampled).toBeUndefined();
+    expect(weights.every((w) => w.sampled === undefined)).toBe(true);
+    expect(weights.map((w) => w.massUg).sort()).toEqual(
+      [6.4, 5.9].map((lb) => Math.round(lb * 453_592_370)).sort(),
+    );
+  });
+
+  it('says how many there are, and counts what is done against it', async () => {
+    await aGroup({ count: 7 });
+    const screen = await mount(<WeighScreen {...routeProps({ groupId: GROUP })} />);
+
+    expect(screen.text()).toContain('All 7');
+    await screen.type('weight-box-0', '6.4');
+    await screen.type('weight-box-1', '5.9');
+    expect(screen.text()).toContain('2 of 7 weighed');
+
+    // The average AND the spread, which one figure could never have given.
+    expect(screen.text()).toContain('6.2 lb average');
   });
 
   /**
-   * "Weigh them on a flock of 7 only has 1 input. Average is okay but it's a
-   * secondary option."
-   *
-   * Exactly right, and the opposite of what was built: one field, defaulted to
-   * an average. A group weighing is several animals, and keeping them
-   * individually is the better record either way — the mean is recoverable
-   * from the readings and the spread is not recoverable from the mean.
+   * The loop is still there for a flock too big to draw a box for, and it is
+   * the mode a farm can always choose. `BOXES_MAX` is 24, so 40 gets two
+   * options rather than three.
    */
-  it('takes one weight after another and keeps each as its own record', async () => {
-    await aGroup();
+  it('falls back to one at a time for a flock too big for boxes', async () => {
+    await aGroup({ count: 40 });
     const screen = await mount(<WeighScreen {...routeProps({ groupId: GROUP })} />);
 
+    expect(screen.has('weight-box-0')).toBe(false);
     await screen.type('weight-amount', '6.4');
     await screen.press('weight-add');
     await screen.type('weight-amount', '5.9');
     await screen.press('weight-add');
+    expect(screen.text()).toContain('2 of 40 weighed');
 
-    // The average and the range, which is the pair a single figure could never
-    // have given: two birds a pound apart read the same as two that match.
-    expect(screen.text()).toContain('2 done');
-
-    // Typed and NOT added — the button must still take it, or the number
-    // somebody is looking at is dropped for want of a tap they had no reason
-    // to make. Same fault as the service meter, on a different screen.
+    /**
+     * Typed and NOT added — the finish button must still take it, or the
+     * number somebody is looking at is dropped for want of a tap they had no
+     * reason to make. The service meter fault, on another screen.
+     */
     await screen.type('weight-amount', '6.1');
     await screen.press('save-weight');
 
-    const weights = await listWeights();
-    expect(weights).toHaveLength(3);
-    expect(weights.every((w) => w.flockId === GROUP)).toBe(true);
-    expect(weights.every((w) => w.sampled === undefined)).toBe(true);
-    expect(weights.map((w) => w.massUg).sort()).toEqual(
-      [6.4, 5.9, 6.1].map((lb) => Math.round(lb * 453_592_370)).sort(),
-    );
+    expect(await listWeights()).toHaveLength(3);
+  });
+
+  /**
+   * Carrying on is the green button and finishing is the quiet one.
+   *
+   * The ranking used to be reversed, so somebody typed the first weight,
+   * pressed the obvious green button and was returned to Today having logged
+   * one — reported as "when you enter a weight the app goes to the Today
+   * screen" and "that seems lazy on our end".
+   */
+  it('does not leave the screen when the loop carries on', async () => {
+    await aGroup({ count: 40 });
+    const screen = await mount(<WeighScreen {...routeProps({ groupId: GROUP })} />);
+
+    await screen.type('weight-amount', '6.4');
+    await screen.press('weight-add');
+
+    expect(navCalls().filter((c) => c.action === 'goBack')).toHaveLength(0);
+    expect(await listWeights()).toHaveLength(0);
   });
 
   /** The fallback is still there, and now it says what it is. */
   it('records one figure as an average when asked to', async () => {
-    await aGroup();
+    await aGroup({ count: 6 });
     const screen = await mount(<WeighScreen {...routeProps({ groupId: GROUP })} />);
 
-    await screen.pressLabel('One figure, averaged across the whole group');
+    await screen.pressLabel('One average');
     await screen.type('weight-amount', '6.4');
     await screen.press('save-weight');
 
@@ -265,22 +307,39 @@ describe('what comes off them', () => {
   });
 
   /**
-   * Switching to the average must not carry the individuals across. One
-   * average plus six readings would double every total that sums either.
+   * Nothing carries between modes. An average logged alongside six individuals
+   * would double every total that sums either, and a box still filled behind a
+   * mode nobody can see is worse.
    */
-  it('drops collected readings when the average is turned on', async () => {
-    await aGroup();
+  it('drops what was collected when the mode changes', async () => {
+    await aGroup({ count: 6 });
     const screen = await mount(<WeighScreen {...routeProps({ groupId: GROUP })} />);
 
-    await screen.type('weight-amount', '6.4');
-    await screen.press('weight-add');
-    await screen.pressLabel('One figure, averaged across the whole group');
+    await screen.type('weight-box-0', '6.4');
+    await screen.pressLabel('One average');
     await screen.type('weight-amount', '6.0');
     await screen.press('save-weight');
 
     const weights = await listWeights();
     expect(weights).toHaveLength(1);
     expect(weights[0]?.massUg).toBe(Math.round(6.0 * 453_592_370));
+  });
+
+  /**
+   * A group of one has nothing to choose between, and "1 of 1 weighed" is a
+   * screen being pleased with itself.
+   */
+  it('offers a group of one a single box and no picker', async () => {
+    await aGroup({ count: 1 });
+    const screen = await mount(<WeighScreen {...routeProps({ groupId: GROUP })} />);
+
+    expect(screen.text()).not.toContain('How are you weighing them?');
+    await screen.type('weight-amount', '6.4');
+    await screen.press('save-weight');
+
+    const weights = await listWeights();
+    expect(weights).toHaveLength(1);
+    expect(weights[0]?.sampled).toBeUndefined();
   });
 
   /** A quart and a cup, on the default imperial farm, stored as millilitres. */
@@ -804,10 +863,12 @@ describe('growing', () => {
 
 describe('navigation out of a screen', () => {
   it('goes back once the work is durable', async () => {
-    await aGroup();
+    await aGroup({ count: 6 });
     const screen = await mount(<WeighScreen {...routeProps({ groupId: GROUP })} />);
 
-    await screen.type('weight-amount', '6.4');
+    // A box per animal is the default for a group this size, so the weighing
+    // goes in a box rather than the single field.
+    await screen.type('weight-box-0', '6.4');
     await screen.press('save-weight');
 
     expect(navCalls()).toContainEqual({ action: 'goBack' });
