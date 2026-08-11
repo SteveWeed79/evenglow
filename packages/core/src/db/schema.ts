@@ -100,6 +100,7 @@ export const META = {
   lastBackupAt: 'lastBackupAt',
   readAlerts: 'readAlerts',
   sessionEnd: 'sessionEnd',
+  pendingPhoto: 'pendingPhoto',
 } as const;
 
 export const metaSchemas = {
@@ -183,6 +184,29 @@ export const metaSchemas = {
    * invented here, and never the token, which is a credential and does not go
    * in a table somebody screenshots.
    */
+  /**
+   * A photo the camera was opened for, held durably across the app dying.
+   *
+   * **Android can destroy the activity while the camera is in front of it** —
+   * low memory, or "Don't keep activities" left on in Developer options — and
+   * when it comes back the app has been rebuilt from nothing. Reported as
+   * *"Steading takes the pic then restarts and the pic is lost."*
+   *
+   * The id and the subject were in a closure in `Photos.tsx`, which is exactly
+   * the wrong place for them: a closure is the first thing to go. Written down
+   * before the camera opens, they survive, and `getPendingResultAsync` can be
+   * matched back to the photo it was for.
+   *
+   * The same reasoning as every other durable thing here — an intent that has
+   * left this app's control is not something to hold in memory.
+   */
+  pendingPhoto: z
+    .object({
+      id: z.string().length(26),
+      subjectId: z.string().length(26),
+      at: z.number().int(),
+    })
+    .strict(),
   sessionEnd: z
     .object({
       at: z.number().int(),
