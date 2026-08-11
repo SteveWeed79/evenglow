@@ -10,6 +10,7 @@ import {
   gramsToUg,
   harvestCreateSchema,
   hourReadingCreateSchema,
+  maintenanceUpdateSchema,
   mlToUl,
   mortalityCreateSchema,
   predatorCreateSchema,
@@ -140,6 +141,18 @@ async function eventsFrom<T>(
  */
 const storedTask = taskCreateSchema.partial();
 
+/**
+ * A service schedule as the projection holds it — create and updates merged,
+ * so every field is optional from a reader's point of view.
+ *
+ * The update schema rather than `maintenanceCreateSchema.partial()`, because
+ * the create schema carries refinements (an interval must be hours or days,
+ * not neither) and zod will not make a refined object partial. The update
+ * schema is that same shape already made optional, which is exactly what a
+ * merged row is.
+ */
+const storedService = maintenanceUpdateSchema;
+
 const plural = (n: number, one: string, many = `${one}s`): string =>
   `${n} ${n === 1 ? one : many}`;
 
@@ -266,6 +279,45 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
               at: v.completedAt,
               title: v.title,
               detail: 'Job done',
+              tally: { key: 'jobs', amount: 1, unit: 'job' },
+            },
+      ),
+
+      /**
+       * A service, on the day it was marked done.
+       *
+       * Reported as *"it doesn't log to history"*, and it did not: an oil
+       * change is one of the few things on a farm that has a receipt, a cost
+       * and a next-time, and What happened had no idea it had occurred.
+       *
+       * Mutable, like `task` above and for the same reason — a completion is a
+       * field on the schedule rather than a record of its own, because the
+       * schedule is the thing that recurs. `lastDoneAtDate` is the moment.
+       *
+       * **What this cannot do, stated:** the field is overwritten every time,
+       * so history shows the LAST service on each schedule and not the ones
+       * before it. That is the same limitation `task` carries and it costs
+       * more here, because a machine's service record is exactly the kind of
+       * thing somebody wants three years of. Fixing it properly wants an
+       * append-only completion record — the shape `careLog` already is for
+       * animals — which is a schema change rather than a reader change, so it
+       * is named here rather than half-done.
+       *
+       * The hours are the detail, because on an hours-based schedule they are
+       * the whole fact: the date says when somebody was under the machine, the
+       * reading says what the next interval counts from.
+       */
+      eventsFrom('maintenance', storedService, (v, id) =>
+        v.lastDoneAtDate === undefined || v.title === undefined
+          ? null
+          : {
+              id,
+              entity: 'maintenance',
+              at: v.lastDoneAtDate,
+              title: `${v.title} — ${named(machineName, v.equipmentId, 'a machine')}`,
+              ...(v.lastDoneAtHours === undefined
+                ? { detail: 'Service done' }
+                : { detail: `Service done at ${v.lastDoneAtHours} hours` }),
               tally: { key: 'jobs', amount: 1, unit: 'job' },
             },
       ),

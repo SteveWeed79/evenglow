@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId, poundsToUg } from '@steading/contracts';
+import { newId, poundsToUg, serviceDue } from '@steading/contracts';
 import { listAnimals } from '@steading/core/read/animals';
 import { listBreedings, listIncubations, listWeights } from '@steading/core/read/breeding';
 import { listCareLogs } from '@steading/core/read/care';
+import { listHistory } from '@steading/core/read/history';
 import {
   currentFeedPlans,
   lastFedByGroup,
@@ -482,6 +483,76 @@ describe('iron', () => {
 
     const [closed] = await listServices();
     expect(closed).toMatchObject({ title: 'Oil and filter', intervalHours: 100, lastDoneAtHours: 100 });
+  });
+
+  /**
+   * "I have it done, does nothing, it doesn't clear the task."
+   *
+   * The test above types into the meter field, and so did every other test
+   * that has ever exercised this screen — which is precisely why nobody caught
+   * it. **A farm does not type into it.** The field shows the machine's
+   * current reading as a placeholder, so the box looks filled in and tapping
+   * straight past it is the obvious move.
+   *
+   * An empty field wrote no `lastDoneAtHours`, `serviceDue` counts from
+   * `(lastDoneAtHours ?? 0) + everyHours`, and a 100-hour interval on a
+   * machine at 110 hours stayed overdue the instant it was marked done. The
+   * date half landed, so the screen said "Last done August 11" while the farm
+   * list still demanded it — everything recorded, nothing changed.
+   */
+  it('takes the meter reading on screen when nobody types one', async () => {
+    const add = await mount(<AddMachineScreen />);
+    await add.type('machine-name', 'The tractor');
+    await add.press('save-machine');
+    const [machine] = await listMachines();
+
+    const hours = await mount(<LogHoursScreen {...routeProps({ machineId: machine!.id })} />);
+    await hours.press('tally-plus-100');
+    await hours.press('tally-plus-10');
+    await hours.press('tally-commit');
+    expect((await listMachines())[0]?.hours).toBe(110);
+
+    const service = await mount(<AddServiceScreen {...routeProps({ machineId: machine!.id })} />);
+    await service.pressLabel('Oil and filter');
+    await service.press('save-service');
+    const [schedule] = await listServices();
+
+    // Straight to the button, past a field showing 110 in grey.
+    const done = await mount(<ServiceDoneScreen {...routeProps({ serviceId: schedule!.id })} />);
+    await done.press('save-done');
+
+    const [closed] = await listServices();
+    expect(closed?.lastDoneAtHours).toBe(110);
+
+    // The whole point of recording it: the next one is 210, not 100.
+    const due = serviceDue(
+      { id: machine!.id, name: 'The tractor', hasHourMeter: true, hours: 110, usagePerDay: null },
+      { id: schedule!.id, name: 'Oil and filter', everyHours: 100, lastDoneAtHours: closed?.lastDoneAtHours },
+      Date.now(),
+    );
+    expect(due?.atReading).toBe(210);
+  });
+
+  /** And it lands in What happened, which is the other half of the report. */
+  it('puts a finished service in history', async () => {
+    const add = await mount(<AddMachineScreen />);
+    await add.type('machine-name', 'The tractor');
+    await add.press('save-machine');
+    const [machine] = await listMachines();
+
+    const service = await mount(<AddServiceScreen {...routeProps({ machineId: machine!.id })} />);
+    await service.pressLabel('Oil and filter');
+    await service.press('save-service');
+    const [schedule] = await listServices();
+
+    const done = await mount(<ServiceDoneScreen {...routeProps({ serviceId: schedule!.id })} />);
+    await done.press('save-done');
+
+    const events = (await listHistory()).flatMap((day) => day.events);
+    const serviced = events.find((event) => event.entity === 'maintenance');
+
+    expect(serviced?.title).toBe('Oil and filter — The tractor');
+    expect(serviced?.detail).toContain('Service done');
   });
 
   /**
