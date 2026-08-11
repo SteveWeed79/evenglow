@@ -7,6 +7,9 @@ import type { z } from 'zod';
 /** Why a device stopped being signed in — see `metaSchemas.sessionEnd`. */
 export type SessionEnd = z.infer<(typeof metaSchemas)['sessionEnd']>;
 
+/** A photo the camera was opened for — see `metaSchemas.pendingPhoto`. */
+export type PendingPhoto = z.infer<(typeof metaSchemas)['pendingPhoto']>;
+
 /**
  * The storage port.
  *
@@ -298,6 +301,10 @@ export interface LocalStore {
    * it has to survive being read on the Diagnostics screen by somebody who is
    * currently signed out.
    */
+  /** A photo the camera was opened for — see `metaSchemas.pendingPhoto`. */
+  getPendingPhoto(): Promise<PendingPhoto | null>;
+  setPendingPhoto(pending: PendingPhoto | null): Promise<void>;
+
   getSessionEnd(): Promise<SessionEnd | null>;
   recordSessionEnd(end: SessionEnd | null): Promise<void>;
 

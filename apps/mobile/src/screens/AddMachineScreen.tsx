@@ -10,7 +10,7 @@ import {
   useSaver,
 } from '../components/Form';
 import { Screen } from '../components/Screen';
-import { useNav } from '../hooks/useNav';
+import { useLeave } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 
 /**
@@ -41,7 +41,6 @@ import { useLog } from '../hooks/useSync';
  * readings, and the service projection reads the readings.
  */
 export function AddMachineScreen(): React.ReactElement {
-  const nav = useNav();
   const log = useLog();
 
   const [name, setName] = useState('');
@@ -49,7 +48,7 @@ export function AddMachineScreen(): React.ReactElement {
   const [hasHourMeter, setHasHourMeter] = useState(true);
   const [hours, setHours] = useState('');
 
-  const { saving, failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
+  const { saving, failure, save } = useSaver(useLeave());
 
   const commit = useCallback(() => {
     void save(async () => {

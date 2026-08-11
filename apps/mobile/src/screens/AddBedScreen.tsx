@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { newId } from '@steading/contracts';
 import { Failure, Field, Primary, TextField, Toggle, useSaver } from '../components/Form';
 import { Screen } from '../components/Screen';
-import { useNav } from '../hooks/useNav';
+import { useLeave } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import type { ScreenProps } from '../navigation/Root';
 
@@ -15,13 +15,12 @@ import type { ScreenProps } from '../navigation/Root';
  */
 export function AddBedScreen({ route }: ScreenProps<'AddBed'>): React.ReactElement {
   const { siteId } = route.params;
-  const nav = useNav();
   const log = useLog();
 
   const [name, setName] = useState('');
   const [covered, setCovered] = useState(false);
 
-  const { saving, failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
+  const { saving, failure, save } = useSaver(useLeave());
 
   const commit = useCallback(() => {
     void save(async () => {

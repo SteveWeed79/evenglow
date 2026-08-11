@@ -17,7 +17,7 @@ import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
-import { useNav } from '../hooks/useNav';
+import { useLeave } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import { useUnits } from '../hooks/useUnits';
 import type { ScreenProps } from '../navigation/Root';
@@ -51,7 +51,6 @@ import { FONTS, TYPE } from '../theme/tokens';
 
 export function ShearingScreen({ route }: ScreenProps<'Shearing'>): React.ReactElement {
   const { groupId } = route.params;
-  const nav = useNav();
   const log = useLog();
   const { colors } = useTheme();
   const units = useUnits();
@@ -65,7 +64,7 @@ export function ShearingScreen({ route }: ScreenProps<'Shearing'>): React.ReactE
   const [animalsShorn, setAnimalsShorn] = useState(1);
   const [note, setNote] = useState('');
 
-  const { saving, failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
+  const { saving, failure, save } = useSaver(useLeave());
 
   const heavy = units === 'metric' ? 'kg' : 'lb';
 

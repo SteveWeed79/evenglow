@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { newId } from '@steading/contracts';
 import { listPhotos, type Photo } from '@steading/core/read/photos';
+import { localStore } from '@steading/core/db/store';
 import { capture, forgetBytes, hasBytes, photoUri } from '../photos/store';
 import { Confirm, Failure, Secondary } from './Form';
 import { Icon } from './Icon';
@@ -86,6 +87,26 @@ export function Photos({
       try {
         // Minted first, because the id is the filename — see `photoFile`.
         const id = newId();
+
+        /**
+         * Written down before the camera opens, because the camera is where
+         * this app stops being in control.
+         *
+         * Android can destroy the activity while the camera is in front of it,
+         * and the app that comes back is a new one — reported as "Steading
+         * takes the pic then restarts and the pic is lost". The id and the
+         * subject lived in this closure, which is the first thing to go.
+         *
+         * Only for the camera. The library picker hands back an image without
+         * the same lifecycle, and a pending note left by it would be a
+         * recovery attempt for something that never went missing.
+         */
+        if (source === 'camera') {
+          await localStore()
+            .setPendingPhoto({ id, subjectId, at: Date.now() })
+            .catch(() => undefined);
+        }
+
         const taken = await capture(id, source);
 
         // Cancelled, or the camera refused. Not a failure and not a message.

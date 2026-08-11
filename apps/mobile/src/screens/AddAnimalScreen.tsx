@@ -14,7 +14,7 @@ import {
 import { Loading, Missing } from '../components/Missing';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
-import { useNav } from '../hooks/useNav';
+import { useLeave } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import type { ScreenProps } from '../navigation/Root';
 
@@ -31,7 +31,6 @@ const SEX_LABELS = { female: 'Female', male: 'Male', unknown: 'Not sure' } as co
 
 export function AddAnimalScreen({ route }: ScreenProps<'AddAnimal'>): React.ReactElement {
   const { groupId } = route.params;
-  const nav = useNav();
   const log = useLog();
 
   const groups = useLive(listGroups);
@@ -48,7 +47,7 @@ export function AddAnimalScreen({ route }: ScreenProps<'AddAnimal'>): React.Reac
     return new Date(now.getFullYear(), 2, 15).getTime();
   });
 
-  const { saving, failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
+  const { saving, failure, save } = useSaver(useLeave());
 
   const commit = useCallback(() => {
     if (group === null) return;

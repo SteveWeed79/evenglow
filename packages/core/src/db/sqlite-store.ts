@@ -850,6 +850,18 @@ export async function openSqliteStore(
       await writeMeta(driver, META.lastBackupAt, at);
     },
 
+    async getPendingPhoto() {
+      return parseMeta('pendingPhoto', await readMeta(driver, 'pendingPhoto')) ?? null;
+    },
+
+    async setPendingPhoto(pending): Promise<void> {
+      if (pending === null) {
+        await driver.run('DELETE FROM meta WHERE key = ?', [META.pendingPhoto]);
+        return;
+      }
+      await writeMeta(driver, META.pendingPhoto, pending);
+    },
+
     async getSessionEnd() {
       return parseMeta('sessionEnd', await readMeta(driver, 'sessionEnd')) ?? null;
     },

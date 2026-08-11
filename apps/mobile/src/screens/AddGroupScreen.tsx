@@ -26,7 +26,7 @@ import {
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useGroups } from '../hooks/useGroups';
-import { useNav } from '../hooks/useNav';
+import { useLeave } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, SPACE, TYPE } from '../theme/tokens';
@@ -71,7 +71,6 @@ const PURPOSE_LABELS: Record<FlockPurpose, string> = {
 
 export function AddGroupScreen(): React.ReactElement {
   const log = useLog();
-  const nav = useNav();
   const { groups } = useGroups();
   const { colors } = useTheme();
 
@@ -84,7 +83,7 @@ export function AddGroupScreen(): React.ReactElement {
   const [knowsBirth, setKnowsBirth] = useState(false);
   const [bornAt, setBornAt] = useState(() => startOfDay(Date.now()));
 
-  const { saving, failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
+  const { saving, failure, save } = useSaver(useLeave());
 
   const traits = SPECIES_TRAITS[species];
   const breeds = breedsForSpecies(species);

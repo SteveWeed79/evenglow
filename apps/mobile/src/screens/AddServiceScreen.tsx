@@ -17,7 +17,7 @@ import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
-import { useNav } from '../hooks/useNav';
+import { useLeave } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import type { ScreenProps } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
@@ -78,7 +78,6 @@ const PRESETS = [
 
 export function AddServiceScreen({ route }: ScreenProps<'AddService'>): React.ReactElement {
   const { machineId } = route.params;
-  const nav = useNav();
   const log = useLog();
   const { colors } = useTheme();
 
@@ -103,7 +102,7 @@ export function AddServiceScreen({ route }: ScreenProps<'AddService'>): React.Re
     setCheck('');
   }, [check, checks]);
 
-  const { saving, failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
+  const { saving, failure, save } = useSaver(useLeave());
 
   /**
    * A meterless machine cannot carry an hours interval, and the check has to

@@ -18,7 +18,7 @@ import { enqueue } from '@steading/core/sync/queue';
 import { localStore } from '@steading/core/db/store';
 import { freshStore } from '../support/store';
 import { mount, routeProps } from '../support/screen';
-import { navCalls } from '../support/native/navigation';
+import { navCalls, setBackable } from '../support/native/navigation';
 import { haptics } from '../support/native/modules';
 
 import { AddAnimalScreen } from '../../apps/mobile/src/screens/AddAnimalScreen';
@@ -1312,5 +1312,49 @@ describe('shearing', () => {
 
     const { buildExport } = await import('@steading/core/export/csv');
     expect((await buildExport()).some((s) => s.name === 'shearing')).toBe(true);
+  });
+});
+
+/**
+ * Leaving a screen when there is nothing behind it.
+ *
+ *   The action 'GO_BACK' was not handled by any navigator.
+ *   Is there any screen to go back to?
+ *
+ * From a tablet, on the first day the app ran on one. Twenty-eight call sites
+ * did `nav.goBack()` unguarded after a save — correct in the ordinary case and
+ * unguarded in every other.
+ *
+ * The trigger is device-shaped: a save is awaited, and on a handset an
+ * edge-swipe back is the natural way to leave a screen you are done with.
+ * Swipe during the save and the screen pops; the save lands a moment later and
+ * calls `goBack` on an empty stack. The emulator has the same gesture and
+ * nobody uses it, which is why this survived every run until the tablet.
+ */
+describe('finishing a screen with nothing behind it', () => {
+  it('lands on the tabs rather than failing to leave', async () => {
+    await aGroup({ count: 6 });
+    const screen = await mount(<WeighScreen {...routeProps({ groupId: GROUP })} />);
+
+    // The stack emptied while the save was in flight.
+    setBackable(false);
+
+    await screen.type('weight-box-0', '6.4');
+    await screen.press('save-weight');
+
+    expect(navCalls()).not.toContainEqual({ action: 'goBack' });
+    expect(navCalls()).toContainEqual({ action: 'navigate', route: 'Tabs', params: undefined });
+    // And the work still landed, which is the half that must never be traded.
+    expect(await listWeights()).toHaveLength(1);
+  });
+
+  it('still goes back the ordinary way', async () => {
+    await aGroup({ count: 6 });
+    const screen = await mount(<WeighScreen {...routeProps({ groupId: GROUP })} />);
+
+    await screen.type('weight-box-0', '6.4');
+    await screen.press('save-weight');
+
+    expect(navCalls()).toContainEqual({ action: 'goBack' });
   });
 });

@@ -18,6 +18,7 @@ export interface NavCall {
 }
 
 let calls: NavCall[] = [];
+let backable = true;
 
 export function navCalls(): NavCall[] {
   return calls;
@@ -25,6 +26,12 @@ export function navCalls(): NavCall[] {
 
 export function resetNav(): void {
   calls = [];
+  backable = true;
+}
+
+/** Empty the stack, as an edge-swipe back mid-save does. */
+export function setBackable(next: boolean): void {
+  backable = next;
 }
 
 const navigation = {
@@ -36,7 +43,12 @@ const navigation = {
   setOptions: () => undefined,
   addListener: () => () => undefined,
   isFocused: () => true,
-  canGoBack: () => true,
+  /**
+   * Settable, because "there is nothing to go back to" is a real state and the
+   * one that produced `GO_BACK was not handled by any navigator` on a tablet.
+   * A double that always says yes cannot express the case worth testing.
+   */
+  canGoBack: () => backable,
 };
 
 /** The recorder itself, for scaffolding that is not inside a component. */

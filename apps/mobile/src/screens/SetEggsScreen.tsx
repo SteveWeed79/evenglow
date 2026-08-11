@@ -24,7 +24,7 @@ import {
 } from '../components/Form';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
-import { useNav } from '../hooks/useNav';
+import { useLeave } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import { SPACE } from '../theme/tokens';
 
@@ -41,7 +41,6 @@ const SOURCE_LABELS = { own: 'My own', bought: 'Bought', gifted: 'Given' } as co
 const METHOD_LABELS = { incubator: 'Incubator', broody: 'Under a broody' } as const;
 
 export function SetEggsScreen(): React.ReactElement {
-  const nav = useNav();
   const log = useLog();
 
   const [label, setLabel] = useState('');
@@ -60,7 +59,7 @@ export function SetEggsScreen(): React.ReactElement {
   const [method, setMethod] = useState<(typeof INCUBATION_METHODS)[number]>('incubator');
   const [breedId, setBreedId] = useState<string | null>(null);
 
-  const { saving, failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
+  const { saving, failure, save } = useSaver(useLeave());
 
   const commit = useCallback(() => {
     void save(async () => {

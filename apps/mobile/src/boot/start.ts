@@ -5,6 +5,8 @@ import { setStorageBacking } from '@steading/core/sync/storage';
 import { ensureLocalOrgId } from '../auth/local-org';
 import { type CachedClaims, refreshSession } from '../auth/session';
 import { deviceBytes } from '../photos/bytes';
+import { recoverPendingPhoto } from '../photos/store';
+import { enqueue } from '@steading/core/sync/queue';
 import { openLocalStore } from '../db/store';
 import { startTriggers, type TriggerHandles } from '../sync/triggers';
 import { reportEngineError } from '@steading/core/sync/report';
@@ -107,6 +109,37 @@ export async function start(raw?: string): Promise<Started> {
    * moves them.
    */
   setPhotoBytes(deviceBytes);
+
+  /**
+   * A photograph taken by a process that did not survive to keep it.
+   *
+   * Android destroys the activity behind the camera when it needs the memory,
+   * so the app that returns is a new one and the picture is sitting in a
+   * result nobody is left to receive. Claimed here, after the store is open
+   * because the record goes in the queue, and before the loop starts so it
+   * flushes with everything else.
+   *
+   * Never fatal. A recovered photo is a bonus at launch — see
+   * `photos/store.ts` for the whole of the reasoning.
+   */
+  try {
+    const rescued = await recoverPendingPhoto();
+    if (rescued !== null) {
+      await enqueue({
+        entity: 'photo',
+        op: 'create',
+        targetId: rescued.id,
+        payload: {
+          subjectId: rescued.subjectId,
+          contentType: 'image/jpeg',
+          byteSize: rescued.byteSize,
+          capturedAt: rescued.capturedAt,
+        },
+      });
+    }
+  } catch (error) {
+    reportEngineError('recovering a photo', error);
+  }
 
   /**
    * Signed in, with nowhere to send anything.

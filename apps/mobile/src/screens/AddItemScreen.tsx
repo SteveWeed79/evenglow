@@ -26,7 +26,7 @@ import {
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
-import { useNav } from '../hooks/useNav';
+import { useLeave } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import { useCurrency } from '../hooks/useUnits';
 import type { ScreenProps } from '../navigation/Root';
@@ -74,7 +74,6 @@ const UNIT_LABELS = {
 } as const;
 
 export function AddItemScreen({ route }: ScreenProps<'AddItem'>): React.ReactElement {
-  const nav = useNav();
   const log = useLog();
   const machines = useLive(listMachines);
   const groups = useLive(listGroups);
@@ -127,7 +126,7 @@ export function AddItemScreen({ route }: ScreenProps<'AddItem'>): React.ReactEle
     [groups],
   );
 
-  const { saving, failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
+  const { saving, failure, save } = useSaver(useLeave());
 
   const commit = useCallback(() => {
     void save(async () => {

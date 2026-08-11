@@ -20,7 +20,7 @@ import { Screen } from '../components/Screen';
 import { Tally } from '../components/Tally';
 import { WithdrawalBanner } from '../components/WithdrawalBanner';
 import { useLive } from '../hooks/useLive';
-import { useNav } from '../hooks/useNav';
+import { useLeave } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import { useUnits } from '../hooks/useUnits';
 import type { ScreenProps } from '../navigation/Root';
@@ -81,7 +81,6 @@ function alreadyToday(amount: number, unit: string, system: UnitSystem): string 
 
 export function ProduceScreen({ route }: ScreenProps<'Produce'>): React.ReactElement {
   const { groupId } = route.params;
-  const nav = useNav();
   const log = useLog();
   const units = useUnits();
   const { colors } = useTheme();
@@ -98,7 +97,7 @@ export function ProduceScreen({ route }: ScreenProps<'Produce'>): React.ReactEle
   const [kind, setKind] = useState<Produce>('milk');
   const [label, setLabel] = useState('');
 
-  const { failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
+  const { failure, save } = useSaver(useLeave());
 
   const commit = useCallback(
     async (amount: number, acknowledged: boolean) => {

@@ -61,6 +61,22 @@ sandbox. It still connects to Metro, so a code change still reloads in a second
 — what changes is that the records survive it. `Run on phone` and `Run on
 emulator` both build one; `npx expo run:android` is the same thing by hand.
 
+### When the app closes itself: `Catch a crash`
+
+Double-click it, do the thing that goes wrong, come back and press a key. It
+clears the log first so what comes back is about the thing that just happened,
+reads three buffers, and says which of two situations it is — because they look
+identical from the outside and want opposite fixes:
+
+- **the app crashed** — `FATAL EXCEPTION`, `OutOfMemoryError`, and a stack;
+- **Android killed it** — `am_kill`, `lowmemorykiller`, no stack at all,
+  usually the camera wanting the memory the app was holding.
+
+It exists because the alternative was asking somebody to type two `adb`
+commands, and `adb` is not on the PATH — which is the whole reason every script
+in that folder has to go and find it first. A diagnostic nobody can run is not
+a diagnostic.
+
 ### A tablet also has to be able to reach the server
 
 The API listens on `0.0.0.0`, so nothing about it needs changing for a device

@@ -17,7 +17,7 @@ import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
-import { useNav } from '../hooks/useNav';
+import { useLeave } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import { useUnits } from '../hooks/useUnits';
 import type { ScreenProps } from '../navigation/Root';
@@ -62,7 +62,6 @@ import { FONTS, SPACE, TYPE } from '../theme/tokens';
  */
 export function FeedPlanScreen({ route }: ScreenProps<'FeedPlan'>): React.ReactElement {
   const { groupId } = route.params;
-  const nav = useNav();
   const log = useLog();
   const units = useUnits();
   const { colors } = useTheme();
@@ -94,7 +93,7 @@ export function FeedPlanScreen({ route }: ScreenProps<'FeedPlan'>): React.ReactE
     return [...new Set(names)];
   }, [shelf, group]);
 
-  const { saving, failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
+  const { saving, failure, save } = useSaver(useLeave());
 
   /** Ounces or grams — a hen's daily ration is a quarter pound, not a pound. */
   const perAnimalUg = useMemo(() => {
