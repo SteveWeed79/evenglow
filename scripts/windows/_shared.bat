@@ -327,6 +327,24 @@ if "%LANIP%"=="" (
 
 powershell -NoProfile -Command "(Get-Content 'apps\mobile\.env') -replace 'EXPO_PUBLIC_API_URL=.*', 'EXPO_PUBLIC_API_URL=http://%LANIP%:3001' | Set-Content 'apps\mobile\.env'"
 echo   Server address - set to %LANIP%.
+echo.
+rem Said here rather than after it fails, because it fails as "cannot reach the
+rem farm server" — which reads as a bug in the app and is a rule in Windows.
+rem
+rem The server already listens on 0.0.0.0, so nothing about it needs changing.
+rem What stops a tablet is the inbound rule: Windows asks once, the first time
+rem Node opens a port, and a prompt dismissed months ago on some other project
+rem is a silent block today with no second prompt coming.
+echo   NOTE: the first time the farm server runs, Windows may ask
+echo   whether to allow Node.js through the firewall. Say ALLOW,
+echo   and make sure "Private networks" is ticked - the tablet
+echo   reaches this computer over your own wifi.
+echo.
+echo   If it never asks and the tablet cannot reach the server,
+echo   open Command Prompt AS ADMINISTRATOR and paste this once:
+echo.
+echo     netsh advfirewall firewall add rule name="Steading farm server" dir=in action=allow protocol=TCP localport=3001
+echo.
 exit /b 0
 
 :trim_ip
