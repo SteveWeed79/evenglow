@@ -32,16 +32,16 @@
       "name": "lamp-unlit",
       "group": "status",
       "elements": {
-        "24": 3,
-        "32": 3
+        "24": 1,
+        "32": 1
       }
     },
     {
       "name": "lamp-lit",
       "group": "status",
       "elements": {
-        "24": 3,
-        "32": 3
+        "24": 1,
+        "32": 1
       }
     },
     {
