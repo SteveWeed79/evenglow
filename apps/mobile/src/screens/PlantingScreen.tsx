@@ -15,7 +15,7 @@ import { Notes } from '../components/Notes';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
-import { useNav } from '../hooks/useNav';
+import { useLeave, useNav } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import { useUnits } from '../hooks/useUnits';
 import type { ScreenProps } from '../navigation/Root';
@@ -52,7 +52,7 @@ export function PlantingScreen({ route }: ScreenProps<'Planting'>): React.ReactE
   const planting = plantings?.find((p) => p.id === plantingId) ?? null;
 
   const { saving, failure, said, save } = useSaver(useCallback(() => undefined, []));
-  const pulled = useSaver(useCallback(() => nav.goBack(), [nav]));
+  const pulled = useSaver(useLeave());
 
   const mark = useCallback(
     (payload: Record<string, unknown>) => {

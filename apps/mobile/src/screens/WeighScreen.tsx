@@ -26,7 +26,7 @@ import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
-import { useNav } from '../hooks/useNav';
+import { useLeave } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import { useUnits } from '../hooks/useUnits';
 import type { ScreenProps } from '../navigation/Root';
@@ -111,7 +111,6 @@ const BOXES_MAX = 24;
 
 export function WeighScreen({ route }: ScreenProps<'Weigh'>): React.ReactElement {
   const { groupId } = route.params;
-  const nav = useNav();
   const log = useLog();
   const { colors } = useTheme();
   const units = useUnits();
@@ -178,7 +177,7 @@ export function WeighScreen({ route }: ScreenProps<'Weigh'>): React.ReactElement
   const [boxes, setBoxes] = useState<readonly string[]>([]);
   const [note, setNote] = useState('');
 
-  const { saving, failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
+  const { saving, failure, save } = useSaver(useLeave());
 
   const choices = UNIT_CHOICES[units];
   // A tap made before the site read landed could name a unit the farm's system

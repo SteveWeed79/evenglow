@@ -7,7 +7,7 @@ import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
-import { useNav } from '../hooks/useNav';
+import { useLeave } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import type { ScreenProps } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
@@ -28,7 +28,6 @@ import { FONTS, TYPE } from '../theme/tokens';
  */
 export function ServiceDoneScreen({ route }: ScreenProps<'ServiceDone'>): React.ReactElement {
   const { serviceId } = route.params;
-  const nav = useNav();
   const log = useLog();
   const { colors } = useTheme();
 
@@ -53,8 +52,8 @@ export function ServiceDoneScreen({ route }: ScreenProps<'ServiceDone'>): React.
    */
   const [wrong, setWrong] = useState<string[]>([]);
 
-  const { saving, failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
-  const removed = useSaver(useCallback(() => nav.goBack(), [nav]));
+  const { saving, failure, save } = useSaver(useLeave());
+  const removed = useSaver(useLeave());
 
   const commit = useCallback(() => {
     if (service === null) return;

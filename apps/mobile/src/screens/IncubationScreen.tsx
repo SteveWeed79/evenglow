@@ -20,7 +20,7 @@ import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
 import { useLog } from '../hooks/useSync';
-import { useNav } from '../hooks/useNav';
+import { useLeave } from '../hooks/useNav';
 import type { ScreenProps } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, SPACE, TYPE } from '../theme/tokens';
@@ -51,7 +51,6 @@ export function IncubationScreen({ route }: ScreenProps<'Incubation'>): React.Re
 }
 
 function Detail({ incubation }: { incubation: IncubationEntry }): React.ReactElement {
-  const nav = useNav();
   const log = useLog();
   const { colors } = useTheme();
 
@@ -73,7 +72,7 @@ function Detail({ incubation }: { incubation: IncubationEntry }): React.ReactEle
   const [earlyLosses, setEarlyLosses] = useState(0);
 
   const candled = useSaver(useCallback(() => undefined, []));
-  const hatchedSaver = useSaver(useCallback(() => nav.goBack(), [nav]));
+  const hatchedSaver = useSaver(useLeave());
 
   const days = INCUBATION_DAYS[incubation.species] ?? 21;
 

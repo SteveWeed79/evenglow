@@ -17,7 +17,7 @@ import { Screen } from '../components/Screen';
 import { Tally } from '../components/Tally';
 import { Touch } from '../components/Touch';
 import { useLive } from '../hooks/useLive';
-import { useNav } from '../hooks/useNav';
+import { useLeave } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import type { ScreenProps } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
@@ -104,7 +104,6 @@ const GRAMS: Record<Measure, number> = { scoop: 907, lb: 454, kg: 1000 };
 
 export function FeedScreen({ route }: ScreenProps<'Feed'>): React.ReactElement {
   const { groupId } = route.params;
-  const nav = useNav();
   const log = useLog();
   const { colors } = useTheme();
 
@@ -261,7 +260,7 @@ export function FeedScreen({ route }: ScreenProps<'Feed'>): React.ReactElement {
     setScoop('');
   }, [log, sack, scoop]);
 
-  const { failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
+  const { failure, save } = useSaver(useLeave());
 
   const commit = useCallback(
     async (count: number) => {

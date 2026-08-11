@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import {
   type Currency,
   DEFAULT_CURRENCY,
@@ -19,7 +19,7 @@ import { Loading } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
-import { useNav } from '../hooks/useNav';
+import { useLeave } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 
 /**
@@ -101,7 +101,6 @@ const CHOICES: readonly Choice[] = [
 ];
 
 export function MyFarmScreen(): React.ReactElement {
-  const nav = useNav();
   const log = useLog();
 
   /**
@@ -126,7 +125,7 @@ export function MyFarmScreen(): React.ReactElement {
   const [units, setUnits] = useState<UnitSystem | null>(null);
   const [currency, setCurrency] = useState<Currency | null>(null);
 
-  const { saving, failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
+  const { saving, failure, save } = useSaver(useLeave());
 
   if (site === null) return <Loading title="My farm" />;
 

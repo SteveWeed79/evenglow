@@ -23,7 +23,7 @@ import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
-import { useNav } from '../hooks/useNav';
+import { useLeave, useNav } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import type { ScreenProps } from '../navigation/Root';
 import { StyleSheet, View } from 'react-native';
@@ -73,7 +73,7 @@ export function EditGroupScreen({ route }: ScreenProps<'EditGroup'>): React.Reac
     processAtWeeks: number | null;
   } | null>(null);
 
-  const { saving, failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
+  const { saving, failure, save } = useSaver(useLeave());
 
   /**
    * Back to the tabs rather than to this screen's parent.

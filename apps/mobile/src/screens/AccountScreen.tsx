@@ -19,7 +19,7 @@ import {
   signIn,
   SignInError,
 } from '../auth/session';
-import { useNav } from '../hooks/useNav';
+import { useLeave } from '../hooks/useNav';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, SPACE, TYPE } from '../theme/tokens';
 
@@ -65,7 +65,6 @@ export function AccountScreen({
 }: {
   onSignedIn: (claims: CachedClaims) => void;
 }): React.ReactElement {
-  const nav = useNav();
   const { colors } = useTheme();
 
   const [claims, setClaims] = useState<CachedClaims | null>(null);
@@ -123,7 +122,7 @@ export function AccountScreen({
     });
   }, []);
 
-  const { saving, failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
+  const { saving, failure, save } = useSaver(useLeave());
 
   /**
    * The Google path, which asks for a farm name it may not need.

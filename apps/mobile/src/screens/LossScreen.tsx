@@ -15,7 +15,7 @@ import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
-import { useNav } from '../hooks/useNav';
+import { useLeave } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import type { ScreenProps } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
@@ -50,7 +50,6 @@ const LABELS: Record<Cause, string> = {
 
 export function LossScreen({ route }: ScreenProps<'Loss'>): React.ReactElement {
   const { groupId } = route.params;
-  const nav = useNav();
   const log = useLog();
   const { colors } = useTheme();
 
@@ -70,7 +69,7 @@ export function LossScreen({ route }: ScreenProps<'Loss'>): React.ReactElement {
   const [predator, setPredator] = useState('');
   const [note, setNote] = useState('');
 
-  const { saving, failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
+  const { saving, failure, save } = useSaver(useLeave());
 
   const commit = useCallback(() => {
     void save(async () => {

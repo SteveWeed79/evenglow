@@ -14,7 +14,7 @@ import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
-import { useNav } from '../hooks/useNav';
+import { useLeave } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import type { ScreenProps } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
@@ -43,7 +43,6 @@ const LABELS = CARE_KIND_LABELS;
 
 export function CareLogScreen({ route }: ScreenProps<'CareLog'>): React.ReactElement {
   const { groupId } = route.params;
-  const nav = useNav();
   const log = useLog();
   const { colors } = useTheme();
 
@@ -55,7 +54,7 @@ export function CareLogScreen({ route }: ScreenProps<'CareLog'>): React.ReactEle
   const [product, setProduct] = useState('');
   const [note, setNote] = useState('');
 
-  const { saving, failure, save } = useSaver(useCallback(() => nav.goBack(), [nav]));
+  const { saving, failure, save } = useSaver(useLeave());
 
   const commit = useCallback(() => {
     if (kind === null) return;
