@@ -99,6 +99,7 @@ export const META = {
   syncHeld: 'syncHeld',
   lastBackupAt: 'lastBackupAt',
   readAlerts: 'readAlerts',
+  sessionEnd: 'sessionEnd',
 } as const;
 
 export const metaSchemas = {
@@ -167,6 +168,28 @@ export const metaSchemas = {
    * cannot keep.
    */
   lastBackupAt: z.number().int(),
+  /**
+   * Why this device stopped being signed in, and when.
+   *
+   * **Recorded because "it makes me sign in again" was reported four times and
+   * diagnosed by guesswork three of them.** Each guess was a real defect and
+   * each fix was right, and the report kept coming back — because nothing on
+   * the device could tell the difference between the causes. A refresh refused
+   * by the server, a token that was never there, and a session ended
+   * deliberately all leave a device at the sign-in screen with nothing to say.
+   *
+   * `at` is when it happened. `reason` is which of the three it was, and
+   * `detail` carries the server's own sentence when there is one — never
+   * invented here, and never the token, which is a credential and does not go
+   * in a table somebody screenshots.
+   */
+  sessionEnd: z
+    .object({
+      at: z.number().int(),
+      reason: z.enum(['refused', 'no-token', 'signed-out']),
+      detail: z.string().max(200).optional(),
+    })
+    .strict(),
 } as const;
 
 /**

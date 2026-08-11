@@ -7,6 +7,8 @@ import { readCachedClaims } from '../auth/session';
 import { readLocalOrgId } from '../auth/local-org';
 import { apiFault, explainFault } from '../boot/config';
 import { APP_BUILD, APP_VERSION } from '../version';
+import { localStore } from '@steading/core/db/store';
+import type { SessionEnd } from '@steading/core/db/port';
 import { Row, Secondary } from '../components/Form';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
@@ -35,11 +37,13 @@ export function DiagnosticsScreen(): React.ReactElement {
   const [storage, setStorage] = useState<StorageReport | null>(null);
   const [pulling, setPulling] = useState(false);
   const [farmId, setFarmId] = useState<string | null>(null);
+  const [ended, setEnded] = useState<SessionEnd | null>(null);
 
   useEffect(() => {
     void readCachedClaims().then((claims) =>
       claims === null ? readLocalOrgId().then(setFarmId) : setFarmId(claims.orgId),
     );
+    void localStore().getSessionEnd().then(setEnded);
   }, []);
 
   // Fixed for the life of the process — applied once in `start()`, before any
@@ -113,6 +117,32 @@ export function DiagnosticsScreen(): React.ReactElement {
           onPress={() => nav.navigate('Inbox')}
         />
       ) : null}
+
+      {/**
+        * Why this device stopped being signed in, when it has.
+        *
+        * **"It makes me sign in again" was reported four times and diagnosed
+        * by inference three of them.** Each inference found a real defect and
+        * each fix was right, and the report came back — because a refusal from
+        * the server, a token that had gone, and a deliberate sign-out all left
+        * the device saying exactly the same nothing. This is the screen
+        * somebody is already sent to when sync is the problem, so it is where
+        * the answer belongs.
+        *
+        * Cleared by signing in, so it describes a fault rather than accruing a
+        * history nobody reads.
+        */}
+      {ended === null ? null : (
+        <Panel label="The last time this device signed out">
+          <Body>{describeSessionEnd(ended)}</Body>
+          {ended.detail === undefined ? null : (
+            /* The server's own words, verbatim — the same reasoning as `Last
+               error` below: a sentence read back to whoever can help beats a
+               tidier one that lost the detail. */
+            <Body>{ended.detail}</Body>
+          )}
+        </Panel>
+      )}
 
       {report.lastError === null ? null : (
         <Panel label="Last error">
@@ -263,3 +293,23 @@ const styles = StyleSheet.create({
   wholeValue: { fontFamily: FONTS.data, fontSize: TYPE.body },
   statValue: { flexShrink: 1, fontFamily: FONTS.data, fontSize: TYPE.body, textAlign: 'right' },
 });
+
+/** One sentence, naming which of the three it was and when. */
+function describeSessionEnd(ended: SessionEnd): string {
+  const when = new Date(ended.at).toLocaleString(undefined, {
+    day: 'numeric',
+    month: 'long',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+
+  if (ended.reason === 'signed-out') return `You signed out on ${when}.`;
+  if (ended.reason === 'no-token') {
+    return (
+      `On ${when} this device had a farm cached but no sign-in left to renew — ` +
+      'which on Android is what an app being reinstalled does, because the ' +
+      'keys that protect it are removed with the app.'
+    );
+  }
+  return `On ${when} the farm server refused to renew this device's sign-in.`;
+}

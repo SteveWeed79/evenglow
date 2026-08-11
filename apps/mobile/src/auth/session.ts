@@ -1,4 +1,5 @@
 import { apiBase, setAccessToken, syncHeaders } from '@steading/core/api';
+import { localStore } from '@steading/core/db/store';
 import { z } from 'zod';
 import { roleSchema } from '@steading/contracts';
 import { retireLocalOrgId } from './local-org';
@@ -205,7 +206,24 @@ async function establish(body: unknown): Promise<CachedClaims> {
   await writeCachedClaims(named);
   setAccessToken(pair.accessToken);
 
+  // Signed in, so whatever ended the last session is history rather than a
+  // fault — cleared for the same reason `syncHeld` is: nothing is wrong now.
+  await localStore().recordSessionEnd(null).catch(() => undefined);
+
   return named;
+}
+
+/**
+ * The server's own words for why it refused, if it gave any.
+ *
+ * Best effort by design: a body that is not JSON, or has no `error`, leaves
+ * the reason recorded with no detail rather than with a sentence this file
+ * made up. Half an answer is worth having; an invented one is not.
+ */
+async function refusalDetail(res: Response): Promise<{ detail?: string }> {
+  const body: unknown = await res.json().catch(() => null);
+  const said = (body as { error?: unknown } | null)?.error;
+  return typeof said === 'string' ? { detail: said.slice(0, 200) } : {};
 }
 
 /** The server's sentence, or a plain one about the network. Never invented. */
@@ -382,7 +400,23 @@ export function refreshSession(): Promise<CachedClaims | null> {
 
 async function runRefresh(): Promise<CachedClaims | null> {
   const refreshToken = await readRefreshToken();
-  if (refreshToken === null) return null;
+  if (refreshToken === null) {
+    /**
+     * No token at all, which is TWO different situations wearing one silence:
+     * a device that has never signed in, and one whose token has gone. The
+     * first is the ordinary first run (D14) and the second is a fault.
+     *
+     * Only recorded when this device has previously held claims — a farm that
+     * has never had an account is not a farm that lost one, and marking it
+     * would put a fault on the most ordinary state the app has.
+     */
+    if ((await readCachedClaims()) !== null) {
+      await localStore()
+        .recordSessionEnd({ at: Date.now(), reason: 'no-token' })
+        .catch(() => undefined);
+    }
+    return null;
+  }
 
   let res: Response;
   try {
@@ -416,6 +450,29 @@ async function runRefresh(): Promise<CachedClaims | null> {
    * session and lets the next refresh try again.
    */
   if (res.status === 401 || res.status === 403) {
+    /**
+     * Written down before the credentials go, because afterwards there is
+     * nothing left to explain it with.
+     *
+     * "It makes me sign in again" has been reported four times and diagnosed
+     * by inference three of them. Each guess found a real defect — a refresh
+     * race, then a rotation stored after the thing that could fail — and each
+     * fix was right, and the report came back, because **nothing on the device
+     * could tell one cause from another**. A session refused by the server, a
+     * token that was never there and a deliberate sign-out all end at the same
+     * screen saying the same nothing.
+     *
+     * The server's own sentence, never one invented here. `detail` is bounded
+     * and the token is not in it: this is meant to be screenshotted.
+     */
+    await localStore()
+      .recordSessionEnd({
+        at: Date.now(),
+        reason: 'refused',
+        ...(await refusalDetail(res)),
+      })
+      .catch(() => undefined);
+
     await clearCredentials();
     setAccessToken(null);
     return null;
@@ -548,6 +605,12 @@ export async function signOut(): Promise<void> {
       body: JSON.stringify({ refreshToken }),
     }).catch(() => undefined);
   }
+
+  // Recorded before the wipe, so Diagnostics can tell a deliberate sign-out
+  // from a session the server refused — the distinction the screen exists for.
+  await localStore()
+    .recordSessionEnd({ at: Date.now(), reason: 'signed-out' })
+    .catch(() => undefined);
 
   // Unconditional, and it swallows nothing: a device that cannot clear its
   // tokens must not report a successful sign-out.

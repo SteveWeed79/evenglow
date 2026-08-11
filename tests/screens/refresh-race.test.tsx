@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetApiBase, setAccessToken, setApiBase } from '@steading/core/api';
 import { freshStore } from '../support/store';
 import { seedSecureStore } from '../support/native/modules';
-import { readCachedClaims, refreshSession } from '../../apps/mobile/src/auth/session';
+import { readCachedClaims, refreshSession, signIn } from '../../apps/mobile/src/auth/session';
+import { localStore } from '@steading/core/db/store';
 
 /**
  * "The app makes me sign in each time."
@@ -303,5 +304,79 @@ describe('the farm’s own name', () => {
 
     await refreshSession();
     expect((await readCachedClaims())?.orgName).toBe('Weed Family Farm');
+  });
+});
+
+/**
+ * Why a device stopped being signed in, written down.
+ *
+ * **"It makes me sign in again" has been reported four times and diagnosed by
+ * inference three of them.** Each inference found a real defect — a refresh
+ * race, then a rotation stored after the thing that could fail — and each fix
+ * was right, and the report came back. Because nothing on the device could
+ * tell the causes apart: a refusal from the server, a token that had gone, and
+ * a deliberate sign-out all end at the same screen saying the same nothing.
+ *
+ * Recorded in the local store rather than in secure storage: it is not a
+ * credential, and it has to be readable by somebody who is currently signed
+ * out and looking at Diagnostics.
+ */
+describe('what ended the session', () => {
+  it('records the server’s own refusal, and its words', async () => {
+    vi.stubGlobal('fetch', async () =>
+      new Response(JSON.stringify({ error: 'Your session has expired. Sign in again.' }), {
+        status: 401,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    expect(await refreshSession()).toBeNull();
+
+    const ended = await localStore().getSessionEnd();
+    expect(ended?.reason).toBe('refused');
+    expect(ended?.detail).toContain('expired');
+  });
+
+  /**
+   * The Android case, which is not a bug in this app and must not be reported
+   * as one: SecureStore encrypts with keys in the Android Keystore, and those
+   * are removed when the app is uninstalled. A rebuild that reinstalls takes
+   * the token with it while the farm's records come back from the server on
+   * the next sign-in — so it looks like the session alone was singled out.
+   */
+  it('tells a vanished token apart from a farm that never signed in', async () => {
+    seedSecureStore({
+      'steading.claims': JSON.stringify({ userId: 'u1', orgId: ORG, role: 'owner' }),
+    });
+
+    expect(await refreshSession()).toBeNull();
+    expect((await localStore().getSessionEnd())?.reason).toBe('no-token');
+  });
+
+  /** A device that has never had an account is not one that lost an account. */
+  it('says nothing about a farm that has never signed in', async () => {
+    seedSecureStore({});
+
+    expect(await refreshSession()).toBeNull();
+    expect(await localStore().getSessionEnd()).toBeNull();
+  });
+
+  /** Signing in clears it: it describes a fault, not a history. */
+  it('is cleared by signing back in', async () => {
+    vi.stubGlobal('fetch', async () =>
+      new Response(JSON.stringify({ error: 'nope' }), { status: 401 }),
+    );
+    await refreshSession();
+    expect(await localStore().getSessionEnd()).not.toBeNull();
+
+    vi.stubGlobal('fetch', async () =>
+      new Response(
+        JSON.stringify({ accessToken: accessToken(), refreshToken: 'fresh' }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    await signIn('someone@example.com', 'a-password');
+
+    expect(await localStore().getSessionEnd()).toBeNull();
   });
 });

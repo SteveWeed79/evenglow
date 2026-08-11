@@ -850,6 +850,20 @@ export async function openSqliteStore(
       await writeMeta(driver, META.lastBackupAt, at);
     },
 
+    async getSessionEnd() {
+      return parseMeta('sessionEnd', await readMeta(driver, 'sessionEnd')) ?? null;
+    },
+
+    async recordSessionEnd(end): Promise<void> {
+      // Cleared by deletion, like `syncHeld`: "never ended" and "ended and then
+      // signed back in" are the same fact, which is that nothing is wrong now.
+      if (end === null) {
+        await driver.run('DELETE FROM meta WHERE key = ?', [META.sessionEnd]);
+        return;
+      }
+      await writeMeta(driver, META.sessionEnd, end);
+    },
+
     async getReadAlerts(): Promise<string[]> {
       return parseMeta('readAlerts', await readMeta(driver, 'readAlerts')) ?? [];
     },

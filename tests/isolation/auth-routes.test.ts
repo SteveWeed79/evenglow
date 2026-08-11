@@ -150,7 +150,21 @@ describeDb('POST /auth/login', () => {
 });
 
 describeDb('POST /auth/refresh', () => {
-  it('rotates, and the old token stops working', async () => {
+  /**
+   * Rotation over the wire, and a retry that is tolerated rather than punished.
+   *
+   * **The replay assertion here used to expect 401 and now expects 200**, which
+   * is the grace window arriving — see `REUSE_GRACE_MS` in `auth/refresh.ts`. A
+   * spent token coming back within thirty seconds is this app retrying after a
+   * response it never received, not a thief, and signing a farm out for it was
+   * the fault behind four reports of "it makes me sign in again".
+   *
+   * Only the tolerated half is testable from here: `app.inject` has no way to
+   * hand the route a clock, so the far side of the window — where the family
+   * really is revoked — is asserted in `refresh.test.ts`, which calls
+   * `rotateSession` directly and can pass a `now` an hour later.
+   */
+  it('rotates, and honours a retry of the spent token', async () => {
     const app = await server();
 
     const login = await app.inject({
@@ -168,12 +182,14 @@ describeDb('POST /auth/refresh', () => {
     expect(rotated.statusCode).toBe(200);
     expect(rotated.json().refreshToken).not.toBe(first);
 
+    // The request a killed process makes on its next launch, moments later.
     const replayed = await app.inject({
       method: 'POST',
       url: '/auth/refresh',
       payload: { refreshToken: first },
     });
-    expect(replayed.statusCode).toBe(401);
+    expect(replayed.statusCode).toBe(200);
+    expect(replayed.json().refreshToken).not.toBe(first);
     await app.close();
   });
 
