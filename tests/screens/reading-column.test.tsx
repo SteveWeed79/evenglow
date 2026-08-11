@@ -10,12 +10,12 @@ import { seedSecureStore } from '../support/native/modules';
 /**
  * The width the app is allowed to become.
  *
- * **`orientation: "portrait"` does not hold on a tablet.** An app targeting
- * Android SDK 36 — which Expo SDK 57 does — has its orientation, aspect-ratio
- * and resizability restrictions ignored on any display 600dp or wider, and
- * Android 17 removes the opt-out. So the app already rotates freely on every
- * Android tablet; the lock survives only on phones, which is the whole reason
- * nobody has seen it.
+ * **A tablet turns.** This used to claim it turned already, because an app
+ * targeting Android SDK 36 has its orientation restrictions ignored on displays
+ * 600dp and wider — true, and Android 16's behaviour rather than the target
+ * level's, so a tablet on API 35 honoured the portrait lock completely and did
+ * not turn at all. `theme/rotation.ts` is what unlocks it now, and the cap
+ * asserted here is what the unlocking depends on.
  *
  * Nothing else in the app bounded its width, so a row that reads as a design
  * at 430dp reads as two words at opposite ends of a metre of plaster at

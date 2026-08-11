@@ -371,6 +371,24 @@ waiting.**
 - **The tallies, on a phone, with a glove.** Haptics, camera, signal loss and
   regain, doze. An emulator reaches none of it.
 
+**And then a tablet found a ninth, which is the argument for §6 in one line.**
+The app would not rotate. `app.json` said `orientation: "portrait"`, which
+lands on the main activity as `android:screenOrientation="portrait"` and locks
+a tablet exactly as hard as it locks a phone. Two places in the codebase had
+already reasoned about this and reached the wrong answer — an app targeting
+Android SDK 36 does have its orientation restrictions ignored on displays
+600dp and wider, but that is **Android 16's** behaviour rather than the target
+level's, so the tablet it was tried on (API 35) honoured the lock completely.
+Both comments asserted the app already rotated freely on every Android tablet
+in the world. It rotated on none of them.
+
+Fixed in `theme/rotation.ts`: the manifest stops locking and the lock is
+re-applied at runtime to screens under 600dp, so a phone is unchanged and a
+tablet turns. No new dependency — the navigator's own `orientation` option
+reaches `react-native-screens`, which is already here. **Needs a device to
+close:** the manifest change only takes effect after a prebuild, and whether
+the screens read well at 1280dp is a question for eyes, not for a test.
+
 ---
 
 ## 7 — Getting in without an account — **built, except the billing**

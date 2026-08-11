@@ -279,13 +279,18 @@ export const SPACE = { xs: 4, sm: 8, md: 12, lg: 20, xl: 32 } as const;
  *
  * ## Why this is not a nice-to-have
  *
- * `orientation: "portrait"` in `app.json` **does not hold on a tablet.** Expo
- * SDK 57 targets Android SDK 36, and an app targeting 36 has its orientation,
- * aspect-ratio and resizability restrictions *ignored* on any display whose
- * smallest width is 600dp or more. So the app already rotates freely on every
- * Android tablet in the world, and Android 17 removes the opt-out that would
- * put it back. The lock still works on phones, which is the only reason this
- * has not been noticed.
+ * **The app rotates on a tablet, and this cap is what stops that being a mess.**
+ *
+ * This paragraph used to say the app *already* rotated everywhere, on the
+ * grounds that an app targeting Android SDK 36 — which Expo SDK 57 does — has
+ * its orientation, aspect-ratio and resizability restrictions ignored on any
+ * display 600dp or wider. That behaviour is real but it is **Android 16's**,
+ * not the target level's: the OS on the device is what ignores the manifest, so
+ * a tablet running anything earlier honoured `orientation: "portrait"` in full.
+ * The tablet this was found on reports API 35 and would not turn at all.
+ *
+ * It turns now — `theme/rotation.ts` unlocks the manifest and re-locks compact
+ * screens at runtime — so the cap below has gone from insurance to load-bearing.
  *
  * Nothing else in the app bounded its width. A row that reads
  * "Chickens · EGGS · 6 HEAD · 4" at 430dp becomes the same words at 1280dp
