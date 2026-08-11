@@ -33,6 +33,17 @@ const pairSchema = z
      * forward rather than being lost.
      */
     user: z.object({ name: z.string().max(80) }).partial().optional(),
+    /**
+     * The farm's own name, sent by sign-in and by every refresh.
+     *
+     * Not in the access token deliberately — it is not authorization, and a
+     * token re-verified on every request is the wrong place for a label. But
+     * the client rebuilds its cached claims FROM that token, so anything the
+     * cache holds beyond `sub`, `orgId` and `role` must arrive beside it or be
+     * carried forward, or it is silently dropped on the first refresh. It was:
+     * see `runRefresh`.
+     */
+    org: z.object({ name: z.string().max(120) }).partial().optional(),
   })
   .passthrough();
 
@@ -174,10 +185,21 @@ async function establish(body: unknown): Promise<CachedClaims> {
     throw new SignInError(`The server sent a session we could not read — ${read.problem}.`);
   }
 
-  // The name is not in the token and is not authorization — it is the label a
-  // note carries so the other person's phone can say who wrote it offline.
-  const named: CachedClaims =
-    pair.user?.name === undefined ? read.claims : { ...read.claims, name: pair.user.name };
+  /**
+   * Neither name is in the token and neither is authorization.
+   *
+   * The person's name is the label a note carries, so the other phone can say
+   * who wrote it offline. The **farm's** name is what every screen was built to
+   * show and never did: `claimFarm` and `googleSignIn` take an `orgName` and
+   * send it to the server, and nothing ever put it in the cache — so
+   * `useFarmName` has returned null since it was written, and `TodayScreen`'s
+   * subtitle has never once rendered. Built, wired at one end only.
+   */
+  const named: CachedClaims = {
+    ...read.claims,
+    ...(pair.user?.name === undefined ? {} : { name: pair.user.name }),
+    ...(pair.org?.name === undefined ? {} : { orgName: pair.org.name }),
+  };
 
   await writeRefreshToken(pair.refreshToken);
   await writeCachedClaims(named);
@@ -401,19 +423,88 @@ async function runRefresh(): Promise<CachedClaims | null> {
 
   if (!res.ok) return readCachedClaims();
 
-  const pair = pairSchema.parse(await res.json());
-  const claims = readClaims(pair.accessToken);
-  if (claims === null) return null;
+  /**
+   * **From here the old refresh token is already spent.**
+   *
+   * The server rotated the moment it answered 200 and retired what this device
+   * sent. So every line below is running with no valid credential on disk until
+   * the new one is written, and any path that returns before writing it leaves
+   * the device holding a dead token. The next launch presents that token, the
+   * server sees a spent one, `revokeFamily` does exactly what it should — and
+   * somebody is asked for a password having done nothing but open the app.
+   *
+   * `establish` states this rule for sign-in: *the refresh token is durable
+   * before the access token is live*. This is a second copy of that sequence
+   * and it did not follow it — the claim parse came first and returned `null`
+   * on failure, before the write. Both reported symptoms fall out of that one
+   * ordering: null claims send `start.ts` to `ensureLocalOrgId`, so the app
+   * opens the device's own farm instead of the real one, **and** the spent
+   * token bricks the next launch for real.
+   *
+   * So: parse the envelope, store the rotation, and only then worry about
+   * whether the access token can be read.
+   */
+  let pair: z.infer<typeof pairSchema>;
+  try {
+    pair = pairSchema.parse(await res.json());
+  } catch {
+    /**
+     * A 200 whose body is not a token pair. The rotation is spent and its
+     * replacement is unreadable, so this session cannot be saved — but it must
+     * not throw either: `start.ts` awaits this on the boot path with no catch,
+     * and a rejected promise there is a farm looking at a start-up error over
+     * a database that is sitting right beside it, intact.
+     *
+     * The cached claims keep the right farm open. The next refresh gets the
+     * 401 this one could not, and that is where the session properly ends.
+     */
+    return readCachedClaims();
+  }
 
-  // Refresh does not repeat the display name, so it is carried forward rather
-  // than being quietly dropped on the first resume after a sign-in.
+  await writeRefreshToken(pair.refreshToken);
+
+  const claims = readClaims(pair.accessToken);
+  if (claims === null) {
+    /**
+     * The session is alive on the server — it just handed over a rotation —
+     * and this device cannot read the access token that came with it. That is
+     * a client-side fault, and answering it by opening a different farm is the
+     * worst available response.
+     *
+     * The cached claims name the right org, so every screen is right and every
+     * log is durable. No access token is set, so the flush 401s and the engine
+     * keeps the work queued, which is what it does in a barn. Nothing is lost
+     * and nothing is wrongly claimed.
+     */
+    return readCachedClaims();
+  }
+
+  /**
+   * Everything the cache holds that the access token does not carry.
+   *
+   * `readClaims` rebuilds from the token, which has `sub`, `orgId` and `role`
+   * and nothing else — so every other cached field is dropped here unless it is
+   * put back. The display name was already being carried; **the farm's name was
+   * not**, so it survived exactly until the first refresh and then vanished for
+   * good. That is the next launch, since `start.ts` refreshes at boot.
+   *
+   * The visible half was "why does no screen show the farm name" — `TodayScreen`
+   * has rendered it as a subtitle all along and was reading a field that a farm
+   * only ever had for one session.
+   *
+   * Server first, cache second: a farm that renames itself should see the new
+   * name, and `/auth/refresh` now sends it on every rotation for that reason.
+   */
   const previous = await readCachedClaims();
   const name = pair.user?.name ?? previous?.name;
-  const named: CachedClaims = name === undefined ? claims : { ...claims, name };
+  const orgName = pair.org?.name ?? previous?.orgName;
 
-  // Rotation: the server issues a new refresh token and retires the old one,
-  // so failing to store this would sign the device out on the next launch.
-  await writeRefreshToken(pair.refreshToken);
+  const named: CachedClaims = {
+    ...claims,
+    ...(name === undefined ? {} : { name }),
+    ...(orgName === undefined ? {} : { orgName }),
+  };
+
   await writeCachedClaims(named);
   setAccessToken(pair.accessToken);
 

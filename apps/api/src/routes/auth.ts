@@ -5,6 +5,7 @@ import { authorizeCredentials } from '../auth/credentials';
 import { verifyGoogleIdToken } from '../auth/google';
 import { hashPassword } from '../auth/password';
 import { endSession, rotateSession, startSession } from '../auth/refresh';
+import { verifyAccessToken } from '../auth/tokens';
 import {
   deleteOrgIfEmpty,
   findOrgById,
@@ -35,6 +36,26 @@ import { errorBody, HttpError } from '../http';
  * counts as a valid credential.
  */
 const refreshSchema = z.object({ refreshToken: z.string().min(1) }).strict();
+
+/**
+ * The farm's name, for a response body.
+ *
+ * Every route that hands over a session sends this, and the client caches it
+ * beside the claims. It is deliberately NOT in the access token: a name is not
+ * authorization and does not belong in something re-verified on every request.
+ *
+ * But the client rebuilds its cached claims FROM that token, so a field the
+ * cache needs and the token does not carry has to arrive alongside it every
+ * time — including on refresh, which is where it was being lost. A farm that
+ * renames itself sees the new name on the next rotation for the same reason.
+ *
+ * Absent rather than empty when the org has gone: an old session for a deleted
+ * farm should say nothing, not name it.
+ */
+async function farmOf(orgId: string): Promise<{ org?: { name: string } }> {
+  const org = await findOrgById(orgId);
+  return org === null ? {} : { org: { name: org.name } };
+}
 
 export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> {
   /**
@@ -71,8 +92,17 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
        * in a barn has to be able to say who wrote it on the other person's
        * phone, and a device with no signal cannot look one up. So it is
        * handed over once, here, and cached.
+       *
+       * The farm's name travels with it, for that reason and a second one: a
+       * device that SIGNS IN rather than signing up never typed the farm name
+       * and had no way to learn it, so a second handset showed no farm name at
+       * all. See `farmOf`.
        */
-      return reply.status(200).send({ ...pair, user: { id: user.id, name: user.name, role: user.role } });
+      return reply.status(200).send({
+        ...pair,
+        user: { id: user.id, name: user.name, role: user.role },
+        ...(await farmOf(user.orgId)),
+      });
     });
 
     /**
@@ -192,7 +222,9 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
       // Signed in immediately, for the reason `/invites/accept` gives: making
       // somebody create an account and then find a sign-in screen is two
       // chances to lose them and buys nothing.
-      return reply.status(201).send({ ...pair, user: { id: userId, name, role: 'owner' } });
+      return reply
+        .status(201)
+        .send({ ...pair, user: { id: userId, name, role: 'owner' }, ...(await farmOf(orgId)) });
     });
 
     /**
@@ -242,7 +274,11 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
         );
         return reply
           .status(200)
-          .send({ ...pair, user: { id: byGoogle._id, name: byGoogle.name, role: byGoogle.role } });
+          .send({
+            ...pair,
+            user: { id: byGoogle._id, name: byGoogle.name, role: byGoogle.role },
+            ...(await farmOf(byGoogle.orgId)),
+          });
       }
 
       // 2. Same person, arriving a different way. Safe because the token
@@ -259,7 +295,11 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
         );
         return reply
           .status(200)
-          .send({ ...pair, user: { id: byEmail._id, name: byEmail.name, role: byEmail.role } });
+          .send({
+            ...pair,
+            user: { id: byEmail._id, name: byEmail.name, role: byEmail.role },
+            ...(await farmOf(byEmail.orgId)),
+          });
       }
 
       // 3. A farm claiming itself, with Google instead of a password.
@@ -311,7 +351,11 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
       const pair = await startSession({ userId, orgId, role: 'owner' }, env.AUTH_SECRET);
       return reply
         .status(201)
-        .send({ ...pair, user: { id: userId, name: identity.name ?? 'Farmer', role: 'owner' } });
+        .send({
+          ...pair,
+          user: { id: userId, name: identity.name ?? 'Farmer', role: 'owner' },
+          ...(await farmOf(orgId)),
+        });
     });
 
     scope.post('/auth/refresh', async (request, reply) => {
@@ -321,7 +365,24 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
       }
 
       try {
-        return reply.status(200).send(await rotateSession(parsed.data.refreshToken, env.AUTH_SECRET));
+        const pair = await rotateSession(parsed.data.refreshToken, env.AUTH_SECRET);
+
+        /**
+         * Repeated on every refresh, and it has to be.
+         *
+         * The client rebuilds its cached claims from the access token, which
+         * carries `sub`, `orgId` and `role` and nothing else — so anything the
+         * cache holds beyond those three has to be either re-sent or carried
+         * forward, and a farm that renames itself should see the new name
+         * rather than the one this device happened to be told at signup.
+         *
+         * `rotateSession` has already re-derived the user from the database
+         * for exactly this kind of reason: a long-lived session is the one
+         * place stale facts accumulate.
+         */
+        const claims = await verifyAccessToken(pair.accessToken, env.AUTH_SECRET);
+
+        return reply.status(200).send({ ...pair, ...(await farmOf(claims.orgId)) });
       } catch (error) {
         const { status, body } = errorBody(error);
         return reply.status(status).send(body);

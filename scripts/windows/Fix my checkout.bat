@@ -34,6 +34,23 @@ if errorlevel 1 (
   goto :failed
 )
 
+:: This script throws things away — `git reset --hard`, then a recursive delete
+:: — and every path it uses is relative to whatever `cd /d` above landed on. A
+:: `cd` that fails prints one line and lets the script carry on, so the check is
+:: one comparison against a file that exists only at the root of this repo.
+::
+:: Nothing has gone wrong here. It is in front of the destructive step because
+:: that is where a guard belongs, not because it is known to be needed.
+if not exist "pnpm-workspace.yaml" (
+  echo.
+  echo   PROBLEM: this is not the Steading folder, so nothing has been
+  echo   changed and nothing has been deleted.
+  echo.
+  echo   Currently in: %CD%
+  echo   Copy everything in this window and send it to Claude.
+  goto :failed
+)
+
 echo.
 echo   [1 of 4] What is currently changed:
 git status --short

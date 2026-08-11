@@ -58,7 +58,36 @@ export function ServiceDoneScreen({ route }: ScreenProps<'ServiceDone'>): React.
 
   const commit = useCallback(() => {
     if (service === null) return;
-    const hours = Number(atHours);
+
+    /**
+     * An untouched field means "the reading on the screen", not "no reading".
+     *
+     * **This is the bug that made the button look broken.** Reported as *"I
+     * have it done, does nothing, it doesn't clear the task"* — from a tractor
+     * showing 110 hours, on a schedule that runs every 100.
+     *
+     * The meter box shows the machine's current reading as a PLACEHOLDER, so
+     * it is grey text in an empty field. Tapping straight through it — which
+     * is the whole design of this screen, since the reading is nearly always
+     * the one already on file — left `atHours` as `''`. That is not a finite
+     * positive number, so `lastDoneAtHours` was omitted from the payload, and
+     * `serviceDue` counts an hours-based interval from
+     * `(lastDoneAtHours ?? 0) + everyHours`. Target stays at 100 with the meter
+     * at 110, so the job is still overdue the moment it is marked done, for
+     * ever.
+     *
+     * The date half landed, which is what made it so hard to argue with: the
+     * screen said "Last done August 11" while the farm list still demanded it.
+     * Everything looked recorded and nothing had changed.
+     *
+     * `?? 0` in the engine is right and stays — a machine bought at 900 hours
+     * with no service history IS overdue, and quietly restarting its clock
+     * would be the worse lie. The fault is here: this screen has the reading,
+     * shows it, and then threw it away.
+     */
+    const typed = Number(atHours);
+    const reading =
+      Number.isFinite(typed) && typed > 0 ? typed : (machine?.hours ?? null);
 
     void save(async () => {
       await log({
@@ -67,8 +96,8 @@ export function ServiceDoneScreen({ route }: ScreenProps<'ServiceDone'>): React.
         targetId: service.id,
         payload: {
           lastDoneAtDate: Date.now(),
-          ...(service.intervalHours !== undefined && Number.isFinite(hours) && hours > 0
-            ? { lastDoneAtHours: hours }
+          ...(service.intervalHours !== undefined && reading !== null && reading > 0
+            ? { lastDoneAtHours: reading }
             : {}),
         },
       });
@@ -189,7 +218,13 @@ export function ServiceDoneScreen({ route }: ScreenProps<'ServiceDone'>): React.
       {service.intervalHours === undefined ? null : (
         <Field
           label="Meter reading now"
-          hint="The interval counts from this, not from the last hour log — those are minutes apart on the day of a service."
+          hint={
+            machine?.hours === null || machine?.hours === undefined
+              ? 'The interval counts from this, not from the last hour log — those are minutes apart on the day of a service.'
+              : // Says what an untouched field does, because it is not nothing
+                // and a grey placeholder cannot tell you which it is.
+                `The interval counts from this. Leave it and ${machine.hours} hours is used — change it if the meter has moved since you did the work.`
+          }
         >
           <NumberField
             value={atHours}

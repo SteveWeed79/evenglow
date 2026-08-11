@@ -26,7 +26,11 @@ if errorlevel 1 (
 
 where pnpm >nul 2>&1
 if errorlevel 1 (
+  :: Counted like the rest. It was the one MISSING line that did not add to the
+  :: total, so a machine whose only gap was pnpm read "Nothing missing" with a
+  :: MISSING line above it.
   echo   [ MISSING ] pnpm           - the run scripts install this for you
+  set /a MISSING+=1
 ) else (
   for /f "tokens=*" %%v in ('pnpm --version 2^>^&1') do echo   [ OK ]      pnpm           %%v
 )
@@ -247,7 +251,12 @@ echo   --- Do the app's packages match Expo? ---
 :: promises it will never do, and which then makes `git pull --ff-only`
 :: refuse to update the machine. It reports; fixing is a decision, made
 :: somewhere it can be reviewed.
-cd apps\mobile
+:: `pushd` rather than `cd`, and the pair matters more than it looks. `cd` with
+:: no `/d` does nothing at all when the target is on another drive — it prints
+:: nothing and returns success — so the check below would run against the repo
+:: root, and the `cd ..\..` that used to pair with it would then climb two
+:: levels ABOVE the project. `popd` returns to wherever this actually started.
+pushd "apps\mobile"
 :: Three goes at this, and the lesson is the same each time: a check that
 :: names the wrong fix is worse than one that names none.
 ::
@@ -303,12 +312,24 @@ findstr /c:"- expected version:" "%TEMP%\steading-expo-rest.txt" >nul 2>&1
 if errorlevel 1 goto :packages_held
 
 :packages_missing
+:: The cure named here has to cover the case where it CANNOT work, because that
+:: is the case that actually happened: six Expo packages behind, a farm that ran
+:: the server script as instructed, and the same line still there afterwards —
+:: because `package.json` and the lockfile pinned the old versions, and no
+:: amount of installing moves a pin. An install fixes "node_modules is behind
+:: package.json" and nothing else, so it is named first and named as one of two.
 set /a MISSING+=1
 echo.
-echo   [ MISSING ] packages       - run "Start the farm server" once; it installs them.
-echo               This window only looks, so it cannot fix this itself.
-echo               If this line is STILL here afterwards, the project needs a
-echo               version change - send this window to Claude.
+echo   [ MISSING ] packages       - two different faults print this line.
+echo.
+echo               FIRST TRY: run "Start the farm server" once. If node_modules
+echo               is simply behind a pull, that installs what is missing.
+echo               This window only looks, so it cannot do it itself.
+echo.
+echo               IF THIS LINE IS STILL HERE afterwards, installing cannot fix
+echo               it: the versions are pinned in the project and the pin is
+echo               what is wrong. That is a change somebody has to review.
+echo               Send this window to Claude - it is not something to fix here.
 goto :packages_done
 
 :packages_held
@@ -321,7 +342,7 @@ echo               ROADMAP.md. Everything else Expo asked about matches.
 :packages_done
 del "%TEMP%\steading-expo-check.txt" >nul 2>&1
 del "%TEMP%\steading-expo-rest.txt" >nul 2>&1
-cd ..\..
+popd
 
 echo.
 echo   ============================================

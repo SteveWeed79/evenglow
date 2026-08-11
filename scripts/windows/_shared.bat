@@ -141,6 +141,28 @@ if exist "node_modules\.modules.yaml" (
 dir /b "node_modules\.pnpm\react-native@*" >nul 2>&1
 if not errorlevel 1 set "layout_wrong=1"
 
+:: Every delete below is a RELATIVE path, and relative to the wrong directory
+:: `rd /s /q node_modules` is a different command entirely. The callers all
+:: `cd /d "%~dp0..\.."` first and none of them check that it worked — and a
+:: `cd` that fails in cmd prints one line and carries on, which is how a script
+:: ends up recursively deleting from wherever the window happened to open.
+::
+:: Nothing has gone wrong here. It is one comparison against a file that only
+:: exists at the root of this repo, in front of the only block in these scripts
+:: that removes a directory tree, and it costs nothing to be sure.
+if defined layout_wrong (
+  if not exist "pnpm-workspace.yaml" (
+    echo.
+    echo   PROBLEM: this script is not running from the Steading folder,
+    echo   so it has stopped rather than deleting anything.
+    echo.
+    echo   Currently in: %CD%
+    echo   Copy everything in this window and send it to Claude.
+    echo.
+    exit /b 1
+  )
+)
+
 if defined layout_wrong (
   echo   The package layout has changed - rebuilding it.
   echo   This takes a couple of minutes and only happens once.
@@ -175,21 +197,31 @@ if defined layout_wrong (
 :: `.modules.yaml` is written by every install, so it being newer than `.cxx`
 :: means the tree moved after the last native configure. That is a comparison
 :: rather than a guess, and node is already required above.
+:: **This was a `for /f` around a `node -e` one-liner, and it never ran once.**
+:: The command went through a second `cmd /c`, so it was parsed twice, and the
+:: snippet was made of exactly what does not survive that: single quotes inside
+:: a single-quoted argument, double quotes inside those, and colons that a
+:: mangled fragment reads as a drive letter. What a real machine printed was
+::
+::   The system cannot find the drive specified.
+::   The system cannot find the drive specified.
+::
+:: twice per run, with `%%R` unset and the `do` block skipped — so the guard
+:: below has been decorative on Windows since it was written, and those two
+:: lines were the only sign of it.
+::
+:: An exit code needs no `for /f` and has nothing to quote. See
+:: `scripts\windows\cxx-stale.mjs`.
 if exist "apps\mobile\android\app\.cxx" (
-  :: `%%R` rather than a variable, because delayed expansion is per batch file
-  :: and this one is reached through `call`. And no angle brackets anywhere in
-  :: the node snippet: cmd parses this line before node ever sees it, and a
-  :: bare `-` would become a redirect. `Math.max` says the same thing.
-  for /f %%R in ('node -e "const{statSync:t}=require('fs');const m=t('node_modules/.modules.yaml').mtimeMs,c=t('apps/mobile/android/app/.cxx').mtimeMs;process.stdout.write(Math.max(m,c)===m?'stale':'ok')" 2^>nul') do (
-    if "%%R"=="stale" (
-      echo   The packages moved since the last native build - clearing its cache.
-      rd /s /q "apps\mobile\android\app\.cxx" 2>nul
-      :: Metro's too, for the same reason and from the same event: it stores
-      :: resolved ABSOLUTE paths, so a tree replaced underneath it is still
-      :: asked for where it used to be.
-      for /d %%M in ("%TEMP%\metro-*") do rd /s /q "%%M" 2>nul
-      for /d %%M in ("%TEMP%\haste-map-*") do rd /s /q "%%M" 2>nul
-    )
+  node "%~dp0cxx-stale.mjs"
+  if errorlevel 1 (
+    echo   The packages moved since the last native build - clearing its cache.
+    rd /s /q "apps\mobile\android\app\.cxx" 2>nul
+    :: Metro's too, for the same reason and from the same event: it stores
+    :: resolved ABSOLUTE paths, so a tree replaced underneath it is still
+    :: asked for where it used to be.
+    for /d %%M in ("%TEMP%\metro-*") do rd /s /q "%%M" 2>nul
+    for /d %%M in ("%TEMP%\haste-map-*") do rd /s /q "%%M" 2>nul
   )
 )
 
