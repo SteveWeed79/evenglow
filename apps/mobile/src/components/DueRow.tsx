@@ -163,6 +163,9 @@ export function DueRow({
         style={[styles.row, { backgroundColor: fill, borderColor: colors.border }]}
         accessibilityRole="text"
         accessibilityLabel={`${due.title}, ${when(due, now)}`}
+        // Present on the unpressable branch too, so a test can tell "this row
+        // deliberately goes nowhere" from "this row is missing".
+        testID={`due-${due.key}`}
       >
         {body}
       </View>
@@ -174,6 +177,7 @@ export function DueRow({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`${due.title}, ${when(due, now)}`}
+      testID={`due-${due.key}`}
       style={({ pressed }) => [
         styles.row,
         { backgroundColor: fill, borderColor: colors.border, opacity: pressed ? 0.75 : 1 },

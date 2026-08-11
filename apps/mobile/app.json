@@ -6,11 +6,14 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon/steading.png",
     "newArchEnabled": true,
     "android": {
       "package": "com.steading.app",
       "adaptiveIcon": {
-        "backgroundColor": "#EDE6D2"
+        "foregroundImage": "./assets/icon/steading-foreground.png",
+        "backgroundColor": "#201913",
+        "monochromeImage": "./assets/icon/steading-monochrome.png"
       },
       "allowBackup": false
     },
@@ -24,6 +27,18 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "Steading asks once, to find the forecast for your farm. The position is stored rounded to about a kilometre and is never sent anywhere but the weather service."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash/steading-daylight.png",
+          "backgroundColor": "#ede6d2",
+          "imageWidth": 180,
+          "dark": {
+            "image": "./assets/splash/steading-lamplight.png",
+            "backgroundColor": "#201913"
+          }
         }
       ]
     ],
