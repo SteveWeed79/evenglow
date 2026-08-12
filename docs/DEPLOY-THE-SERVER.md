@@ -369,12 +369,20 @@ Installs MongoDB 8, binds it to **127.0.0.1 only**, caps the WiredTiger cache at
 on, and creates the `steading` account — printing its connection string once,
 because the only place it should live is `/etc/steading/api.env`.
 
+```bash
+export MONGODB_DB=steadingdb
+export ATLAS_URI="$(sudo grep -oP '^MONGODB_URI=\K.*' /etc/steading/api.env)"
+export LOCAL_URI='<the string setup-mongo.sh printed>'
+
+sudo -E /opt/steading/scripts/deploy/migrate-to-local-mongo.sh
 ```
-sudo -E MONGODB_DB=steadingdb \
-        ATLAS_URI='mongodb+srv://…' \
-        LOCAL_URI='<the string setup-mongo.sh printed>' \
-  /opt/steading/scripts/deploy/migrate-to-local-mongo.sh
-```
+
+**Exported, not written on the `sudo` line.** `sudo -E VAR=… script` passes
+those assignments as *arguments to sudo*, so both connection strings — with
+their passwords — sit in `ps` output for every user on the box while the
+migration runs. Which is the exact thing the script's own header says it is
+avoiding, and this document told you to do it the wrong way until somebody ran
+it.
 
 Counts every collection on Atlas, stops the API, dumps, restores with `--drop`,
 counts again, and **refuses to declare success unless the two match document for
