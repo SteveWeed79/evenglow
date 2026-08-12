@@ -87,4 +87,38 @@ if (isEntryPoint()) {
   const app = await buildServer(env);
   await app.listen({ port: env.PORT, host: '0.0.0.0' });
   console.log(`steading api listening on :${env.PORT}`);
+
+  /**
+   * Stop when asked, rather than being killed for not answering.
+   *
+   * **Every clean restart was being recorded as a failure**, which is the sort
+   * of thing that costs nothing until the day it matters:
+   *
+   *   steading-api.service: Main process exited, code=exited, status=143/n/a
+   *   steading-api.service: Failed with result 'exit-code'.
+   *
+   * 143 is 128 + SIGTERM. Node installs no handler for it, so the default
+   * action terminates the process and systemd sees a non-zero exit. Nothing
+   * was wrong — that was `systemctl restart` — but `deploy.sh` restarts on
+   * every deployment, so the journal fills with failures that are not failures
+   * and a real one has somewhere to hide.
+   *
+   * Closing Fastify rather than exiting immediately is the part worth having:
+   * it stops accepting new connections and lets in-flight requests finish. A
+   * sync flush killed halfway is not a correctness problem — every mutation
+   * carries a ULID and applies once — but the device would take the dropped
+   * connection as a failed batch and retry all hundred of them.
+   *
+   * `once`, so a second signal during shutdown falls through to the default
+   * action and kills it. If closing hangs, the operator holding Ctrl-C twice
+   * should be obeyed, and systemd's TimeoutStopSec is the backstop.
+   */
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+    process.once(signal, () => {
+      void app
+        .close()
+        .then(() => process.exit(0))
+        .catch(() => process.exit(1));
+    });
+  }
 }

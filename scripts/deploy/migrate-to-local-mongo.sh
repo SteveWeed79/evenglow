@@ -2,8 +2,10 @@
 #
 # Atlas -> the box. Run it once, after `setup-mongo.sh`.
 #
-#   sudo ATLAS_URI='mongodb+srv://…' LOCAL_URI='mongodb://steading:…@127.0.0.1:27017/steading?authSource=admin' \
-#     /opt/steading/scripts/deploy/migrate-to-local-mongo.sh
+#   export MONGODB_DB=steadingdb
+#   export ATLAS_URI="$(sudo grep -oP '^MONGODB_URI=\K.*' /etc/steading/api.env)"
+#   export LOCAL_URI='mongodb://steading:…@127.0.0.1:27017/steadingdb?authSource=admin'
+#   sudo -E /opt/steading/scripts/deploy/migrate-to-local-mongo.sh
 #
 # ## Downtime is free here, and that is worth using
 #
@@ -19,6 +21,12 @@
 #
 # Both URIs hold passwords, and `argv` is visible in `ps` to every user on the
 # box. Same rule as `backup-mongo.sh`, `db:seed` and `db:password`.
+#
+# **Which means EXPORT them, rather than writing them on the sudo line.**
+# `sudo -E VAR=… script` passes those assignments as arguments to *sudo*, so
+# both strings sit in `ps` for the length of the migration — defeating the rule
+# this paragraph is about. The runbook said to do it that way until somebody
+# ran it.
 
 set -Eeuo pipefail
 umask 077
@@ -64,7 +72,7 @@ if [ -n "$ATLAS_DB" ] && [ "$ATLAS_DB" != "$DB_NAME" ]; then
   '$DB_NAME'. One of them is wrong and guessing which would move the wrong
   records.
 
-  If '$ATLAS_DB' is the right one:   sudo -E MONGODB_DB=$ATLAS_DB ... $0
+  If '$ATLAS_DB' is the right one:   export MONGODB_DB=$ATLAS_DB, then re-run
   If it is not, take the database off the end of ATLAS_URI."
 fi
 

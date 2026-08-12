@@ -31,6 +31,38 @@ anybody is ever asked to pay for (D13).
 | A MongoDB Atlas cluster | The free M0 is fine to begin with |
 | SSH access to the box | `ssh ubuntu@<the box's public IP>` |
 
+### Two SSH settings, before you spend an evening on the box
+
+**`client_loop: send disconnect: Connection reset` after a pause is not the
+box.** A NAT entry somewhere between you and it — a home router, or the
+provider's edge — expires while the connection sits idle, and neither end finds
+out until the next keystroke tries to send. On your own machine, once, for every
+host you ever reach:
+
+```
+# ~/.ssh/config, or %USERPROFILE%\.ssh\config on Windows
+Host *
+    ServerAliveInterval 60
+    ServerAliveCountMax 5
+```
+
+A keepalive every minute keeps the entry warm, and five missed replies still
+disconnects — so a real five-minute outage is still an outage, and a coffee
+break is not.
+
+**And run anything long inside `tmux`.** A dropped session sends `SIGHUP` to
+whatever it was running, so a disconnect during `migrate-to-local-mongo.sh` or
+`backup-mongo.sh` leaves a half-finished job with nobody watching:
+
+```
+sudo apt-get install -y tmux
+tmux new -s steading      # Ctrl-B then D detaches; close the laptop
+tmux attach -t steading   # it kept running
+```
+
+Deployments do not need this — `steading-deploy.timer` runs them from systemd,
+so they neither know nor care whether anybody is connected.
+
 **Upgrade the Oracle account to Pay As You Go before you rely on this.** Oracle
 reclaims Always Free compute that sits idle — roughly under 20% CPU with low
 network over seven days — and a farm API is exactly that shape. A Pay As You Go
@@ -369,12 +401,20 @@ Installs MongoDB 8, binds it to **127.0.0.1 only**, caps the WiredTiger cache at
 on, and creates the `steading` account — printing its connection string once,
 because the only place it should live is `/etc/steading/api.env`.
 
+```bash
+export MONGODB_DB=steadingdb
+export ATLAS_URI="$(sudo grep -oP '^MONGODB_URI=\K.*' /etc/steading/api.env)"
+export LOCAL_URI='<the string setup-mongo.sh printed>'
+
+sudo -E /opt/steading/scripts/deploy/migrate-to-local-mongo.sh
 ```
-sudo -E MONGODB_DB=steadingdb \
-        ATLAS_URI='mongodb+srv://…' \
-        LOCAL_URI='<the string setup-mongo.sh printed>' \
-  /opt/steading/scripts/deploy/migrate-to-local-mongo.sh
-```
+
+**Exported, not written on the `sudo` line.** `sudo -E VAR=… script` passes
+those assignments as *arguments to sudo*, so both connection strings — with
+their passwords — sit in `ps` output for every user on the box while the
+migration runs. Which is the exact thing the script's own header says it is
+avoiding, and this document told you to do it the wrong way until somebody ran
+it.
 
 Counts every collection on Atlas, stops the API, dumps, restores with `--drop`,
 counts again, and **refuses to declare success unless the two match document for
