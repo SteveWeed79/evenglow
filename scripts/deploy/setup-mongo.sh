@@ -89,11 +89,16 @@ command -v mongodump >/dev/null 2>&1 || die "mongodump is missing. The mongodb-o
   should have brought mongodb-database-tools; install it before migrating."
 
 # ── the configuration ───────────────────────────────────────────────────────
+#
+# Written twice, deliberately: once WITHOUT authorization so the account can be
+# created, then again with it on. See the account section for why the obvious
+# order does not work.
 say "Configuring"
 BACKUP="/etc/mongod.conf.before-steading"
 [ -f "$BACKUP" ] || cp /etc/mongod.conf "$BACKUP"
 
-cat > /etc/mongod.conf <<CONF
+write_conf() {
+  cat > /etc/mongod.conf <<CONF
 # Written by scripts/deploy/setup-mongo.sh. The original is at
 # /etc/mongod.conf.before-steading.
 
@@ -121,23 +126,56 @@ security:
   # On even though it is loopback-only. Defence in depth: a bug in the API that
   # let an attacker run code as the service user should not additionally hand
   # them an unauthenticated database admin shell.
-  authorization: enabled
+  authorization: ${1}
 CONF
+}
+
+wait_for_mongo() {
+  for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+    if mongosh --quiet --eval 'db.adminCommand({ping:1}).ok' >/dev/null 2>&1; then return 0; fi
+    sleep 1
+  done
+  systemctl is-active --quiet mongod || die "mongod did not start. journalctl -u mongod -n 50"
+  return 0
+}
 
 systemctl enable mongod >/dev/null
-systemctl restart mongod
-
-for attempt in 1 2 3 4 5 6 7 8 9 10; do
-  if mongosh --quiet --eval 'db.adminCommand({ping:1}).ok' >/dev/null 2>&1; then break; fi
-  sleep 1
-done
-systemctl is-active --quiet mongod || die "mongod did not start. journalctl -u mongod -n 50"
-note "running, bound to ${BIND_IP}, cache ${CACHE_GB}GB"
 
 # ── the account the API uses ────────────────────────────────────────────────
 #
-# Created only if it is absent, because re-running this must not rotate a
-# password that is already in /etc/steading/api.env and working.
+# **Created with authorization OFF, and the obvious order does not work.**
+#
+# Turning auth on first and then creating the account is what this script did,
+# and MongoDB refuses it:
+#
+#   MongoServerError: not authorized on admin to execute command
+#   { createUser: "steading", roles: [ { role: "readWrite", db: "steadingdb" } ] }
+#
+# The localhost exception — which is what lets anyone create the first account
+# on a fresh deployment with auth enabled — permits creating **a user who can
+# administer users**, and nothing else. An application account holding
+# readWrite and dbAdmin on one database does not qualify, so the exception does
+# not apply and there is no account in existence to authenticate as. Auth on,
+# zero users, and no way to add one: a dead end reached on the first real run.
+#
+# The alternatives were an admin account created first and then used to create
+# this one — a second credential to store, rotate and eventually leak, for a
+# box that runs exactly one application — or this: bring mongod up without
+# auth, create the account with precisely the rights it needs, then turn auth
+# on and restart. One credential, exact privileges.
+#
+# The window costs nothing here. `bindIp` is 127.0.0.1 for both restarts, so
+# the only things that could reach it are processes already on this box, and
+# `mongod` is not yet holding any data on a first run.
+#
+# Doing it on every run rather than only the first is what makes this
+# idempotent from any starting state — including the broken one above, where
+# auth is already enabled and no account exists.
+write_conf disabled
+systemctl restart mongod
+wait_for_mongo
+note "authorization off while the account is created"
+
 say "Application account"
 EXISTS="$(mongosh --quiet admin --eval 'db.getSiblingDB("admin").system.users.countDocuments({user:"steading"})' 2>/dev/null || echo 0)"
 
@@ -174,6 +212,24 @@ else
   note "already exists — password left alone"
   note "the URI shape is: mongodb://steading:<password>@127.0.0.1:27017/${DB_NAME}?authSource=admin"
 fi
+
+# ── and now lock it ─────────────────────────────────────────────────────────
+#
+# The account exists, so the localhost exception is no longer needed and the
+# window closes. Asserted rather than assumed: an unauthenticated command must
+# now FAIL, and a script that left a farm's database open to every process on
+# the box while reporting success would be worse than one that never ran.
+say "Turning authorization on"
+write_conf enabled
+systemctl restart mongod
+wait_for_mongo
+
+if mongosh --quiet --eval 'db.getSiblingDB("admin").system.users.countDocuments({})' >/dev/null 2>&1; then
+  die "Authorization is NOT in force — an unauthenticated read succeeded after the restart.
+  Do not put data here yet. Check /etc/mongod.conf for 'authorization: enabled'
+  and 'journalctl -u mongod -n 50'."
+fi
+note "on — unauthenticated access refused, as it should be"
 
 cat <<DONE
 
