@@ -138,6 +138,14 @@ corepack pnpm install --frozen-lockfile --filter "@steading/api..."
   || die "tsx is not where the service unit expects it ($REPO_DIR/node_modules/tsx/dist/cli.mjs).
   That means the install did not hoist. Check .npmrc still sets node-linker=hoisted."
 chown -R "$SERVICE_USER:$SERVICE_USER" "$REPO_DIR"
+
+# The chown above is what makes this necessary. Root running git in a checkout
+# owned by another user is refused since CVE-2022-24765, and `deploy.sh` runs
+# as root — so without this the deploy timer fails every five minutes into the
+# journal and never deploys anything, while the box looks perfectly healthy.
+# `deploy.sh` sets it too; doing it here means the first run is already clean.
+git config --system --get-all safe.directory 2>/dev/null | grep -qxF "$REPO_DIR" \
+  || git config --system --add safe.directory "$REPO_DIR"
 note "ready"
 
 # ── 5. The secrets file, created empty ──────────────────────────────────────
