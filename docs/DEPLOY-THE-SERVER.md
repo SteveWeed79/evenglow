@@ -720,6 +720,97 @@ reverting fixes nothing and hides which of the two it was.
 
 ---
 
+## Editing files on the box from Windows (WinSCP)
+
+`/etc/steading/api.env` holds an auth secret, a database password and a GitHub
+token. None of those is typeable and all of them arrive by copy and paste, which
+is precisely what `nano` in an SSH window is worst at. WinSCP opens the file in
+a normal Windows editor where Ctrl+V does what it says.
+
+### 1. Install and connect
+
+<https://winscp.net/eng/download.php> — the Installation package.
+
+| | |
+|---|---|
+| File protocol | **SFTP** |
+| Host name | the box's public IP |
+| Port | 22 |
+| User name | `ubuntu` |
+| Password | *leave empty* |
+
+**The key goes in Advanced → SSH → Authentication → Private key file.** Oracle
+Cloud disables password login, so without a key this fails with *no supported
+authentication methods available* and nothing about that message says "key".
+
+Point it at whatever `ssh` already uses — `%USERPROFILE%\.ssh\id_ed25519`, or
+the `.key` file downloaded when the instance was created. WinSCP will say it is
+not a PuTTY key and offer to convert it; say yes and let it save the `.ppk`
+beside the original. **It converts a copy — the original keeps working for
+`ssh`.**
+
+### 2. The part that will otherwise look like you got it wrong
+
+`/etc/steading` is `0750 root:root` and the file inside it is `0600`. `ubuntu`
+cannot read it, so a correctly configured WinSCP still shows **permission
+denied** on that folder. That is the box being right, not the setup being wrong.
+
+**Advanced → Environment → SFTP → SFTP server:**
+
+```
+sudo /usr/lib/openssh/sftp-server
+```
+
+Oracle's Ubuntu image gives `ubuntu` passwordless sudo, so this needs nothing
+else. The path is Ubuntu's; on a Red Hat–family box it is
+`/usr/libexec/openssh/sftp-server`.
+
+**Every file operation in that session is now root.** There is no confirmation
+step and no undo, so it is worth having only this one saved site pointed at this
+one box rather than making it the default for everything.
+
+Save the site so none of the above has to be found twice.
+
+### 3. Edit, then check what you left behind
+
+Navigate to `/etc/steading`, select `api.env`, press **F4**. Paste, save, close —
+WinSCP uploads on save.
+
+Then, in the SSH window:
+
+```
+sudo ls -l /etc/steading/api.env
+sudo systemctl restart steading-api
+```
+
+**Expect `-rw------- 1 root root`.** An upload can come back `0644`, and a
+world-readable file holding a database password is a worse outcome than the
+typing this was meant to avoid. If it moved:
+
+```
+sudo chown root:root /etc/steading/api.env
+sudo chmod 0600 /etc/steading/api.env
+```
+
+The service reads its environment once at startup, so nothing you edit here
+takes effect until that restart.
+
+### If you would rather not hand root an SFTP session
+
+Leave the SFTP server setting alone, drop the file in `/home/ubuntu/` where
+`ubuntu` can write, and put it in place with one command that is explicit about
+mode and owner:
+
+```
+sudo install -m 0600 -o root -g root /home/ubuntu/api.env /etc/steading/api.env
+sudo systemctl restart steading-api
+```
+
+Two steps instead of one, and the permissions cannot drift because they are
+stated rather than inherited from whatever the upload felt like.
+
+---
+
 ## Keeping it going
 
 ```
