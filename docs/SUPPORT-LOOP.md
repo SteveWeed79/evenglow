@@ -162,6 +162,40 @@ merged pair of unrelated bugs is a wrong fix.
 **Rate limiting is per device and per fingerprint**, not global: one farm
 having a bad morning must not silence another farm's first report.
 
+### The listing lags, and that broke this twice
+
+Both times the loop was used in anger it produced duplicate issues, and the
+second cause is not the first.
+
+**#95 and #96** — two held reports arriving a second apart, both searching,
+both finding nothing because neither had created its issue yet, both creating
+one. Check-then-act across a network round trip. Fixed by serialising filings
+per fingerprint.
+
+**#113 to #116** — five held reports, drained *sequentially*, still four
+issues. The single-flight was working perfectly. `GET /issues?labels=` is a
+**listing**, and GitHub's listings are eventually consistent: a just-created
+issue is absent from them for roughly five to twenty seconds. The fifth report,
+twenty seconds after the fourth, found its issue and commented — which is what
+identified the window.
+
+Ordering our own calls cannot fix this, because the staleness begins *after*
+the create returns — the exact moment we know the issue number and the listing
+does not. So the server remembers what it opened, keyed by repository and
+fingerprint, and prefers that over asking. The number is then **checked rather
+than trusted**, by reading the single issue (strongly consistent, unlike the
+listing): §3 wants an *open* issue, so a defect that was closed and reported
+again opens a fresh one.
+
+The memory is in-process and deliberately so — the tracker is the durable
+record, and a restart falls back to a listing that has long since caught up.
+
+> **The suite passed through both.** The fake tracker indexed an issue the
+> instant it was created, so it was more consistent than the real service and
+> tested a race that could not happen. A fake that is kinder than production is
+> not a test. `tests/unit/support-filing.test.ts` lags by default now, and the
+> caught-up case is the one that has to be asked for.
+
 ---
 
 ## 4. What is deliberately not in this
