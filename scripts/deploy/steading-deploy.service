@@ -1,0 +1,40 @@
+# One deployment attempt. Started by steading-deploy.timer, not by hand —
+# though `sudo systemctl start steading-deploy` is a fine way to force one.
+#
+#   sudo cp scripts/deploy/steading-deploy.{service,timer} /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now steading-deploy.timer
+#
+# ## Why the box pulls instead of GitHub pushing
+#
+# The obvious alternative is an SSH step in the workflow. It would mean GitHub
+# holding a private key that opens a shell on the machine with every farm's
+# records on it, and port 22 reachable from the runner ranges — which are large
+# enough to be the internet. This way there is no inbound access and no key to
+# leak, and the only thing GitHub can do is move a branch.
+#
+# The cost is up to five minutes of latency. For an app whose clients queue
+# offline by design, that is not a cost.
+
+[Unit]
+Description=Deploy Steading from the release branch
+Documentation=https://github.com/SteveWeed79/steading/blob/main/docs/DEPLOY-THE-SERVER.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+
+# Root, because it restarts steading-api and chowns the checkout. It is a
+# scheduled job rather than a listening service, so it has no attack surface of
+# its own beyond the repository it pulls from.
+User=root
+ExecStart=/opt/steading/scripts/deploy/deploy.sh
+
+# A pull that hangs on a network that is not coming back must not sit there
+# until the next one starts underneath it.
+TimeoutStartSec=600
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=steading-deploy

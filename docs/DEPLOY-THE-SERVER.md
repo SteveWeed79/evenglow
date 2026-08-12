@@ -434,6 +434,91 @@ sudo resize2fs /dev/sda1        # ext4. `sudo xfs_growfs /` if df -Th says xfs
 
 ---
 
+## Deploying automatically
+
+```
+sudo cp /opt/steading/scripts/deploy/steading-deploy.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now steading-deploy.timer
+systemctl list-timers steading-deploy
+```
+
+That is it. The box checks for a new release every five minutes, and a check
+that finds nothing costs one `git fetch` and exits.
+
+### The box pulls; GitHub is never given a key
+
+The obvious shape is an SSH step in the workflow — a private key in GitHub
+Secrets, port 22 open to the runner ranges, the runner driving the box. It
+trades a real property for convenience: **GitHub would hold a credential that
+opens a shell on the machine with every farm's records on it**, and the ranges
+it would have to be reachable from are large enough to be the internet.
+
+Pulling inverts that. Nothing inbound is opened, there is no key anywhere for a
+leaked token to expose, and the only thing GitHub can do is move a branch. The
+cost is up to five minutes of latency — which, for an app whose clients queue
+offline by design, is not a cost.
+
+### `release`, not `main`
+
+The box follows a branch called **`release`**, and CI pushes it *only* after
+`verify` goes green on `main` (`.github/workflows/ci.yml`). So a red build
+cannot reach a farm during the minutes between a bad merge and somebody
+noticing.
+
+The push is a plain fast-forward with no `--force`. If `release` and `main` ever
+diverge the workflow fails rather than dragging the server to wherever the last
+green run happened to be — a person should look at that.
+
+`deploy.sh` refuses anything but a fast-forward too, so a box somebody edited in
+place at 6am stops and says so instead of silently resolving it.
+
+### A dev branch
+
+Yes, and there are two versions of it depending on how much the box is carrying.
+
+**While nothing depends on the server**, point it at a branch:
+
+```
+echo 'STEADING_REF=dev' | sudo tee /etc/steading/deploy.env
+sudo systemctl start steading-deploy
+```
+
+`deploy.sh` reads that file, so the timer picks it up on the next tick. Put it
+back to `release` — or delete the file — when you are done.
+
+**Once somebody else is testing against it, don't.** Your tester's phone is
+pointed at `api.swbuild.dev`, and repointing the box at `dev` repoints hers with
+it. At that stage the second version is worth the hour:
+
+- a second `A` record, `api-dev.swbuild.dev`, at the same box
+- a second site block in the Caddyfile, proxying to `127.0.0.1:3002`
+- a copy of the unit as `steading-api-dev`, with `PORT=3002`, its own
+  `/etc/steading/api-dev.env`, and `MONGODB_DB=steading_dev` so it cannot touch
+  real records
+- a copy of the timer with `STEADING_REF=dev` against a second checkout
+
+Twelve gigabytes and two cores carry both without noticing — the constraint was
+never compute. **Use a separate database, not a separate collection prefix.**
+The whole tenancy model is `scoped(orgId)` inside one database, and a dev farm
+sharing that database with a real one is the exact thing every isolation test
+in the repo exists to prevent.
+
+### Watching it
+
+```
+journalctl -u steading-deploy -n 50        # what the last runs did
+journalctl -u steading-deploy -f           # follow the next one
+systemctl list-timers steading-deploy      # when it last ran, when it next will
+```
+
+A failed deployment leaves the previous version running and prints the last
+thirty lines of the API's log plus the command to go back. It does not roll back
+by itself: the new code may be fine and the database unreachable, in which case
+reverting fixes nothing and hides which of the two it was.
+
+---
+
 ## Keeping it going
 
 ```
