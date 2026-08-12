@@ -177,12 +177,19 @@ many farms there are:
 **Roughly $125 a year.** The masterplan's *"same box as your other services, or
 a managed host?"* has an answer: **the box, and it is already rented.**
 
-An Oracle Cloud Always Free Ampere A1 allocation is 4 ARM cores, 24 GB of RAM,
-200 GB of block storage and 10 TB a month of egress — more machine than this
-workload will ever notice, and on a pay-as-you-go account it is not subject to
-the idle reclamation that affects trial accounts. Fastify and MongoDB both run
-there, and it is what D10 describes: one long-running process with a stable
-connection pool.
+An Oracle Cloud Always Free Ampere A1 allocation is **2 ARM cores and 12 GB of
+RAM** as of August 2026, with 200 GB of block storage and 10 TB a month of
+egress — still far more machine than this workload will notice, and on a
+pay-as-you-go account it is not subject to the idle reclamation that affects
+trial accounts. Fastify and MongoDB both run there, and it is what D10
+describes: one long-running process with a stable connection pool.
+
+**It was 4 cores and 24 GB when this was written, and Oracle halved it.** Noted
+with a date rather than quietly corrected, because it is the one number here
+somebody else controls — and because nothing downstream moved: the bill is still
+$0, break-even is still three or four farms, and the workload was never within
+an order of magnitude of either figure. What a change like this *would* threaten
+is a plan that had started treating the headroom as a resource. This one has not.
 
 **ARM is not a blocker, and this was checked rather than assumed.** The only
 native dependency in `apps/api` is `@node-rs/argon2`, and
