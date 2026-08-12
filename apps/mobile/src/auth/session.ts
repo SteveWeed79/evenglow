@@ -1,4 +1,5 @@
 import { apiBase, setAccessToken, syncHeaders } from '@steading/core/api';
+import type { LocalStore } from '@steading/core/db/port';
 import { localStore } from '@steading/core/db/store';
 import { z } from 'zod';
 import { roleSchema } from '@steading/contracts';
@@ -398,6 +399,47 @@ export function refreshSession(): Promise<CachedClaims | null> {
   return refreshing;
 }
 
+/**
+ * A session-end breadcrumb, which must never be the reason the app will not
+ * open.
+ *
+ * **`localStore()` throws synchronously when no store is installed, so
+ * `.catch()` chained onto the call never runs.** Both refusal paths below were
+ * written as
+ *
+ *   await localStore().recordSessionEnd({ … }).catch(() => undefined);
+ *
+ * which reads as belt-and-braces and is not: the `.catch` is attached to the
+ * result of `recordSessionEnd`, and execution never gets that far. The throw
+ * escapes `runRefresh`, and `start.ts` awaits this **eighteen lines before it
+ * opens the store** — because the database is per-farm and the orgId comes
+ * from the session. So the store genuinely is not installed yet on the boot
+ * path, and this was fatal there by construction.
+ *
+ * It shipped because it needs a server that **answers**. An unreachable origin
+ * throws in `fetch` and returns cached claims without ever reaching here; only
+ * a live server refusing a token gets this far. Pointing a device that had
+ * been talking to a laptop at a real deployment does exactly that — the token
+ * was signed with the other server's secret — and the app that came up said
+ * "Steading could not start. No local store installed", over an intact
+ * database, having failed at a diagnostic.
+ *
+ * The rule this restores is the one stated for the malformed-pair branch
+ * further down, in this same function: nothing on the boot path may throw.
+ * Losing a breadcrumb is a smaller loss than losing the app, and a device that
+ * cannot record why it signed out can still be asked.
+ */
+async function noteSessionEnd(
+  end: Parameters<LocalStore['recordSessionEnd']>[0],
+): Promise<void> {
+  try {
+    await localStore().recordSessionEnd(end);
+  } catch {
+    // Includes the store not being open yet, which is the ordinary state of
+    // the boot path and the whole reason this wrapper exists.
+  }
+}
+
 async function runRefresh(): Promise<CachedClaims | null> {
   const refreshToken = await readRefreshToken();
   if (refreshToken === null) {
@@ -411,9 +453,7 @@ async function runRefresh(): Promise<CachedClaims | null> {
      * would put a fault on the most ordinary state the app has.
      */
     if ((await readCachedClaims()) !== null) {
-      await localStore()
-        .recordSessionEnd({ at: Date.now(), reason: 'no-token' })
-        .catch(() => undefined);
+      await noteSessionEnd({ at: Date.now(), reason: 'no-token' });
     }
     return null;
   }
@@ -465,13 +505,11 @@ async function runRefresh(): Promise<CachedClaims | null> {
      * The server's own sentence, never one invented here. `detail` is bounded
      * and the token is not in it: this is meant to be screenshotted.
      */
-    await localStore()
-      .recordSessionEnd({
-        at: Date.now(),
-        reason: 'refused',
-        ...(await refusalDetail(res)),
-      })
-      .catch(() => undefined);
+    await noteSessionEnd({
+      at: Date.now(),
+      reason: 'refused',
+      ...(await refusalDetail(res)),
+    });
 
     await clearCredentials();
     setAccessToken(null);
