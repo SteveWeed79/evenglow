@@ -146,6 +146,29 @@ chown -R "$SERVICE_USER:$SERVICE_USER" "$REPO_DIR"
 # `deploy.sh` sets it too; doing it here means the first run is already clean.
 git config --system --get-all safe.directory 2>/dev/null | grep -qxF "$REPO_DIR" \
   || git config --system --add safe.directory "$REPO_DIR"
+
+# ── so the operator commands work here without ceremony ─────────────────────
+#
+# Every command in `docs/OPERATOR.md` — farm:ls, farm:show, farm:grant,
+# db:usage, db:indexes — runs `tsx --env-file-if-exists=../../.env.local`. On a
+# developer's machine that file is the config. On this box the config lives in
+# /etc/steading/api.env instead, so all of them came up with
+#
+#   Error: MONGODB_URI is not set. Copy .env.example to .env.local ...
+#
+# and the workaround was two exports typed again after every reconnect — which
+# is also two chances to answer an operational question against the wrong
+# database, having pasted a stale URI from further up the scrollback.
+#
+# A symlink rather than a copy, deliberately: it reads the LIVE config, so it
+# cannot drift from what the service itself is using. Three things make it safe
+# — `.env*` is gitignored so it cannot be committed, the target stays 0600 and
+# root-owned so only sudo reads it, and `deploy.sh`'s chown touches the link
+# rather than the file behind it.
+if [ ! -e "$REPO_DIR/.env.local" ]; then
+  ln -s /etc/steading/api.env "$REPO_DIR/.env.local"
+  note "linked .env.local -> /etc/steading/api.env, so sudo pnpm farm:ls works"
+fi
 note "ready"
 
 # ── 5. The secrets file, created empty ──────────────────────────────────────
