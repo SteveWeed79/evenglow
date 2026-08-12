@@ -1,0 +1,34 @@
+# Check for a new release every five minutes.
+#
+#   sudo systemctl enable --now steading-deploy.timer
+#   systemctl list-timers steading-deploy      # when it last ran and next will
+#
+# Five minutes is a compromise between "a fix I just merged is live" and "the
+# box is not hammering GitHub". A run that finds nothing new costs one `git
+# fetch` and exits before touching anything — `deploy.sh` compares the commit
+# before and after and says "already on <sha>".
+
+[Unit]
+Description=Check for a new Steading release
+Documentation=https://github.com/SteveWeed79/steading/blob/main/docs/DEPLOY-THE-SERVER.md
+
+[Timer]
+# Not immediately at boot. The box has just started; mongod, the API and Caddy
+# are all coming up, and a deployment landing in the middle of that turns one
+# event into two.
+OnBootSec=5min
+OnUnitActiveSec=5min
+
+# **Without this every box on this timer would fetch at the same second.** One
+# box is not a thundering herd, but the habit is worth keeping and it costs
+# nothing: a random offset up to a minute means the schedule stays roughly
+# five-minutely without being a metronome.
+RandomizedDelaySec=60
+
+# Survives the box being off. If it misses a window — a reboot, a maintenance
+# window, Oracle moving the instance — it runs once on the way back rather than
+# waiting for the next slot.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

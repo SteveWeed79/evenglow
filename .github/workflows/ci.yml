@@ -98,3 +98,41 @@ jobs:
       # here ships inside an APK and cannot be recalled from a device.
       - name: Secret hygiene
         run: pnpm check:secrets
+
+  # ── What the server is allowed to run ───────────────────────────────────────
+  #
+  # `release` is a branch that only ever points at a commit this workflow went
+  # green on. The farm server tracks it — never `main` — so a red build cannot
+  # reach a farm even for the minutes it takes somebody to notice and revert.
+  #
+  # ## Why this pushes a ref instead of deploying
+  #
+  # The obvious shape is an SSH step: put a private key in GitHub Secrets, open
+  # port 22 to GitHub's runner ranges, and have the runner drive the box. That
+  # trades a real property for convenience — **GitHub would hold a credential
+  # that opens a shell on the machine holding every farm's records**, and the
+  # runner ranges it would have to be reachable from are large enough to be the
+  # internet.
+  #
+  # Pulling inverts it. The box reaches out on a timer
+  # (`scripts/deploy/steading-deploy.timer`), nothing inbound is opened, and
+  # there is no key anywhere that a leaked GitHub token would hand over. The
+  # cost is latency — up to five minutes — which for an app whose clients queue
+  # offline by design is not a cost at all.
+  release:
+    needs: verify
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      # The built-in GITHUB_TOKEN, scoped to this. No secret to create, none to
+      # rotate, and it cannot reach anything outside this repository.
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # `--force` is deliberately absent. `release` must only ever move forward
+      # along main's history — a fast-forward that fails means the two have
+      # diverged, and the right answer to that is a person looking rather than
+      # a server being handed whatever the last green run happened to be.
+      - name: Move release to this commit
+        run: git push origin HEAD:refs/heads/release

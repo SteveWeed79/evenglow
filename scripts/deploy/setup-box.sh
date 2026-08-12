@@ -176,9 +176,18 @@ fi
 say "Installing the service"
 sed "s#/opt/steading#${REPO_DIR}#g" \
   "$REPO_DIR/scripts/deploy/steading-api.service" > /etc/systemd/system/steading-api.service
+sed "s#/opt/steading#${REPO_DIR}#g" \
+  "$REPO_DIR/scripts/deploy/steading-deploy.service" > /etc/systemd/system/steading-deploy.service
+cp "$REPO_DIR/scripts/deploy/steading-deploy.timer" /etc/systemd/system/steading-deploy.timer
 systemctl daemon-reload
 systemctl enable steading-api >/dev/null
 note "enabled (starts on boot)"
+
+# Installed but NOT started. Automatic deployment onto a box whose two secrets
+# are still blank would restart a service that cannot come up, every five
+# minutes, and bury the real reason under the noise. Turn it on once the thing
+# is known to work.
+note "steading-deploy.timer installed but not started — see DEPLOY-THE-SERVER"
 
 # ── 7. Caddy, and with it the certificate ───────────────────────────────────
 say "Caddy, for $DOMAIN"
@@ -233,5 +242,12 @@ $(printf '\033[1m')Then check it from anywhere:$(printf '\033[0m')
 
   That is the address that goes into eas.json's preview-farm profile. It is
   compiled into the APK, so changing it later means another build.
+
+$(printf '\033[1m')Once it works, deployments can look after themselves:$(printf '\033[0m')
+
+       sudo systemctl enable --now steading-deploy.timer
+
+  The box then follows the 'release' branch, which CI moves only after a green
+  build. Nothing inbound is opened and GitHub is given no key to this machine.
 
 DONE

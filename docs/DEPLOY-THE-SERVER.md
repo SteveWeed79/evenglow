@@ -310,6 +310,215 @@ the gate, so nothing downstream learns that promotions exist.
 
 ---
 
+## Moving the database onto the box
+
+Optional at first and eventually not: **Atlas's free M0 is 512 MB, and photos
+live in GridFS.** At roughly 1 MB of records and 30 MB of photos per farm-year
+(§4.1) that is about sixteen farm-years — but a farm photographing receipts and
+equipment gets there much faster, and the box has ~170 GB spare.
+
+This is what `ACCESS-AND-BILLING.md` §4.1a always described: Fastify and MongoDB
+on one free instance.
+
+### A standalone, not a replica set
+
+Checked rather than assumed. Multi-document transactions and change streams both
+require a replica set; this service uses neither. Every write is a single
+document, sync idempotency is one `upsertOne` with `$setOnInsert`, and nothing
+tails an oplog. GridFS works standalone. So one `mongod` is the correct shape
+here, not a compromise — and one process to reason about instead of three.
+
+### Two commands
+
+```
+sudo /opt/steading/scripts/deploy/setup-mongo.sh
+```
+
+Installs MongoDB 8, binds it to **127.0.0.1 only**, caps the WiredTiger cache at
+2 GB so it does not compete with the API for the same 12 GB, turns authorization
+on, and creates the `steading` account — printing its password once, because the
+only place it should live is `/etc/steading/api.env`.
+
+```
+sudo -E ATLAS_URI='mongodb+srv://…' \
+       LOCAL_URI='mongodb://steading:…@127.0.0.1:27017/steading?authSource=admin' \
+  /opt/steading/scripts/deploy/migrate-to-local-mongo.sh
+```
+
+Counts every collection on Atlas, stops the API, dumps, restores with `--drop`,
+counts again, and **refuses to declare success unless the two match document for
+document**. Then applies the indexes.
+
+Both URIs go through the environment rather than argv, because argv is visible
+in `ps` to every user on the box — the same rule `backup-mongo.sh` and
+`db:seed` follow.
+
+**Stopping the API costs nothing here**, which is worth using rather than
+attempting a live migration. The app is offline-first: a phone with no server
+queues its mutations and flushes them when one returns, which is the ordinary
+path exercised every time somebody logs eggs in a barn with no signal. A dump
+taken while writes are landing is a dump that silently misses some.
+
+### Never open 27017
+
+Not in iptables, not in Oracle's security list, not in `bindIp`. An
+internet-reachable MongoDB is found and ransomwared by automated scanners within
+hours — among the most reliably exploited services there is. The API is on the
+same box and reaches it over loopback.
+
+Authorization is on even so. A bug in the API that let somebody run code as the
+service user should not additionally hand them an unauthenticated database admin
+shell.
+
+### Afterwards
+
+**Leave the Atlas cluster alone for a week.** It is a free, off-site, known-good
+copy of the farm's records and costs nothing to keep until the box has proven
+itself.
+
+**Then backups are yours, and nobody else has a copy.**
+`scripts/backup-mongo.sh` is the job — dump, encrypt to a public key so the box
+can write backups it cannot read, upload; `restore` is a subcommand of the same
+script. §4.1a-i calls this a condition of the first real farm rather than a
+nicety, and it was already true on M0, which has no automated backups either.
+
+**Photos stay in GridFS**, and that was re-argued rather than assumed once the
+database moved — §4A.3 has the three reasons the box's own filesystem is not an
+improvement, and the one clock this starts.
+
+---
+
+## How much of the box this actually uses
+
+Worth knowing before spending an evening growing a disk, because the answer is
+"almost none of it":
+
+| | |
+|---|---|
+| Node 22, pnpm, the checkout and its dependencies | ~1.5 GB |
+| Caddy, and its logs | rolls at 10 MiB × 5 |
+| Farm records | ~1 MB per farm-year |
+| Photos | ~30 MB per farm-year, in GridFS |
+| SQLite | **none** — that lives on the handset |
+
+The last two are on the box only once the database is; before that they are in
+Atlas and the server is stateless. Either way a default 46.6 GB boot volume has
+roughly 37 GB spare — over a thousand farm-years. `df -h /` settles it in a line.
+
+Memory is the same story. The only component with a real appetite is argon2,
+bounded per hash at 19 MiB and `parallelism: 1`, so a hundred *simultaneous*
+sign-ins is under 2 GB — against a 90-day refresh token that makes sign-ins rare
+by construction.
+
+**Egress is the one free-tier resource this app can genuinely consume at scale**,
+because photo bytes stream through the API in both directions. That is the number
+to re-read in the console, not cores.
+
+### If you do need to grow the disk
+
+Three steps, and the middle one is the one people miss — a resized volume does
+not change `lsblk` until the device is rescanned, so `growpart` reports
+`NOCHANGE` and looks like a failure:
+
+```
+# 1. Console: Block Storage -> Boot Volumes -> Edit -> new size
+# 2. Make Linux notice
+sudo dd iflag=direct if=/dev/sda of=/dev/null count=1
+echo 1 | sudo tee /sys/class/block/sda/device/rescan
+
+# 3. Partition boundary, THEN the filesystem inside it. Only the first leaves
+#    the space unusable and looks like the resize did nothing.
+sudo growpart /dev/sda 1
+sudo resize2fs /dev/sda1        # ext4. `sudo xfs_growfs /` if df -Th says xfs
+```
+
+---
+
+## Deploying automatically
+
+```
+sudo cp /opt/steading/scripts/deploy/steading-deploy.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now steading-deploy.timer
+systemctl list-timers steading-deploy
+```
+
+That is it. The box checks for a new release every five minutes, and a check
+that finds nothing costs one `git fetch` and exits.
+
+### The box pulls; GitHub is never given a key
+
+The obvious shape is an SSH step in the workflow — a private key in GitHub
+Secrets, port 22 open to the runner ranges, the runner driving the box. It
+trades a real property for convenience: **GitHub would hold a credential that
+opens a shell on the machine with every farm's records on it**, and the ranges
+it would have to be reachable from are large enough to be the internet.
+
+Pulling inverts that. Nothing inbound is opened, there is no key anywhere for a
+leaked token to expose, and the only thing GitHub can do is move a branch. The
+cost is up to five minutes of latency — which, for an app whose clients queue
+offline by design, is not a cost.
+
+### `release`, not `main`
+
+The box follows a branch called **`release`**, and CI pushes it *only* after
+`verify` goes green on `main` (`.github/workflows/ci.yml`). So a red build
+cannot reach a farm during the minutes between a bad merge and somebody
+noticing.
+
+The push is a plain fast-forward with no `--force`. If `release` and `main` ever
+diverge the workflow fails rather than dragging the server to wherever the last
+green run happened to be — a person should look at that.
+
+`deploy.sh` refuses anything but a fast-forward too, so a box somebody edited in
+place at 6am stops and says so instead of silently resolving it.
+
+### A dev branch
+
+Yes, and there are two versions of it depending on how much the box is carrying.
+
+**While nothing depends on the server**, point it at a branch:
+
+```
+echo 'STEADING_REF=dev' | sudo tee /etc/steading/deploy.env
+sudo systemctl start steading-deploy
+```
+
+`deploy.sh` reads that file, so the timer picks it up on the next tick. Put it
+back to `release` — or delete the file — when you are done.
+
+**Once somebody else is testing against it, don't.** Your tester's phone is
+pointed at `api.swbuild.dev`, and repointing the box at `dev` repoints hers with
+it. At that stage the second version is worth the hour:
+
+- a second `A` record, `api-dev.swbuild.dev`, at the same box
+- a second site block in the Caddyfile, proxying to `127.0.0.1:3002`
+- a copy of the unit as `steading-api-dev`, with `PORT=3002`, its own
+  `/etc/steading/api-dev.env`, and `MONGODB_DB=steading_dev` so it cannot touch
+  real records
+- a copy of the timer with `STEADING_REF=dev` against a second checkout
+
+Twelve gigabytes and two cores carry both without noticing — the constraint was
+never compute. **Use a separate database, not a separate collection prefix.**
+The whole tenancy model is `scoped(orgId)` inside one database, and a dev farm
+sharing that database with a real one is the exact thing every isolation test
+in the repo exists to prevent.
+
+### Watching it
+
+```
+journalctl -u steading-deploy -n 50        # what the last runs did
+journalctl -u steading-deploy -f           # follow the next one
+systemctl list-timers steading-deploy      # when it last ran, when it next will
+```
+
+A failed deployment leaves the previous version running and prints the last
+thirty lines of the API's log plus the command to go back. It does not roll back
+by itself: the new code may be fine and the database unreachable, in which case
+reverting fixes nothing and hides which of the two it was.
+
+---
+
 ## Keeping it going
 
 ```
@@ -343,7 +552,7 @@ the free M0 tier has no automated backups either.
 |---|---|
 | `curl` hangs, no response at all | The Oracle ingress rule (step 2). Then the instance iptables: `sudo iptables -L INPUT -n --line-numbers` |
 | Certificate error, or Caddy will not start | DNS. `dig +short api.swbuild.dev` must return the box. Then `journalctl -u caddy -n 50` |
-| `{"ok":true}` but everything else fails | Atlas Network Access (step 3), or a wrong `MONGODB_URI` |
+| `{"ok":true}` but everything else fails | Atlas Network Access (step 3), or a wrong `MONGODB_URI`. On a local mongod: `systemctl status mongod` |
 | Service will not start | `systemctl status steading-api` then `journalctl -u steading-api -n 50`. Usually an empty `AUTH_SECRET` |
 | Restarting in a loop | It stops itself after five in a minute. The reason is in `systemctl status` |
 | Connects fine, but the farm is empty | `MONGODB_DB`. The default is `steading`; a cluster holding records under another name serves an empty one without complaining (step 5) |
