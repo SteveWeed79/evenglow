@@ -9,6 +9,7 @@
   },
   "scripts": {
     "start": "expo start --dev-client",
+    "start:usb": "expo start --dev-client --host localhost",
     "android": "pnpm stamp && expo run:android",
     "prebuild": "expo prebuild --platform android --clean",
     "export": "pnpm stamp && expo export --platform android --output-dir .expo-export",
