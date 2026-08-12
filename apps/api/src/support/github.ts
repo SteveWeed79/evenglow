@@ -188,12 +188,99 @@ export interface Filed {
  */
 const filing = new Map<string, Promise<unknown>>();
 
+function keyFor(config: SupportConfig, fingerprint: string): string {
+  return `${config.owner}/${config.repo}#${fingerprint}`;
+}
+
+/**
+ * What this process has already opened, because GitHub will not admit to it yet.
+ *
+ * **Serialising the calls was necessary and not sufficient.** After the
+ * single-flight above, five queued reports of one fault still produced four
+ * issues — #113 to #116, one to two seconds apart, each search returning
+ * nothing although the previous issue existed and the create had returned its
+ * number. The fifth report, twenty seconds later, found #116 and commented.
+ *
+ * `GET /issues?labels=` is a listing, and GitHub's listings are eventually
+ * consistent: a just-created issue is not in them for something between five
+ * and twenty seconds. No amount of ordering our own calls helps, because the
+ * staleness begins *after* the create returns — which is precisely the moment
+ * we know the answer and it does not.
+ *
+ * So remember it. A create tells us the number; the next report of the same
+ * fingerprint uses that instead of asking a question we already know the answer
+ * to. This is in-process and deliberately so — the tracker is the durable
+ * record, and a restart falls back to a listing that has long since caught up.
+ */
+const opened = new Map<string, number>();
+
+/**
+ * Bounded, because a server that runs for months must not accumulate a row per
+ * fingerprint it has ever seen. Insertion order is Map's own, so the oldest
+ * goes first, and losing one only costs a listing call that would by then have
+ * been correct anyway.
+ */
+const REMEMBERED = 500;
+
+/**
+ * Forgets what this process has opened. Tests only.
+ *
+ * Module state that outlives a test is a test that passes because of the one
+ * before it, and this map is keyed by fingerprint — which fixtures reuse.
+ */
+export function resetFiling(): void {
+  opened.clear();
+  filing.clear();
+}
+
+function remember(key: string, issue: number): void {
+  opened.set(key, issue);
+  if (opened.size > REMEMBERED) {
+    const oldest = opened.keys().next();
+    if (!oldest.done) opened.delete(oldest.value);
+  }
+}
+
+/**
+ * The issue this process opened for that fingerprint, if it is still open.
+ *
+ * Checked by number rather than trusted, and the distinction is the whole
+ * reason this is a round trip rather than a cache hit: §3 wants an **open**
+ * issue, so a defect that was fixed and closed and then reported again must
+ * open a fresh one instead of reviving a thread somebody deliberately shut.
+ *
+ * A single issue read by number is strongly consistent — it is the listing that
+ * lags, not the record — so this answers correctly in the window where the
+ * search does not.
+ */
+async function rememberedIssue(
+  config: SupportConfig,
+  key: string,
+): Promise<{ number: number; html_url: string } | undefined> {
+  const number = opened.get(key);
+  if (number === undefined) return undefined;
+
+  // Deleted, transferred, or a tracker having a bad minute: fall through to the
+  // listing rather than failing a report over an optimisation.
+  const issue = (await call(
+    config,
+    `/repos/${config.owner}/${config.repo}/issues/${number}`,
+  ).catch(() => null)) as { html_url?: string; state?: string } | null;
+
+  if (issue?.state !== 'open' || typeof issue.html_url !== 'string') {
+    opened.delete(key);
+    return undefined;
+  }
+
+  return { number, html_url: issue.html_url };
+}
+
 export function fileTicket(
   config: SupportConfig,
   bundle: SupportBundle,
   records: string | undefined,
 ): Promise<Filed> {
-  const key = `${config.owner}/${config.repo}#${bundle.fingerprint}`;
+  const key = keyFor(config, bundle.fingerprint);
   const previous = filing.get(key) ?? Promise.resolve();
 
   // A failed filing must not poison the ones behind it: the next report is
@@ -230,12 +317,25 @@ async function runFileTicket(
       ? await fileRecords(config, bundle.fingerprint, records).catch(() => null)
       : null;
 
-  const open = (await call(
-    config,
-    `/repos/${config.owner}/${config.repo}/issues?state=open&labels=${encodeURIComponent(label)}&per_page=1`,
-  )) as { number?: number; html_url?: string }[] | null;
+  /**
+   * What this process opened first, then the listing.
+   *
+   * The order is the fix: the listing cannot see an issue created a second ago
+   * (see `opened`), and this is exactly the case a queue of held reports
+   * produces every time somebody opens the support screen.
+   */
+  const key = keyFor(config, bundle.fingerprint);
+  const remembered = await rememberedIssue(config, key);
 
-  const existing = Array.isArray(open) ? open[0] : undefined;
+  const open =
+    remembered !== undefined
+      ? null
+      : ((await call(
+          config,
+          `/repos/${config.owner}/${config.repo}/issues?state=open&labels=${encodeURIComponent(label)}&per_page=1`,
+        )) as { number?: number; html_url?: string }[] | null);
+
+  const existing = remembered ?? (Array.isArray(open) ? open[0] : undefined);
 
   /**
    * Found: the issue accumulates evidence rather than multiplying.
@@ -249,6 +349,9 @@ async function runFileTicket(
       method: 'POST',
       body: { body: bodyFor(bundle, gistUrl) },
     });
+    // Found by listing or by memory, it is the answer either way — so the next
+    // report of this fault skips the listing entirely.
+    remember(key, existing.number);
     return { url: existing.html_url, created: false };
   }
 
@@ -257,14 +360,22 @@ async function runFileTicket(
     body: {
       title: titleFor(bundle),
       body: bodyFor(bundle, gistUrl),
-      // The fingerprint is the label, so the next arrival can find this
-      // without a search index that may be minutes behind.
+      // The fingerprint is the label, so the next arrival can find this without
+      // a search index that may be minutes behind. It is still labelled for
+      // every other reader — a second process, a person filtering the tracker —
+      // even though this one now remembers the number as well.
       labels: [label, 'from-a-farm'],
     },
-  })) as { html_url?: string } | null;
+  })) as { number?: number; html_url?: string } | null;
 
   const url = issue?.html_url;
   if (typeof url !== 'string') throw new HttpError(502, 'The issue tracker did not answer.');
+
+  /**
+   * The one moment the number is known and the listing does not have it yet.
+   * Everything above exists to use this.
+   */
+  if (typeof issue?.number === 'number') remember(key, issue.number);
 
   return { url, created: true };
 }
