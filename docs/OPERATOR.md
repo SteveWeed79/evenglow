@@ -384,7 +384,8 @@ app falls back to its share sheet — which works, and is not the loop.
    - **Repository access** → Only select repositories → `steading`
    - **Permissions** → Repository permissions → **Issues: Read and write**
    - Nothing else. It files issues and that is all it can do.
-2. Add two lines to `.env.local` **on the machine running the server**:
+2. Add two lines **on the machine running the server the app is built against**
+   — `.env.local` on a PC, `/etc/steading/api.env` on the box:
 
    ```
    SUPPORT_GITHUB_TOKEN=github_pat_...
@@ -395,6 +396,20 @@ app falls back to its share sheet — which works, and is not the loop.
 
 `.env.local` is gitignored and the token is read only by the server — it never
 reaches the app, which is why the route is unauthenticated and the token is not.
+
+### It is per server, and the check used to lie about which one
+
+Configuring this in a laptop checkout configures the laptop. A build pointed at
+the deployed box is asking the box, whose `/etc/steading/api.env` is a different
+file that `setup-box.sh` leaves commented out.
+
+`Check my setup` read the laptop's `.env.local` no matter where the build
+pointed, so it printed **reporting files issues to SteveWeed79/steading** on the
+morning a handset was being told *this server has nowhere to file a report*. It
+now reads `apps/mobile/.env` first and, when that is a real deployment, asks
+that server instead — an empty `POST /support`, which cannot become a ticket:
+501 is the gate closed, 400 is the gate open and the schema doing its job. See
+`scripts/lib/support-probe.mjs`; §7b of `DEPLOY-THE-SERVER.md` is the box half.
 
 ### Leave `SUPPORT_ACCEPT_RECORDS` alone while the repository is public
 

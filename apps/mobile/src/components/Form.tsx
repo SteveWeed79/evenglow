@@ -897,6 +897,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: SPACE.sm,
     minHeight: TAP.min,
+    /**
+     * **The words need room, and for a long time they only got it by accident.**
+     *
+     * There was no horizontal padding here at all. In a column that is
+     * invisible: the button stretches to the panel and the centred label has
+     * the whole width to sit in. Put two in a `flexDirection: 'row'` — which
+     * `Photos` does — and each one shrinks to its content instead, so the
+     * label ends up flat against a hairline border on both sides. Reported
+     * from a handset as the ugliest thing in the app, and it was.
+     *
+     * `SPACE.md` rather than something smaller because this is a glove target
+     * (R3): the padding is part of what the thumb is aiming at, not decoration
+     * around it.
+     */
+    paddingHorizontal: SPACE.md,
     borderRadius: RADII.softHead,
     borderWidth: StyleSheet.hairlineWidth,
   },

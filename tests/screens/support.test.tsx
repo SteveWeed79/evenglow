@@ -186,4 +186,54 @@ describe('when it cannot go', () => {
     expect(shared).toHaveLength(1);
     expect(await pendingTickets()).toHaveLength(0);
   });
+
+  /**
+   * **The answer goes under the button that asked for it.**
+   *
+   * Reported from a handset as pressing Send and nothing happening whatsoever
+   * — on the morning the answer was *this server has nowhere to file a
+   * report*. The app had said exactly that, in a panel rendered above the
+   * actions, off the top of a screen whose primary button is in the bottom
+   * third by R3. A verdict nobody can see is a verdict the app did not give.
+   *
+   * Asserted on reading order rather than left to the eye, because the fault
+   * is invisible on any screen short enough to fit — which is every screen a
+   * component test would otherwise be written against.
+   */
+  it('puts the verdict below the button rather than off the top of the screen', async () => {
+    noSignal();
+    const screen = await mount(<SupportScreen />);
+
+    await screen.press('support-send');
+
+    const read = screen.text();
+    expect(read).toContain('Kept on this phone');
+    expect(read.indexOf('Kept on this phone')).toBeGreaterThan(read.indexOf('Send this report'));
+  });
+
+  /** Success is read in the same glance, and had the same problem. */
+  it('puts a filed report below the button too', async () => {
+    serverTakesIt();
+    const screen = await mount(<SupportScreen />);
+
+    await screen.press('support-send');
+
+    const read = screen.text();
+    expect(read).toContain('That is filed');
+    expect(read.indexOf('That is filed')).toBeGreaterThan(read.indexOf('Send this report'));
+  });
+
+  /**
+   * The copy points at the other door, and the door moved when the panel did.
+   * "below" was true when the verdict sat above the buttons and became a wrong
+   * direction the moment it did not.
+   */
+  it('points at the share button in the direction it is actually in', async () => {
+    noSignal();
+    const screen = await mount(<SupportScreen />);
+
+    await screen.press('support-send');
+
+    expect(screen.text()).toContain('just above');
+  });
 });

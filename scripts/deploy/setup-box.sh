@@ -221,6 +221,34 @@ MONGODB_URI=
 TRUSTED_PROXY_HOPS=1
 
 PORT=3001
+
+# ── "Something is wrong" (docs/SUPPORT-LOOP.md) ─────────────────────────────
+#
+# The app's report button posts a bundle here and this server files it as a
+# GitHub issue. Without both lines below /support answers 501, and the app tells
+# the farm *this server has nowhere to file a report* and offers its share
+# sheet instead. That is a supported state — but it is not the loop, and it is
+# not what you want on the box you are testing against.
+#
+# **This is per-server, and that is what catches people.** Setting it in the
+# repo checkout on a laptop configures the laptop. A handset pointed at this box
+# is asking THIS file.
+#
+# A fine-grained token from
+# https://github.com/settings/personal-access-tokens/new
+#   Repository access -> Only select repositories -> steading
+#   Permissions -> Repository permissions -> Issues: Read and write
+# and nothing else. It files issues and that is the whole of what it can do.
+#SUPPORT_GITHUB_TOKEN=
+#SUPPORT_REPO=SteveWeed79/steading
+
+# Whether a farm's own records may ride along with a report (S5).
+#
+# LEAVE THIS OFF WHILE THE REPOSITORY IS PUBLIC. An issue on a public repo is
+# world-readable and a farm cannot meaningfully consent to that on a prompt in
+# a barn. The lean bundle is safe in public by construction — structure and
+# counts, never content — and this switch is the other half.
+#SUPPORT_ACCEPT_RECORDS=
 ENV
   chmod 0600 /etc/steading/api.env
   note "created /etc/steading/api.env — FILL IT IN before starting the service"

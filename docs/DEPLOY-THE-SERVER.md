@@ -287,6 +287,63 @@ means another build.
 
 ---
 
+## 7b. "Something is wrong" — turning it on for this box
+
+The app's report button posts a bundle to whichever server it was built
+against, and that server files it as a GitHub issue. Without a token and a repo
+`/support` answers 501 and the handset says **this server has nowhere to file a
+report**, then offers its share sheet instead. The share sheet works; it is not
+the loop.
+
+**This is configured per server, and that is the part that catches people.**
+Setting it in a repo checkout on a laptop configures the laptop. The moment the
+app is pointed at this box, the box's `/etc/steading/api.env` is the file being
+asked — and `setup-box.sh` leaves both lines commented out, so a box that has
+never been told is the normal state of a new one.
+
+1. Make a fine-grained token at
+   <https://github.com/settings/personal-access-tokens/new>:
+   - **Repository access** → Only select repositories → `steading`
+   - **Permissions** → Repository permissions → **Issues: Read and write**
+
+   Nothing else. It files issues and that is the whole of what it can do.
+
+2. On the box, uncomment and fill in the two lines the setup script left:
+
+   ```
+   sudo nano /etc/steading/api.env
+   ```
+
+   ```
+   SUPPORT_GITHUB_TOKEN=github_pat_...
+   SUPPORT_REPO=SteveWeed79/steading
+   ```
+
+3. Restart, because the environment is read once at startup:
+
+   ```
+   sudo systemctl restart steading-api
+   ```
+
+4. Check it from the PC without filing anything:
+
+   ```
+   curl.exe -s -o NUL -w "%{http_code}\n" -X POST -H "content-type: application/json" -d "{}" https://api.swbuild.dev/support
+   ```
+
+   **`400` is the good answer.** The route checks its configuration before it
+   parses the body, so an empty body gets past the gate and is refused by the
+   schema — which proves a token is set without creating an issue to prove it.
+   `501` is the gate still closed. `Check my setup` runs exactly this probe and
+   says which server it asked.
+
+**Leave `SUPPORT_ACCEPT_RECORDS` alone while the repository is public.** It
+governs the opt-in second half — the farm's own records — and a public tracker
+is a public place to put them. The lean bundle is safe in public by
+construction: structure and counts, never content.
+
+---
+
 ## 8. Two devices, one farm
 
 **Do the tablet first, and the order matters.** Everything on it today is
@@ -660,6 +717,97 @@ A failed deployment leaves the previous version running and prints the last
 thirty lines of the API's log plus the command to go back. It does not roll back
 by itself: the new code may be fine and the database unreachable, in which case
 reverting fixes nothing and hides which of the two it was.
+
+---
+
+## Editing files on the box from Windows (WinSCP)
+
+`/etc/steading/api.env` holds an auth secret, a database password and a GitHub
+token. None of those is typeable and all of them arrive by copy and paste, which
+is precisely what `nano` in an SSH window is worst at. WinSCP opens the file in
+a normal Windows editor where Ctrl+V does what it says.
+
+### 1. Install and connect
+
+<https://winscp.net/eng/download.php> — the Installation package.
+
+| | |
+|---|---|
+| File protocol | **SFTP** |
+| Host name | the box's public IP |
+| Port | 22 |
+| User name | `ubuntu` |
+| Password | *leave empty* |
+
+**The key goes in Advanced → SSH → Authentication → Private key file.** Oracle
+Cloud disables password login, so without a key this fails with *no supported
+authentication methods available* and nothing about that message says "key".
+
+Point it at whatever `ssh` already uses — `%USERPROFILE%\.ssh\id_ed25519`, or
+the `.key` file downloaded when the instance was created. WinSCP will say it is
+not a PuTTY key and offer to convert it; say yes and let it save the `.ppk`
+beside the original. **It converts a copy — the original keeps working for
+`ssh`.**
+
+### 2. The part that will otherwise look like you got it wrong
+
+`/etc/steading` is `0750 root:root` and the file inside it is `0600`. `ubuntu`
+cannot read it, so a correctly configured WinSCP still shows **permission
+denied** on that folder. That is the box being right, not the setup being wrong.
+
+**Advanced → Environment → SFTP → SFTP server:**
+
+```
+sudo /usr/lib/openssh/sftp-server
+```
+
+Oracle's Ubuntu image gives `ubuntu` passwordless sudo, so this needs nothing
+else. The path is Ubuntu's; on a Red Hat–family box it is
+`/usr/libexec/openssh/sftp-server`.
+
+**Every file operation in that session is now root.** There is no confirmation
+step and no undo, so it is worth having only this one saved site pointed at this
+one box rather than making it the default for everything.
+
+Save the site so none of the above has to be found twice.
+
+### 3. Edit, then check what you left behind
+
+Navigate to `/etc/steading`, select `api.env`, press **F4**. Paste, save, close —
+WinSCP uploads on save.
+
+Then, in the SSH window:
+
+```
+sudo ls -l /etc/steading/api.env
+sudo systemctl restart steading-api
+```
+
+**Expect `-rw------- 1 root root`.** An upload can come back `0644`, and a
+world-readable file holding a database password is a worse outcome than the
+typing this was meant to avoid. If it moved:
+
+```
+sudo chown root:root /etc/steading/api.env
+sudo chmod 0600 /etc/steading/api.env
+```
+
+The service reads its environment once at startup, so nothing you edit here
+takes effect until that restart.
+
+### If you would rather not hand root an SFTP session
+
+Leave the SFTP server setting alone, drop the file in `/home/ubuntu/` where
+`ubuntu` can write, and put it in place with one command that is explicit about
+mode and owner:
+
+```
+sudo install -m 0600 -o root -g root /home/ubuntu/api.env /etc/steading/api.env
+sudo systemctl restart steading-api
+```
+
+Two steps instead of one, and the permissions cannot drift because they are
+stated rather than inherited from whatever the upload felt like.
 
 ---
 

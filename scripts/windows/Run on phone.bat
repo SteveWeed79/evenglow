@@ -252,6 +252,8 @@ rem
 rem With the reverse in place, --host localhost puts localhost:8081 in the QR
 rem instead of a LAN address, so the phone resolves it over the cable. No wifi,
 rem no firewall rule, no "are you both on the same network".
+call "%~dp0_shared.bat" :free_metro_port
+
 set "USB_METRO="
 adb -s !PHONE! reverse tcp:8081 tcp:8081 >nul 2>&1
 if not errorlevel 1 set "USB_METRO=1"
