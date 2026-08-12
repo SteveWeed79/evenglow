@@ -246,7 +246,10 @@ $(printf '\033[1m')Set up. Three things left, and only you can do them.$(printf 
 
 $(printf '\033[1m')Then check it from anywhere:$(printf '\033[0m')
 
-       curl https://${DOMAIN}/health          -> {"ok":true}
+       curl -i https://${DOMAIN}/health       -> {"ok":true}
+
+     On Windows write curl.exe, not curl: in PowerShell 'curl' is an
+     alias for Invoke-WebRequest and stops on a parsing prompt.
 
   That is the address that goes into eas.json's preview-farm profile. It is
   compiled into the APK, so changing it later means another build.

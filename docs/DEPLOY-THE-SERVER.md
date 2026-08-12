@@ -196,17 +196,42 @@ sudo systemctl start steading-api
 systemctl status steading-api
 ```
 
-Then from your own machine, not the box:
+Then from your own machine, not the box.
 
-```
-curl https://api.swbuild.dev/health
+**On Windows, write `curl.exe` and not `curl`.** In PowerShell `curl` is an
+alias for `Invoke-WebRequest`, which tries to parse the reply as a web page and
+stops on a *"Script Execution Risk"* prompt instead of showing you anything.
+Windows 10 and later ship the real thing at `C:\Windows\System32\curl.exe`; the
+`.exe` is what gets past the alias.
+
+```powershell
+curl.exe -i https://api.swbuild.dev/health
 ```
 
-`{"ok":true}` and you are done with the server.
+```bash
+curl -i https://api.swbuild.dev/health     # macOS, Linux, Git Bash
+```
+
+`-i` prints the status line and headers as well as the body, which is the
+difference between "it did not work" and knowing which of five things to look
+at. `{"ok":true}` and you are done with the server.
 
 `/health` deliberately touches nothing — it opens no database connection — so a
 green health check means the process is up, and it is still worth doing one real
-request afterwards to prove Atlas is reachable.
+request afterwards to prove the database is reachable.
+
+**What the reply tells you:**
+
+| | |
+|---|---|
+| `200` and `{"ok":true}` | Done |
+| Hangs, then times out | The Oracle ingress rule (step 2) |
+| `Connection refused` | The port is open, Caddy is not running |
+| A certificate error | `sudo journalctl -u caddy -n 50` — usually DNS was not ready when it asked |
+| `502 Bad Gateway` | Caddy is up, the API is not. `sudo journalctl -u steading-api -n 50` |
+
+`502` is the likeliest one after a first run, because the service will not start
+until `/etc/steading/api.env` has both values in it.
 
 ---
 

@@ -102,9 +102,6 @@ else
   exit 1
 fi
 
-# Indexes are in the dump, but this is the authoritative definition and it is
-# idempotent — cheaper to run than to wonder about. An unindexed sync query is
-# not an error, it is a farm whose app got slower for no visible reason.
 say "Applying indexes"
 # The same command §5b of DEPLOY-THE-SERVER documents, so there is one way to do
 # this rather than two that can drift. `mongorestore` brings the dump's indexes
@@ -123,7 +120,7 @@ $(printf '\033[1m')Data is on the box. Two things left.$(printf '\033[0m')
 
        sudo nano /etc/steading/api.env      # MONGODB_URI= the LOCAL_URI
        sudo systemctl start steading-api
-       curl https://api.swbuild.dev/health
+       curl -i https://api.swbuild.dev/health      # curl.exe on Windows
 
   2. Leave the Atlas cluster alone for a week before deleting anything. It is
      a free, off-site, known-good copy of the farm's records, and it costs
