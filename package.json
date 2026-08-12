@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit && pnpm typecheck:mobile",
     "typecheck:mobile": "pnpm --filter @steading/mobile typecheck",
     "mobile": "pnpm --filter @steading/mobile start",
+    "mobile:usb": "pnpm --filter @steading/mobile start:usb",
     "mobile:android": "pnpm --filter @steading/mobile android",
     "mobile:prebuild": "pnpm --filter @steading/mobile prebuild",
     "mobile:export": "pnpm --filter @steading/mobile export",

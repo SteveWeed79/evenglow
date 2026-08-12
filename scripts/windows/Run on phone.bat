@@ -236,7 +236,35 @@ if 1==1 (
 
 :connect
 echo.
+rem  Metro down the cable as well
+rem
+rem The app fetches its JavaScript from Metro on 8081, and until now that was
+rem the ONE part of this loop still going over wifi - the QR code carried this
+rem computer's LAN address. So a tablet on another network, or a Windows
+rem Firewall prompt dismissed months ago, produced "failed to load" with
+rem nothing on screen connecting it to either cause.
+rem
+rem `adb reverse` makes the DEVICE's own localhost reach this computer back
+rem down the USB cable - what :set_usb_address already does for the farm server,
+rem and what the comment there says React Native has always done for Metro.
+rem Nothing in this repo actually did it.
+rem
+rem With the reverse in place, --host localhost puts localhost:8081 in the QR
+rem instead of a LAN address, so the phone resolves it over the cable. No wifi,
+rem no firewall rule, no "are you both on the same network".
+set "USB_METRO="
+adb -s !PHONE! reverse tcp:8081 tcp:8081 >nul 2>&1
+if not errorlevel 1 set "USB_METRO=1"
+
 echo   [2 of 2] Starting the app.
+echo.
+if defined USB_METRO (
+  echo   Metro - down the USB cable, same as everything else.
+) else (
+  echo   Metro - over wifi, because the USB route could not be opened.
+  echo   The phone and this computer have to be on the same network,
+  echo   and Windows Firewall has to allow port 8081.
+)
 echo.
 echo   A big square QR CODE will appear below in a moment.
 echo.
@@ -250,7 +278,11 @@ echo   Leave this window OPEN while you use the app.
 echo   To stop, close this window.
 echo.
 
-call pnpm mobile
+if defined USB_METRO (
+  call pnpm mobile:usb
+) else (
+  call pnpm mobile
+)
 
 :stopped
 
