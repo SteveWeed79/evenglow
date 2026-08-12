@@ -159,14 +159,40 @@ jobs:
       # rotate, and it cannot reach anything outside this repository.
       contents: write
     steps:
-      # Same default as `verify` — the branch chosen in the dispatch form — so
-      # what was tested and what ships cannot come apart.
+      # Same default ref as `verify` — the branch chosen in the dispatch form —
+      # so what was tested and what ships cannot come apart.
       - uses: actions/checkout@v4
+        with:
+          # **The whole history, and the first promote failed without it.**
+          #
+          # `actions/checkout` clones one commit by default. Pushing to another
+          # branch then asks git to prove the move is a fast-forward using
+          # objects it does not have, and it refuses:
+          #
+          #   ! [rejected]  HEAD -> release (fetch first)
+          #   hint: Updates were rejected because the remote contains work that
+          #   hint: you do not have locally.
+          #
+          # Which reads as `release` having diverged, and it had not — it was
+          # four commits behind main and a perfectly ordinary fast-forward. The
+          # hint sends you looking for a divergence that does not exist.
+          #
+          # Reproduced with a `file://` remote, which honours --depth where a
+          # plain local clone silently ignores it: shallow rejects with that
+          # exact text, full succeeds.
+          #
+          # Only this job needs it. `verify` stays shallow, because a full
+          # clone on every pull request is a cost for no benefit.
+          fetch-depth: 0
 
       # `--force` is deliberately absent, and it is the guard rather than a
       # tidiness preference: `release` may only move FORWARD. A promote that
       # would rewind the server — shipping an older commit over a newer one —
       # fails here instead of quietly handing a farm yesterday's code.
+      #
+      # With the full history above, that check now happens for the right
+      # reason: git can see the ancestry and refuses a real rewind, rather than
+      # refusing everything because it cannot see anything.
       #
       # To go back on purpose, that is a revert commit through the normal route,
       # so what the server runs stays a thing that exists in main's history.
