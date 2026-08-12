@@ -730,7 +730,7 @@ landed. Everything that is a design decision is listed below it, unbuilt.
 
 ---
 
-## 12 — The way home for a farm with no account — **built**
+## 12 — The way home for a farm with no account — **built, except a restored photo's bytes**
 
 **Cost of skipping it:** one farm in the app has no route back from a lost
 phone, and it is the one the whole local-first design was built to welcome.
@@ -810,6 +810,57 @@ media permission — asking for every document on the phone in order to look at
 one — and Android Auto Backup, which is off in `app.json` on purpose because it
 would put an accountless farm's records into Google's backup without anybody
 agreeing to it.
+
+### 12c. TODO — a restored photo says its bytes exist, and nothing re-sends them
+
+**The one part of the way home that is not built.** Everything above rebuilds a
+farm's *records*; this is the gap where its *photographs* do not come with them,
+and the failure is quieter than a missing file.
+
+**What already works, and it is more than `ACCESS-AND-BILLING.md` §4.1a-i
+claims.** That section says a total server loss is recoverable *"in principle"*
+because *"no mechanism exists for it — `/snapshot` runs server-to-client only"*.
+True of `/snapshot`, and stale: `restore.ts` goes through `enqueue`, so restored
+records are queued mutations and they flush. Device to file to a fresh database
+is a working rebuild today. **§4.1a-i should be corrected when this is done.**
+
+**Where it stops.** `BACKUP_EXCLUDES = ['photographs']`, deliberately — A2.7 is
+right that a backup which quietly grew to 300 MB is one that fails to send with
+no explanation. But `buildBackup` walks every entity, so a photo's *record* is
+in the file, and the payload it carries is the projection's current value —
+including `uploadedAt`. On a rebuilt server that leaves:
+
+- a record asserting the bytes are on the server;
+- `sync/photos.ts` uploading only when `uploadedAt === undefined`, so the device
+  still holding the file never offers them again;
+- every download answering 404 — the state `download()` already describes as
+  *"a record whose `uploadedAt` says the bytes exist and the server disagrees."*
+
+So the metadata does not merely omit the bytes, it makes a claim about them that
+nothing will ever repair. A farm sees a gallery of records with no pictures in
+it and no reason given.
+
+**The fix, and it is small.** Drop `uploadedAt` from a photo payload as it is
+restored. The transfer loop then sees a photo whose bytes are not up yet,
+offers them, and the device that still has the file re-pushes it. Two notes for
+whoever does it:
+
+- **`restore.ts` currently enqueues `entry.payload` verbatim**, which is the
+  right default for every other entity — the field to strip is photo-specific,
+  so it wants naming rather than a general rule about optional fields.
+- **The bytes have to still be on a device.** A photo whose only copy was on the
+  server is gone either way, and the restore should not imply otherwise. Worth a
+  sentence on the restore screen rather than silence.
+
+**The test is the interesting half**, because it is a rehearsal nothing has
+run: build a file on a device that has synced photos, wipe the server side,
+restore, and assert the bytes reach the server again. §4.1a-i calls
+device-re-sync *"the cheapest disaster insurance this design could ever
+grow"* — this is what turns that from a latent property into one that is
+exercised.
+
+**Cheapest while there is no user data.** Changing restore semantics later means
+reasoning about farms that are mid-restore when the build changes under them.
 
 ---
 
