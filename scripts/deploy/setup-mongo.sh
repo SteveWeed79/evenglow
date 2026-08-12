@@ -37,6 +37,21 @@ BIND_IP="127.0.0.1"
 # for a working set this size and which competes with the API for the same RAM.
 CACHE_GB="${STEADING_MONGO_CACHE_GB:-2}"
 
+# **Which database the application account is granted on, and it is not always
+# `steading`.**
+#
+# The API chooses its database from MONGODB_DB, independently of the connection
+# string (`db/client.ts`). An Atlas cluster named `steadingdb` holding a
+# database also named `steadingdb` is an ordinary thing to end up with — and
+# this script used to grant readWrite on `steading` regardless, so the restore
+# that followed failed with "not authorized" against a database the account had
+# never been given.
+#
+# Pass it the same way the API and the migration take it:
+#
+#   sudo MONGODB_DB=steadingdb ./setup-mongo.sh
+DB_NAME="${MONGODB_DB:-steading}"
+
 say() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 note() { printf '   %s\n' "$*"; }
 die() { printf '\n\033[1;31mSTOPPED:\033[0m %s\n\n' "$*" >&2; exit 1; }
@@ -54,7 +69,7 @@ case "$CODENAME" in
   before going further rather than forcing a codename that has no repository." ;;
 esac
 
-say "MongoDB $MONGO_SERIES for $CODENAME/$ARCH"
+say "MongoDB $MONGO_SERIES for $CODENAME/$ARCH (database: $DB_NAME)"
 if command -v mongod >/dev/null 2>&1; then
   note "$(mongod --version | head -1) already installed"
 else
@@ -135,8 +150,8 @@ if [ "$EXISTS" = "0" ]; then
       user: 'steading',
       pwd: '${PASSWORD}',
       roles: [
-        { role: 'readWrite', db: 'steading' },
-        { role: 'dbAdmin',   db: 'steading' }
+        { role: 'readWrite', db: '${DB_NAME}' },
+        { role: 'dbAdmin',   db: '${DB_NAME}' }
       ]
     })
   " >/dev/null
@@ -146,7 +161,7 @@ if [ "$EXISTS" = "0" ]; then
 
 $(printf '\033[1m')Put this in /etc/steading/api.env, then start the API:$(printf '\033[0m')
 
-MONGODB_URI=mongodb://steading:${PASSWORD}@127.0.0.1:27017/steading?authSource=admin
+MONGODB_URI=mongodb://steading:${PASSWORD}@127.0.0.1:27017/${DB_NAME}?authSource=admin
 
   It is printed once and stored nowhere else. If you lose it, re-create the
   user rather than guessing:
@@ -157,7 +172,7 @@ MONGODB_URI=mongodb://steading:${PASSWORD}@127.0.0.1:27017/steading?authSource=a
 KEY
 else
   note "already exists — password left alone"
-  note "the URI shape is: mongodb://steading:<password>@127.0.0.1:27017/steading?authSource=admin"
+  note "the URI shape is: mongodb://steading:<password>@127.0.0.1:27017/${DB_NAME}?authSource=admin"
 fi
 
 cat <<DONE

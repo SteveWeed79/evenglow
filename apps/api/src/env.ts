@@ -19,7 +19,18 @@ const envSchema = z.object({
    */
   AUTH_SECRET: z.string().min(32, 'AUTH_SECRET must be at least 32 characters.'),
   MONGODB_URI: z.string().min(1),
-  MONGODB_DB: z.string().default('steading'),
+  /**
+   * Empty is treated as absent, matching `db/client.ts`.
+   *
+   * `.default()` fires only when the key is missing, and an env file line
+   * reading `MONGODB_DB=` supplies an empty string instead — which would
+   * satisfy `z.string()` and pass through. See `databaseName()` for what the
+   * driver then does with it, which is not what anybody wants.
+   */
+  MONGODB_DB: z
+    .string()
+    .default('steading')
+    .transform((value) => (value.trim() === '' ? 'steading' : value.trim())),
   PORT: z.coerce.number().int().positive().default(3001),
   /**
    * Comma-separated. The Capacitor client is not a browser origin in the usual

@@ -196,17 +196,42 @@ sudo systemctl start steading-api
 systemctl status steading-api
 ```
 
-Then from your own machine, not the box:
+Then from your own machine, not the box.
 
-```
-curl https://api.swbuild.dev/health
+**On Windows, write `curl.exe` and not `curl`.** In PowerShell `curl` is an
+alias for `Invoke-WebRequest`, which tries to parse the reply as a web page and
+stops on a *"Script Execution Risk"* prompt instead of showing you anything.
+Windows 10 and later ship the real thing at `C:\Windows\System32\curl.exe`; the
+`.exe` is what gets past the alias.
+
+```powershell
+curl.exe -i https://api.swbuild.dev/health
 ```
 
-`{"ok":true}` and you are done with the server.
+```bash
+curl -i https://api.swbuild.dev/health     # macOS, Linux, Git Bash
+```
+
+`-i` prints the status line and headers as well as the body, which is the
+difference between "it did not work" and knowing which of five things to look
+at. `{"ok":true}` and you are done with the server.
 
 `/health` deliberately touches nothing — it opens no database connection — so a
 green health check means the process is up, and it is still worth doing one real
-request afterwards to prove Atlas is reachable.
+request afterwards to prove the database is reachable.
+
+**What the reply tells you:**
+
+| | |
+|---|---|
+| `200` and `{"ok":true}` | Done |
+| Hangs, then times out | The Oracle ingress rule (step 2) |
+| `Connection refused` | The port is open, Caddy is not running |
+| A certificate error | `sudo journalctl -u caddy -n 50` — usually DNS was not ready when it asked |
+| `502 Bad Gateway` | Caddy is up, the API is not. `sudo journalctl -u steading-api -n 50` |
+
+`502` is the likeliest one after a first run, because the service will not start
+until `/etc/steading/api.env` has both values in it.
 
 ---
 
@@ -331,17 +356,23 @@ here, not a compromise — and one process to reason about instead of three.
 ### Two commands
 
 ```
-sudo /opt/steading/scripts/deploy/setup-mongo.sh
+sudo MONGODB_DB=steadingdb /opt/steading/scripts/deploy/setup-mongo.sh
 ```
+
+**Pass `MONGODB_DB` if your database is not called `steading`** — the same value
+that is in `/etc/steading/api.env`. The account it creates is granted on that
+database *and only that one*, so getting it wrong means the restore in the next
+step fails with "not authorized" against a database the account was never given.
 
 Installs MongoDB 8, binds it to **127.0.0.1 only**, caps the WiredTiger cache at
 2 GB so it does not compete with the API for the same 12 GB, turns authorization
-on, and creates the `steading` account — printing its password once, because the
-only place it should live is `/etc/steading/api.env`.
+on, and creates the `steading` account — printing its connection string once,
+because the only place it should live is `/etc/steading/api.env`.
 
 ```
-sudo -E ATLAS_URI='mongodb+srv://…' \
-       LOCAL_URI='mongodb://steading:…@127.0.0.1:27017/steading?authSource=admin' \
+sudo -E MONGODB_DB=steadingdb \
+        ATLAS_URI='mongodb+srv://…' \
+        LOCAL_URI='<the string setup-mongo.sh printed>' \
   /opt/steading/scripts/deploy/migrate-to-local-mongo.sh
 ```
 
@@ -352,6 +383,15 @@ document**. Then applies the indexes.
 Both URIs go through the environment rather than argv, because argv is visible
 in `ps` to every user on the box — the same rule `backup-mongo.sh` and
 `db:seed` follow.
+
+**If your records are not in a database called `steading`, pass `MONGODB_DB`
+too.** The connection string and the database name are separate settings in
+this app — `env.ts` reads `MONGODB_URI` and `MONGODB_DB` independently — and an
+Atlas string commonly names no database at all. The script settles it once
+rather than guessing twice: a URI that names a *different* database stops with
+both names printed rather than migrating the wrong records, and the count it
+compares before and after is taken against `MONGODB_DB` explicitly, so it
+cannot compare an empty `test` against an empty `test` and call that verified.
 
 **Stopping the API costs nothing here**, which is worth using rather than
 attempting a live migration. The app is offline-first: a phone with no server

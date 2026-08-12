@@ -40,14 +40,48 @@ die() { printf '\n\033[1;31mSTOPPED:\033[0m %s\n\n' "$*" >&2; exit 1; }
 command -v mongodump >/dev/null 2>&1 || die "mongodump is missing. Run setup-mongo.sh first."
 command -v mongorestore >/dev/null 2>&1 || die "mongorestore is missing. Run setup-mongo.sh first."
 
+# ── which database, said once ───────────────────────────────────────────────
+#
+# **The connection string and the database name are separate settings in this
+# app, and conflating them is how this script would have read the wrong one.**
+# `env.ts` takes `MONGODB_URI` and `MONGODB_DB` independently, defaulting the
+# second to `steading` — so an Atlas string commonly carries no database at all
+# (`mongodb+srv://user:pass@cluster/?retryWrites=true`).
+#
+# That matters twice below: `mongosh <uri>` would then select `test` and report
+# an empty database, and `mongodump --db` errors when the URI already names a
+# different one. Both are settled here instead of guessed at twice.
+uri_db() {
+  local rest="${1#mongodb://}"
+  rest="${rest#mongodb+srv://}"
+  rest="${rest%%\?*}"
+  case "$rest" in */*) printf '%s' "${rest#*/}" ;; *) printf '%s' "" ;; esac
+}
+
+ATLAS_DB="$(uri_db "$ATLAS_URI")"
+if [ -n "$ATLAS_DB" ] && [ "$ATLAS_DB" != "$DB_NAME" ]; then
+  die "ATLAS_URI names the database '$ATLAS_DB', but this script is set to migrate
+  '$DB_NAME'. One of them is wrong and guessing which would move the wrong
+  records.
+
+  If '$ATLAS_DB' is the right one:   sudo -E MONGODB_DB=$ATLAS_DB ... $0
+  If it is not, take the database off the end of ATLAS_URI."
+fi
+
 # ── what is there now, so the check at the end has something to compare ─────
-say "Reading the source"
+say "Reading the source ($DB_NAME)"
+#
+# `getSiblingDB` rather than the connection's own default. Without it this reads
+# whatever database the URI happens to name — `test` when it names none — and
+# then compares a count of nothing against a count of nothing and calls the
+# migration verified.
 counts() {
-  mongosh --quiet "$1" --eval '
-    db.getCollectionNames().sort().forEach(function (name) {
-      print(name + " " + db.getCollection(name).countDocuments({}));
+  mongosh --quiet "$1" --eval "
+    var target = db.getSiblingDB('${DB_NAME}');
+    target.getCollectionNames().sort().forEach(function (name) {
+      print(name + ' ' + target.getCollection(name).countDocuments({}));
     });
-  ' 2>/dev/null
+  " 2>/dev/null
 }
 
 counts "$ATLAS_URI" > "$WORK/before.txt" || die "Could not read from Atlas. Check ATLAS_URI, and
@@ -70,11 +104,21 @@ fi
 
 # ── dump, restore ───────────────────────────────────────────────────────────
 say "Dumping from Atlas"
+# `--db` ONLY when the URI does not already carry one. The tools reject the two
+# together, and the check above has already proved they agree when both exist —
+# so this passes exactly one source of the database name, never two.
+#
 # --gzip because this crosses the internet; the photo bytes in GridFS dominate
 # and they compress poorly, but records do not.
-mongodump --uri="$ATLAS_URI" --db="$DB_NAME" --gzip --archive="$WORK/dump.gz" --quiet \
-  || die "The dump failed. Nothing has been changed; the API is stopped and can be started with
+if [ -n "$ATLAS_DB" ]; then
+  mongodump --uri="$ATLAS_URI" --gzip --archive="$WORK/dump.gz" --quiet \
+    || die "The dump failed. Nothing has been changed; the API is stopped and can be started with
   'sudo systemctl start steading-api'."
+else
+  mongodump --uri="$ATLAS_URI" --db="$DB_NAME" --gzip --archive="$WORK/dump.gz" --quiet \
+    || die "The dump failed. Nothing has been changed; the API is stopped and can be started with
+  'sudo systemctl start steading-api'."
+fi
 note "$(du -h "$WORK/dump.gz" | cut -f1)"
 
 say "Restoring onto this box"
@@ -102,9 +146,6 @@ else
   exit 1
 fi
 
-# Indexes are in the dump, but this is the authoritative definition and it is
-# idempotent — cheaper to run than to wonder about. An unindexed sync query is
-# not an error, it is a farm whose app got slower for no visible reason.
 say "Applying indexes"
 # The same command §5b of DEPLOY-THE-SERVER documents, so there is one way to do
 # this rather than two that can drift. `mongorestore` brings the dump's indexes
@@ -123,7 +164,7 @@ $(printf '\033[1m')Data is on the box. Two things left.$(printf '\033[0m')
 
        sudo nano /etc/steading/api.env      # MONGODB_URI= the LOCAL_URI
        sudo systemctl start steading-api
-       curl https://api.swbuild.dev/health
+       curl -i https://api.swbuild.dev/health      # curl.exe on Windows
 
   2. Leave the Atlas cluster alone for a week before deleting anything. It is
      a free, off-site, known-good copy of the farm's records, and it costs

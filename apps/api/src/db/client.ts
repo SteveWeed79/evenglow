@@ -65,7 +65,33 @@ function connect(): Promise<MongoClient> {
   return created;
 }
 
+/**
+ * Which database, and why an empty string is not the same as unset.
+ *
+ * **`??` is the wrong operator here and it silently sends a whole farm to the
+ * wrong place.** It falls back only on null and undefined, so an env file line
+ * reading `MONGODB_DB=` — which is what systemd's `EnvironmentFile` produces
+ * from a key with nothing after it, and what a commented-out setting becomes
+ * the moment somebody uncomments it and does not fill it in — arrives as `''`
+ * and passes straight through.
+ *
+ * The driver then does not reject it. `client.db('')` returns the connection's
+ * default database, which for a URI with no path is **`test`** — created on
+ * first write, empty, and perfectly healthy-looking. The server answers every
+ * request, `/health` is green, and a farm's records are somewhere nobody is
+ * reading from.
+ *
+ * Found while pointing the first real deployment at an Atlas cluster whose
+ * database is `steadingdb` rather than `steading`. The name does NOT come from
+ * the connection string — a URI ending `/steadingdb` is connected to and then
+ * ignored, because this line is the only thing that chooses.
+ */
+export function databaseName(source: Record<string, string | undefined> = process.env): string {
+  const configured = source.MONGODB_DB?.trim();
+  return configured === undefined || configured === '' ? 'steading' : configured;
+}
+
 export async function db(): Promise<Db> {
   const client = await connect();
-  return client.db(process.env.MONGODB_DB ?? 'steading');
+  return client.db(databaseName());
 }
