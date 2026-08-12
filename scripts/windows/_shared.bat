@@ -251,6 +251,39 @@ rem Nothing is broken — but it costs a full crawl on every start until the cac
 rem is replaced, and it prints a wall of red that looks exactly like a fault.
 rem Reported from a real machine on Node 25 reading a cache written by an older
 rem one, and it would have printed that every morning until somebody guessed.
+rem  A Metro left running by a previous window 
+rem
+rem Every run starts Metro in ITS OWN window, and the window has to stay open
+rem while the app is used. So the ordinary way to work - run it, use the app,
+rem come back tomorrow and run it again - leaves the first one running. Expo
+rem then finds 8081 taken and offers 8083, which is the WORST available
+rem outcome: `adb reverse` forwards 8081, so the phone goes on asking a port
+rem nothing is serving and reports a connection that opens and closes empty.
+rem
+rem Reported as windows piling up rather than as a bug, which is what it looks
+rem like from the outside.
+rem
+rem Only ever kills node.exe. Anything else on 8081 is somebody else's program
+rem and gets named rather than closed.
+:free_metro_port
+set "METRO_PID="
+for /f "tokens=5" %%P in ('netstat -ano ^| findstr ":8081" ^| findstr "LISTENING"') do (
+  if not defined METRO_PID set "METRO_PID=%%P"
+)
+if not defined METRO_PID exit /b 0
+
+tasklist /fi "PID eq !METRO_PID!" /fo csv /nh | findstr /i "node.exe" >nul
+if errorlevel 1 (
+  echo   NOTE: port 8081 is held by something that is not Metro ^(PID !METRO_PID!^).
+  echo   Close it first - otherwise Metro starts on another port and the
+  echo   phone keeps asking 8081.
+  exit /b 0
+)
+
+taskkill /F /PID !METRO_PID! >nul 2>&1
+echo   Cleared Metro from a previous run ^(it was still holding port 8081^).
+exit /b 0
+
 :clear_stale_metro
 node "%~dp0metro-stale.mjs"
 if errorlevel 1 (

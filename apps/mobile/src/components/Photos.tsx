@@ -427,17 +427,35 @@ export function Photos({
 
       <Failure message={problem} />
 
+      {/**
+        * Two halves of one row, rather than two buttons that happened to be
+        * adjacent.
+        *
+        * They were shrink-wrapped: each sized to its own words, so "Take one"
+        * and "Choose one" came out different widths and sat huddled against
+        * the left edge under a full-width thumbnail. Nothing else on these
+        * screens does that — every other control is either the panel's width
+        * or a row spanning it — so the pair read as the one thing on the
+        * screen nobody had laid out.
+        *
+        * `flex: 1` on the wrappers rather than a prop on `Secondary`, because
+        * the button has no business knowing how wide its container wants it.
+        */}
       <View style={styles.actions}>
-        <Secondary
-          label={busy ? 'Working…' : 'Take one'}
-          onPress={() => void add('camera')}
-          testID="photo-camera"
-        />
-        <Secondary
-          label="Choose one"
-          onPress={() => void add('library')}
-          testID="photo-library"
-        />
+        <View style={styles.action}>
+          <Secondary
+            label={busy ? 'Working…' : 'Take one'}
+            onPress={() => void add('camera')}
+            testID="photo-camera"
+          />
+        </View>
+        <View style={styles.action}>
+          <Secondary
+            label="Choose one"
+            onPress={() => void add('library')}
+            testID="photo-library"
+          />
+        </View>
       </View>
     </Panel>
   );
@@ -499,6 +517,9 @@ const styles = StyleSheet.create({
     gap: SPACE.xs,
     padding: SPACE.sm,
   },
-  actions: { flexDirection: 'row', gap: SPACE.sm, flexWrap: 'wrap' },
+  // No `flexWrap`: the two below share the row equally, so there is nothing
+  // left to wrap. Wrapping was what let them be different widths.
+  actions: { flexDirection: 'row', gap: SPACE.sm },
+  action: { flex: 1 },
   label: { fontFamily: FONTS.data, fontSize: TYPE.label, textAlign: 'center' },
 });

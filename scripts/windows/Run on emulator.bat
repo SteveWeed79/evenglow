@@ -108,6 +108,8 @@ echo.
 :: `--no-install` because this window already ran `pnpm install` above. Left to
 :: itself `expo run:android` runs its own package install from apps/mobile,
 :: which in a pnpm workspace is redundant at best.
+call "%~dp0_shared.bat" :free_metro_port
+
 call pnpm mobile:android --no-install
 
 echo.
