@@ -287,6 +287,63 @@ means another build.
 
 ---
 
+## 7b. "Something is wrong" — turning it on for this box
+
+The app's report button posts a bundle to whichever server it was built
+against, and that server files it as a GitHub issue. Without a token and a repo
+`/support` answers 501 and the handset says **this server has nowhere to file a
+report**, then offers its share sheet instead. The share sheet works; it is not
+the loop.
+
+**This is configured per server, and that is the part that catches people.**
+Setting it in a repo checkout on a laptop configures the laptop. The moment the
+app is pointed at this box, the box's `/etc/steading/api.env` is the file being
+asked — and `setup-box.sh` leaves both lines commented out, so a box that has
+never been told is the normal state of a new one.
+
+1. Make a fine-grained token at
+   <https://github.com/settings/personal-access-tokens/new>:
+   - **Repository access** → Only select repositories → `steading`
+   - **Permissions** → Repository permissions → **Issues: Read and write**
+
+   Nothing else. It files issues and that is the whole of what it can do.
+
+2. On the box, uncomment and fill in the two lines the setup script left:
+
+   ```
+   sudo nano /etc/steading/api.env
+   ```
+
+   ```
+   SUPPORT_GITHUB_TOKEN=github_pat_...
+   SUPPORT_REPO=SteveWeed79/steading
+   ```
+
+3. Restart, because the environment is read once at startup:
+
+   ```
+   sudo systemctl restart steading-api
+   ```
+
+4. Check it from the PC without filing anything:
+
+   ```
+   curl.exe -s -o NUL -w "%{http_code}\n" -X POST -H "content-type: application/json" -d "{}" https://api.swbuild.dev/support
+   ```
+
+   **`400` is the good answer.** The route checks its configuration before it
+   parses the body, so an empty body gets past the gate and is refused by the
+   schema — which proves a token is set without creating an issue to prove it.
+   `501` is the gate still closed. `Check my setup` runs exactly this probe and
+   says which server it asked.
+
+**Leave `SUPPORT_ACCEPT_RECORDS` alone while the repository is public.** It
+governs the opt-in second half — the farm's own records — and a public tracker
+is a public place to put them. The lean bundle is safe in public by
+construction: structure and counts, never content.
+
+---
+
 ## 8. Two devices, one farm
 
 **Do the tablet first, and the order matters.** Everything on it today is

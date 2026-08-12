@@ -392,6 +392,11 @@ const eslintConfig = defineConfig([
         module: 'writable',
         require: 'readonly',
         __dirname: 'readonly',
+        // Global in Node since 18, and the repo's floor is well above that.
+        // Listed rather than pulled from `globals` because this whole block is
+        // written out by hand and one honest list beats two sources.
+        fetch: 'readonly',
+        AbortSignal: 'readonly',
       },
     },
   },

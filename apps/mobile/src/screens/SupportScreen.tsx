@@ -212,21 +212,6 @@ export function SupportScreen(): React.ReactElement {
         />
       </Field>
 
-      {outcome === null ? null : (
-        <Panel label={outcome.ok ? 'Sent' : 'Kept on this phone'}>
-          <Body>
-            {outcome.ok
-              ? 'That is filed. Nothing else is needed from you.'
-              : `${outcome.error ?? 'It could not be sent.'} It is saved here and will go the next time you open this screen — or send it another way, below.`}
-          </Body>
-          {/* The farm was asked a question and said yes; it is owed the truth
-              about what happened to the answer. */}
-          {outcome.note === undefined ? null : <Body>{outcome.note}</Body>}
-        </Panel>
-      )}
-
-      <Failure message={problem} />
-
       <View style={styles.actions}>
         <Primary
           label={busy ? 'Sending…' : 'Send this report'}
@@ -248,6 +233,36 @@ export function SupportScreen(): React.ReactElement {
           testID="support-share"
         />
       </View>
+
+      {/**
+       * The verdict goes UNDER the buttons, and that is the fix rather than the
+       * layout it started with.
+       *
+       * R3 puts the primary action in the bottom third, so on a screen taller
+       * than the viewport — which this one is, with two panels and a records
+       * toggle above the fold — a result rendered above the button lands off
+       * the top of the screen. Pressing Send and being told nothing is exactly
+       * what was reported from a handset, on the day the answer was *this
+       * server has nowhere to file a report*: the app had said so, above the
+       * only thing anybody was looking at.
+       *
+       * Under the thumb that pressed it, the answer cannot be missed, and it
+       * sits beside the other door it sends people to.
+       */}
+      {outcome === null ? null : (
+        <Panel label={outcome.ok ? 'Sent' : 'Kept on this phone'}>
+          <Body>
+            {outcome.ok
+              ? 'That is filed. Nothing else is needed from you.'
+              : `${outcome.error ?? 'It could not be sent.'} It is saved here and will go the next time you open this screen — or send it another way, using the button just above.`}
+          </Body>
+          {/* The farm was asked a question and said yes; it is owed the truth
+              about what happened to the answer. */}
+          {outcome.note === undefined ? null : <Body>{outcome.note}</Body>}
+        </Panel>
+      )}
+
+      <Failure message={problem} />
 
       {held.length === 0 ? null : (
         <Panel label={held.length === 1 ? 'One report waiting' : `${held.length} reports waiting`}>

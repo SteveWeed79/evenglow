@@ -297,28 +297,20 @@ rem "Something is wrong" posts a bundle to the farm server, which files it as a
 rem GitHub issue. Without a token and a repo the route answers 501 and the app
 rem falls back to its share sheet — which works, and is not the loop.
 rem
-rem Read from .env.local, which is where the server reads it from and is
-rem gitignored. The token is never printed: this window is meant to be pasted
-rem into a chat.
-set "HASTOKEN="
-set "HASREPO="
-if exist ".env.local" (
-  findstr /b /c:"SUPPORT_GITHUB_TOKEN=" ".env.local" | findstr /v /c:"SUPPORT_GITHUB_TOKEN=$" >nul 2>&1
-  if not errorlevel 1 set "HASTOKEN=1"
-  for /f "usebackq tokens=2 delims==" %%v in (`findstr /b /c:"SUPPORT_REPO=" ".env.local"`) do set "HASREPO=%%v"
-)
-
-if defined HASTOKEN (
-  if defined HASREPO (
-    echo   [ OK ]      reporting files issues to !HASREPO!
-  ) else (
-    echo   [ NOTE ]    a token is set but SUPPORT_REPO is not, so nothing
-    echo               knows where to file. Add SUPPORT_REPO=owner/repo.
-  )
+rem **Asked of the server the build is pointed at**, not of this PC. This block
+rem used to read .env.local unconditionally, so once "Use the farm server" sent
+rem the app to the box it reported the laptop's configuration for a server the
+rem app no longer spoke to — and read OK on the morning a handset was being told
+rem the server had nowhere to file.
+rem
+rem The token is never printed either way: this window gets pasted into a chat.
+rem Node builtins only — no package needs installing for this to answer, which
+rem matters because a fresh clone is exactly when somebody runs this.
+where node >nul 2>&1
+if errorlevel 1 (
+  echo   [ NOTE ]    needs Node.js, which is missing above.
 ) else (
-  echo   [ NOTE ]    not set up. "Something is wrong" still works and
-  echo               offers to share the report by hand; it just cannot
-  echo               file it for you. Ask Claude to set it up.
+  node "scripts\windows\support-check.mjs"
 )
 
 echo.
