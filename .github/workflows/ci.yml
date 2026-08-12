@@ -5,6 +5,36 @@ on:
     branches: [main]
   pull_request:
 
+  # ── Shipping to the farm server is a decision, not a consequence ────────────
+  #
+  # Actions -> CI -> "Run workflow". That re-runs every check below against the
+  # ref you pick and, only if they all pass, moves `release` — which is what the
+  # box follows.
+  #
+  # **Deliberately not automatic on a green main.** Merging and shipping are
+  # different acts, and in this repo the gap between them is where the real
+  # defects live: the camera crash, the portrait lock, a VPN address compiled
+  # into an APK, a systemd directive that let the port bind and then killed the
+  # process. Every one of them passed CI. The server half is genuinely well
+  # covered here — a real mongod, the isolation suite, `db:verify` — but "the
+  # tests pass" and "I have tried it on the tablet" are different claims, and
+  # the button is where the second one gets made.
+  #
+  # Not a permanent shape. While the only farms on the box are the author's and
+  # a tester's, the cost of a bad deploy is an afternoon, and one click is
+  # cheap enough either way. Deleting the `if:` on the release job below is all
+  # it takes to go back to shipping every green main.
+  #
+  # It runs from the GitHub web UI or the phone app, so shipping does not need a
+  # laptop or a checkout.
+  #
+  # **No `ref` input, on purpose.** The dispatch form already has a branch
+  # selector, and `actions/checkout` defaults to it in every job — so `verify`
+  # and `release` below provably act on the same commit. Adding an input would
+  # have created a second source of truth, and the failure mode is the one that
+  # matters: testing one commit and shipping another, with both steps green.
+  workflow_dispatch:
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -120,19 +150,35 @@ jobs:
   # cost is latency — up to five minutes — which for an app whose clients queue
   # offline by design is not a cost at all.
   release:
+    # Only from the button. A push to main runs `verify` and stops there.
     needs: verify
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       # The built-in GITHUB_TOKEN, scoped to this. No secret to create, none to
       # rotate, and it cannot reach anything outside this repository.
       contents: write
     steps:
+      # Same default as `verify` — the branch chosen in the dispatch form — so
+      # what was tested and what ships cannot come apart.
       - uses: actions/checkout@v4
 
-      # `--force` is deliberately absent. `release` must only ever move forward
-      # along main's history — a fast-forward that fails means the two have
-      # diverged, and the right answer to that is a person looking rather than
-      # a server being handed whatever the last green run happened to be.
+      # `--force` is deliberately absent, and it is the guard rather than a
+      # tidiness preference: `release` may only move FORWARD. A promote that
+      # would rewind the server — shipping an older commit over a newer one —
+      # fails here instead of quietly handing a farm yesterday's code.
+      #
+      # To go back on purpose, that is a revert commit through the normal route,
+      # so what the server runs stays a thing that exists in main's history.
       - name: Move release to this commit
         run: git push origin HEAD:refs/heads/release
+
+      - name: Say what shipped
+        run: |
+          echo "### Shipped \`$(git rev-parse --short HEAD)\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+          git log -1 --format='%s%n%n%an, %ar' >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "The server picks this up within five minutes." >> "$GITHUB_STEP_SUMMARY"

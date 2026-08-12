@@ -434,7 +434,10 @@ sudo resize2fs /dev/sda1        # ext4. `sudo xfs_growfs /` if df -Th says xfs
 
 ---
 
-## Deploying automatically
+## Deploying
+
+Two halves, and they are deliberately separate: **you decide when something
+ships; the box works out how to fetch it.**
 
 ```
 sudo cp /opt/steading/scripts/deploy/steading-deploy.{service,timer} /etc/systemd/system/
@@ -443,8 +446,8 @@ sudo systemctl enable --now steading-deploy.timer
 systemctl list-timers steading-deploy
 ```
 
-That is it. The box checks for a new release every five minutes, and a check
-that finds nothing costs one `git fetch` and exits.
+That is the box half, once. It then checks for a new release every five
+minutes, and a check that finds nothing costs one `git fetch` and exits.
 
 ### The box pulls; GitHub is never given a key
 
@@ -459,19 +462,59 @@ leaked token to expose, and the only thing GitHub can do is move a branch. The
 cost is up to five minutes of latency — which, for an app whose clients queue
 offline by design, is not a cost.
 
-### `release`, not `main`
+### `release`, not `main` — and shipping is a button
 
-The box follows a branch called **`release`**, and CI pushes it *only* after
-`verify` goes green on `main` (`.github/workflows/ci.yml`). So a red build
-cannot reach a farm during the minutes between a bad merge and somebody
-noticing.
+The box follows a branch called **`release`**, and nothing moves it on its own.
 
-The push is a plain fast-forward with no `--force`. If `release` and `main` ever
-diverge the workflow fails rather than dragging the server to wherever the last
-green run happened to be — a person should look at that.
+**GitHub → Actions → CI → "Run workflow"**, pick the branch, go. That re-runs
+every check against that exact commit and moves `release` only if they all
+pass. It works from the phone app, so shipping needs no laptop and no checkout.
+
+```
+merge a PR into main
+        ↓
+CI runs verify on main          (nothing ships — this is just the check)
+        ↓
+you test it on the tablet
+        ↓
+Actions -> CI -> Run workflow   ← the deploy
+        ↓
+verify runs again on that commit; green moves `release`
+        ↓
+the box's timer picks it up within five minutes
+```
+
+**Why the button rather than shipping every green main.** Merging and shipping
+are different acts, and the gap between them is where this project's real
+defects have lived — the camera crash, the portrait lock, a VPN address
+compiled into an APK, a systemd directive that let the port bind and then
+killed the process. All of them passed CI. The server half is genuinely well
+covered (a real mongod, the isolation suite, `db:verify`), but *the tests pass*
+and *I have tried it on the tablet* are different claims, and this is where the
+second one gets made.
+
+**It is not a permanent shape.** Deleting the `if:` on the release job ships
+every green main instead. Worth revisiting when the ceremony costs more than
+the mistakes it catches.
+
+There is **no `ref` input** on the form, deliberately: the dispatch UI already
+has a branch selector and `actions/checkout` defaults to it in both jobs, so
+what gets tested and what gets shipped cannot come apart. An input would have
+been a second source of truth whose failure mode is testing one commit and
+shipping another, with both steps green.
+
+The push is a plain fast-forward with **no `--force`**, and that is the guard
+rather than tidiness: `release` may only move forward. A promote that would
+rewind the server — shipping an older commit over a newer one — fails instead
+of quietly handing the box yesterday's code. To go back on purpose, revert
+through the normal route, so what the server runs stays something that exists
+in main's history.
 
 `deploy.sh` refuses anything but a fast-forward too, so a box somebody edited in
 place at 6am stops and says so instead of silently resolving it.
+
+**The command-line equivalent is `git push origin main:release`** — but it
+skips the re-verify, so the button is the better habit.
 
 ### A dev branch
 
