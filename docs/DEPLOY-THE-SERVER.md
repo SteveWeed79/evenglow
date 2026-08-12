@@ -378,6 +378,15 @@ Both URIs go through the environment rather than argv, because argv is visible
 in `ps` to every user on the box — the same rule `backup-mongo.sh` and
 `db:seed` follow.
 
+**If your records are not in a database called `steading`, pass `MONGODB_DB`
+too.** The connection string and the database name are separate settings in
+this app — `env.ts` reads `MONGODB_URI` and `MONGODB_DB` independently — and an
+Atlas string commonly names no database at all. The script settles it once
+rather than guessing twice: a URI that names a *different* database stops with
+both names printed rather than migrating the wrong records, and the count it
+compares before and after is taken against `MONGODB_DB` explicitly, so it
+cannot compare an empty `test` against an empty `test` and call that verified.
+
 **Stopping the API costs nothing here**, which is worth using rather than
 attempting a live migration. The app is offline-first: a phone with no server
 queues its mutations and flushes them when one returns, which is the ordinary
