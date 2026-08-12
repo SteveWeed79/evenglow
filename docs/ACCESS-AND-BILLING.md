@@ -442,6 +442,36 @@ Switch when photo bytes become a serious fraction of the database's working set,
 or when backup and restore time becomes an operational problem rather than a
 line item.
 
+**Asked again once MongoDB moved onto the box, and the answer did not change —
+but one of the three reasons above started a clock.**
+
+The new question is whether a self-hosted server with ~170 GB spare should put
+photos on its own filesystem rather than in GridFS. Disk is no longer the
+constraint that motivated any of this, and three things still say no:
+
+- **Backups stop being one command.** Photos on disk means a `mongodump` is no
+  longer a complete backup, so there are two jobs that can drift — and a restore
+  that hands a farm records referencing photos that are not there is worse than
+  either failure alone. `scripts/backup-mongo.sh` is currently the whole story.
+- **Half-written state becomes possible.** A record and its bytes are one system
+  today. Split them and every failed write can leave an orphan (bytes with no
+  record) or a dangling reference (record with no bytes).
+- **A filesystem path is a tenancy boundary that has to be re-earned.**
+  `blobsFor(orgId)` is already the seam and §4A.2's isolation tests are already
+  its conformance suite. A path built from `{orgId}/{photoId}` introduces
+  traversal as a risk class GridFS does not have at all.
+
+**The local filesystem was never the successor anyway — S3 is** (§4A.4), and it
+is the better answer than the box's own disk for the reason §4.1a-i gives about
+databases: an off-site copy somebody else keeps running is most of what the money
+buys.
+
+**The clock: the nightly dump now copies every photo ever taken, every night.**
+O(total) rather than O(new), and it is the first of the three reasons above
+coming due. `pnpm db:usage` already counts photo bytes separately from records,
+which makes it the instrument for exactly this — when photo bytes dominate the
+dump, the trigger has fired and §4A is the plan.
+
 ### 4A.4 — S3, not R2, and the reason is not price
 
 R2 is cheaper — roughly $0.015/GB against $0.023, and no egress charge against

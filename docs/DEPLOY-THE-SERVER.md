@@ -310,6 +310,130 @@ the gate, so nothing downstream learns that promotions exist.
 
 ---
 
+## Moving the database onto the box
+
+Optional at first and eventually not: **Atlas's free M0 is 512 MB, and photos
+live in GridFS.** At roughly 1 MB of records and 30 MB of photos per farm-year
+(§4.1) that is about sixteen farm-years — but a farm photographing receipts and
+equipment gets there much faster, and the box has ~170 GB spare.
+
+This is what `ACCESS-AND-BILLING.md` §4.1a always described: Fastify and MongoDB
+on one free instance.
+
+### A standalone, not a replica set
+
+Checked rather than assumed. Multi-document transactions and change streams both
+require a replica set; this service uses neither. Every write is a single
+document, sync idempotency is one `upsertOne` with `$setOnInsert`, and nothing
+tails an oplog. GridFS works standalone. So one `mongod` is the correct shape
+here, not a compromise — and one process to reason about instead of three.
+
+### Two commands
+
+```
+sudo /opt/steading/scripts/deploy/setup-mongo.sh
+```
+
+Installs MongoDB 8, binds it to **127.0.0.1 only**, caps the WiredTiger cache at
+2 GB so it does not compete with the API for the same 12 GB, turns authorization
+on, and creates the `steading` account — printing its password once, because the
+only place it should live is `/etc/steading/api.env`.
+
+```
+sudo -E ATLAS_URI='mongodb+srv://…' \
+       LOCAL_URI='mongodb://steading:…@127.0.0.1:27017/steading?authSource=admin' \
+  /opt/steading/scripts/deploy/migrate-to-local-mongo.sh
+```
+
+Counts every collection on Atlas, stops the API, dumps, restores with `--drop`,
+counts again, and **refuses to declare success unless the two match document for
+document**. Then applies the indexes.
+
+Both URIs go through the environment rather than argv, because argv is visible
+in `ps` to every user on the box — the same rule `backup-mongo.sh` and
+`db:seed` follow.
+
+**Stopping the API costs nothing here**, which is worth using rather than
+attempting a live migration. The app is offline-first: a phone with no server
+queues its mutations and flushes them when one returns, which is the ordinary
+path exercised every time somebody logs eggs in a barn with no signal. A dump
+taken while writes are landing is a dump that silently misses some.
+
+### Never open 27017
+
+Not in iptables, not in Oracle's security list, not in `bindIp`. An
+internet-reachable MongoDB is found and ransomwared by automated scanners within
+hours — among the most reliably exploited services there is. The API is on the
+same box and reaches it over loopback.
+
+Authorization is on even so. A bug in the API that let somebody run code as the
+service user should not additionally hand them an unauthenticated database admin
+shell.
+
+### Afterwards
+
+**Leave the Atlas cluster alone for a week.** It is a free, off-site, known-good
+copy of the farm's records and costs nothing to keep until the box has proven
+itself.
+
+**Then backups are yours, and nobody else has a copy.**
+`scripts/backup-mongo.sh` is the job — dump, encrypt to a public key so the box
+can write backups it cannot read, upload; `restore` is a subcommand of the same
+script. §4.1a-i calls this a condition of the first real farm rather than a
+nicety, and it was already true on M0, which has no automated backups either.
+
+**Photos stay in GridFS**, and that was re-argued rather than assumed once the
+database moved — §4A.3 has the three reasons the box's own filesystem is not an
+improvement, and the one clock this starts.
+
+---
+
+## How much of the box this actually uses
+
+Worth knowing before spending an evening growing a disk, because the answer is
+"almost none of it":
+
+| | |
+|---|---|
+| Node 22, pnpm, the checkout and its dependencies | ~1.5 GB |
+| Caddy, and its logs | rolls at 10 MiB × 5 |
+| Farm records | ~1 MB per farm-year |
+| Photos | ~30 MB per farm-year, in GridFS |
+| SQLite | **none** — that lives on the handset |
+
+The last two are on the box only once the database is; before that they are in
+Atlas and the server is stateless. Either way a default 46.6 GB boot volume has
+roughly 37 GB spare — over a thousand farm-years. `df -h /` settles it in a line.
+
+Memory is the same story. The only component with a real appetite is argon2,
+bounded per hash at 19 MiB and `parallelism: 1`, so a hundred *simultaneous*
+sign-ins is under 2 GB — against a 90-day refresh token that makes sign-ins rare
+by construction.
+
+**Egress is the one free-tier resource this app can genuinely consume at scale**,
+because photo bytes stream through the API in both directions. That is the number
+to re-read in the console, not cores.
+
+### If you do need to grow the disk
+
+Three steps, and the middle one is the one people miss — a resized volume does
+not change `lsblk` until the device is rescanned, so `growpart` reports
+`NOCHANGE` and looks like a failure:
+
+```
+# 1. Console: Block Storage -> Boot Volumes -> Edit -> new size
+# 2. Make Linux notice
+sudo dd iflag=direct if=/dev/sda of=/dev/null count=1
+echo 1 | sudo tee /sys/class/block/sda/device/rescan
+
+# 3. Partition boundary, THEN the filesystem inside it. Only the first leaves
+#    the space unusable and looks like the resize did nothing.
+sudo growpart /dev/sda 1
+sudo resize2fs /dev/sda1        # ext4. `sudo xfs_growfs /` if df -Th says xfs
+```
+
+---
+
 ## Keeping it going
 
 ```
@@ -343,7 +467,7 @@ the free M0 tier has no automated backups either.
 |---|---|
 | `curl` hangs, no response at all | The Oracle ingress rule (step 2). Then the instance iptables: `sudo iptables -L INPUT -n --line-numbers` |
 | Certificate error, or Caddy will not start | DNS. `dig +short api.swbuild.dev` must return the box. Then `journalctl -u caddy -n 50` |
-| `{"ok":true}` but everything else fails | Atlas Network Access (step 3), or a wrong `MONGODB_URI` |
+| `{"ok":true}` but everything else fails | Atlas Network Access (step 3), or a wrong `MONGODB_URI`. On a local mongod: `systemctl status mongod` |
 | Service will not start | `systemctl status steading-api` then `journalctl -u steading-api -n 50`. Usually an empty `AUTH_SECRET` |
 | Restarting in a loop | It stops itself after five in a minute. The reason is in `systemctl status` |
 | Connects fine, but the farm is empty | `MONGODB_DB`. The default is `steading`; a cluster holding records under another name serves an empty one without complaining (step 5) |
