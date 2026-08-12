@@ -32,7 +32,8 @@ if errorlevel 1 goto :failed
 
 :: The address is compiled into the app now, so a wifi address left behind by
 :: "Run on phone" would build something the emulator cannot reach.
-call "%~dp0_shared.bat" :set_emulator_address
+call "%~dp0_shared.bat" :keep_chosen_address
+if errorlevel 1 call "%~dp0_shared.bat" :set_emulator_address
 
 call "%~dp0_shared.bat" :check_adb
 if errorlevel 1 goto :failed

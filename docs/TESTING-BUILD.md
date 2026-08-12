@@ -91,6 +91,38 @@ app and is a rule in the operating system. `Run on phone` says so at the moment
 it sets the address, and prints the one-line `netsh` rule for the case where the
 prompt never appears.
 
+### Testing against the real server, not this computer
+
+Everything above points a development build at the machine that built it. To
+test the whole thing end to end — a device talking to the deployed API over the
+internet, the way a tester's phone will:
+
+```
+Use the farm server.bat        then    Run on phone.bat
+```
+
+and `Use my own computer.bat` to go back. The address comes from `eas.json`'s
+`preview-farm` profile, so it is written down in one place rather than two.
+
+**This existed only as a full EAS build until it didn't.** `eas.json` has always
+sent `preview-farm` and `production` at the deployed server, but every run
+script rewrites the address to something local on each run — correct for the
+flows they were written for, and it left no way to point a *development* build
+anywhere else. So "does it work end to end" cost ten minutes and a cloud build,
+with no Metro reload at the end of it.
+
+The run scripts now check first: an address that is neither this machine nor
+this network was a decision, so they leave it alone and say so. The test is by
+destination rather than a flag file, so there is no marker to go stale —
+`scripts/lib/api-origin.mjs`, and `tests/unit/api-origin.test.ts` pins the
+boundary cases, including that `172.15` and `172.32` are public while
+`172.16`–`172.31` are not.
+
+**Two devices only share a farm if they were built against the same server.** A
+tablet pointed at this computer and a phone pointed at `api.swbuild.dev` are two
+separate farms whatever account you sign into — the origin is compiled in, and
+`boot/config.ts` has no runtime setting on purpose.
+
 ### The QR code is not an Expo Go QR code
 
 Worth its own line, because it is the trap that follows from the paragraph

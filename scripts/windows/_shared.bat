@@ -280,6 +280,30 @@ if errorlevel 1 (
 echo   Settings file - created.
 exit /b 0
 
+rem ── An address somebody chose on purpose ───────────────────────────────────
+rem
+rem Called by the run scripts BEFORE they set their own. Exit code 1 means
+rem "carry on and set yours"; 0 means the .env points at something that is
+rem neither this machine nor this network, so it was a decision and this run
+rem leaves it alone.
+rem
+rem Without this, "use the real server" would last exactly one run: every run
+rem script rewrites the address, which is correct for the emulator and USB
+rem flows and is the whole reason a wifi address left behind by yesterday does
+rem not quietly break today.
+rem
+rem The test is by DESTINATION rather than a flag file, so there is no marker
+rem to go stale and nothing to clean up. See scripts\lib\api-origin.mjs.
+:keep_chosen_address
+node "%~dp0api-origin.mjs" is-remote
+if errorlevel 1 exit /b 1
+set "CHOSEN="
+for /f "usebackq tokens=1,* delims==" %%a in (`findstr /b "EXPO_PUBLIC_API_URL" "apps\mobile\.env"`) do set "CHOSEN=%%b"
+echo   Server address - the farm server, !CHOSEN!
+echo   ^(Chosen on purpose, so this run is leaving it alone. Double-click
+echo    "Use my own computer" to point it back at this machine.^)
+exit /b 0
+
 :set_emulator_address
 :: The inverse of rem ── the tethered address ─────────────────────────────────────────────────────
 rem

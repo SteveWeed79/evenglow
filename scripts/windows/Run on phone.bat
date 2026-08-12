@@ -161,7 +161,8 @@ echo   Connected: !PHONE!
 rem Addressed AFTER the device is known, which it could not be before: the
 rem tethered route needs a serial to reverse a port onto. It used to run in the
 rem preflight, where the only answer available was a guess about the wifi.
-call "%~dp0_shared.bat" :set_usb_address !PHONE!
+call "%~dp0_shared.bat" :keep_chosen_address
+if errorlevel 1 call "%~dp0_shared.bat" :set_usb_address !PHONE!
 
 set "NEEDBUILD="
 adb -s !PHONE! shell pm list packages 2>nul | findstr /c:"com.steading.app" >nul
