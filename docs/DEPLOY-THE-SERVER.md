@@ -356,17 +356,23 @@ here, not a compromise — and one process to reason about instead of three.
 ### Two commands
 
 ```
-sudo /opt/steading/scripts/deploy/setup-mongo.sh
+sudo MONGODB_DB=steadingdb /opt/steading/scripts/deploy/setup-mongo.sh
 ```
+
+**Pass `MONGODB_DB` if your database is not called `steading`** — the same value
+that is in `/etc/steading/api.env`. The account it creates is granted on that
+database *and only that one*, so getting it wrong means the restore in the next
+step fails with "not authorized" against a database the account was never given.
 
 Installs MongoDB 8, binds it to **127.0.0.1 only**, caps the WiredTiger cache at
 2 GB so it does not compete with the API for the same 12 GB, turns authorization
-on, and creates the `steading` account — printing its password once, because the
-only place it should live is `/etc/steading/api.env`.
+on, and creates the `steading` account — printing its connection string once,
+because the only place it should live is `/etc/steading/api.env`.
 
 ```
-sudo -E ATLAS_URI='mongodb+srv://…' \
-       LOCAL_URI='mongodb://steading:…@127.0.0.1:27017/steading?authSource=admin' \
+sudo -E MONGODB_DB=steadingdb \
+        ATLAS_URI='mongodb+srv://…' \
+        LOCAL_URI='<the string setup-mongo.sh printed>' \
   /opt/steading/scripts/deploy/migrate-to-local-mongo.sh
 ```
 
