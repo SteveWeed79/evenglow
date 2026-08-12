@@ -30,6 +30,13 @@ rem one place it lives and not two.
 call "%~dp0_shared.bat" :check_node
 if errorlevel 1 goto :failed
 
+rem Every other script in this folder pulls before it acts, for the reason
+rem :update_code gives - a fix has to reach this machine somehow, and the
+rem alternative is a screenshot of a bug that was corrected days ago. These two
+rem were the exception, which meant the address they write could be stale in a
+rem way nothing on screen would show.
+call "%~dp0_shared.bat" :update_code
+
 call "%~dp0_shared.bat" :ensure_env
 if errorlevel 1 goto :failed
 
