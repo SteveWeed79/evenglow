@@ -10,14 +10,22 @@ before they install it.
 ```
 pnpm dlx eas-cli login                     # once
 pnpm dlx eas-cli build:configure           # once, if it asks
+pnpm dlx eas-cli credentials               # once — back up the keystore (§8)
+
+# then, for every build that leaves this machine:
+#   bump expo.android.versionCode in app.json  (§5b)
 pnpm --filter @steading/mobile exec eas build --profile preview --platform android
 ```
 
 EAS builds it on Expo's machines and prints a URL. That URL is the link — mail
 it, message it, whatever. Opening it on an Android phone downloads the APK, and
-Android asks the tester to allow installing from that browser once.
+Android asks the tester to allow installing from that browser once. §7 is what
+the person on the other end sees, which is two warnings that both look like a
+refusal and are both routine.
 
-No Play Console, no $25, no signing keys to manage, no review.
+No Play Console, no $25, no review, and no signing key to *create* — EAS makes
+one on the first build. There is still exactly one to **keep**, and §8 is why
+that is not a formality.
 
 ---
 
@@ -244,6 +252,70 @@ version apart.
 
 ---
 
+## 5b. There are three version numbers and they answer different questions
+
+Easy to conflate, and only one of them is Android's.
+
+| | Where | Who reads it | When it changes |
+|---|---|---|---|
+| `version` | `app.json` → `expo.version` | People. Support fingerprints. | When a release is a different release |
+| `versionCode` | `app.json` → `expo.android.versionCode` | **Android and Play.** Never shown. | **Every build you hand to anybody** |
+| the commit stamp | generated, `EXPO_PUBLIC_BUILD` | You, in a ticket | Automatically, every build |
+
+`versionCode` is an integer and the only thing Android uses to decide whether
+one APK is newer than another. **It was absent until now**, which means Expo
+defaulted it to `1` and every build ever made carried the same one.
+
+### What that actually cost, which is less than it sounds
+
+Sideloading a same-`versionCode` APK over an installed one **works** — same
+signing key makes it a reinstall, and the records survive exactly as §3's table
+says. So nothing was broken and nothing was lost. The bill comes due in three
+places instead:
+
+- **Play rejects a duplicate `versionCode` outright.** The first `production`
+  upload would succeed and the second would be refused, at the worst possible
+  moment to be discovering this.
+- **Android blocks a downgrade.** Once a device has `versionCode` 4, a build at
+  3 will not install over it — `INSTALL_FAILED_VERSION_DOWNGRADE`. Going back
+  to an older build to reproduce something therefore costs an uninstall, and an
+  uninstall takes the farm. Worth knowing *before* you need it.
+- **Nothing on the device can tell two builds apart.** Settings → Apps shows
+  `version`, which does not move between builds. `adb shell dumpsys package
+  com.steading.app | findstr versionCode` is the only place the integer
+  surfaces, and it was the same integer every time.
+
+### The rule
+
+**Bump `versionCode` by one for every build that leaves this machine.** It is
+one line in `app.json`, it belongs in the same commit as whatever the build is
+of, and git history is then the record of which integer was which.
+
+**On EAS this needs nothing else** — the builder prebuilds from `app.json`
+every time, so the new integer is in the APK. **Locally it does**: `expo
+run:android` prebuilds only when `android/` is *absent*, so an existing native
+project is compiled with yesterday's `versionCode` and the change is silently
+ignored. That is the same trap as icons and permissions (see `CLAUDE.md`), and
+it has the same answer — `pnpm mobile:prebuild` first. It matters less here
+than for an icon, because a local build is for the machine you develop on and
+§3 says to keep those on their own route anyway.
+
+`version` moves on its own schedule — a release being a different release —
+and often does not move at all between two tester builds. The commit stamp
+answers *which build* either way, which is why it exists (§5) and why neither
+of the other two has to carry that job.
+
+> **`autoIncrement` is the option if bumping by hand becomes the thing that
+> gets forgotten.** Setting `"autoIncrement": true` on a build profile has
+> eas-cli do it, and with `appVersionSource: "local"` — which is what `eas.json`
+> uses — the incremented value is written back into `app.json` for you to
+> commit, so it stays visible in git rather than moving to a counter on Expo's
+> servers. **Not enabled here and not verified on a real build**, because the
+> first time it runs is the wrong time to find out it wrote somewhere else.
+> Try it on a throwaway build before trusting it.
+
+---
+
 ## 6. Free access for a tester
 
 Sync is the paid thing (D13), so a tester on `preview-farm` would hit a 402
@@ -253,3 +325,90 @@ its own from **Settings → Sync**, at the bottom.
 
 It is deployment configuration rather than a route, deliberately: a grant that
 can be requested is a grant that can be requested by anybody.
+
+---
+
+## 7. Sending a build to somebody
+
+```
+pnpm --filter @steading/mobile exec eas build --profile preview-farm --platform android
+```
+
+Ten to twenty minutes on Expo's free tier, most of it queueing. It ends with a
+build page URL and a QR code in the terminal.
+
+**That URL is the distribution.** There is nothing else to set up — no Play
+Console, no App Center, no file to host. The page has an *Install* button that
+serves the APK.
+
+### What the person on the other end does
+
+1. Opens the link **on the Android phone itself** — not on a computer. The page
+   detects Android and offers the APK.
+2. Chrome warns that this file type can harm your device. That warning is
+   unavoidable and correct in general; **Download anyway**.
+3. Android asks to allow installing unknown apps from Chrome. This is a
+   per-source permission and it is asked once.
+4. Play Protect then says the app was not scanned or is from an unknown
+   developer. **Install anyway** — it is not signed by a Play-registered
+   developer, and it will say so every time until it is.
+
+Steps 2 and 4 look like two different refusals and are both routine. Worth
+saying in the message with the link, because a tester who reads either as *this
+is dangerous* stops there and does not tell you they stopped.
+
+### What the link is and is not
+
+- **`distribution: "internal"`** on the profile means anybody with the URL can
+  install it. It is unlisted, not access-controlled — the same shape as the
+  secret gists in `SUPPORT-LOOP.md` S4, and acceptable for the same reason.
+- **Build artefacts expire on the free tier** (30 days). The link dies with
+  them. It is a delivery mechanism, not an archive — see below.
+- **The origin is compiled in.** A `preview-farm` APK talks to
+  `api.swbuild.dev` forever; there is no setting on the device (`boot/config.ts`,
+  deliberately — a server address a stranger can talk somebody into changing is
+  a phishing surface). Pointing at a different server means another build.
+
+### If you want an archive rather than a link
+
+A **GitHub Release** attached to a tag is the right tool for *keeping* an APK —
+"the build that was on her phone in August" — which is a different job from
+handing one out, and worth having before the artefact expires.
+
+It is a poor *distribution* channel here and the reason is not obvious: a
+Release on a public repository puts the APK in front of anybody, which is the
+same consideration that keeps `SUPPORT_ACCEPT_RECORDS` off. It also has no
+install page — a raw file download, and the tester is on their own for steps 2
+to 4 above.
+
+So: EAS for the link, a Release for the archive, and neither pretending to be
+the other.
+
+---
+
+## 8. The keystore, which cannot be replaced
+
+EAS generated a keystore the first time it built this app and holds it. **Every
+APK is signed with it, and Android will only accept an update signed by the same
+key** (§3's table, last row).
+
+Lose it and there is no recovery. Not a hard recovery — none. A new key means a
+new signature, which Android treats as a different app: every installed copy has
+to be uninstalled first, and an uninstall takes the farm's records with it. On
+Play it is worse, because the package name is claimed and cannot be reused.
+
+Back it up now rather than before the first Play upload:
+
+```
+pnpm dlx eas-cli credentials
+```
+
+Android → the build profile → **Download credentials**. Keep the `.jks` and the
+passwords it prints somewhere that is not this repository and not this machine
+only. They are secrets in the ordinary sense — a password manager, or an
+encrypted archive somewhere off the laptop.
+
+This is the one piece of state in the whole project that lives outside the
+repository and cannot be regenerated from it. The database can be restored from
+a backup, the box can be rebuilt from `setup-box.sh`, the server's secrets can
+be rotated. The signing key cannot be any of those things.

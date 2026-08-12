@@ -10,6 +10,7 @@
     "newArchEnabled": true,
     "android": {
       "package": "com.steading.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon/steading-foreground.png",
         "backgroundColor": "#201913",
