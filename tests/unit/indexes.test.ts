@@ -51,3 +51,41 @@ describe('the plan handed to Mongo', () => {
     expect(indexPlan().map(([name]) => name)).not.toContain('promoCodes');
   });
 });
+
+/**
+ * One Play purchase, one farm.
+ *
+ * The behaviour is asserted against a database in
+ * `tests/isolation/purchase-token.test.ts`. This is here as well, and pure,
+ * for the reason D15 gives about the defence being structural rather than
+ * remembered: *"an index is a thing somebody can forget to create."* A unique
+ * index that exists only in a suite which skips without a mongod is exactly
+ * that kind of thing — so the declaration is checked on every machine, and a
+ * deployment cannot lose the guard by never having had a test database.
+ */
+describe('the purchase-token binding', () => {
+  const orgIndexes = () => indexPlan().find(([name]) => name === 'orgs')?.[1] ?? [];
+
+  it('is declared unique, so one purchase cannot entitle two farms', () => {
+    const bound = orgIndexes().find((index) => 'playPurchaseToken' in index.key);
+
+    expect(bound).toBeDefined();
+    expect(bound?.unique).toBe(true);
+  });
+
+  it('is partial, so the farms with no subscription do not collide', () => {
+    /**
+     * The failure a plain `unique: true` would cause, and it is worse than the
+     * one it fixes: almost every org has no `playPurchaseToken` and never will,
+     * so a plain unique index admits exactly one of them and refuses every
+     * other free farm the deployment ever creates.
+     */
+    const bound = orgIndexes().find((index) => 'playPurchaseToken' in index.key);
+
+    expect(bound?.partialFilterExpression).toEqual({ playPurchaseToken: { $type: 'string' } });
+  });
+
+  it('is in the plan, so `pnpm db:indexes` applies it', () => {
+    expect(indexPlan().map(([name]) => name)).toContain('orgs');
+  });
+});

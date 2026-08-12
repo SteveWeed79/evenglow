@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { canMutate } from '@steading/contracts';
+import { canMutate, MAX_PHOTO_BYTES } from '@steading/contracts';
 import { requireClaims, requireMutationClaims } from '../auth/require';
 import { blobsFor } from '../db/blobs';
 import { scoped, type Tenanted } from '../db/scoped';
@@ -53,8 +53,20 @@ interface PhotoRecord extends Tenanted {
  * with no matching record in this org must behave as though nothing is there.
  */
 
-/** Fastify's default body limit is 1 MB. A resized photo runs to a few. */
-const MAX_BYTES = 25_000_000;
+/**
+ * Fastify's default body limit is 1 MB and a resized photo runs to a few
+ * hundred kilobytes, so this has to be raised — but only to the same number the
+ * contract enforces on the record.
+ *
+ * **Taken from `MAX_PHOTO_BYTES` rather than written again here.** The two
+ * limits guard the same thing from opposite ends: the contract refuses an
+ * oversized *record* at the boundary, this refuses oversized *bytes*. A local
+ * copy of the number is a second declaration to drift, and drift in either
+ * direction is a bug — a larger ceiling here accepts bytes for a record that
+ * was refused, and a smaller one refuses bytes for a record that was accepted,
+ * which the transfer loop would retry for ever (see `sync/photos.ts`).
+ */
+const MAX_BYTES = MAX_PHOTO_BYTES;
 
 const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp'] as const;
 

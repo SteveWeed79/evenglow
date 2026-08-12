@@ -309,9 +309,10 @@ during.** Nothing else in that document depends on it.
   Build against the S3 SDK, which R2 also speaks, so the choice stays cheap to
   revisit. Timing and reasoning in `ACCESS-AND-BILLING.md` §4A.
 - ~~API hosting: same box as your other services, or a managed host?~~
-  **Answered: the box.** An Oracle Cloud Always Free ARM instance (4 cores,
-  24 GB, 10 TB egress) carries both Fastify and MongoDB at no cost, which is
-  what D10 describes and puts **break-even at three or four paying farms**.
+  **Answered: the box.** An Oracle Cloud Always Free ARM instance (2 cores,
+  12 GB, 10 TB egress as of August 2026 — Oracle halved the first two) carries
+  both Fastify and MongoDB at no cost, which is what D10 describes and puts
+  **break-even at three or four paying farms**.
   ARM was checked rather than assumed — `@node-rs/argon2` is the only native
   dependency and its `linux-arm64-gnu` build is already in the lockfile.
   **The open part is backups**, which self-hosting makes ours: a nightly

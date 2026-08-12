@@ -131,7 +131,36 @@ export const INDEXES: Record<CollectionName, IndexDescription[]> = {
 /** Identity collections are not tenant-scoped; they need their own uniqueness rules. */
 const IDENTITY_INDEXES: Record<string, IndexDescription[]> = {
   users: [{ key: { email: 1 }, unique: true }, { key: { orgId: 1, role: 1 } }],
-  orgs: [{ key: { _id: 1 } }],
+  orgs: [
+    { key: { _id: 1 } },
+    /**
+     * One Play purchase, one farm.
+     *
+     * `POST /billing/play` asks Google whether a purchase token is real, which
+     * it answers about the *purchase* — Google has no idea which farm is
+     * submitting it. Without this, a token that verifies could be posted by any
+     * number of orgs and every one of them would be written `active`: one $39
+     * subscription entitling unlimited farms. The route refuses that case with a
+     * sentence, and this is what makes the refusal true even if the route is
+     * ever wrong.
+     *
+     * **Structural rather than remembered**, which is the argument D15 already
+     * makes one field over: a check in a route is a thing somebody can refactor
+     * past, and a second claim on a bound token has to fail at the database or
+     * it does not really fail.
+     *
+     * **Partial, not merely sparse.** Almost every org has no
+     * `playPurchaseToken` — free farms never will — and a plain unique index
+     * would let exactly one of them hold the missing value. `sparse` would
+     * cover that too, but a partial filter also keeps the index to the handful
+     * of rows that have actually paid, which is the set being protected.
+     */
+    {
+      key: { playPurchaseToken: 1 },
+      unique: true,
+      partialFilterExpression: { playPurchaseToken: { $type: 'string' } },
+    },
+  ],
   refreshTokens: [
     // Family revocation touches every row in a family, on the theft path where
     // latency matters least but correctness matters most.

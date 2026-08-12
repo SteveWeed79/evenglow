@@ -29,10 +29,37 @@ export const taskUpdateSchema = z.object(taskShape).partial().strict();
  * or mutable but leave `photo` unassigned. Treated as mutable here so a photo
  * can be deleted; confirm when the upload path lands in Phase 3.
  */
+/**
+ * The largest photo this app will carry, and the number is chosen to separate
+ * two populations rather than to be generous.
+ *
+ * The device resizes to a 1600px long edge at JPEG quality 0.7 before anything
+ * leaves it (`photos/store.ts`), which produces 200–400 KB typically and
+ * around 1.2 MB for the densest subjects a farm photographs — a fleece, straw,
+ * gravel. An un-resized frame from a modern phone camera is 4–8 MB.
+ *
+ * **Three megabytes sits above every resized output and below every raw
+ * frame**, so it admits everything the app is built to send and refuses the one
+ * thing that means the resize did not happen. It was 25 MB, which is sixty
+ * times a typical photo and only reachable when something has already gone
+ * wrong — and on the free Atlas tier a farm's whole 512 MB allowance is twenty
+ * such files.
+ *
+ * `ACCESS-AND-BILLING.md` §4.1a asked for exactly this: *"lower the contract
+ * ceiling to match reality so an oversized photo is refused at the boundary
+ * with a sentence."* The boundary is what matters — refusing the record costs
+ * nothing, where refusing after the upload has spent a barn's bandwidth twice.
+ *
+ * Raising `MAX_EDGE` on the device is what would make this too tight: 2048px at
+ * the same quality reaches roughly 1.9 MB on a dense subject. There is headroom
+ * for that, and not much more.
+ */
+export const MAX_PHOTO_BYTES = 3_000_000;
+
 const photoShape = {
   subjectId: z.string().length(26),
   contentType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
-  byteSize: z.number().int().positive().max(25_000_000),
+  byteSize: z.number().int().positive().max(MAX_PHOTO_BYTES),
   capturedAt: z.number().int(),
   uploadedAt: z.number().int().optional(),
   caption: z.string().max(200).optional(),
