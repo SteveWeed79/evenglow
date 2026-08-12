@@ -21,6 +21,17 @@ pnpm farm:ls
 They read `.env.local` in that root, so `MONGODB_URI` decides which database
 they touch.
 
+**On the farm server that file is a symlink**, created by `setup-box.sh`,
+pointing at `/etc/steading/api.env` — the same config the service itself reads.
+So `sudo pnpm farm:ls` works on the box with nothing exported, and cannot
+disagree with what the API is using. Without it every one of these commands
+stops with *"MONGODB_URI is not set"*, and the workaround is two exports retyped
+after every reconnect — which is also two chances to answer an operational
+question against the wrong database, from a URI pasted out of old scrollback.
+
+`sudo` is required there because the target is `0600` and root-owned, which is
+what it should be.
+
 > ### That last sentence is the whole safety story
 >
 > These commands do not know or care whether a database is "production". If
