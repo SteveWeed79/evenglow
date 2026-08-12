@@ -95,6 +95,35 @@ beforeEach(async () => {
     },
     { _id: ORG_B as never, name: 'Ridge Smallholding', createdAt: new Date() },
   ] as never);
+
+  /**
+   * The owners have to exist, and this is invariant 8 rather than fixture noise.
+   *
+   * `requireMutationClaims` does not trust the token it was handed — it looks
+   * the user up by id, refuses a disabled one, and refuses one whose `orgId` no
+   * longer matches the claim, then returns the role **from the database**. So a
+   * signed token for a user who was never inserted is a 401, which is exactly
+   * what the first version of this suite got and exactly what it should have
+   * got: the server re-deriving identity rather than reading it off the wire.
+   */
+  await harness.db.collection('users').insertMany([
+    {
+      _id: OWNER_A as never,
+      email: 'owner-a@example.test',
+      name: 'Owner A',
+      orgId: ORG_A,
+      role: 'owner',
+      createdAt: new Date(),
+    },
+    {
+      _id: OWNER_B as never,
+      email: 'owner-b@example.test',
+      name: 'Owner B',
+      orgId: ORG_B,
+      role: 'owner',
+      createdAt: new Date(),
+    },
+  ] as never);
 });
 
 describeDb('a purchase token belongs to one farm', () => {
