@@ -73,7 +73,29 @@ RestrictSUIDSGID=true
 RestrictNamespaces=true
 LockPersonality=true
 MemoryDenyWriteExecute=false
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+#
+# **AF_NETLINK is required and its absence killed the first real deployment.**
+#
+# The obvious list is AF_INET, AF_INET6 and AF_UNIX — a service that speaks TCP
+# and nothing else. It is wrong, and wrong in a way no test could catch, because
+# the failure happens *after* the port is successfully bound:
+#
+#   SystemError [ERR_SYSTEM_ERROR]: uv_interface_addresses returned
+#   Unknown system error 97      <- EAFNOSUPPORT
+#       at Object.networkInterfaces (node:os)
+#       at getAddresses (fastify/lib/server.js)
+#       at Server.listeningEventHandler (fastify/lib/server.js)
+#
+# `listen()` on a wildcard address makes Fastify enumerate the machine's
+# interfaces so it can report every address it is now reachable on. On glibc
+# that is `getifaddrs()`, which opens a NETLINK_ROUTE socket — so denying
+# AF_NETLINK denies interface enumeration, and Node throws from the listening
+# handler rather than from anything that looks like configuration.
+#
+# The symptom is the worst shape available: the service binds, then exits 1,
+# restarts five times in a minute and stops, and the journal blames a syscall
+# in libuv. Nothing points at this line.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
 
 # `ProtectSystem=strict` makes the whole filesystem read-only, and nothing here
 # needs to write: SQLite is on the handset, photos are in Mongo, and the logs
