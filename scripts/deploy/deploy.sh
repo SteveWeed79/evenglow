@@ -39,6 +39,24 @@ die() { printf '\n\033[1;31mSTOPPED:\033[0m %s\n\n' "$*" >&2; exit 1; }
 
 cd "$REPO_DIR"
 
+# ── Git will not touch a repository it thinks belongs to somebody else ───────
+#
+# **This is not optional and it broke the timer before it ever ran once.** The
+# checkout is owned by the `steading` service user; this script runs as root.
+# Since CVE-2022-24765 git refuses that combination outright:
+#
+#   fatal: detected dubious ownership in repository at '/opt/steading'
+#
+# Under `sudo` from a terminal it is a confusing error. Under systemd it is
+# invisible — a timer that fails every five minutes into the journal and never
+# deploys anything, while the box looks perfectly healthy.
+#
+# `--system` rather than `--global`, so it belongs to the machine rather than
+# to whichever user happened to run the script the first time. Idempotent:
+# `--add` on an identical value is checked for first.
+git config --system --get-all safe.directory 2>/dev/null | grep -qxF "$REPO_DIR" \
+  || git config --system --add safe.directory "$REPO_DIR"
+
 # What is running now, so the rollback below has somewhere to go back to.
 WAS="$(git rev-parse --short HEAD)"
 
@@ -46,19 +64,49 @@ say "Fetching ($REF)"
 git fetch --quiet origin "$REF" || die "Could not fetch '$REF' from origin.
   If this box has never seen that branch, check the name. CI creates 'release'
   on the first green run on main."
-# --ff-only refuses to invent a merge. A box that has diverged — somebody
-# edited a file in place at 6am to fix something — stops here and says so
-# rather than resolving it silently into a tree nobody can reason about. The
-# same rule the Windows scripts use, for the same reason.
-git merge --ff-only FETCH_HEAD || die "This box has changes of its own, or has diverged from $REF.
-  Look at 'git status' here before going further. Nothing has been changed."
+
+TARGET="$(git rev-parse --short FETCH_HEAD)"
+
+# ── Three cases, and the middle one is why this is not just `merge --ff-only` ─
+#
+# **A box AHEAD of the release ref is the failure worth spelling out.** Run
+# `git pull` here once — the obvious thing to try, and the first thing anybody
+# asks about — and this checkout jumps to `main`. From then on
+# `merge --ff-only FETCH_HEAD` finds the release commit is an *ancestor*,
+# prints "Already up to date", and exits 0. The box quietly serves untested
+# code and every deployment after it reports nothing to do. Silent, permanent
+# until somebody happens to look, and it defeats the entire point of tracking a
+# CI-gated ref.
+#
+# Reproduced before this was written: main two commits ahead of release, a box
+# on main, `merge --ff-only` exit 0 and "Already up to date".
+if [ "$WAS" = "$TARGET" ]; then
+  note "already on $TARGET — nothing to deploy"
+elif git merge-base --is-ancestor HEAD FETCH_HEAD; then
+  # The ordinary case: release has moved forward and this is a fast-forward.
+  git merge --ff-only FETCH_HEAD --quiet \
+    || die "The fast-forward failed unexpectedly. Nothing has been changed."
+  note "$WAS -> $TARGET"
+else
+  die "This box is NOT on $REF, and pulling would not fix it.
+
+  Here:    $WAS
+  $REF:    $TARGET
+
+  HEAD is ahead of $REF, or the two have diverged. The usual cause is a
+  'git pull' run here by hand, which moves this checkout to main — ahead of
+  the commit CI has actually passed. The deploy timer would then report
+  'nothing to deploy' for ever while serving untested code.
+
+  To get back on the tracked ref, discarding whatever is here:
+
+      cd $REPO_DIR && sudo git reset --hard $TARGET
+
+  Look at 'git log --oneline $TARGET..HEAD' first if you want to know what
+  that throws away. Nothing has been changed."
+fi
 
 NOW="$(git rev-parse --short HEAD)"
-if [ "$WAS" = "$NOW" ]; then
-  note "already on $NOW — nothing to deploy"
-else
-  note "$WAS -> $NOW"
-fi
 
 say "Dependencies"
 corepack pnpm install --frozen-lockfile --filter "@steading/api..."

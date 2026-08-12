@@ -504,6 +504,27 @@ The whole tenancy model is `scoped(orgId)` inside one database, and a dev farm
 sharing that database with a real one is the exact thing every isolation test
 in the repo exists to prevent.
 
+### Do you ever `git pull` on the box?
+
+**No — and doing it by hand is actively harmful.** The timer runs `deploy.sh`,
+which fetches and fast-forwards for you. The only manual `git` on that box is
+the `git clone` in step 4, once.
+
+The reason it matters: `git pull` there moves the checkout to **`main`**, which
+is ahead of the CI-gated `release` ref. Every deployment afterwards would find
+the release commit is an *ancestor*, report "nothing to deploy", and exit
+happily — while the box quietly serves code CI never passed. Silent, and
+permanent until somebody notices.
+
+`deploy.sh` now refuses that case explicitly and prints the way back rather than
+reporting success. But the short version is: let the timer do it.
+
+To force a deployment now instead of waiting up to five minutes:
+
+```
+sudo systemctl start steading-deploy
+```
+
 ### Watching it
 
 ```
@@ -559,4 +580,5 @@ the free M0 tier has no automated backups either.
 | Two accounts on one email address, or nothing ever expires | `pnpm db:indexes` was never run (step 5b). Run it — it is idempotent |
 | App says **Not set up** | The APK was built without an origin — that is `preview`, not `preview-farm` |
 | Sync refused with a 402 | Billing, and only possible once `GOOGLE_PLAY_SERVICE_ACCOUNT` is set. With no Play config `access.ts` returns `syncing: true` for every farm, so a 402 here means something else |
+| Deploy timer runs, nothing ever deploys | `journalctl -u steading-deploy -n 30`. Either the box is ahead of `release` — never `git pull` there — or git is refusing the checkout's ownership |
 | One farm sees another's records | Stop and report it. That is the invariant everything else is built on |
