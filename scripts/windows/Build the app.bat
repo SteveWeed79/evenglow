@@ -28,27 +28,18 @@ call "%~dp0_shared.bat" :ensure_packages   || goto :stop
 
 echo.
 echo   --- Which build is this? ---
-rem Android only ever compares versionCode, and it must move for every build
-rem that leaves this machine or Play refuses the upload and a downgrade cannot
-rem install. See section 5b. Asked rather than done silently: the number ends up
-rem in git, and a commit nobody meant to make is its own kind of confusing.
-for /f "tokens=*" %%v in ('node "scripts\windows\build-app.mjs" show') do echo   currently   %%v
-echo.
-echo   Every build you hand to somebody needs a new versionCode.
-set "BUMP="
-set /p "BUMP=  Move it on by one before building? [Y/n] "
-if /i "!BUMP!"=="n" (
-  echo   [ NOTE ]    left alone. If this number has been built before, the
-  echo               farm server will refuse to publish it.
-) else (
-  for /f "tokens=*" %%v in ('node "scripts\windows\build-app.mjs" bump') do echo   [ OK ]      versionCode %%v
-  if errorlevel 1 goto :stop
-  echo.
-  echo   [ NOTE ]    app.json changed. Commit it so the number is in the
-  echo               history rather than only on this PC.
-)
+rem The version NUMBER is Expo's to keep now. `appVersionSource: remote` plus
+rem `autoIncrement` on the profile means EAS holds the counter and moves it on
+rem every build, so there is nothing to edit, nothing to commit, and no way to
+rem build two APKs that claim to be the same one.
+rem
+rem It used to live in app.json and be bumped here. That put a number in a file
+rem which had to be committed in lockstep with every build, and twice it was
+rem not - leaving a working tree that refused to pull and a phone carrying a
+rem build whose number matched a different one.
+for /f "tokens=*" %%v in ('node "scripts\windows\build-app.mjs" show') do echo   version     %%v
+echo   [ OK ]      EAS assigns the build number. Nothing to commit.
 
-echo.
 echo   --- Building on Expo's machines ---
 echo.
 echo   Ten to twenty minutes, mostly queueing. Leave this window open.
