@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { LIBRARY_VARIETIES, LIFECYCLES, newId, scheduleFor } from '@steading/contracts';
+import { cropDefaults, LIFECYCLES, newId, scheduleFor } from '@steading/contracts';
 
 type Lifecycle = (typeof LIFECYCLES)[number];
 import { listBeds, readSite } from '@steading/core/read/growing';
@@ -17,10 +17,11 @@ import type { ScreenProps } from '../navigation/Root';
  *
  * ## Why this had to exist
  *
- * The bundled library is about sixty varieties and there are thousands. The
- * first real morning of use found one: *"my wife just planted Black
- * Pumpkins"* — a search with no result and no way forward, over a seed already
- * in the ground.
+ * The bundled library is a few hundred varieties and there are tens of
+ * thousands. The first real morning of use found one: *"my wife just planted
+ * Black Pumpkins"* — a search with no result and no way forward, over a seed
+ * already in the ground. Growing the library does not fix that; it only moves
+ * where the edge is.
  *
  * A library will always lose that race. `DOMAIN-SCOPE.md` 2.4 settles what
  * happens when it does — *"an app that tells a grower no is an app that is
@@ -46,22 +47,6 @@ import type { ScreenProps } from '../navigation/Root';
  * leaving somebody to wonder where the row went.
  */
 
-/**
- * The botanical family, worked out from the crop rather than asked for.
- *
- * `family` drives `rotationConflict` — brassicas after brassicas build club
- * root — so it is worth having, and it is also the one field on this form a
- * grower has no reason to know. Nobody planting a pumpkin thinks "cucurbit".
- *
- * The library already maps crops to families for the sixty it ships, so a farm
- * adding another pumpkin gets the right answer for free. An unrecognised crop
- * falls to `other`, which means no rotation warning rather than a wrong one.
- */
-function familyOf(crop: string): (typeof LIBRARY_VARIETIES)[number]['family'] {
-  const wanted = crop.trim().toLowerCase();
-  return LIBRARY_VARIETIES.find((v) => v.crop.toLowerCase() === wanted)?.family ?? 'other';
-}
-
 const LIFECYCLE_LABELS: Record<Lifecycle, string> = {
   annual: 'One season',
   biennial: 'Two seasons',
@@ -78,8 +63,30 @@ export function AddVarietyScreen({ route }: ScreenProps<'AddVariety'>): React.Re
 
   const [name, setName] = useState('');
   const [crop, setCrop] = useState(suggested ?? '');
-  const [lifecycle, setLifecycle] = useState<Lifecycle>('annual');
+  /** Null until the grower touches it, so the crop's own answer can show through. */
+  const [chosenLifecycle, setChosenLifecycle] = useState<Lifecycle | null>(null);
   const [days, setDays] = useState(0);
+
+  /**
+   * What the crop table knows about whatever was typed, if anything.
+   *
+   * `family` drives `rotationConflict` — brassicas after brassicas build club
+   * root — so it is worth having, and it is also the one field on this form a
+   * grower has no reason to know. Nobody planting a pumpkin thinks "cucurbit".
+   *
+   * `lifecycle` is a fair guess for the same reason: rosemary comes back and
+   * basil does not, whatever the cultivar is called. It is a default rather
+   * than a decision — the buttons stay live and a choice made there wins.
+   *
+   * An unrecognised crop falls to `other` and `annual`, which means no rotation
+   * warning rather than a wrong one.
+   *
+   * Days to maturity is deliberately *not* pre-filled. That is the one number
+   * that belongs to the cultivar rather than the crop, and this screen exists
+   * precisely because the cultivar is one nothing here has heard of.
+   */
+  const known = cropDefaults(crop);
+  const lifecycle: Lifecycle = chosenLifecycle ?? known?.lifecycle ?? 'annual';
 
   const { saving, failure, save } = useSaver(useLeave());
 
@@ -98,7 +105,7 @@ export function AddVarietyScreen({ route }: ScreenProps<'AddVariety'>): React.Re
         payload: {
           name: name.trim(),
           crop: crop.trim(),
-          family: familyOf(crop),
+          family: known?.family ?? 'other',
           lifecycle,
           // Zero is the stepper's way of saying "not filled in", and an
           // optional field is absent rather than nought.
@@ -143,7 +150,7 @@ export function AddVarietyScreen({ route }: ScreenProps<'AddVariety'>): React.Re
         },
       });
     });
-  }, [enough, bed, save, log, name, crop, lifecycle, days, site]);
+  }, [enough, bed, save, log, name, crop, known, lifecycle, days, site]);
 
   if (loaded === null) return <Loading title="Add a variety" />;
   if (bed === null) return <Missing title="Add a variety" what="That bed" />;
@@ -152,8 +159,8 @@ export function AddVarietyScreen({ route }: ScreenProps<'AddVariety'>): React.Re
     <Screen title="Something of your own" back>
       <Panel label={`Planting in ${bed.name}`}>
         <Body>
-          The list only knows about sixty or so. Anything else you grow goes here, and it is yours
-          — nothing that ships with a later version will overwrite it.
+          The list only knows a few hundred. Anything else you grow goes here, and it is yours —
+          nothing that ships with a later version will overwrite it.
         </Body>
       </Panel>
 
@@ -165,11 +172,16 @@ export function AddVarietyScreen({ route }: ScreenProps<'AddVariety'>): React.Re
         <TextField value={crop} onChangeText={setCrop} placeholder="Pumpkin" testID="variety-crop" />
       </Field>
 
-      <Field label="How long does it live?">
+      <Field
+        label="How long does it live?"
+        {...(chosenLifecycle === null && known !== undefined
+          ? { hint: `Most ${crop.trim().toLowerCase()} does this. Change it if yours is different.` }
+          : {})}
+      >
         <Choice
           options={LIFECYCLES}
           value={lifecycle}
-          onChange={setLifecycle}
+          onChange={setChosenLifecycle}
           labels={LIFECYCLE_LABELS}
         />
       </Field>
