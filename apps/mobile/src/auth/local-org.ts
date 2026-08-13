@@ -1,5 +1,6 @@
 import { isUlid, newId } from '@steading/contracts';
 import { knownFarmIds } from '../db/open';
+import { disposeWhenClosed } from '../db/store';
 import {
   clearLocalOrg,
   readLocalOrgRaw,
@@ -171,4 +172,44 @@ export async function retireLocalOrgId(): Promise<void> {
   // put the same id in the list twice.
   const rest = (await retiredOrgIds()).filter((id) => id !== current);
   await writeRetiredOrgs([current, ...rest]);
+}
+
+/**
+ * Throws away a farm this device minted and never put anything in.
+ *
+ * ## Why an empty farm is not free
+ *
+ * `ensureLocalOrgId` recovers a farm whose id was lost by adopting the database
+ * on disk — but only when there is **exactly one**, because choosing between
+ * two would be the app deciding which farm somebody meant. `knownFarmIds`
+ * matches on filename, so a leftover counts however empty it is:
+ *
+ *     one real farm + one empty leftover  →  two files  →  mints a third
+ *
+ * and the real records are stranded, silently, which is the exact loss the
+ * adoption path exists to prevent. An empty farm carries no information and
+ * full weight in the one decision that recovers a real one.
+ *
+ * ## Why this is not what a join does
+ *
+ * **Signing in and joining want opposite things here, and deleting on both
+ * would leak a farm across tenants.**
+ *
+ * After a join, the retired id is what a later sign-out comes back to. Delete
+ * an empty one instead and there is nothing to come back to — so adoption
+ * runs, finds the employer's database as the only one on disk, and opens it.
+ * A hand who signs out at the end of a season would be looking at their
+ * employer's farm with no account. Retiring an empty farm costs one string and
+ * closes that off, so `joinFarm` retires whatever it has, records or not.
+ *
+ * Signing in to an account of your own has no such problem: the database left
+ * behind is the one the account already syncs, and adopting it after a sign-out
+ * is the app doing the right thing rather than a leak.
+ */
+export async function discardEmptyLocalOrg(): Promise<void> {
+  const current = await readLocalOrgId();
+  if (current === null) return;
+
+  await clearLocalOrg();
+  disposeWhenClosed(current);
 }

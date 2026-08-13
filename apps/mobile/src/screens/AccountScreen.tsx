@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
+import { readExposure } from '@steading/core/backup/exposure';
 import { Choice, Failure, Field, Primary, Secondary, TextField, useSaver } from '../components/Form';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
@@ -19,6 +20,7 @@ import {
   signIn,
   SignInError,
 } from '../auth/session';
+import { useLive } from '../hooks/useLive';
 import { useLeave } from '../hooks/useNav';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, SPACE, TYPE } from '../theme/tokens';
@@ -66,6 +68,15 @@ export function AccountScreen({
   onSignedIn: (claims: CachedClaims) => void;
 }): React.ReactElement {
   const { colors } = useTheme();
+
+  /**
+   * What is on this phone right now, for the join warning below.
+   *
+   * The same read Settings and the exposure strip make, so the number
+   * somebody is shown before a join is the number they have been shown all
+   * along rather than a second opinion computed differently.
+   */
+  const exposure = useLive(readExposure);
 
   const [claims, setClaims] = useState<CachedClaims | null>(null);
   const [known, setKnown] = useState(false);
@@ -358,11 +369,27 @@ export function AccountScreen({
             * you went looking for last week's tallies would be the app's
             * worst broken promise.
             */}
+          {/**
+           * **With the count, and the count is the whole point.**
+           *
+           * "Anything you logged" is a sentence somebody agrees to without
+           * knowing what it costs. On a phone that has been in use since
+           * February the honest version of it is a number, and on a phone
+           * bought yesterday there is nothing to warn about at all — so an
+           * empty farm says the short thing rather than making somebody weigh
+           * a risk that is not there.
+           *
+           * It also used to say the records "stop being reachable", which was
+           * true when a join deleted the id and stopped being true when
+           * `retireLocalOrgId` started setting it aside instead. A warning
+           * that overstates is spent the first time somebody checks it.
+           */}
           <Panel label="This leaves your own farm behind">
             <Body>
-              Joining somebody else's farm signs this phone in to their records. Anything you
-              logged on this handset before joining stays on it and stops being reachable, so do
-              this on a phone you have not been keeping your own records on.
+              Joining somebody else's farm signs this phone in to their records.
+              {exposure === null || exposure.records === 0
+                ? ' Nothing you have logged here goes with you.'
+                : ` The ${exposure.records.toLocaleString()} records on this phone stay on it and stop being shown — they come back if you sign out, and Get your records out can take a copy first.`}
             </Body>
           </Panel>
 
