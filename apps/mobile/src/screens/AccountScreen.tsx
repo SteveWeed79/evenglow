@@ -107,7 +107,39 @@ export function AccountScreen({
     }
   }, [promo]);
 
+  /**
+   * Which of the three this device is most likely here for.
+   *
+   * **It was always `claim`**, so a second phone landed on "Set up an account"
+   * with sign-in one of three options behind a selector, under a panel of
+   * prose. Reported as the login form being hidden — and it was, behind a
+   * question somebody had already answered by owning an account.
+   *
+   * The device cannot be asked, but it can be read. Every handset mints a farm
+   * on first launch (D14), so "has a farm" says nothing; **what it has in it
+   * says everything**:
+   *
+   * - records on this device → `claim`, because claiming is what keeps them
+   *   and losing them to a sign-in is the expensive mistake;
+   * - nothing logged → `signin`, because there is nothing to claim and a bare
+   *   handset opening this screen is somebody adding a second device.
+   *
+   * A default, not a decision — the selector is still there and still says
+   * what all three do. `readExposure` is the same count Settings and the
+   * exposure strip already show, so it cannot disagree with them.
+   */
   const [mode, setMode] = useState<Mode>('claim');
+  const [modeChosen, setModeChosen] = useState(false);
+
+  useEffect(() => {
+    if (modeChosen || exposure === null) return;
+    setMode(exposure.records > 0 ? 'claim' : 'signin');
+  }, [exposure, modeChosen]);
+
+  const chooseMode = useCallback((next: Mode) => {
+    setModeChosen(true);
+    setMode(next);
+  }, []);
   const [farmName, setFarmName] = useState('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -324,17 +356,32 @@ export function AccountScreen({
         * who came looking. What it must not do is bury the one thing an
         * account is actually for behind the two that sound like features.
         */}
-      <Panel label="What this is for">
-        <Body>
-          Everything you have logged is on this handset and nowhere else. An account keeps a copy
-          on the farm's server, so a phone in a water trough costs you a phone rather than a
-          season.
-        </Body>
-        <Body>It is also what lets a second phone, or a farm hand, see the same records.</Body>
-      </Panel>
+      {/**
+        * The honest reason, and only to somebody still deciding.
+        *
+        * A2.3 puts this first deliberately — what an account is actually for
+        * must not be buried behind the two things that sound like features.
+        * That argument is about somebody weighing it up, which is `claim`.
+        *
+        * Sign in and join are people who have already decided, arriving with a
+        * password or a code in hand, and for them a panel of prose is two
+        * hundred pixels between the screen and the field they came to type in.
+        * On a phone that is the difference between the form being visible and
+        * not.
+        */}
+      {mode === 'claim' ? (
+        <Panel label="What this is for">
+          <Body>
+            Everything you have logged is on this handset and nowhere else. An account keeps a copy
+            on the farm's server, so a phone in a water trough costs you a phone rather than a
+            season.
+          </Body>
+          <Body>It is also what lets a second phone, or a farm hand, see the same records.</Body>
+        </Panel>
+      ) : null}
 
       <Field label="Which are you doing?">
-        <Choice options={MODES} value={mode} onChange={setMode} labels={LABELS} />
+        <Choice options={MODES} value={mode} onChange={chooseMode} labels={LABELS} />
       </Field>
 
       {mode === 'claim' ? (
