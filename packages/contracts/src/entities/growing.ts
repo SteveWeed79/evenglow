@@ -188,7 +188,12 @@ const varietyShape = {
   transplantWeeksAfter: z.number().int().min(-12).max(26).optional(),
   directSowWeeksAfter: z.number().int().min(-12).max(26).optional(),
   autumnSowWeeksBefore: z.number().int().min(0).max(26).optional(),
-  daysToMaturity: z.number().int().min(1).max(1500).optional(),
+  // Four years was a sanity bound written with vegetables in mind, and the crop
+  // library walked straight into it: American ginseng is five years to a root
+  // worth digging. Widening a maximum can only accept records that were already
+  // being written, never reject ones that existed — so the bound moves to cover
+  // the slowest thing anybody actually plants in a bed.
+  daysToMaturity: z.number().int().min(1).max(2600).optional(),
 
   // Spacing, in the canonical base unit. Displayed in inches by default.
   spacingUm: micrometresSchema.optional(),

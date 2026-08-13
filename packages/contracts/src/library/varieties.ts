@@ -1,3 +1,4 @@
+import { CATALOGUE_VARIETIES } from './cultivars';
 import type { LibraryVariety } from './types';
 
 /**
@@ -9,11 +10,20 @@ import type { LibraryVariety } from './types';
  *
  * Nothing here is exhaustive and nothing here is authoritative. It exists so
  * the first evening with the app is useful rather than an evening of typing.
+ *
+ * ## These are hand-tuned, and they win
+ *
+ * The bulk of the library now comes from `cultivars.ts`, where a cultivar is a
+ * name and a number and everything else is inherited from the crop. The entries
+ * below predate that and were written one at a time, so several carry a figure
+ * or a note that the crop's defaults would flatten. Where the two describe the
+ * same variety, these are kept and the generated one is dropped — see the merge
+ * at the foot of the file.
  */
 
 const P = 'commonly-published' as const;
 
-export const LIBRARY_VARIETIES: readonly LibraryVariety[] = [
+const HAND_TUNED: readonly LibraryVariety[] = [
   // ── solanaceae ─────────────────────────────────────────────────────────────
   { id: 'tomato-sungold', crop: 'Tomato', name: 'Sungold', family: 'solanaceae', lifecycle: 'annual',
     startIndoorsWeeksBefore: 6, transplantWeeksAfter: 2, daysToMaturity: 57,
@@ -252,4 +262,20 @@ export const LIBRARY_VARIETIES: readonly LibraryVariety[] = [
   { id: 'chives-common', crop: 'Chives', name: 'Common', family: 'allium', lifecycle: 'perennial',
     hardyToF: -35, directSowWeeksAfter: -2, daysToMaturity: 80,
     spacingIn: 8, rowSpacingIn: 12, sowDepthIn: 0.25, provenance: P },
+];
+
+const HAND_TUNED_IDS = new Set(HAND_TUNED.map((v) => v.id));
+
+/**
+ * The whole library: the hand-tuned entries, then everything the crop tables
+ * generate that they do not already cover.
+ *
+ * Deduplicated on `id`, which is slugged from crop and name by the same rule on
+ * both sides — so `tomato-brandywine` written out by hand and `tomato-brandywine`
+ * generated from the table are recognised as one variety rather than shipping
+ * twice and appearing twice in the picker.
+ */
+export const LIBRARY_VARIETIES: readonly LibraryVariety[] = [
+  ...HAND_TUNED,
+  ...CATALOGUE_VARIETIES.filter((v) => !HAND_TUNED_IDS.has(v.id)),
 ];

@@ -7,6 +7,7 @@ import type { VarietyTiming } from '../growing/schedule';
 export * from './types';
 export { LIBRARY_BREEDS } from './breeds';
 export { LIBRARY_VARIETIES } from './varieties';
+export { CROP_DEFAULTS, cropDefaults, type CropDefaults, type Cultivar } from './crops';
 
 /**
  * Using the library.
