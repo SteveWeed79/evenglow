@@ -2,6 +2,7 @@
   "expo": {
     "name": "Steading",
     "slug": "steading",
+    "owner": "swbuilds-team",
     "scheme": "steading",
     "version": "0.1.0",
     "orientation": "default",

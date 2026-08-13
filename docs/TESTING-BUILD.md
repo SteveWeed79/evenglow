@@ -37,6 +37,36 @@ that is not a formality.
 > CLI versions and `eas.json`'s own `cli.version` floor goes unchecked. It never
 > reaches a bundle — it is a build tool, not a dependency of the app.
 
+### Which Expo account this belongs to
+
+`app.json` sets `"owner": "swbuilds-team"`, and it is not decoration:
+
+**`owner` decides which account holds the signing keystore.** Moving it later
+means a different project and a different key, and a different key means every
+installed copy needs an uninstall before it will take an update — which takes
+the farm's records with it (§3, last row). It is close to a one-way door, which
+is why it is written down rather than left to whoever happens to be logged in.
+
+An organisation rather than the personal account that created it, because an
+org can gain members and change hands without the project moving. A personal
+account ties the keystore — and eventually the Play listing — to one login.
+
+**Set it before the first build, not after.** With no `owner` and no
+`extra.eas.projectId`, `eas build` creates a project under whoever is signed in
+and writes the id into `app.json` mid-build. That works once and then leaves the
+tree dirty, so the next `Build the app.bat` stops at `:update_code` — `git pull
+--ff-only` refuses local changes — with nothing to connect it to the build that
+caused it.
+
+`eas init` is the deliberate version, run on its own and committed:
+
+```
+pnpm --filter @steading/mobile exec eas init
+```
+
+**And turn on 2FA for that account.** It holds the one piece of state in this
+project that cannot be regenerated from anything (§8).
+
 ---
 
 ## 2. Which profile
