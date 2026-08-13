@@ -154,7 +154,27 @@ export function Screen({
          * not draw into. `contentStyle` still comes after, so a caller can
          * override it.
          */}
-       <View style={[styles.content, { paddingBottom: SPACE.xl + insets.bottom }, contentStyle]}>
+       <View
+        style={[
+          styles.content,
+          /**
+           * Only where nothing else is already standing in that space.
+           *
+           * `back` is the signal and it is already here: a pushed screen has no
+           * tab bar under it, so the system navigation is what its content
+           * would run into. A tab screen has the bar, which reserves the inset
+           * itself — adding it again here is a second helping of the same
+           * gap, and Today ends in a band of nothing.
+           *
+           * Wrong in the harmless direction, unlike the two it follows, but
+           * wrong for the same reason both of those were: the inset belongs to
+           * whichever thing actually meets the bottom of the screen, and that
+           * is a different thing on a tab than on a form.
+           */
+          { paddingBottom: SPACE.xl + (back ? insets.bottom : 0) },
+          contentStyle,
+        ]}
+       >
         {/* One block, so the title and the name under it are not separated by
             the content gap that separates whole panels. */}
         <View style={styles.heading}>
