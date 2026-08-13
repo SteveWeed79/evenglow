@@ -1,10 +1,20 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import {
+  Dimensions,
+  Keyboard,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  type ViewStyle,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from './Icon';
 import { LampToggle } from './LampToggle';
 import { Plaster } from './Plaster';
+import { RevealProvider, scrollToClear, type Measurable, type Reveal } from './reveal';
 import { SyncChip } from './SyncChip';
 import { Touch } from './Touch';
 import { useTrouble } from '../hooks/useTrouble';
@@ -50,7 +60,78 @@ export function Screen({
   const navigation = useNavigation<NativeStackNavigationProp<RootParamList>>();
   const trouble = useTrouble();
 
+  /**
+   * Room for the keyboard, and the field that wants to be above it.
+   *
+   * See `reveal.tsx` for why this is not a `KeyboardAvoidingView`. The short
+   * version: edge-to-edge means the window no longer resizes when the keyboard
+   * opens, so the scroll view has to be told.
+   *
+   * Both a ref and state, which is not an oversight — the padding needs to
+   * re-render and the measurement callback needs the value without closing over
+   * a stale render.
+   */
+  const scroll = useRef<ScrollView>(null);
+  const offset = useRef(0);
+  const focused = useRef<Measurable | null>(null);
+  const covered = useRef(0);
+  const [keyboard, setKeyboard] = useState(0);
+
+  const bring = useCallback((height: number) => {
+    const node = focused.current;
+    if (node === null || height <= 0) return;
+
+    node.measureInWindow((_x, y, _width, fieldHeight) => {
+      const next = scrollToClear({
+        fieldTop: y,
+        fieldHeight,
+        windowHeight: Dimensions.get('window').height,
+        keyboardHeight: height,
+        margin: SPACE.lg,
+        offset: offset.current,
+      });
+      if (next !== null) scroll.current?.scrollTo({ y: next, animated: true });
+    });
+  }, []);
+
+  useEffect(() => {
+    /**
+     * `Did` rather than `Will`, because the field has to be measured against a
+     * keyboard that is actually there. On Android `keyboardWillShow` does not
+     * fire at all, and measuring against a height of zero would be a no-op on
+     * the one platform this ships to.
+     */
+    const shown = Keyboard.addListener('keyboardDidShow', (event) => {
+      const height = event.endCoordinates.height;
+      covered.current = height;
+      setKeyboard(height);
+      bring(height);
+    });
+    const hidden = Keyboard.addListener('keyboardDidHide', () => {
+      covered.current = 0;
+      setKeyboard(0);
+    });
+    return () => {
+      shown.remove();
+      hidden.remove();
+    };
+  }, [bring]);
+
+  const reveal = useCallback<Reveal>(
+    (node) => {
+      focused.current = node;
+      /**
+       * Moving between two fields with the keyboard already up fires no
+       * `keyboardDidShow`, so without this the second field is never brought
+       * up — which is every form on this app past the first line.
+       */
+      if (node !== null) bring(covered.current);
+    },
+    [bring],
+  );
+
   return (
+   <RevealProvider value={reveal}>
     <View style={[styles.ground, { backgroundColor: colors.ground, paddingTop: insets.top }]}>
       {/* Behind everything, never over it. The grain is a shipped tile because
           feTurbulence blended at soft-light has no RN form — see Plaster.tsx. */}
@@ -129,10 +210,17 @@ export function Screen({
           hand in, so centring it is a bet on internals. Centring a plain child
           inside it is ordinary flexbox and cannot be anything else. */}
       <ScrollView
+        ref={scroll}
         contentContainerStyle={styles.scroll}
         // Tapping a field then reaching for a stepper should not need the
         // keyboard dismissed first.
         keyboardShouldPersistTaps="handled"
+        // Where the surface is, so a field can be scrolled up from wherever it
+        // happens to be rather than from the top of the form.
+        onScroll={(event) => {
+          offset.current = event.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={16}
       >
        {/**
          * The bottom inset, which was missing and cost the last centimetre of
@@ -171,7 +259,17 @@ export function Screen({
            * whichever thing actually meets the bottom of the screen, and that
            * is a different thing on a tab than on a form.
            */
-          { paddingBottom: SPACE.xl + (back ? insets.bottom : 0) },
+          /**
+           * The keyboard stands in the same place, so it takes the same slot
+           * rather than stacking with it — `Math.max`, not a sum. The system
+           * navigation is *behind* the keyboard when the keyboard is up, and
+           * adding both would leave a bar of nothing under the last field.
+           *
+           * This is the half that makes scrolling possible at all: without
+           * somewhere to scroll to, `scrollToClear` computes an offset the
+           * surface cannot reach and the field stays put.
+           */
+          { paddingBottom: SPACE.xl + Math.max(keyboard, back ? insets.bottom : 0) },
           contentStyle,
         ]}
        >
@@ -212,6 +310,7 @@ export function Screen({
        </View>
       </ScrollView>
     </View>
+   </RevealProvider>
   );
 }
 
