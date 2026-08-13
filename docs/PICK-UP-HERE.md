@@ -52,7 +52,7 @@ exits 1. The real fix is in PR #100; the drop-in can go once that merges and
 ### 1. Build the tester APK — any machine with the checkout
 
 ```
-pnpm dlx eas-cli login
+pnpm --filter @steading/mobile exec eas login
 pnpm --filter @steading/mobile exec eas build --profile preview-farm --platform android
 ```
 

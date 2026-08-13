@@ -273,7 +273,7 @@ until `/etc/steading/api.env` has both values in it.
 `preview-farm` and `production` profiles. Build a tester APK:
 
 ```
-pnpm dlx eas-cli login
+pnpm --filter @steading/mobile exec eas login
 pnpm --filter @steading/mobile exec eas build --profile preview-farm --platform android
 ```
 

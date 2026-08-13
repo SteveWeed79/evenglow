@@ -8,9 +8,9 @@ before they install it.
 ## 1. The short version
 
 ```
-pnpm dlx eas-cli login                     # once
-pnpm dlx eas-cli build:configure           # once, if it asks
-pnpm dlx eas-cli credentials               # once — back up the keystore (§8)
+pnpm --filter @steading/mobile exec eas login                     # once
+pnpm --filter @steading/mobile exec eas build:configure           # once, if it asks
+pnpm --filter @steading/mobile exec eas credentials               # once — back up the keystore (§8)
 
 # then, for every build that leaves this machine:
 #   bump expo.android.versionCode in app.json  (§5b)
@@ -26,6 +26,46 @@ refusal and are both routine.
 No Play Console, no $25, no review, and no signing key to *create* — EAS makes
 one on the first build. There is still exactly one to **keep**, and §8 is why
 that is not a formality.
+
+> **`eas-cli` is a devDependency of `apps/mobile`**, which is why these say
+> `exec eas` rather than `pnpm dlx eas-cli`. It was neither for a long time, so
+> every command written down here failed with *'eas' is not recognized* — the
+> docs described a tool nothing installed.
+>
+> `dlx` would also have worked, and pinning is why it is not used: `dlx` fetches
+> whatever is newest each time, so two machines can drive one project with two
+> CLI versions and `eas.json`'s own `cli.version` floor goes unchecked. It never
+> reaches a bundle — it is a build tool, not a dependency of the app.
+
+### Which Expo account this belongs to
+
+`app.json` sets `"owner": "swbuilds-team"`, and it is not decoration:
+
+**`owner` decides which account holds the signing keystore.** Moving it later
+means a different project and a different key, and a different key means every
+installed copy needs an uninstall before it will take an update — which takes
+the farm's records with it (§3, last row). It is close to a one-way door, which
+is why it is written down rather than left to whoever happens to be logged in.
+
+An organisation rather than the personal account that created it, because an
+org can gain members and change hands without the project moving. A personal
+account ties the keystore — and eventually the Play listing — to one login.
+
+**Set it before the first build, not after.** With no `owner` and no
+`extra.eas.projectId`, `eas build` creates a project under whoever is signed in
+and writes the id into `app.json` mid-build. That works once and then leaves the
+tree dirty, so the next `Build the app.bat` stops at `:update_code` — `git pull
+--ff-only` refuses local changes — with nothing to connect it to the build that
+caused it.
+
+`eas init` is the deliberate version, run on its own and committed:
+
+```
+pnpm --filter @steading/mobile exec eas init
+```
+
+**And turn on 2FA for that account.** It holds the one piece of state in this
+project that cannot be regenerated from anything (§8).
 
 ---
 
@@ -464,7 +504,7 @@ Play it is worse, because the package name is claimed and cannot be reused.
 Back it up now rather than before the first Play upload:
 
 ```
-pnpm dlx eas-cli credentials
+pnpm --filter @steading/mobile exec eas credentials
 ```
 
 Android → the build profile → **Download credentials**. Keep the `.jks` and the
