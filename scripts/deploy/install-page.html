@@ -1,0 +1,148 @@
+<!doctype html>
+<!--
+  What a tester sees at https://api.swbuild.dev/app
+
+  Served by Caddy from /var/lib/steading/dist; put there by publish-apk.sh,
+  which refreshes it on every publish so it is reviewed in the repo rather than
+  edited on the box and forgotten.
+
+  ## Why this page exists at all
+
+  Android asks two questions before an APK from a browser will install, and
+  both of them look like a refusal:
+
+    1. Chrome — "this type of file can harm your device"
+    2. Play Protect — an unknown developer, app not scanned
+
+  Both are routine here and neither is a fault. But somebody who reads either
+  as *this is dangerous* stops, and does not tell you they stopped — so the
+  answer has to be in front of them before they hit it, not in a message they
+  read yesterday. That is the whole job of this page, and it is the thing a
+  GitHub release download cannot do.
+
+  ## No fonts, no scripts, no images
+
+  It is opened once, on a phone, possibly on a bad signal, by somebody who is
+  not sure this is safe. Every external request is a chance to be slow or
+  broken, and a page about trust that half-loads is worse than plain text.
+  Colours are the app's own (theme/tokens.ts) so the page and the thing it
+  installs look like one product.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Install Steading</title>
+    <style>
+      :root {
+        --ground: #ede6d2;
+        --ink: #2b211a;
+        --quiet: #5c4c3d;
+        --line: #cbbfa6;
+        --lantern: #8a4b2a;
+        --panel: #f6f1e2;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --ground: #201913;
+          --ink: #ede6d2;
+          --quiet: #bfae97;
+          --line: #4a3c30;
+          --lantern: #d98b5a;
+          --panel: #2a211a;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 1.5rem 1.25rem 4rem;
+        background: var(--ground);
+        color: var(--ink);
+        font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        max-width: 34rem;
+        margin-inline: auto;
+      }
+      h1 { font-size: 1.9rem; margin: 0 0 0.25rem; letter-spacing: -0.01em; }
+      .sub { color: var(--quiet); margin: 0 0 2rem; }
+      /* 64px, because R4 makes primary actions 64 and this is one. */
+      .get {
+        display: block;
+        text-align: center;
+        background: var(--lantern);
+        color: #fff;
+        text-decoration: none;
+        font-size: 1.15rem;
+        font-weight: 600;
+        padding: 1.15rem;
+        min-height: 64px;
+        border-radius: 10px;
+        margin-bottom: 2.25rem;
+      }
+      ol { padding-left: 1.3rem; margin: 0 0 2rem; }
+      li { margin-bottom: 1.1rem; }
+      li b { display: block; }
+      .warn {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 1rem 1.15rem;
+        margin: 0 0 2rem;
+      }
+      .warn p { margin: 0.5rem 0 0; }
+      .warn p:first-child { margin-top: 0; }
+      h2 { font-size: 1.05rem; margin: 0 0 0.5rem; }
+      footer { color: var(--quiet); font-size: 0.9rem; border-top: 1px solid var(--line); padding-top: 1rem; }
+    </style>
+  </head>
+  <body>
+    <h1>Steading</h1>
+    <p class="sub">Farm records that work without a signal.</p>
+
+    <a class="get" href="steading.apk">Install on this phone</a>
+
+    <div class="warn">
+      <h2>Android will ask you two things. Both are normal.</h2>
+      <p>
+        <b>“This type of file can harm your device.”</b>
+        Chrome says this about every app that does not come from the Play Store.
+        Choose <b>Download anyway</b>.
+      </p>
+      <p>
+        <b>“Unknown developer” or “app not scanned”.</b>
+        That is Play Protect noticing the app is not published on the store yet.
+        Choose <b>Install anyway</b>.
+      </p>
+      <p>
+        You may also be asked to allow installing apps from Chrome. That is asked
+        once.
+      </p>
+    </div>
+
+    <h2>Then</h2>
+    <ol>
+      <li>
+        <b>Open it and start using it.</b>
+        There is nothing to set up and no account needed. Everything you log is
+        on the phone straight away.
+      </li>
+      <li>
+        <b>Make an account when you want a copy somewhere else.</b>
+        Settings → <i>Keep these records safe</i>. Until then, everything lives
+        on this phone and nowhere else — so uninstalling the app, or clearing
+        its data, takes it.
+      </li>
+      <li>
+        <b>If something goes wrong, tell it.</b>
+        Settings → <i>Something is wrong</i>. It already knows what happened and
+        sends that; there is nothing you have to describe.
+      </li>
+    </ol>
+
+    <footer>
+      <p>
+        Open this page on the phone you want it on — the file is for Android and
+        will not do anything on a computer.
+      </p>
+    </footer>
+  </body>
+</html>

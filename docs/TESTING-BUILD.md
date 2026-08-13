@@ -362,27 +362,76 @@ is dangerous* stops there and does not tell you they stopped.
 - **`distribution: "internal"`** on the profile means anybody with the URL can
   install it. It is unlisted, not access-controlled — the same shape as the
   secret gists in `SUPPORT-LOOP.md` S4, and acceptable for the same reason.
-- **Build artefacts expire on the free tier** (30 days). The link dies with
-  them. It is a delivery mechanism, not an archive — see below.
+- **Build artefacts expire on the free tier** (30 days), and the url is new
+  every build. It is a delivery mechanism, not an address — which is what the
+  next section is for.
 - **The origin is compiled in.** A `preview-farm` APK talks to
   `api.swbuild.dev` forever; there is no setting on the device (`boot/config.ts`,
   deliberately — a server address a stranger can talk somebody into changing is
   a phishing surface). Pointing at a different server means another build.
 
-### If you want an archive rather than a link
+### Better: serve it from the box, at an address that never changes
 
-A **GitHub Release** attached to a tag is the right tool for *keeping* an APK —
-"the build that was on her phone in August" — which is a different job from
-handing one out, and worth having before the artefact expires.
+The EAS link is fine for a one-off and poor for a tester you send builds to
+repeatedly, because **it is a different url every build and it dies after
+thirty days**. So "here is the app" becomes a message you send again each time,
+and any link somebody kept stops working in a month.
 
-It is a poor *distribution* channel here and the reason is not obvious: a
-Release on a public repository puts the APK in front of anybody, which is the
-same consideration that keeps `SUPPORT_ACCEPT_RECORDS` off. It also has no
-install page — a raw file download, and the tester is on their own for steps 2
-to 4 above.
+The box already has Caddy and a certificate. One static route later,
+`https://api.swbuild.dev/app` is a constant and the file behind it moves:
 
-So: EAS for the link, a Release for the archive, and neither pretending to be
-the other.
+```
+# on the PC, once the build is done
+scp ~/Downloads/steading-0.1.0-2.apk ubuntu@api.swbuild.dev:
+
+# on the box
+sudo /opt/steading/scripts/deploy/publish-apk.sh ~/steading-0.1.0-2.apk
+```
+
+**Caddy serves it and Fastify never sees it.** A static file needs no route, no
+auth and no database, so the API's surface does not grow by a byte to get a
+download — `handle_path /app/*` is matched before the reverse proxy and nothing
+under it reaches the service.
+
+It lives in `/var/lib/steading/dist`, deliberately outside `/opt/steading`: the
+deploy timer pulls into that tree every five minutes, and a build kept there
+would be one `git clean` from gone.
+
+`publish-apk.sh` keeps every build under its own name, moves the
+`steading.apk` symlink the stable link serves, refreshes the install page, and
+**refuses to overwrite a name that already exists** — which is the §5b
+`versionCode` bump with teeth, because two different builds under one name make
+the archive a lie.
+
+The install page is the part a raw download cannot do: it explains Chrome's
+warning and Play Protect's warning *before* somebody hits them, so you are not
+writing that in a message every time. It is `scripts/deploy/install-page.html`,
+in the repo so it is reviewed like everything else.
+
+### What the box deliberately does not do
+
+**Build the APK.** It would need the JDK and the Android SDK — roughly ten
+gigabytes on a free-tier instance this repo already has a disk-resize section
+for — and Gradle on that hardware is slow enough that nobody would use it
+twice.
+
+The disqualifying reason is §8, though. Building here means **the signing key
+lives here**, on the internet-facing machine, and that is the one piece of
+state that cannot be regenerated from anything. Expo's credential store holding
+it is a better trade than an Oracle box holding it next to a public web server.
+
+So EAS builds it and the box serves it.
+
+**And there is no upload route.** The APK arrives by `scp` because a download
+endpoint is a static file and an upload endpoint is a way to put a file on a
+server, and those are not the same risk at all.
+
+### A GitHub Release is for the archive
+
+Attached to a tag, it answers "the build that was on her phone in August" after
+the box has been rebuilt or the file pruned. It is a poor *channel* — no
+install page, and on a public repository it puts the APK in front of anybody,
+the same consideration that keeps `SUPPORT_ACCEPT_RECORDS` off.
 
 ---
 
