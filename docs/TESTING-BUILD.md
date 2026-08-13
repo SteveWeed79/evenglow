@@ -75,10 +75,25 @@ project that cannot be regenerated from anything (§8).
 
 | Profile | `EXPO_PUBLIC_API_URL` | What it is for |
 |---|---|---|
-| `development` | empty | A dev-client APK built in the cloud — for when the local Gradle toolchain is the problem |
-| `preview` | empty | **A tester.** The whole app, no server, nothing to set up |
+| `development` | **unset** | A dev-client APK built in the cloud — for when the local Gradle toolchain is the problem |
+| `preview` | **unset** | **A tester.** The whole app, no server, nothing to set up |
 | `preview-farm` | `https://api.swbuild.dev` | The same, plus sync and accounts |
 | `production` | `https://api.swbuild.dev` | An AAB for the Play Store |
+
+> **Unset, not `""` — and do not put the empty string back.** Those two profiles
+> carried `"EXPO_PUBLIC_API_URL": ""` to say *no server, deliberately*, and
+> eas-cli rejects it outright:
+>
+> ```
+> eas.json is not valid.
+> - "build.preview.env.EXPO_PUBLIC_API_URL" is not allowed to be empty
+> ```
+>
+> Absent means the same thing to the app and nothing else changes.
+> `resolveApiConfig` maps `undefined` and `''` to the same `{ kind: 'missing' }`
+> — see `boot/config.ts`, where a build with no origin opens, records, and says
+> **Not set up** rather than refusing to start. `tests/unit/api-config.test.ts`
+> pins both.
 
 **Start with `preview`.** The free tier is the whole app on one device (D13), so
 a build with no server is not a crippled demo — it is the product, and it needs
