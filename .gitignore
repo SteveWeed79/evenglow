@@ -74,6 +74,26 @@ apps/mobile/ios/
 # JetBrains IDEs
 .idea/
 
+# Signing keys, and this one is not tidiness.
+#
+# EAS generates a keystore on the first build and holds it; `eas credentials`
+# downloads a copy to back up, and the natural place somebody puts that copy is
+# wherever the terminal happened to be — which is this directory.
+#
+# **It cannot be rotated.** Every APK is signed with it and Android only accepts
+# an update signed by the same key, so losing it means every installed copy needs
+# an uninstall to take a new build — which takes the farm's records with it. And
+# committing it to a public repository is worse than losing it, because then
+# anybody can sign an app that Android will install straight over this one.
+#
+# `credentials.json` is eas-cli's own local-credentials file and holds the
+# keystore passwords in plain text.
+*.jks
+*.keystore
+*.p12
+*.p8
+credentials.json
+
 # Build output from the retired Capacitor client. The directory is not in the
 # repository — it was deleted when the web client was retired — but a checkout
 # that predates that still has Gradle writing into it, and those writes block

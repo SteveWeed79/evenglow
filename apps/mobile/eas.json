@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/expo/eas-cli/main/schema/eas.json",
   "cli": {
-    "version": ">= 12.0.0",
+    "version": ">= 21.8.0",
     "appVersionSource": "local"
   },
   "build": {
@@ -10,15 +10,13 @@
         "buildType": "apk"
       },
       "developmentClient": true,
-      "distribution": "internal",
-      "channel": "development"
+      "distribution": "internal"
     },
     "preview": {
       "android": {
         "buildType": "apk"
       },
-      "distribution": "internal",
-      "channel": "preview"
+      "distribution": "internal"
     },
     "preview-farm": {
       "extends": "preview",
@@ -31,7 +29,6 @@
         "buildType": "app-bundle"
       },
       "distribution": "store",
-      "channel": "production",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.swbuild.dev"
       }
