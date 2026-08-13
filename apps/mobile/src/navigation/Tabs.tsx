@@ -1,5 +1,6 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TabDividers } from './TabDividers';
 import { tabs } from './tab-marks';
 import { FarmScreen } from '../screens/FarmScreen';
@@ -47,6 +48,7 @@ const Tab = createBottomTabNavigator<TabParamList>();
 
 export function Tabs(): React.ReactElement {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
 
   /**
    * The same three for every farm. What a farm runs still decides what it
@@ -76,12 +78,33 @@ export function Tabs(): React.ReactElement {
          * tab, which is what a bar made of words needs.
          */
         tabBarShowLabel: true,
+        /**
+         * The bar clears the system navigation, and the explicit height is why
+         * it did not.
+         *
+         * React Navigation adds the bottom inset to a tab bar by itself — and
+         * stops doing so the moment `height` is set here, because a fixed
+         * height is a fixed height. So on a handset with gesture navigation the
+         * whole bar sat under the pill: reported as *"the Today, Farm and
+         * History tabs are still completely hidden under the phone's onscreen
+         * buttons"*, and it is the entire bar, not the edge of it.
+         *
+         * **The `Screen` inset fixed a different half.** That one gave scroll
+         * content room at the bottom of a pushed screen. This bar is not on a
+         * screen — it is beside them — so it needed its own, and having fixed
+         * one it was easy to believe both were done.
+         *
+         * Stated in both places rather than relying on the default: the height
+         * grows by the inset and the padding holds the content above it, so
+         * what the marks sit in is the same size it always was.
+         */
         tabBarStyle: {
           backgroundColor: colors.raised,
           borderTopColor: colors.border,
           borderTopWidth: StyleSheet.hairlineWidth * 2,
-          height: TAP.primary + 24,
+          height: TAP.primary + 24 + insets.bottom,
           paddingTop: 6,
+          paddingBottom: insets.bottom,
         },
         // A tab is one of the two things tapped through a glove. It gets the
         // full primary target even though the icon is 26px.
