@@ -71,10 +71,35 @@ api.example.com {
 	handle_path /app/* {
 		root * /var/lib/steading/dist
 
+		# A link to a build that is no longer here lands on the install page
+		# rather than on nothing.
+		#
+		# **Without this a missing APK is the worst answer available**: Caddy
+		# returns 404 with an empty body, the header below types it as an
+		# Android package anyway, and the phone downloads zero bytes and says
+		# *there was a problem parsing the package* — which reads as a broken
+		# app rather than as a link that has gone stale. Somebody pruned an old
+		# build, or kept a url from a previous message, and the app looks
+		# broken. Found by serving it and asking for a name that was not there.
+		#
+		try_files {path} /index.html
+
 		# Android installs from a plain octet-stream perfectly well, but the
-		# correct type is what stops a browser deciding an APK is something to
-		# display. Set here rather than hoped for.
-		header /*.apk Content-Type application/vnd.android.package-archive
+		# correct type is what makes a browser hand it to the package installer
+		# rather than deciding it is something to display.
+		#
+		# **`file` as well as `path`, and the pair is the whole point.** Caddy
+		# runs `header` BEFORE `try_files`, so matching on the name alone types
+		# the rewritten install page as an Android package — a 200, serving
+		# html, claiming to be an APK, which is a worse answer than the empty
+		# 404 this started as. Matching on the file existing means a name that
+		# is not there never gets the header, and the page is served as the
+		# html it is. Verified by asking for a build that was never published.
+		@apk {
+			path *.apk
+			file
+		}
+		header @apk Content-Type application/vnd.android.package-archive
 
 		# The install page is small and the APK is not. Caching the page would
 		# hide the version note somebody was sent to read.
