@@ -112,6 +112,49 @@ say "Dependencies"
 corepack pnpm install --frozen-lockfile --filter "@steading/api..."
 chown -R "$SERVICE_USER:$SERVICE_USER" "$REPO_DIR"
 
+# ── Caddy, which nothing was deploying ──────────────────────────────────────
+#
+# **The Caddyfile is in this repository and was only ever installed by
+# `setup-box.sh`.** That runs once, by hand, when a box is built — so every
+# change to it since has been sitting in the checkout doing nothing, and the
+# box has gone on serving whatever it was given the day it was set up.
+#
+# It surfaced as a 404 from the API for a route Caddy was supposed to answer:
+# `/app` had been added to the Caddyfile, merged, and deployed, and the box had
+# never read it. The reply came from Fastify, which is exactly what the config
+# exists to stop reaching.
+#
+# Reloaded rather than restarted: a reload keeps the certificate and drops no
+# connections. Validated first, because an invalid config reloaded is a web
+# server that stops answering — and the API being fine underneath would make
+# that look like a much bigger failure than it is.
+if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
+  say "Caddy"
+  DOMAIN="$(sed -n 's/^\([a-z0-9.-]*\) {$/\1/p' /etc/caddy/Caddyfile | head -1)"
+
+  if [ -z "$DOMAIN" ]; then
+    note "could not read the domain out of /etc/caddy/Caddyfile — left alone"
+  else
+    sed "s/api\.example\.com/${DOMAIN}/" "$REPO_DIR/scripts/deploy/Caddyfile" > /tmp/Caddyfile.next
+
+    if ! caddy validate --config /tmp/Caddyfile.next --adapter caddyfile >/dev/null 2>&1; then
+      note "the Caddyfile in this commit is not valid — left the running one alone"
+    elif cmp -s /tmp/Caddyfile.next /etc/caddy/Caddyfile; then
+      note "unchanged"
+    else
+      install -m 0644 /tmp/Caddyfile.next /etc/caddy/Caddyfile
+      systemctl reload caddy
+      note "reloaded for ${DOMAIN}"
+    fi
+    rm -f /tmp/Caddyfile.next
+  fi
+
+  # Where publish-apk.sh puts a build. Created here as well as in setup-box.sh
+  # so a box built before /app existed grows one without being rebuilt.
+  install -d -m 0755 /var/lib/steading/dist
+  chown caddy:caddy /var/lib/steading/dist 2>/dev/null || true
+fi
+
 say "Restarting"
 systemctl restart steading-api
 

@@ -814,6 +814,9 @@ describe('growing', () => {
     expect(added).toMatchObject({ name: 'Bed 3' });
 
     const pick = await mount(<PickVarietyScreen {...routeProps({ bedId: added!.id })} />);
+    // Crops collapse now, so the crop is the first decision and the variety the
+    // second — which is how somebody standing at a bed actually chooses.
+    await pick.press('crop-Tomato');
     await pick.pressLabel('Sungold');
     await pick.press('plant-it');
 
@@ -855,6 +858,7 @@ describe('growing', () => {
     const [bed] = await listBeds();
 
     const screen = await mount(<PickVarietyScreen {...routeProps({ bedId: bed!.id })} />);
+    await screen.press('crop-Tomato');
     await screen.pressLabel('Sungold');
     // Warns, never blocks — the button is still there.
     expect(screen.has('plant-it')).toBe(true);

@@ -38,6 +38,7 @@ import { LossScreen } from '../screens/LossScreen';
 import { MachineScreen } from '../screens/MachineScreen';
 import { MembersScreen } from '../screens/MembersScreen';
 import { AddVarietyScreen } from '../screens/AddVarietyScreen';
+import { NumbersScreen } from '../screens/NumbersScreen';
 import { PickVarietyScreen } from '../screens/PickVarietyScreen';
 import { PlantingScreen } from '../screens/PlantingScreen';
 import { ProduceScreen } from '../screens/ProduceScreen';
@@ -181,6 +182,7 @@ export type RootParamList = {
   // Growing
   SiteSetup: undefined;
   AddBed: { siteId: string };
+  Numbers: undefined;
   PickVariety: { bedId: string };
   AddVariety: { bedId: string; crop?: string };
   Planting: { plantingId: string };
@@ -266,6 +268,7 @@ export function Root({
 
       <Stack.Screen name="SiteSetup" component={SiteSetupScreen} />
       <Stack.Screen name="AddBed" component={AddBedScreen} />
+      <Stack.Screen name="Numbers" component={NumbersScreen} />
       <Stack.Screen name="PickVariety" component={PickVarietyScreen} />
       <Stack.Screen name="AddVariety" component={AddVarietyScreen} />
       <Stack.Screen name="Planting" component={PlantingScreen} />

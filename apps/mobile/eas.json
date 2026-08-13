@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/expo/eas-cli/main/schema/eas.json",
   "cli": {
     "version": ">= 21.8.0",
-    "appVersionSource": "local"
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
@@ -16,7 +16,8 @@
       "android": {
         "buildType": "apk"
       },
-      "distribution": "internal"
+      "distribution": "internal",
+      "autoIncrement": true
     },
     "preview-farm": {
       "extends": "preview",
@@ -31,7 +32,8 @@
       "distribution": "store",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.swbuild.dev"
-      }
+      },
+      "autoIncrement": true
     }
   },
   "submit": {
