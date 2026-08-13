@@ -15,6 +15,7 @@ import {
 } from '@steading/contracts';
 import { listBeds, readSite, type Site } from '@steading/core/read/growing';
 import { describeLogFailure } from '@steading/core/sync/failure';
+import { Secondary } from '../components/Form';
 import { Icon } from '../components/Icon';
 import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
@@ -246,6 +247,31 @@ export function PickVarietyScreen({ route }: ScreenProps<'PickVariety'>): React.
           ))}
         </View>
       ))}
+
+      {/**
+        * The way out of a list that cannot be complete.
+        *
+        * Sixty varieties against thousands, and the first real morning of use
+        * found one it did not have — *"my wife just planted Black Pumpkins"*,
+        * a search with no result and no next step over a seed already in the
+        * ground. `DOMAIN-SCOPE.md` 2.4 settles what happens then: an app that
+        * tells a grower no is an app that is wrong about that grower.
+        *
+        * At the end rather than only on an empty search, because somebody who
+        * can see six near-misses still knows theirs is not among them, and
+        * making them clear the box to be offered the answer is a puzzle rather
+        * than a screen. The crop they typed comes with them.
+        */}
+      <Secondary
+        label={query.trim() === '' ? 'Add one of your own' : `Add "${query.trim()}" yourself`}
+        testID="add-variety"
+        onPress={() =>
+          nav.navigate('AddVariety', {
+            bedId,
+            ...(query.trim() === '' ? {} : { crop: query.trim() }),
+          })
+        }
+      />
     </Screen>
   );
 }

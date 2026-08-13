@@ -37,6 +37,7 @@ import { LogHoursScreen } from '../screens/LogHoursScreen';
 import { LossScreen } from '../screens/LossScreen';
 import { MachineScreen } from '../screens/MachineScreen';
 import { MembersScreen } from '../screens/MembersScreen';
+import { AddVarietyScreen } from '../screens/AddVarietyScreen';
 import { PickVarietyScreen } from '../screens/PickVarietyScreen';
 import { PlantingScreen } from '../screens/PlantingScreen';
 import { ProduceScreen } from '../screens/ProduceScreen';
@@ -181,6 +182,7 @@ export type RootParamList = {
   SiteSetup: undefined;
   AddBed: { siteId: string };
   PickVariety: { bedId: string };
+  AddVariety: { bedId: string; crop?: string };
   Planting: { plantingId: string };
   Harvest: { plantingId: string };
 };
@@ -265,6 +267,7 @@ export function Root({
       <Stack.Screen name="SiteSetup" component={SiteSetupScreen} />
       <Stack.Screen name="AddBed" component={AddBedScreen} />
       <Stack.Screen name="PickVariety" component={PickVarietyScreen} />
+      <Stack.Screen name="AddVariety" component={AddVarietyScreen} />
       <Stack.Screen name="Planting" component={PlantingScreen} />
       <Stack.Screen name="Harvest" component={HarvestScreen} />
     </Stack.Navigator>
