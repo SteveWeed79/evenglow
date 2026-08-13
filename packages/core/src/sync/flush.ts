@@ -121,10 +121,23 @@ async function runFlush(transport: SyncTransport): Promise<FlushOutcome> {
     return { ...outcome, deferred: `server-${response.status}` };
   }
 
-  // 401 means the session lapsed. The work is fine; it needs a sign-in, not a
-  // rejection, so it stays queued without burning an attempt.
+  /**
+   * 401 means the session lapsed. The work is fine; it needs a sign-in, not a
+   * rejection, so it stays queued without burning an attempt.
+   *
+   * **It says nothing is lost first, and that is not padding.** The sentence
+   * used to be "Sign in again to send your queued work", which is accurate and
+   * was read as a threat — the first real report from a farm was somebody
+   * looking at six waiting items asking *"won't those updates be lost?"*
+   * (issue #125). They were never at risk: the queue is rows in SQLite,
+   * nothing deletes a mutation on failure (invariant 7), and the batch above
+   * did not even burn an attempt.
+   *
+   * A farmer who believes their morning is about to be lost stops using the
+   * app, and no amount of it being untrue afterwards gets that back.
+   */
   if (response.status === 401 || response.status === 403) {
-    await setLastError('Sign in again to send your queued work.');
+    await setLastError('Nothing is lost — sign in again to send the work waiting here.');
     return { ...outcome, deferred: 'unauthenticated' };
   }
 

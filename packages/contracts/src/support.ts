@@ -98,6 +98,21 @@ export const supportBundleSchema = z
       lastError: z.string().max(300).nullable(),
       held: z.string().max(40).nullable().optional(),
       online: z.boolean().optional(),
+      /**
+       * Whether this device has a session at all.
+       *
+       * **The field the first real ticket needed and did not have.** Issue #125
+       * arrived with `lastError: "Sign in again to send your queued work"` and
+       * six items waiting, and that sentence has two quite different causes: a
+       * device that signed out, or a server refusing a token it ought to
+       * accept. The first is a farm doing something; the second is a fault on
+       * the box. The bundle could not tell them apart, and the answer only came
+       * from the farmer saying out loud what they had pressed.
+       *
+       * A boolean, deliberately. It says which of two bugs this is and carries
+       * nothing about who — no email, no name, no token.
+       */
+      signedIn: z.boolean().optional(),
     }),
 
     rejections: z.array(rejectionSchema).max(20),
