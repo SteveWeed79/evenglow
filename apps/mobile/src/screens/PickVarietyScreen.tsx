@@ -52,6 +52,21 @@ export function PickVarietyScreen({ route }: ScreenProps<'PickVariety'>): React.
   const bed = loaded?.[1].find((b) => b.id === bedId) ?? null;
 
   const [query, setQuery] = useState('');
+
+  /**
+   * Crops open one at a time, rather than every variety at once.
+   *
+   * Grouping put the crop above its varieties and left all of them on screen,
+   * so the list was still the whole library with headings in it. Reported as
+   * wanting the crop to collapse and the variety hidden — *"collapse parsley
+   * and hide Italian flat leaf"* — which is how the decision is actually made:
+   * you know you are planting parsley before you know which parsley.
+   *
+   * Searching overrides it. Somebody who typed "flat leaf" has named a variety
+   * rather than a crop, and answering that with a closed row saying Parsley
+   * would be the app pretending not to have heard.
+   */
+  const [opened, setOpened] = useState<string | null>(null);
   const [chosen, setChosen] = useState<LibraryVariety | null>(null);
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -101,6 +116,9 @@ export function PickVarietyScreen({ route }: ScreenProps<'PickVariety'>): React.
       }))
       .sort((a, b) => a.crop.localeCompare(b.crop));
   }, [query]);
+
+  /** Searching opens everything: a typed variety name must not stay hidden. */
+  const isOpen = (crop: string): boolean => query.trim() !== '' || opened === crop;
 
   const plant = useCallback(async () => {
     if (saving || chosen === null || bed === null || site === null || site.frost === undefined) {
@@ -209,6 +227,7 @@ export function PickVarietyScreen({ route }: ScreenProps<'PickVariety'>): React.
           placeholderTextColor={colors.muted}
           autoCapitalize="none"
           autoCorrect={false}
+          testID="variety-search"
           style={[
             styles.field,
             { backgroundColor: colors.raised, borderColor: colors.border, color: colors.ink },
@@ -218,9 +237,29 @@ export function PickVarietyScreen({ route }: ScreenProps<'PickVariety'>): React.
 
       {groups.map(({ crop, varieties }) => (
         <View key={crop} style={styles.group}>
-          <Text style={[styles.cropHeading, { color: colors.muted }]}>{crop}</Text>
+          <Touch affordance="chevron"
+            onPress={() => {
+              void Haptics.selectionAsync();
+              setOpened((was) => (was === crop ? null : crop));
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={`${crop}, ${varieties.length} to choose from`}
+            testID={`crop-${crop}`}
+            style={({ pressed }) => [
+              styles.row,
+              { backgroundColor: colors.raised, borderColor: colors.border, opacity: pressed ? 0.75 : 1 },
+            ]}
+          >
+            <View style={styles.rowWords}>
+              <Text style={[styles.rowTitle, { color: colors.ink }]}>{crop}</Text>
+              <Text style={[styles.rowCrop, { color: colors.muted }]}>
+                {varieties.length} {varieties.length === 1 ? 'kind' : 'kinds'}
+              </Text>
+            </View>
+            <Icon name={isOpen(crop) ? 'check' : 'forward'} size={20} color={colors.muted} />
+          </Touch>
 
-          {varieties.map((variety) => (
+          {!isOpen(crop) ? null : varieties.map((variety) => (
         <Touch affordance="check"
           key={variety.id}
           onPress={() => {
@@ -230,6 +269,7 @@ export function PickVarietyScreen({ route }: ScreenProps<'PickVariety'>): React.
           accessibilityRole="button"
           style={({ pressed }) => [
             styles.row,
+            styles.nested,
             { backgroundColor: colors.raised, borderColor: colors.border, opacity: pressed ? 0.75 : 1 },
           ]}
         >
@@ -354,13 +394,7 @@ function Plan({
 const styles = StyleSheet.create({
   search: { gap: SPACE.sm },
   group: { gap: SPACE.sm },
-  cropHeading: {
-    fontFamily: FONTS.data,
-    fontSize: TYPE.label,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    marginTop: SPACE.sm,
-  },
+  nested: { marginLeft: SPACE.lg },
   field: {
     minHeight: TAP.min,
     borderRadius: RADII.softHead,

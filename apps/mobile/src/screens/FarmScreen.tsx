@@ -139,6 +139,21 @@ export function FarmScreen(): React.ReactElement {
       />
 
       {/**
+        * A row in the hub, which is where R2 puts it.
+        *
+        * *"Home is today, not a dashboard. Charts live one level down."* One
+        * level down is exactly here — reached on purpose, never in the way of a
+        * morning. It is the closest this app comes to a dashboard and the hub
+        * is the right distance from the door for that.
+        */}
+      <Row
+        title="The numbers"
+        detail="What came off this season, beside what came off by now last year"
+        testID="farm-numbers"
+        onPress={() => nav.navigate('Numbers')}
+      />
+
+      {/**
         * Below the two year-round rows, and only for a farm that keeps stock.
         *
         * **It led them both, and it is the most seasonal row on the hub.** A
