@@ -3,7 +3,7 @@ import type { LocalStore } from '@steading/core/db/port';
 import { localStore } from '@steading/core/db/store';
 import { z } from 'zod';
 import { roleSchema } from '@steading/contracts';
-import { retireLocalOrgId } from './local-org';
+import { discardEmptyLocalOrg, readLocalOrgId, retireLocalOrgId } from './local-org';
 import {
   type CachedClaims,
   clearCredentials,
@@ -234,7 +234,32 @@ async function refusal(res: Response, fallback: string): Promise<SignInError> {
   return new SignInError(typeof said === 'string' ? said : fallback);
 }
 
+/**
+ * Whether the farm currently open has anything in it.
+ *
+ * Records rather than mutations, which `backup/exposure.ts` sets out at length:
+ * a group created and then edited three times is four outbox rows and one
+ * record, so counting mutations would call a farm non-empty over an entity
+ * somebody thought better of.
+ *
+ * **Unreadable counts as full.** A farm this cannot measure is a farm nothing
+ * may throw away — the whole point of the caller is that it deletes something.
+ */
+async function localFarmIsEmpty(): Promise<boolean> {
+  try {
+    return (await localStore().countRecords()) === 0;
+  } catch {
+    return false;
+  }
+}
+
 export async function signIn(email: string, password: string): Promise<CachedClaims> {
+  /**
+   * Asked before the session moves, because afterwards the store belongs to
+   * the farm being signed in to and this question is about the other one.
+   */
+  const wasEmpty = await localFarmIsEmpty();
+
   const res = await fetch(url('/auth/login'), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -245,7 +270,23 @@ export async function signIn(email: string, password: string): Promise<CachedCla
   // used to enumerate accounts. Passing it through verbatim keeps that true.
   if (!res.ok) throw await refusal(res, 'That email or password is not right.');
 
-  return establish(await res.json());
+  const claims = await establish(await res.json());
+
+  /**
+   * A farm minted on first launch and never written to is not a farm, and
+   * leaving the file behind is not free: `discardEmptyLocalOrg` explains what
+   * one empty database costs the recovery path, and why a join must not do
+   * this even though a sign-in should.
+   *
+   * Only when the account's farm is a different one. Signing in to the farm
+   * this device already holds is the ordinary second-device-of-your-own case,
+   * and its database is the one about to be opened.
+   */
+  if (wasEmpty && claims.orgId !== (await readLocalOrgId())) {
+    await discardEmptyLocalOrg();
+  }
+
+  return claims;
 }
 
 /**
