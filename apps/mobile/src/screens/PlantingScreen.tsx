@@ -106,8 +106,24 @@ export function PlantingScreen({ route }: ScreenProps<'Planting'>): React.ReactE
           />
         ) : null}
 
-        {/* Gated on the indoor start for the same reason the due builder is. */}
-        {planting.transplantedAt === undefined && (!needsIndoorStart || started) ? (
+        {/**
+          * Gated on the indoor start for the same reason the due builder is —
+          * and on there being a transplant stage at all, which the gate used to
+          * be missing.
+          *
+          * **A direct-sown crop offered both buttons.** "Sowed it" and "Planted
+          * it out" sat side by side for a pumpkin that goes straight in the
+          * ground, and pressing the second one recorded a transplant that never
+          * happened while leaving the sowing unrecorded — so the sow row stayed
+          * outstanding over a bed with a plant in it.
+          *
+          * `plannedTransplantAt` is what says a variety has that stage. The due
+          * builder has always required it, because `add` returns early on an
+          * absent date; this button never asked.
+          */}
+        {planting.transplantedAt === undefined &&
+        planting.plannedTransplantAt !== undefined &&
+        (!needsIndoorStart || started) ? (
           <Secondary
             label="Planted it out"
             testID="mark-planted"

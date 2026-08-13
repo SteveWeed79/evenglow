@@ -237,3 +237,36 @@ describe('when it cannot go', () => {
     expect(screen.text()).toContain('just above');
   });
 });
+
+/**
+ * What the box does after a press.
+ *
+ * Reported from a handset: the words stay after a successful send, so the next
+ * press files them again — a duplicate report of a fault nobody re-encountered,
+ * which is the flood dedup exists to prevent arriving through the front door.
+ */
+describe('the free-text line', () => {
+  it('is emptied once the report has actually gone', async () => {
+    serverTakesIt();
+    const screen = await mount(<SupportScreen />);
+
+    await screen.type('support-said', 'The egg total looked wrong');
+    await screen.press('support-send');
+
+    expect(screen.shows('support-said')).toBe('');
+  });
+
+  /**
+   * Kept on a failure. The report is on the phone rather than filed, the panel
+   * says so, and clearing the box under it would look like the words went too.
+   */
+  it('keeps them when the report could not go', async () => {
+    noSignal();
+    const screen = await mount(<SupportScreen />);
+
+    await screen.type('support-said', 'The egg total looked wrong');
+    await screen.press('support-send');
+
+    expect(screen.shows('support-said')).toBe('The egg total looked wrong');
+  });
+});

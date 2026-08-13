@@ -256,15 +256,19 @@ export function useDues(): DuesView {
     // ── growing ──────────────────────────────────────────────────────────────
 
     const bedNames = new Map(beds.map((b) => [b.id, b.name]));
-    const varietyNames = new Map(varieties.map((v) => [v.id, v.name]));
+    const varietyById = new Map(varieties.map((v) => [v.id, v]));
 
     for (const planting of plantings) {
+      const variety = varietyById.get(planting.varietyId);
       rows.push(
         ...growingDues(planting, {
           // Named rather than two ULIDs — and named honestly when the variety
           // record has not reached this device yet.
-          variety: varietyNames.get(planting.varietyId) ?? 'this planting',
+          variety: variety?.name ?? 'this planting',
           bed: bedNames.get(planting.bedId) ?? 'the bed',
+          // Lets the harvest row count from the day it went in the ground
+          // rather than from a spring forecast. Absent is handled there.
+          daysToMaturity: variety?.daysToMaturity,
         }),
       );
     }
