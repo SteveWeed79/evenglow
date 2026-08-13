@@ -330,6 +330,21 @@ can be requested is a grant that can be requested by anybody.
 
 ## 7. Sending a build to somebody
 
+**`Build the app.bat` does all of this.** Double-click it: it pulls, offers to
+move `versionCode` on by one, builds on EAS, works out the download url and asks
+whether to publish it to the box. The rest of this section is what it is doing
+and how to do it by hand when something in the middle fails.
+
+Three machines are involved and which does what is the part worth holding onto:
+
+| | does what |
+|---|---|
+| **this PC** | uploads the *source* to Expo. It compiles nothing. |
+| **Expo** | compiles it, signs it with the keystore it holds |
+| **the box** | serves it at `/app`, at one address, forever |
+
+By hand:
+
 ```
 pnpm --filter @steading/mobile exec eas build --profile preview-farm --platform android
 ```
