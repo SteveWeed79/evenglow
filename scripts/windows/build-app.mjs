@@ -102,7 +102,7 @@ if (command === 'artifact') {
       { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
     );
   } catch {
-    console.error('Could not ask EAS for the build list. Are you signed in? pnpm dlx eas-cli login');
+    console.error('Could not ask EAS for the build list. Are you signed in? pnpm --filter @steading/mobile exec eas login');
     process.exit(1);
   }
 

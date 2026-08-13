@@ -8,9 +8,9 @@ before they install it.
 ## 1. The short version
 
 ```
-pnpm dlx eas-cli login                     # once
-pnpm dlx eas-cli build:configure           # once, if it asks
-pnpm dlx eas-cli credentials               # once — back up the keystore (§8)
+pnpm --filter @steading/mobile exec eas login                     # once
+pnpm --filter @steading/mobile exec eas build:configure           # once, if it asks
+pnpm --filter @steading/mobile exec eas credentials               # once — back up the keystore (§8)
 
 # then, for every build that leaves this machine:
 #   bump expo.android.versionCode in app.json  (§5b)
@@ -26,6 +26,16 @@ refusal and are both routine.
 No Play Console, no $25, no review, and no signing key to *create* — EAS makes
 one on the first build. There is still exactly one to **keep**, and §8 is why
 that is not a formality.
+
+> **`eas-cli` is a devDependency of `apps/mobile`**, which is why these say
+> `exec eas` rather than `pnpm dlx eas-cli`. It was neither for a long time, so
+> every command written down here failed with *'eas' is not recognized* — the
+> docs described a tool nothing installed.
+>
+> `dlx` would also have worked, and pinning is why it is not used: `dlx` fetches
+> whatever is newest each time, so two machines can drive one project with two
+> CLI versions and `eas.json`'s own `cli.version` floor goes unchecked. It never
+> reaches a bundle — it is a build tool, not a dependency of the app.
 
 ---
 
@@ -464,7 +474,7 @@ Play it is worse, because the package name is claimed and cannot be reused.
 Back it up now rather than before the first Play upload:
 
 ```
-pnpm dlx eas-cli credentials
+pnpm --filter @steading/mobile exec eas credentials
 ```
 
 Android → the build profile → **Download credentials**. Keep the `.jks` and the
