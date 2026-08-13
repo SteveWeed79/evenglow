@@ -8,7 +8,6 @@
     "orientation": "default",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon/steading.png",
-    "newArchEnabled": true,
     "android": {
       "package": "com.steading.app",
       "versionCode": 1,
