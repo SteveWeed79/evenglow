@@ -34,6 +34,86 @@
 # below would be wrong.
 
 api.example.com {
+	# ── The app itself, for a phone to install ──────────────────────────────
+	#
+	# `docs/TESTING-BUILD.md` §7. EAS builds the APK; this serves it, and the
+	# split is deliberate — the signing key stays in Expo's credential store
+	# rather than on an internet-facing box, which §8 argues is the one piece of
+	# state that must not live here.
+	#
+	# **Caddy serves this, Fastify never sees it.** A static file needs no route,
+	# no auth and no database, so the API's surface does not grow by one byte to
+	# get a download. `handle_path` strips the prefix and is matched before the
+	# proxy below, so nothing under /app reaches the service.
+	#
+	# ## Why not just send the EAS link
+	#
+	# EAS mints a NEW url for every build and its artefacts expire after thirty
+	# days on the free tier. That makes "here is the app" a message you send
+	# again every time, and a link that dies in a month for anybody who kept it.
+	# This url never changes: replace the file, the link still works.
+	#
+	# A GitHub release does not expire but has no install page, and on a public
+	# repository it puts the APK in front of everybody — the same consideration
+	# that keeps SUPPORT_ACCEPT_RECORDS off.
+	#
+	# ## Outside the repository, on purpose
+	#
+	# `/var/lib/steading/dist` rather than anywhere under /opt/steading. The
+	# deploy timer pulls into that tree every five minutes, so an APK kept there
+	# would be one `git clean` from gone — and a directory Caddy serves should
+	# not be a directory a deploy writes to.
+	#
+	#   sudo install -d -m 0755 /var/lib/steading/dist
+	#
+	# Put a build there with `scripts/deploy/publish-apk.sh`, which is where the
+	# naming and the symlink are explained.
+	handle_path /app/* {
+		root * /var/lib/steading/dist
+
+		# A link to a build that is no longer here lands on the install page
+		# rather than on nothing.
+		#
+		# **Without this a missing APK is the worst answer available**: Caddy
+		# returns 404 with an empty body, the header below types it as an
+		# Android package anyway, and the phone downloads zero bytes and says
+		# *there was a problem parsing the package* — which reads as a broken
+		# app rather than as a link that has gone stale. Somebody pruned an old
+		# build, or kept a url from a previous message, and the app looks
+		# broken. Found by serving it and asking for a name that was not there.
+		#
+		try_files {path} /index.html
+
+		# Android installs from a plain octet-stream perfectly well, but the
+		# correct type is what makes a browser hand it to the package installer
+		# rather than deciding it is something to display.
+		#
+		# **`file` as well as `path`, and the pair is the whole point.** Caddy
+		# runs `header` BEFORE `try_files`, so matching on the name alone types
+		# the rewritten install page as an Android package — a 200, serving
+		# html, claiming to be an APK, which is a worse answer than the empty
+		# 404 this started as. Matching on the file existing means a name that
+		# is not there never gets the header, and the page is served as the
+		# html it is. Verified by asking for a build that was never published.
+		@apk {
+			path *.apk
+			file
+		}
+		header @apk Content-Type application/vnd.android.package-archive
+
+		# The install page is small and the APK is not. Caching the page would
+		# hide the version note somebody was sent to read.
+		header /index.html Cache-Control "no-cache"
+
+		# `browse` is deliberately absent: this directory holds exactly what is
+		# meant to be downloaded, and a listing is a habit that stops being safe
+		# the first time something else is put there.
+		file_server
+	}
+
+	# So the address a person is given can be said out loud without a slash.
+	redir /app /app/ permanent
+
 	# The API binds 127.0.0.1 through this proxy rather than being exposed
 	# directly, so the only thing on a public port is Caddy.
 	reverse_proxy 127.0.0.1:3001 {

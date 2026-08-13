@@ -288,6 +288,15 @@ fi
 
 install -d -m 0755 /var/log/caddy
 chown caddy:caddy /var/log/caddy 2>/dev/null || true
+
+# Where the APK is served from (`/app`, see the Caddyfile). Created empty and
+# **outside the repository on purpose** — the deploy timer pulls into
+# $REPO_DIR every five minutes, so a build kept in that tree would be one
+# `git clean` from gone. Nothing publishes here automatically; that is
+# `scripts/deploy/publish-apk.sh`, run by hand after an EAS build.
+install -d -m 0755 /var/lib/steading/dist
+chown caddy:caddy /var/lib/steading/dist 2>/dev/null || true
+
 sed "s/api\.example\.com/${DOMAIN}/" "$REPO_DIR/scripts/deploy/Caddyfile" > /etc/caddy/Caddyfile
 systemctl enable caddy >/dev/null
 systemctl reload caddy 2>/dev/null || systemctl restart caddy

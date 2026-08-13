@@ -1,0 +1,133 @@
+@echo off
+setlocal enabledelayedexpansion
+title Steading - build the app
+cd /d "%~dp0..\.."
+
+rem Builds an APK on Expo's machines and publishes it to the farm server, so the
+rem address you give somebody never changes.
+rem
+rem The three machines, because it is not obvious and it decides what runs where:
+rem
+rem   this PC      uploads the SOURCE to Expo. It compiles nothing.
+rem   Expo         compiles it and signs it with the keystore it holds.
+rem   the box      serves it at /app, forever, at one address.
+rem
+rem The signing key staying with Expo rather than on the box is the reason for
+rem that split - docs/TESTING-BUILD.md section 8.
+
+echo.
+echo   ============================================
+echo     STEADING - build the app for a phone
+echo   ============================================
+echo.
+
+call "%~dp0_shared.bat" :check_node        || goto :stop
+call "%~dp0_shared.bat" :check_pnpm        || goto :stop
+call "%~dp0_shared.bat" :update_code       || goto :stop
+call "%~dp0_shared.bat" :ensure_packages   || goto :stop
+
+echo.
+echo   --- Which build is this? ---
+rem Android only ever compares versionCode, and it must move for every build
+rem that leaves this machine or Play refuses the upload and a downgrade cannot
+rem install. See section 5b. Asked rather than done silently: the number ends up
+rem in git, and a commit nobody meant to make is its own kind of confusing.
+for /f "tokens=*" %%v in ('node "scripts\windows\build-app.mjs" show') do echo   currently   %%v
+echo.
+echo   Every build you hand to somebody needs a new versionCode.
+set "BUMP="
+set /p "BUMP=  Move it on by one before building? [Y/n] "
+if /i "!BUMP!"=="n" (
+  echo   [ NOTE ]    left alone. If this number has been built before, the
+  echo               farm server will refuse to publish it.
+) else (
+  for /f "tokens=*" %%v in ('node "scripts\windows\build-app.mjs" bump') do echo   [ OK ]      versionCode %%v
+  if errorlevel 1 goto :stop
+  echo.
+  echo   [ NOTE ]    app.json changed. Commit it so the number is in the
+  echo               history rather than only on this PC.
+)
+
+echo.
+echo   --- Building on Expo's machines ---
+echo.
+echo   Ten to twenty minutes, mostly queueing. Leave this window open.
+echo   If it asks you to sign in, it is asking about your Expo account.
+echo.
+call pnpm --filter @steading/mobile exec eas build --profile preview-farm --platform android
+if errorlevel 1 (
+  echo.
+  echo   [ FAILED ]  the build did not finish. The output above is from EAS
+  echo               and says why - the log link in it has the detail.
+  goto :stop
+)
+
+echo.
+echo   --- Sending it to the farm server ---
+rem The url rather than a downloaded file. The APK is already on Expo's servers,
+rem so pulling it down here and pushing it up again is the same forty megabytes
+rem crossing a home connection twice, up the slow half. The box fetches it once,
+rem from a datacentre.
+set "ARTIFACT="
+for /f "tokens=*" %%u in ('node "scripts\windows\build-app.mjs" artifact') do set "ARTIFACT=%%u"
+
+if not defined ARTIFACT (
+  echo   [ NOTE ]    could not work out the download url. The build is fine -
+  echo               open the build page, copy the url, and on the box run:
+  echo                 sudo /opt/steading/scripts/deploy/publish-apk.sh ^<url^>
+  goto :done
+)
+
+echo   Found it.
+echo.
+where ssh >nul 2>&1
+if errorlevel 1 (
+  echo   [ NOTE ]    no ssh on this PC, so this cannot finish the job. On the
+  echo               box, run:
+  echo.
+  echo                 sudo /opt/steading/scripts/deploy/publish-apk.sh "!ARTIFACT!"
+  goto :done
+)
+
+set "SEND="
+set /p "SEND=  Publish it to api.swbuild.dev now? [Y/n] "
+if /i "!SEND!"=="n" goto :manual
+
+rem Quoted, because an artefact url carries a query string and an unquoted
+rem ampersand ends the remote command early - which would publish nothing and
+rem look like it worked.
+ssh ubuntu@api.swbuild.dev "sudo /opt/steading/scripts/deploy/publish-apk.sh '!ARTIFACT!'"
+if errorlevel 1 (
+  echo.
+  echo   [ NOTE ]    that did not go through. The build is safe on Expo -
+  echo               nothing is lost. Try the command below by hand.
+  goto :manual
+)
+
+echo.
+echo   ============================================
+echo     Done. Send this, once:
+echo.
+echo       https://api.swbuild.dev/app
+echo.
+echo     It never changes. The next build replaces
+echo     what is behind it.
+echo   ============================================
+goto :done
+
+:manual
+echo.
+echo   To publish it yourself, on the box:
+echo.
+echo     sudo /opt/steading/scripts/deploy/publish-apk.sh "!ARTIFACT!"
+echo.
+goto :done
+
+:stop
+echo.
+echo   Stopped. Nothing was built.
+echo.
+
+:done
+echo.
+pause
