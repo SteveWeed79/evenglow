@@ -45,6 +45,7 @@ describe('seeing what you typed', () => {
   /** One control for both boxes — checking one and not the other is no check. */
   it('reveals the confirmation with it', async () => {
     const screen = await mount(signedOut());
+    await screen.pressLabel('Set up an account');
 
     await screen.press('account-password-show');
     expect(screen.get('account-password-confirm').props.secureTextEntry).toBeFalsy();
@@ -55,8 +56,14 @@ describe('seeing what you typed', () => {
 describe('typing it twice', () => {
   it('asks for it twice when the password is being created', async () => {
     const screen = await mount(signedOut());
+    /**
+     * Said rather than assumed. The screen opens on `claim` or `signin`
+     * depending on whether this handset has records to keep, so a test about
+     * the claim form has to ask for it — which is what the sign-in case below
+     * has always done.
+     */
+    await screen.pressLabel('Set up an account');
 
-    // 'claim' is the default mode — setting up an account for this farm.
     expect(screen.has('account-password-confirm')).toBe(true);
     screen.unmount();
   });
@@ -76,6 +83,7 @@ describe('typing it twice', () => {
 
   it('will not submit until the two match', async () => {
     const screen = await mount(signedOut());
+    await screen.pressLabel('Set up an account');
 
     await screen.type('account-farm', 'Hollow Farm');
     await screen.type('account-name', 'Sam');

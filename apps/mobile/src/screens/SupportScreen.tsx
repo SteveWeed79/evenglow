@@ -124,6 +124,21 @@ export function SupportScreen(): React.ReactElement {
 
       setRaised({ id, bundle });
       setOutcome(filed);
+
+      /**
+       * Emptied once it has actually gone, and only then.
+       *
+       * The words were still sitting there after a successful send, so the next
+       * press would file them a second time — a duplicate report of a fault
+       * nobody re-encountered, which is the flood dedup exists to prevent
+       * arriving through the front door instead.
+       *
+       * **Kept on a failure**, because the report is on the phone rather than
+       * filed and the screen says so. Clearing the box under a panel reading
+       * "Kept on this phone" would look like the words went with it.
+       */
+      if (filed.ok) setSaid('');
+
       await refresh();
     } catch (error) {
       setProblem(error instanceof Error ? error.message : 'That report could not be made.');

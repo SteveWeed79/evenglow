@@ -95,6 +95,26 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
     }
     setBusy(true);
     await signOut();
+
+    /**
+     * Say it happened, because nothing else will.
+     *
+     * Signing out deliberately does not drop to a door — the records are on
+     * this device and the app still works, which is the premise (`Boot.tsx`).
+     * The consequence nobody accounted for is that **the screen looks
+     * identical afterwards**: this row is read once on mount, so it went on
+     * saying "Signed in as …" over a device that was no longer signed in.
+     *
+     * Reported as *"tap again to sign out does nothing"*, and it did not stop
+     * there — the tokens were gone, so the next flush deferred, and the fault
+     * surfaced later as six items stuck behind a message about signing in
+     * again (issue #125). A silent success that only shows up as a failure two
+     * screens away is worse than a failure.
+     */
+    setAccount(null);
+    setArmed(false);
+    setBusy(false);
+
     onSignedOut();
   }, [armed, onSignedOut]);
 

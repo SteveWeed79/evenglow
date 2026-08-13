@@ -134,7 +134,27 @@ export function Screen({
         // keyboard dismissed first.
         keyboardShouldPersistTaps="handled"
       >
-       <View style={[styles.content, contentStyle]}>
+       {/**
+         * The bottom inset, which was missing and cost the last centimetre of
+         * every pushed screen.
+         *
+         * `paddingTop: insets.top` was applied above and this was not, so on a
+         * handset with gesture navigation the pill sat over whatever was at the
+         * bottom of the scroll — reported from a test phone as the bar covering
+         * the last few percent. It is worst exactly where it hurts most: R3 puts
+         * primary actions in the bottom third, so the button is the thing under
+         * the bar.
+         *
+         * It did not show on the tablet, which is why it survived to a second
+         * device, and `TabDividers` already reads `insets.bottom` — so the
+         * knowledge was in the codebase, one file away.
+         *
+         * On the padding rather than the ground, so the inset is scrollable
+         * space at the end of the content rather than a dead band the app may
+         * not draw into. `contentStyle` still comes after, so a caller can
+         * override it.
+         */}
+       <View style={[styles.content, { paddingBottom: SPACE.xl + insets.bottom }, contentStyle]}>
         {/* One block, so the title and the name under it are not separated by
             the content gap that separates whole panels. */}
         <View style={styles.heading}>

@@ -755,6 +755,26 @@ export function useSaver(onDone: () => void): Saver {
         return;
       }
 
+      /**
+       * **Cleared on the way out as well as on the way in.**
+       *
+       * `setSaving(false)` lived only in the catch above, so a save that
+       * succeeded left the flag true forever — and the guard at the top of this
+       * function then refused every later press. One write per screen, silently.
+       *
+       * It hid because most forms save and leave: `useSaver(useLeave())`
+       * unmounts the screen, the flag goes with it, and nothing is ever asked
+       * again. The screens that stay put are the ones that show it, and a bed
+       * is the obvious case — reported as *"the plant screen only allows for 1
+       * interaction, if you select sow you have to leave the screen to select
+       * plant it"*. Sowing and planting out are two presses on one visit by
+       * design.
+       *
+       * Before `onDone`, because `onDone` is often a navigation and setting
+       * state on a screen that has gone is the other half of this bug.
+       */
+      setSaving(false);
+
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
       if (say !== undefined) {

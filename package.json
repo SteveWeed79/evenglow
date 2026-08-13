@@ -62,5 +62,10 @@
     "typescript": "^5",
     "typescript-eslint": "^8.65.0",
     "vitest": "^4.1.10"
+  },
+  "pnpm": {
+    "overrides": {
+      "expo-constants": "~57.0.10"
+    }
   }
 }

@@ -15,6 +15,7 @@ import {
 } from '@steading/contracts';
 import { listBeds, readSite, type Site } from '@steading/core/read/growing';
 import { describeLogFailure } from '@steading/core/sync/failure';
+import { Secondary } from '../components/Form';
 import { Icon } from '../components/Icon';
 import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
@@ -57,14 +58,48 @@ export function PickVarietyScreen({ route }: ScreenProps<'PickVariety'>): React.
 
   const season = new Date().getFullYear();
 
-  const matches = useMemo(() => {
+  /**
+   * Crops, each with its varieties under it.
+   *
+   * **The list used to be neither sorted nor grouped**, and the row put the
+   * variety in the title with the crop underneath — so it read Roma first and
+   * Tomato second, which is backwards from how anybody decides what to plant.
+   * Reported as *"our plant sorting is incorrect, it should be Tomatoes >
+   * Roma"*, and it is: you know you are planting tomatoes before you know
+   * which.
+   *
+   * It was also `LIBRARY_VARIETIES` in declaration order sliced to forty, so a
+   * search for nothing showed whichever forty the file happened to open with
+   * and said nothing about the rest.
+   *
+   * Grouping is by `crop`, not `family`. They are different fields and only
+   * one of them is a word a grower uses: `family` is botanical — `solanaceae`
+   * covers tomatoes, potatoes, peppers and aubergines together — and it is
+   * load-bearing for `rotationConflict`, which is a different question from
+   * what to plant today.
+   */
+  const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const all = q === ''
-      ? LIBRARY_VARIETIES
-      : LIBRARY_VARIETIES.filter(
-          (v) => v.name.toLowerCase().includes(q) || v.crop.toLowerCase().includes(q),
-        );
-    return all.slice(0, 40);
+    const all =
+      q === ''
+        ? LIBRARY_VARIETIES
+        : LIBRARY_VARIETIES.filter(
+            (v) => v.name.toLowerCase().includes(q) || v.crop.toLowerCase().includes(q),
+          );
+
+    const byCrop = new Map<string, LibraryVariety[]>();
+    for (const variety of all) {
+      const found = byCrop.get(variety.crop);
+      if (found === undefined) byCrop.set(variety.crop, [variety]);
+      else found.push(variety);
+    }
+
+    return [...byCrop.entries()]
+      .map(([crop, varieties]) => ({
+        crop,
+        varieties: [...varieties].sort((a, b) => a.name.localeCompare(b.name)),
+      }))
+      .sort((a, b) => a.crop.localeCompare(b.crop));
   }, [query]);
 
   const plant = useCallback(async () => {
@@ -181,7 +216,11 @@ export function PickVarietyScreen({ route }: ScreenProps<'PickVariety'>): React.
         />
       </View>
 
-      {matches.map((variety) => (
+      {groups.map(({ crop, varieties }) => (
+        <View key={crop} style={styles.group}>
+          <Text style={[styles.cropHeading, { color: colors.muted }]}>{crop}</Text>
+
+          {varieties.map((variety) => (
         <Touch affordance="check"
           key={variety.id}
           onPress={() => {
@@ -196,13 +235,43 @@ export function PickVarietyScreen({ route }: ScreenProps<'PickVariety'>): React.
         >
           <View style={styles.rowWords}>
             <Text style={[styles.rowTitle, { color: colors.ink }]}>{variety.name}</Text>
+            {/* The crop is the heading above now, so the line under a variety
+                is what distinguishes it from its siblings rather than what it
+                already has in common with them. */}
             <Text style={[styles.rowCrop, { color: colors.muted }]}>
-              {variety.crop} · {variety.daysToMaturity} days
+              {variety.daysToMaturity} days
             </Text>
           </View>
           <Icon name="forward" size={20} color={colors.muted} />
         </Touch>
+          ))}
+        </View>
       ))}
+
+      {/**
+        * The way out of a list that cannot be complete.
+        *
+        * Sixty varieties against thousands, and the first real morning of use
+        * found one it did not have — *"my wife just planted Black Pumpkins"*,
+        * a search with no result and no next step over a seed already in the
+        * ground. `DOMAIN-SCOPE.md` 2.4 settles what happens then: an app that
+        * tells a grower no is an app that is wrong about that grower.
+        *
+        * At the end rather than only on an empty search, because somebody who
+        * can see six near-misses still knows theirs is not among them, and
+        * making them clear the box to be offered the answer is a puzzle rather
+        * than a screen. The crop they typed comes with them.
+        */}
+      <Secondary
+        label={query.trim() === '' ? 'Add one of your own' : `Add "${query.trim()}" yourself`}
+        testID="add-variety"
+        onPress={() =>
+          nav.navigate('AddVariety', {
+            bedId,
+            ...(query.trim() === '' ? {} : { crop: query.trim() }),
+          })
+        }
+      />
     </Screen>
   );
 }
@@ -284,6 +353,14 @@ function Plan({
 
 const styles = StyleSheet.create({
   search: { gap: SPACE.sm },
+  group: { gap: SPACE.sm },
+  cropHeading: {
+    fontFamily: FONTS.data,
+    fontSize: TYPE.label,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginTop: SPACE.sm,
+  },
   field: {
     minHeight: TAP.min,
     borderRadius: RADII.softHead,

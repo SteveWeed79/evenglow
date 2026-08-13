@@ -72,10 +72,21 @@ async function orgKey(): Promise<string | undefined> {
 }
 
 export async function collectBundle(said?: string): Promise<SupportBundle> {
-  const [diag, rejections, org] = await Promise.all([
+  const [diag, rejections, org, signedIn] = await Promise.all([
     diagnostics(),
     rejectionShapes(),
     orgKey(),
+    /**
+     * Whether this device has a session, which is the difference between two
+     * bugs that produce the same sentence — see `signedIn` in the schema.
+     *
+     * Failing soft: a bundle that could not be assembled because the keystore
+     * was unhappy is a report nobody gets, and this is one boolean.
+     */
+    readCachedClaims().then(
+      (claims) => claims !== null,
+      () => undefined,
+    ),
   ]);
 
   /**
@@ -128,6 +139,7 @@ export async function collectBundle(said?: string): Promise<SupportBundle> {
       // report, and it is a message this app wrote.
       lastError: diag.lastError === null ? null : diag.lastError.slice(0, 300),
       online: diag.online,
+      ...(signedIn === undefined ? {} : { signedIn }),
     },
     rejections,
     errors,

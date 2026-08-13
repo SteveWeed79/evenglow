@@ -30,7 +30,17 @@ export interface PlantingRecord {
 export interface PlantingNames {
   variety: string;
   bed: string;
+  /**
+   * The variety's days to maturity, when the farm's record has one.
+   *
+   * Only used to re-anchor the harvest below. Absent for a variety somebody
+   * added themselves without filling it in, which is a supported state — the
+   * planned date is then the only estimate there is.
+   */
+  daysToMaturity?: number | undefined;
 }
+
+const DAY = 24 * 60 * 60 * 1000;
 
 /**
  * Statuses that produce nothing.
@@ -78,7 +88,24 @@ export function growingDues(
     `Start ${names.variety} indoors`,
   );
 
-  add('sow', planting.plannedSowAt, planting.sownAt, `Sow ${names.variety} in ${names.bed}`);
+  /**
+   * Being in the ground counts as sown, whichever button said so.
+   *
+   * Reported from a farm: *"when I push In-Ground on a plant, Sowed it should
+   * automatically check itself off."* Quite right — a thing that has been
+   * planted out is not waiting to be sown, and a row saying otherwise is the
+   * app being confidently wrong about a bed somebody is standing in front of.
+   *
+   * Derived rather than written, so it also settles the records that already
+   * carry a transplant and no sowing. Nothing rewrites a farm's history to fix
+   * a row this could simply stop asking for.
+   */
+  add(
+    'sow',
+    planting.plannedSowAt,
+    planting.sownAt ?? planting.transplantedAt,
+    `Sow ${names.variety} in ${names.bed}`,
+  );
 
   /**
    * A transplant waits on its own start, not on the sow date.
@@ -100,11 +127,40 @@ export function growingDues(
    * Harvest is the one stage with no completion field of its own — picking is
    * append-only and goes on for weeks. It clears when the planting is moved to
    * `harvesting` or beyond, which is what the status is for.
+   *
+   * ## Counted from the day it went in, not from the day it was meant to
+   *
+   * **Reported from a farm: a pumpkin put in the ground today was fifteen days
+   * overdue to harvest.** `plannedFirstHarvestAt` is computed once, when the
+   * planting is created, from the site's frost dates — "sow this many weeks
+   * after last frost, add days to maturity". That is a forecast for something
+   * not yet planted, and it is the only thing this used to look at. Plant late
+   * and the app announces a harvest that is already behind you.
+   *
+   * A plant does not know what the schedule said. It takes its days from the
+   * day it was sown or set out, so that is the anchor: `transplantedAt` when
+   * there is one, `sownAt` otherwise. That order is also how seed catalogues
+   * count — days to maturity runs from transplant for a crop raised indoors and
+   * from sowing for one direct sown.
+   *
+   * This is the same rule the transplant row above already follows and says out
+   * loud: a stage waits on what actually happened, not on what was predicted.
+   * Harvest simply never got it.
+   *
+   * The planned date stays as the estimate for a planting that has not gone in
+   * yet, and for a variety with no days to maturity — a farm's own addition it
+   * has not filled in — because a rough row beats no row.
    */
   if (planting.status !== 'harvesting') {
+    const anchor = planting.transplantedAt ?? planting.sownAt;
+    const fromGround =
+      anchor === undefined || names.daysToMaturity === undefined
+        ? undefined
+        : anchor + names.daysToMaturity * DAY;
+
     add(
       'harvest',
-      planting.plannedFirstHarvestAt,
+      fromGround ?? planting.plannedFirstHarvestAt,
       undefined,
       `${names.variety} should be ready in ${names.bed}`,
     );

@@ -253,8 +253,16 @@ export function occupants(plantings: readonly Planting[], bedId: string): Planti
   );
 }
 
-/** Varieties the farm has taken from the library or added itself. */
-export async function listVarieties(): Promise<{ id: string; name: string; crop: string }[]> {
+/**
+ * Varieties the farm has taken from the library or added itself.
+ *
+ * `daysToMaturity` rides along because the due engine needs it to anchor a
+ * harvest to the day something actually went in the ground rather than to the
+ * date a spring schedule predicted — see `growingDues`.
+ */
+export async function listVarieties(): Promise<
+  { id: string; name: string; crop: string; daysToMaturity?: number }[]
+> {
   const records = await localStore().readRecordsByEntity('variety');
   const stored = varietyCreateSchema.partial();
 
@@ -265,7 +273,16 @@ export async function listVarieties(): Promise<{ id: string; name: string; crop:
       if (!parsed.success || parsed.data.name === undefined || parsed.data.crop === undefined) {
         return [];
       }
-      return [{ id: record.targetId, name: parsed.data.name, crop: parsed.data.crop }];
+      return [
+        {
+          id: record.targetId,
+          name: parsed.data.name,
+          crop: parsed.data.crop,
+          ...(parsed.data.daysToMaturity === undefined
+            ? {}
+            : { daysToMaturity: parsed.data.daysToMaturity }),
+        },
+      ];
     })
     .sort((a, b) => a.crop.localeCompare(b.crop) || a.name.localeCompare(b.name));
 }
