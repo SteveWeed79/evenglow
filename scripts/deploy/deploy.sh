@@ -154,7 +154,7 @@ if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
   install -d -m 0755 /var/lib/steading/dist
   chown caddy:caddy /var/lib/steading/dist 2>/dev/null || true
 
-  # The install page, before there is anything to install.
+  # The install page, before there is anything to install — and after.
   #
   # `publish-apk.sh` also lays this down, but only on a successful publish — so
   # between the first deploy and the first build the directory existed and was
@@ -162,15 +162,26 @@ if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
   # can't be found"*, which reads as a broken box rather than as a box with no
   # build on it yet.
   #
-  # The Caddyfile already argues this case for a missing APK and routes it here
-  # with `try_files`; the hole was that the page it routes to did not exist yet.
-  # Copied on every deploy so a wording change ships with the rest of the repo,
-  # and it is the same file either way — nothing here can drift from what
-  # publish-apk.sh installs.
-  if [ -f "${REPO_DIR}/scripts/deploy/install-page.html" ]; then
-    install -m 0644 "${REPO_DIR}/scripts/deploy/install-page.html" \
-      /var/lib/steading/dist/index.html
-  fi
+  # Copied on every deploy so a wording change ships with the rest of the repo.
+  #
+  # ## And that is exactly how the version stamp disappeared
+  #
+  # This used to copy the raw template, placeholder and all, over whatever was
+  # there. `publish-apk.sh` stamps the page with the version; this ran five
+  # minutes later and took the stamp off again. Reported as *"the version number
+  # disappeared from the download site?"* — and it had.
+  #
+  # **The re-download loop was hiding it.** While that bug was live,
+  # `publish-apk.sh` ran on every tick as well, so it re-stamped the page moments
+  # after this had blanked it. Fixing the loop did not cause this; it stopped
+  # masking something that had been wrong the whole time.
+  #
+  # So the version is read back from where the publish wrote it, and one script
+  # renders the page for both callers. This can no longer write a page it does
+  # not know the contents of.
+  STAMP=""
+  [ -f /var/lib/steading/.version ] && STAMP="$(cat /var/lib/steading/.version)"
+  "${REPO_DIR}/scripts/deploy/render-install-page.sh" /var/lib/steading/dist "$STAMP" || true
 fi
 
 say "Restarting"
@@ -246,9 +257,19 @@ if [ -n "${EXPO_TOKEN:-}" ]; then
   # closes the loop whatever the file ends up called, including the case that
   # caused it: no version reported, no name to compare.
   #
-  # Beside the APKs rather than in the repo, because it describes what is on
-  # this shelf and a deploy must never be able to `git clean` it away.
-  LAST="/var/lib/steading/dist/.last-artifact"
+  # Outside the repo, because it describes what is on this shelf and a deploy
+  # must never be able to `git clean` it away — and outside `dist/`, because
+  # Caddy points `file_server` at that directory and a deploy marker is a note
+  # to the next deploy rather than something to publish. It sat in `dist/` when
+  # it was written, which served the Expo artefact url at /app/.last-artifact to
+  # anybody who asked.
+  LAST="/var/lib/steading/.last-artifact"
+
+  # A box that published before the move keeps its marker rather than deciding
+  # it has never fetched anything and pulling ninety megabytes to find out.
+  if [ ! -f "$LAST" ] && [ -f /var/lib/steading/dist/.last-artifact ]; then
+    mv /var/lib/steading/dist/.last-artifact "$LAST"
+  fi
 
   if [ -z "$APK_URL" ]; then
     note "no finished Android build to fetch (or Expo could not be reached)"
