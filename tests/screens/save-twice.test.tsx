@@ -27,6 +27,11 @@ import { PlantingScreen } from '../../apps/mobile/src/screens/PlantingScreen';
  * planting out are two presses on one visit by design — `PlantingScreen`'s own
  * header says the buttons are how growing dues clear.
  *
+ * It used to press "It is ready" as the second write. That button is gone:
+ * logging a harvest already moves a planting to `harvesting`, so it did by hand
+ * what picking does by happening. Sowing and planting out are the same test and
+ * a truer one — they are the two presses the report was actually about.
+ *
  * Five screens use the stay-put form: this one, Notes, Members, History and
  * Incubation. All five took one press.
  */
@@ -87,7 +92,7 @@ describe('a screen that stays where it is after saving', () => {
     expect(afterFirst, 'the first press wrote nothing').toBeGreaterThan(before);
 
     // The reported failure: everything after this was ignored.
-    await screen.press('mark-harvesting');
+    await screen.press('mark-planted');
     const afterSecond = (await localStore().counts()).total;
 
     expect(afterSecond, 'the second press on one visit did nothing').toBeGreaterThan(afterFirst);
@@ -106,9 +111,8 @@ describe('a screen that stays where it is after saving', () => {
     const before = (await localStore().counts()).total;
     await screen.press('mark-sown');
     await screen.press('mark-planted');
-    await screen.press('mark-harvesting');
 
-    expect((await localStore().counts()).total - before).toBeGreaterThanOrEqual(3);
+    expect((await localStore().counts()).total - before).toBeGreaterThanOrEqual(2);
 
     screen.unmount();
   });

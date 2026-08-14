@@ -40,7 +40,6 @@ import { InventoryScreen } from '../../apps/mobile/src/screens/InventoryScreen';
 import { LogHoursScreen } from '../../apps/mobile/src/screens/LogHoursScreen';
 import { LossScreen } from '../../apps/mobile/src/screens/LossScreen';
 import { PickVarietyScreen } from '../../apps/mobile/src/screens/PickVarietyScreen';
-import { PlantingScreen } from '../../apps/mobile/src/screens/PlantingScreen';
 import { ProduceScreen } from '../../apps/mobile/src/screens/ProduceScreen';
 import { ServiceDoneScreen } from '../../apps/mobile/src/screens/ServiceDoneScreen';
 import { SetEggsScreen } from '../../apps/mobile/src/screens/SetEggsScreen';
@@ -825,16 +824,25 @@ describe('growing', () => {
     expect(variety?.name).toBe('Sungold');
     expect(planting).toMatchObject({ bedId: added!.id, status: 'planned' });
 
-    const detail = await mount(<PlantingScreen {...routeProps({ plantingId: planting!.id })} />);
-    await detail.press('mark-harvesting');
-    expect((await listPlantings())[0]?.status).toBe('harvesting');
-
+    /**
+     * Straight to picking, with nothing pressed to announce it.
+     *
+     * There used to be an "It is ready — start picking" button here and this
+     * test pressed it. It is gone, because `HarvestScreen` already moves the
+     * planting to `harvesting` on the first pick — so the button did by hand
+     * what picking does by happening, and two controls meaning "it is harvest
+     * time" is a screen asking to be told something it is about to find out.
+     *
+     * Asserting the status *after* the pick is the stronger test: it proves the
+     * thing the button was standing in for still happens without it.
+     */
     const harvest = await mount(<HarvestScreen {...routeProps({ plantingId: planting!.id })} />);
     await harvest.type('harvest-mass', '4.5');
     await harvest.press('save-harvest');
 
     const [picked] = await listHarvests();
     expect(picked?.massUg).toBe(Math.round(4.5 * 453_592_370));
+    expect((await listPlantings())[0]?.status).toBe('harvesting');
   });
 
   it('warns about a tender variety without blocking it', async () => {

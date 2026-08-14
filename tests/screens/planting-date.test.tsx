@@ -71,6 +71,9 @@ async function aPlanting(): Promise<void> {
       varietyId: VARIETY,
       season: new Date().getFullYear(),
       status: 'planned',
+      // So "Planted it out" is offered as well — the button is gated on the
+      // variety actually having a transplant stage.
+      plannedTransplantAt: Date.now(),
     },
   });
 }
@@ -149,12 +152,12 @@ describe('recording something that happened earlier', () => {
     await screen.press('planting-when');
     await screen.type('day-of-month', String(OTHER_DAY));
     await screen.press('mark-sown');
-    await screen.press('mark-harvesting');
+    await screen.press('mark-planted');
 
     const planting = (await listPlantings()).find((p) => p.id === PLANTING);
 
     expect(planting?.sownAt).toBe(dayThisMonth(OTHER_DAY));
-    expect(planting?.status).toBe('harvesting');
+    expect(planting?.transplantedAt).toBe(dayThisMonth(OTHER_DAY));
 
     screen.unmount();
   });
