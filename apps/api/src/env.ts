@@ -111,6 +111,37 @@ const envSchema = z.object({
     .transform((value) => value === '1' || value.toLowerCase() === 'true'),
 
   /**
+   * Whether syncing needs an explicit grant on a server that takes no payments.
+   *
+   * **Off by default, and the default is the one that keeps a self-hosted farm
+   * working.** `syncAccess` treats "no Play configuration" as *there is no such
+   * thing as paid here* and lets everybody sync, because refusing over a
+   * subscription state nobody could hold would lock a self-hoster out of their
+   * own server.
+   *
+   * That is right for a box serving one farm and wrong for a box whose install
+   * page is on the open internet. Reported from exactly that: *"our site for
+   * download is online all the time — if someone finds it they get a free
+   * account?"* They did, and the hostname is in Certificate Transparency logs,
+   * so "if someone finds it" is a matter of when.
+   *
+   * **The app stays free either way, and that is the point of putting the gate
+   * here rather than in front of the download.** Anyone may install it and keep
+   * a farm's whole records on their own handset for nothing; what needs a grant
+   * is a copy on somebody else's server, which is the part that costs. D13
+   * already says sync is the only thing sold — this makes that true before Play
+   * exists rather than after.
+   *
+   * Granted three ways, all of which are read first: `FREE_SYNC_ORGS`,
+   * `pnpm farm:grant`, and a promotion code the farm redeems itself (A2.6).
+   * Turn this on AFTER granting the farms already syncing — see A2.8.
+   */
+  SYNC_REQUIRES_GRANT: z
+    .string()
+    .default('')
+    .transform((value) => value === '1' || value.toLowerCase() === 'true'),
+
+  /**
    * How many proxies sit in front of this service, or empty for none.
    *
    * **Off by default, and this used to be `trustProxy: true` unconditionally.**

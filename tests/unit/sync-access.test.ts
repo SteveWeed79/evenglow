@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { subscriptionFromPromo } from '@steading/contracts';
 import { syncAccess } from '@steading/api/billing/access';
 import { readEnv } from '@steading/api/env';
 import type { OrgDoc } from '@steading/api/db/identity';
@@ -86,5 +87,93 @@ describe('a server that does take payments', () => {
   it('lets a paid farm through', () => {
     const paid = farm({ subscription: { state: 'active', expiresAt: Date.now() + 86_400_000 } });
     expect(syncAccess(readEnv(withPlay), paid).syncing).toBe(true);
+  });
+});
+
+/**
+ * The open box, which is the state a public install page puts a server in.
+ *
+ * Reported from the box: *"our site for download is online all the time — if
+ * someone finds it they get a free account?"* They did. The install page is
+ * public by necessity, and the hostname is in Certificate Transparency logs the
+ * moment a certificate is issued, so *if* somebody finds it is a matter of
+ * when.
+ *
+ * `SYNC_REQUIRES_GRANT` is the answer, and where it sits is the argument: the
+ * app stays free to install and a farm may keep its whole records on its own
+ * handset for nothing. What needs granting is a copy on somebody else's server,
+ * which is the part that costs — and D13 already says sync is the only thing
+ * sold. This makes that true before Play exists rather than after.
+ */
+const guarded = { ...base, SYNC_REQUIRES_GRANT: '1' };
+
+describe('a server that takes no payments and has been told to ask anyway', () => {
+  it('holds a farm nobody has granted anything', () => {
+    expect(syncAccess(readEnv(guarded), farm())).toEqual({
+      syncing: false,
+      refusal: 'unsubscribed',
+    });
+  });
+
+  /** The stranger case exactly: an org this server has no document for. */
+  it('holds a farm it has never heard of', () => {
+    expect(syncAccess(readEnv(guarded), null).syncing).toBe(false);
+  });
+
+  it('lets a farm named in the environment through', () => {
+    const env = readEnv({ ...guarded, FREE_SYNC_ORGS: ORG });
+    expect(syncAccess(env, farm())).toEqual({ syncing: true, refusal: null });
+  });
+
+  it('lets a farm granted in the database through', () => {
+    const granted = farm({ syncGranted: { at: new Date(), note: 'the tester' } });
+    expect(syncAccess(readEnv(guarded), granted)).toEqual({ syncing: true, refusal: null });
+  });
+
+  /**
+   * **The assertion the whole design rests on.** A promotion code does not
+   * bypass the gate, it writes a subscription (A2.6) — so it has to arrive
+   * through `entitlementOf` like a purchase would. If it did not, turning this
+   * flag on would lock out the very people who had redeemed a code, which is
+   * the opposite of what it is for.
+   *
+   * Built with the real `subscriptionFromPromo` rather than a hand-written
+   * `{ state: 'active' }`, so a change to what redeeming writes fails here
+   * rather than in somebody's barn.
+   */
+  it('lets a farm that redeemed a code through', () => {
+    const redeemed = farm({ subscription: subscriptionFromPromo({ days: null }, Date.now()) });
+    expect(syncAccess(readEnv(guarded), redeemed)).toEqual({ syncing: true, refusal: null });
+  });
+
+  it('holds a farm whose redeemed code has run out', () => {
+    const expired = farm({ subscription: subscriptionFromPromo({ days: 30 }, Date.now() - 31 * 86_400_000) });
+    expect(syncAccess(readEnv(guarded), expired).refusal).toBe('lapsed');
+  });
+});
+
+describe('the flag itself', () => {
+  /** Off is the default, because the default must keep a self-hoster working. */
+  it('is off when unset', () => {
+    expect(syncAccess(readEnv(base), farm()).syncing).toBe(true);
+  });
+
+  it.each(['', '0', 'no'])('is off for %o', (value) => {
+    expect(syncAccess(readEnv({ ...base, SYNC_REQUIRES_GRANT: value }), farm()).syncing).toBe(true);
+  });
+
+  it.each(['1', 'true', 'TRUE'])('is on for %o', (value) => {
+    expect(syncAccess(readEnv({ ...base, SYNC_REQUIRES_GRANT: value }), farm()).syncing).toBe(false);
+  });
+
+  /**
+   * It changes nothing once Play is configured. The flag exists to bring the
+   * gate forward, not to add a second one beside it — a farm that has paid must
+   * sync whether or not this is set.
+   */
+  it('does not disturb a server that does take payments', () => {
+    const paid = farm({ subscription: { state: 'active', expiresAt: Date.now() + 86_400_000 } });
+    expect(syncAccess(readEnv({ ...withPlay, SYNC_REQUIRES_GRANT: '1' }), paid).syncing).toBe(true);
+    expect(syncAccess(readEnv({ ...withPlay, SYNC_REQUIRES_GRANT: '1' }), farm()).syncing).toBe(false);
   });
 });

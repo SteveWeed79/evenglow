@@ -767,6 +767,34 @@ self-hosted server permanently.
 
 Confirm which state a box is in with `grep -c GOOGLE_PLAY /etc/steading/api.env`.
 
+### Except when the box is on the open internet
+
+That default is right for a server with one farm on it and wrong for one whose
+install page is public. Reported from exactly that box: *"our site for download
+is online all the time — if someone finds it they get a free account?"* They
+did. The page has to be public for a tester to reach it, and the hostname is in
+**Certificate Transparency logs** from the moment Caddy is issued a certificate,
+so *if* somebody finds it is a matter of when rather than whether.
+
+`SYNC_REQUIRES_GRANT=1` makes the first question ask rather than answer. The two
+comps below and a redeemed promotion code become the only ways through, on a
+server that has never heard of Play.
+
+**Where the gate sits is the argument.** The app stays free to install and a
+farm may keep its whole records on its own handset for nothing — that is D14 and
+it is not a trial. What needs granting is a copy on *somebody else's* server,
+which is the part that costs money to keep. D13 already says sync is the only
+thing sold; this makes that true before Play exists rather than after.
+
+A farm without a grant is told *"Kept on this phone. Everything works; nothing
+is sent anywhere."* — true, naming no store it could not reach, and sitting
+directly above the field where a code goes.
+
+Guarding the download page instead was considered and is weaker: it costs a
+tester a password, and it does nothing at all about somebody who already has the
+APK. The account is what consumes the disk, so the account is where the gate
+belongs.
+
 ### The cliff
 
 Adding those two variables does not switch billing on gradually. It moves the
@@ -780,12 +808,15 @@ mitigation is ordering rather than cleverness.
 
 ### The order that avoids it
 
+The same order applies to `SYNC_REQUIRES_GRANT`, which is the same cliff arriving
+earlier and on purpose — and is the cheaper one to rehearse on, because it can be
+turned back off in a file.
+
 1. **Comp everyone who must not be interrupted** — the farm running the box,
-   every tester, anyone mid-season. All three mechanisms below work while
-   `playConfig` is still null, because they are read *before* the subscription
-   is.
-2. **Then** add `GOOGLE_PLAY_SERVICE_ACCOUNT` and `GOOGLE_PLAY_PACKAGE`, and
-   restart.
+   every tester, anyone mid-season. All three mechanisms below are read *before*
+   the subscription is, so they work in either state.
+2. **Then** turn the gate on: `SYNC_REQUIRES_GRANT=1` now, or
+   `GOOGLE_PLAY_SERVICE_ACCOUNT` and `GOOGLE_PLAY_PACKAGE` later. Restart.
 3. **Then** verify from a handset that had been syncing that it still is —
    before anybody reports that it is not. The account screen and the sync chip
    both read `syncAccess`, so they agree or they are both wrong.
