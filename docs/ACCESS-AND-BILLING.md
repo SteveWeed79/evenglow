@@ -745,3 +745,64 @@ Backup**, which really is the platform doing this automatically, is off in
 Google's backup without anybody agreeing to it, and *"everything is on this
 phone only"* — which is what this document says and what the app repeats —
 would quietly stop being true.
+
+---
+
+## A2.8 — The day the paywall switches on
+
+**Right now this server charges nobody, and that is not an oversight.**
+`syncAccess` asks three questions before it asks what a farm has paid, and the
+first one ends it:
+
+```ts
+if (env.playConfig === null) return { syncing: true, refusal: null };
+```
+
+`playConfig` is null unless **both** `GOOGLE_PLAY_SERVICE_ACCOUNT` and
+`GOOGLE_PLAY_PACKAGE` are set, which needs a Play Console service account. On a
+box without them the answer is not "unpaid", it is *"there is no such thing as
+paid here"* — nobody could have bought anything, so refusing work over a
+subscription state nobody could possibly hold would lock every farm out of a
+self-hosted server permanently.
+
+Confirm which state a box is in with `grep -c GOOGLE_PLAY /etc/steading/api.env`.
+
+### The cliff
+
+Adding those two variables does not switch billing on gradually. It moves the
+first question from *yes* to *keep asking*, for **every farm at once** —
+including the one running the server. A farm that was syncing five minutes ago
+starts getting `unsubscribed` on every batch, and the only thing it did was
+exist while somebody edited a file it has never heard of.
+
+This is the ordinary shape of a flag that gates a whole population, and the
+mitigation is ordering rather than cleverness.
+
+### The order that avoids it
+
+1. **Comp everyone who must not be interrupted** — the farm running the box,
+   every tester, anyone mid-season. All three mechanisms below work while
+   `playConfig` is still null, because they are read *before* the subscription
+   is.
+2. **Then** add `GOOGLE_PLAY_SERVICE_ACCOUNT` and `GOOGLE_PLAY_PACKAGE`, and
+   restart.
+3. **Then** verify from a handset that had been syncing that it still is —
+   before anybody reports that it is not. The account screen and the sync chip
+   both read `syncAccess`, so they agree or they are both wrong.
+
+Doing 2 before 1 is recoverable — nothing is lost, the queue holds and flushes
+when the grant lands — but the farm spends that window being told its records
+are staying on the phone, which is the one sentence this app cannot afford to
+say carelessly.
+
+### Which comp to reach for
+
+| | Where it lives | Right when |
+| --- | --- | --- |
+| `FREE_SYNC_ORGS` | the server's environment | the break-glass. Needs no database, so it works when the database is the thing that is broken. Costs a restart. |
+| `pnpm farm:grant` | the `orgs` document | the ordinary comp. Same decision, no restart, and it survives somebody rewriting the env file. |
+| A promotion code (A2.6) | handed to a person | when the farm should do the redeeming — a tester you will never have shell access on behalf of. |
+
+The first two are things done *to* a farm and need its org id. The third is a
+thing a farm does for itself, which is why it is the only one of the three that
+belongs in somebody else's hands.
