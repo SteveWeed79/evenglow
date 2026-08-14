@@ -264,35 +264,58 @@ function Forecast({
           >
             {hours.map((hour, index) => (
               <View key={hour.at} style={styles.hour}>
-                {/* Midnight needs saying, or 2am reads as this afternoon. The
-                    first cell never carries it — "today" above a strip that
-                    starts now is noise. */}
-                <Text
-                  style={[
-                    styles.hourDay,
-                    {
-                      color:
-                        index > 0 && dayStart(hour.at) !== dayStart(hours[index - 1]?.at ?? hour.at)
-                          ? colors.lanternInk
-                          : 'transparent',
-                    },
-                  ]}
-                >
-                  {DAY_NAMES[new Date(hour.at).getDay()]}
-                </Text>
+                {/**
+                  * Midnight needs saying, or 2am reads as this afternoon. The
+                  * first cell never carries it — "today" above a strip that
+                  * starts now is noise.
+                  *
+                  * ## The row is a fixed height and the text is simply absent
+                  *
+                  * This used to render the day on **every** cell and paint the
+                  * ones with nothing to say `'transparent'`, so all twenty-four
+                  * were the same height. Reported from a handset: *"the Day
+                  * text on the scrolling hourly weather is impossible to see on
+                  * lamplight, the font is black, it's there but not visible."*
+                  *
+                  * Black on every cell means the inline colour never reached
+                  * the `Text` at all — both branches were lost, `'transparent'`
+                  * included — and Android's default text colour is black. Why
+                  * it was lost is not something the bundler can be made to
+                  * show, so the dependency goes instead of being guessed at: a
+                  * cell with nothing to say now renders **no text**, and the
+                  * heights still line up because the row that holds it has a
+                  * height of its own.
+                  *
+                  * Invisibility that depends on a colour resolving correctly is
+                  * invisibility with a failure mode. An element that is not
+                  * there has none.
+                  */}
+                <View style={styles.hourDayRow}>
+                  {index > 0 &&
+                  dayStart(hour.at) !== dayStart(hours[index - 1]?.at ?? hour.at) ? (
+                    /* `inkQuiet`, not brass: this is a label to be read rather
+                       than a mark to be noticed, and it is the token that holds
+                       R7's 7:1 on all three grounds. Brass is 5.15:1 in
+                       daylight, which is a fine bar and a marginal word. */
+                    <Text style={[styles.hourDay, { color: colors.inkQuiet }]}>
+                      {DAY_NAMES[new Date(hour.at).getDay()]}
+                    </Text>
+                  ) : null}
+                </View>
                 <Text style={[styles.label, { color: colors.muted }]}>{clock(hour.at)}</Text>
                 <Icon name={SKY_MARKS[hour.condition]} size={24} color={colors.muted} />
                 <Text style={[styles.hourTemp, { color: colors.ink }]}>
                   {degrees(hour.tempDeciC, units)}°
                 </Text>
-                <Text
-                  style={[
-                    styles.hourRain,
-                    { color: hour.rainChance === 0 ? 'transparent' : colors.lanternInk },
-                  ]}
-                >
-                  {hour.rainChance}%
-                </Text>
+                {/* The same trick and therefore the same trap — a dry hour now
+                    renders nothing rather than a percentage painted out. */}
+                <View style={styles.hourRainRow}>
+                  {hour.rainChance === 0 ? null : (
+                    <Text style={[styles.hourRain, { color: colors.lanternInk }]}>
+                      {hour.rainChance}%
+                    </Text>
+                  )}
+                </View>
               </View>
             ))}
           </ScrollView>
@@ -558,20 +581,35 @@ const styles = StyleSheet.create({
   hours: { flexDirection: 'row', gap: SPACE.sm, paddingRight: SPACE.lg },
   hour: { alignItems: 'center', gap: 2, minWidth: 56, paddingVertical: SPACE.xs },
   /**
-   * Always rendered, coloured transparent when it has nothing to say.
+   * The rows that keep the cells the same height whether or not they speak.
    *
-   * A cell that only sometimes has this line would be a cell that only
-   * sometimes is the same height, and the wrap would step up and down across
-   * the midnight boundary. Same trick the rain percentage already uses.
+   * A cell that only sometimes has a line would be a cell that only sometimes
+   * is the same height, and the strip would step up and down across the
+   * midnight boundary. That was solved by painting the spare lines
+   * `'transparent'`, which put the layout at the mercy of a colour arriving —
+   * and on a handset it did not, so twenty-four black day names appeared on a
+   * near-black ground.
+   *
+   * A fixed height holds the row open with nothing in it. `lineHeight` is set
+   * on the text to match, so the reserved space is the space the word takes
+   * rather than a number that happens to look right on one device.
    */
+  hourDayRow: { height: TYPE.label + 2, justifyContent: 'center' },
+  hourRainRow: { height: TYPE.label + 3, justifyContent: 'center' },
   hourDay: {
     fontFamily: FONTS.data,
     fontSize: TYPE.label - 2,
+    lineHeight: TYPE.label + 2,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
   hourTemp: { fontFamily: FONTS.data, fontSize: TYPE.body, fontVariant: ['tabular-nums'] },
-  hourRain: { fontFamily: FONTS.data, fontSize: TYPE.label - 1, fontVariant: ['tabular-nums'] },
+  hourRain: {
+    fontFamily: FONTS.data,
+    fontSize: TYPE.label - 1,
+    lineHeight: TYPE.label + 3,
+    fontVariant: ['tabular-nums'],
+  },
   day: {
     flexDirection: 'row',
     alignItems: 'center',
