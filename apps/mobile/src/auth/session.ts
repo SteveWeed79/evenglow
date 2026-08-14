@@ -385,6 +385,76 @@ export async function joinFarm(input: {
 }
 
 /**
+ * What an invitation is for, before anybody types a password.
+ *
+ * The server has published this since invites were built and **nothing ever
+ * called it**. That is the half of the flow that was missing: a farm could mint
+ * a link and share it, and the person who received one had nowhere in the app
+ * to put it. The invite was a token in a text message and a dead end.
+ *
+ * It is a public read on purpose, rate limited on the server, and it answers
+ * with the farm's own name rather than the inviter's — *"Hollow Farm"* is what
+ * somebody recognises when deciding whether a link is the right one; *"Sam
+ * invited you"* is not.
+ *
+ * Returns null when the link is spent, revoked, expired or simply wrong. All
+ * four are one answer deliberately: distinguishing them tells a guesser which
+ * tokens exist.
+ */
+const invitationSchema = z.object({
+  orgName: z.string(),
+  invitedBy: z.string(),
+  role: roleSchema,
+  email: z.string(),
+  expiresAt: z.number(),
+});
+
+export type Invitation = z.infer<typeof invitationSchema>;
+
+export async function lookupInvite(token: string): Promise<Invitation | null> {
+  const res = await fetch(url(`/invites/${encodeURIComponent(token.trim())}`));
+  if (!res.ok) return null;
+
+  const parsed = invitationSchema.safeParse(await res.json());
+  return parsed.success ? parsed.data : null;
+}
+
+/**
+ * Taking up an invitation, which creates the account and signs it in.
+ *
+ * The email is asked for and sent even though the invite already carries one,
+ * and that is the point rather than a redundancy: **the token proves somebody
+ * has the link, the email proves they are who it was for.** The server compares
+ * them in constant time so a leaked link cannot be used to recover the invited
+ * address a character at a time.
+ *
+ * `retireLocalOrgId` for the same reason `joinFarm` does it: this device may
+ * have been keeping its own farm before it was invited to somebody else's, and
+ * that id is the only pointer to the database holding those records. Retired
+ * rather than deleted — see `local-org.ts`.
+ */
+export async function acceptInvite(input: {
+  token: string;
+  name: string;
+  email: string;
+  password: string;
+}): Promise<CachedClaims> {
+  const res = await fetch(url('/invites/accept'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ...input, token: input.token.trim() }),
+  });
+
+  if (!res.ok) {
+    throw await refusal(res, 'That invitation did not work. Ask for a fresh link.');
+  }
+
+  const claims = await establish(await res.json());
+  await retireLocalOrgId();
+  return claims;
+}
+
+/**
  * Exchanges the stored refresh token for a fresh access token.
  *
  * Returns null when there is nothing to exchange or the server refuses, and

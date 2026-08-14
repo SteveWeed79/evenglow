@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Share, StyleSheet, Text, View } from 'react-native';
 import { z } from 'zod';
-import { assignableRoles, canInvite, INVITE_TTL_DAYS, JOIN_CODE_TTL_MINUTES, type PendingInvite, type Role, roleSchema } from '@steading/contracts';
+import { assignableRoles, canInvite, ROLE_WORDS, INVITE_TTL_DAYS, JOIN_CODE_TTL_MINUTES, type PendingInvite, type Role, roleSchema } from '@steading/contracts';
 import { apiBase, currentAccessToken } from '@steading/core/api';
 import { Choice, Confirm, Failure, Field, Primary, Secondary, TextField, useSaver } from '../components/Form';
 import { Body, Panel } from '../components/Panel';
@@ -28,12 +28,6 @@ import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
  * the actor's role from the database on the request that acts, and an admin
  * who edits their way past the chips below gets a 403 rather than an owner.
  */
-
-const ROLE_LABELS: Record<Role, string> = {
-  owner: 'Owner',
-  admin: 'Manager',
-  hand: 'Farm hand',
-};
 
 const ROLE_NOTES: Record<Role, string> = {
   owner: 'Everything, including inviting other owners.',
@@ -252,7 +246,7 @@ export function MembersScreen(): React.ReactElement {
               {member.id === me ? ' (you)' : ''}
             </Text>
             <Text style={[styles.detail, { color: colors.muted }]}>
-              {member.email} · {ROLE_LABELS[member.role]}
+              {member.email} · {ROLE_WORDS[member.role]}
               {member.disabled ? ' · removed' : ''}
             </Text>
 
@@ -269,7 +263,7 @@ export function MembersScreen(): React.ReactElement {
                       call(`/members/${member.id}/role`, { method: 'PATCH', body: { role: next } }),
                     )
                   }
-                  labels={ROLE_LABELS}
+                  labels={ROLE_WORDS}
                 />
                 <Confirm
                   label="Remove from the farm"
@@ -289,7 +283,7 @@ export function MembersScreen(): React.ReactElement {
           {invites.map((pending) => (
             <View key={pending.id} style={styles.invite}>
               <Text style={[styles.detail, { color: colors.ink }]}>
-                {pending.email} · {ROLE_LABELS[pending.role]} · expires{' '}
+                {pending.email} · {ROLE_WORDS[pending.role]} · expires{' '}
                 {new Date(pending.expiresAt).toLocaleDateString(undefined, {
                   day: 'numeric',
                   month: 'short',
@@ -346,7 +340,7 @@ export function MembersScreen(): React.ReactElement {
                 {code.code}
               </Text>
               <Body>
-                They will join as {ROLE_LABELS[code.role].toLowerCase()}. It stops working once
+                They will join as {ROLE_WORDS[code.role].toLowerCase()}. It stops working once
                 somebody uses it.
               </Body>
             </>
@@ -357,7 +351,7 @@ export function MembersScreen(): React.ReactElement {
               options={grantable}
               value={inviteRole}
               onChange={setInviteRole}
-              labels={ROLE_LABELS}
+              labels={ROLE_WORDS}
             />
           </Field>
 
@@ -389,7 +383,7 @@ export function MembersScreen(): React.ReactElement {
               options={grantable}
               value={inviteRole}
               onChange={setInviteRole}
-              labels={ROLE_LABELS}
+              labels={ROLE_WORDS}
             />
           </Field>
 
