@@ -84,21 +84,39 @@ export interface ThemeValue {
    * for one of them.
    */
   override: ThemeName | null;
+  /**
+   * Whether the stored choice has been read off the disk yet.
+   *
+   * `override` cannot answer this: null is both "nothing was ever chosen" and
+   * "not looked yet", and the difference decides whether it is safe to paint.
+   *
+   * Boot is the caller. It holds the native splash until this turns true, so
+   * the first thing drawn in JS is the theme the farm actually chose — not a
+   * frame of daylight at 5am, which is the thing lamplight exists to prevent.
+   */
+  ready: boolean;
 }
 
 const ThemeContext = createContext<ThemeValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }): React.ReactElement {
   const [override, setOverride] = useState<ThemeName | null>(null);
+  const [ready, setReady] = useState(false);
   const scheme = useColorScheme();
 
   // What this handset was last told to wear. `undefined` means nothing was
   // ever chosen, which is not the same as choosing to follow the device — and
   // `readLook` keeps them apart so a stored `null` is honoured as the answer
   // it is rather than read as a missing one.
+  //
+  // `readLook` swallows its own failures and resolves `undefined` rather than
+  // rejecting, which is what lets `ready` be set unconditionally here: a
+  // preference that could not be read still settles the question, and a splash
+  // that waited for a promise that never arrived would never come down.
   useEffect(() => {
     void readLook().then((look) => {
       if (look !== undefined) setOverride(look);
+      setReady(true);
     });
   }, []);
 
@@ -122,8 +140,8 @@ export function ThemeProvider({ children }: { children: ReactNode }): React.Reac
   }, []);
 
   const value = useMemo<ThemeValue>(
-    () => ({ theme, colors: THEMES[theme], toggle, setTheme: choose, override }),
-    [theme, toggle, choose, override],
+    () => ({ theme, colors: THEMES[theme], toggle, setTheme: choose, override, ready }),
+    [theme, toggle, choose, override, ready],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

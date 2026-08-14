@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, create } from 'react-test-renderer';
 import { ThemeProvider } from '../../apps/mobile/src/theme/ThemeProvider';
+import { writeLook } from '../../apps/mobile/src/theme/look';
+import { THEMES } from '../../apps/mobile/src/theme/tokens';
 import { freshStore } from '../support/store';
-import { resetSplash, splash } from '../support/native/modules';
+import { files, resetSplash, splash } from '../support/native/modules';
 
 /**
  * When the splash comes down.
@@ -34,7 +36,16 @@ vi.mock('../../apps/mobile/src/theme/fonts', () => ({
 
 const { Boot } = await import('../../apps/mobile/src/Boot');
 
-async function mountBoot(): Promise<{ text: string; unmount: () => void }> {
+interface Mounted {
+  text: string;
+  /** Whether a control is on screen at all. */
+  has: (testID: string) => boolean;
+  /** The resolved `backgroundColor` of a node, which is how a theme shows. */
+  background: (testID: string) => unknown;
+  unmount: () => void;
+}
+
+async function mountBoot(): Promise<Mounted> {
   let tree!: ReturnType<typeof create>;
 
   await act(async () => {
@@ -44,10 +55,11 @@ async function mountBoot(): Promise<{ text: string; unmount: () => void }> {
       </ThemeProvider>,
     );
   });
-  // Let the store promise settle and the effect that follows it run.
+  // Let the store promise settle and the effect that follows it run. Four
+  // passes rather than two: the stored theme is read on its own promise now,
+  // and the splash waits on it.
   await act(async () => {
-    await Promise.resolve();
-    await Promise.resolve();
+    for (let i = 0; i < 4; i += 1) await Promise.resolve();
   });
 
   const read = (node: unknown): string =>
@@ -57,12 +69,33 @@ async function mountBoot(): Promise<{ text: string; unmount: () => void }> {
       read((node as { children: unknown }).children)
     : '';
 
-  return { text: read(tree.toJSON()), unmount: () => tree.unmount() };
+  const find = (testID: string): ReturnType<typeof tree.root.findAll>[number] | undefined =>
+    tree.root.findAll((node) => node.props['testID'] === testID)[0];
+
+  return {
+    text: read(tree.toJSON()),
+    has: (testID) => find(testID) !== undefined,
+    background: (testID) => {
+      const style = find(testID)?.props['style'];
+      const layers = (Array.isArray(style) ? style : [style]).filter(
+        (s: unknown): s is Record<string, unknown> => typeof s === 'object' && s !== null,
+      );
+      return layers.reduce<unknown>(
+        (found, layer) => (layer['backgroundColor'] === undefined ? found : layer['backgroundColor']),
+        undefined,
+      );
+    },
+    unmount: () => tree.unmount(),
+  };
 }
 
 beforeEach(async () => {
   await freshStore();
   resetSplash();
+  // The stored look is a file beside the database rather than a row in it, so
+  // `freshStore` does not touch it and a choice made in one test would be the
+  // starting state of the next.
+  files.clear();
   start.run = () => Promise.resolve({ stop: () => {} });
 });
 
@@ -92,14 +125,86 @@ describe('the splash over a cold start', () => {
     screen.unmount();
   });
 
-  it('stays up while the store is still opening', async () => {
-    // A boot that never settles: the splash is the loading state, so nothing
-    // should replace it.
+  /**
+   * The native splash used to be the loading state for the whole cold start,
+   * and that is what made the theme wrong: Android picks it from the *phone's*
+   * dark mode, so a farm that chose lamplight on a light-mode handset booted
+   * into the daylight mark every time.
+   *
+   * It hands over instead. What must not change is that the screen is never
+   * empty while the store opens — so this asserts the mark took the wait, not
+   * that the native splash kept it.
+   */
+  it('hands the wait to its own mark rather than emptying the screen', async () => {
+    // A boot that never settles: something has to be holding the screen.
     start.run = () => new Promise(() => {});
 
     const screen = await mountBoot();
 
-    expect(splash.hidden).toBe(0);
+    expect(screen.has('boot-mark')).toBe(true);
+    screen.unmount();
+  });
+});
+
+/**
+ * The half the native splash cannot do.
+ *
+ * Asked for plainly — *"can we change the splash screen so that it matches the
+ * theme the app is set to? I would love a lamplight version with the glowing
+ * S"* — and the lamplight art already existed, wired to `expo-splash-screen`'s
+ * `dark` key. That key follows the handset, because Android draws the splash
+ * from resource qualifiers before a line of JavaScript runs. A farm on a
+ * light-mode phone could not reach it.
+ */
+describe('the mark under the boot', () => {
+  /**
+   * **The ground, not the drawing.** Vitest resolves every PNG to one shared
+   * stub, so `source` is the same object for all three themes here and an
+   * assertion about which file was picked would pass whatever the code did.
+   * Saying so rather than writing it: the image choice is one line, and it is
+   * checked on a handset.
+   *
+   * The ground is the half this harness can see, and it is the half that was
+   * wrong — a farm on a light-mode phone booted onto cream after choosing
+   * lamplight.
+   */
+  it('wears the chosen theme, not the phone one', async () => {
+    start.run = () => new Promise(() => {});
+
+    // The stub reports a light-mode handset, so this is exactly the
+    // disagreement the report was about: lamplight chosen, daylight phone.
+    await writeLook('lamplight');
+    const screen = await mountBoot();
+
+    expect(screen.has('boot-mark')).toBe(true);
+    expect(screen.background('boot')).toBe(THEMES.lamplight.ground);
+    screen.unmount();
+  });
+
+  it('follows the phone when nothing has been chosen', async () => {
+    start.run = () => new Promise(() => {});
+
+    const screen = await mountBoot();
+
+    // Nothing stored and a light-mode stub: following the device is still the
+    // default, and the new gate must not have quietly become an override.
+    expect(screen.background('boot')).toBe(THEMES.daylight.ground);
+    screen.unmount();
+  });
+
+  /**
+   * Bright sun is a legibility override rather than a time of day, and it has
+   * no mark of its own — it borrows the pale one. Asserted so that "sun has no
+   * art" stays a decision rather than becoming a missing file.
+   */
+  it('paints bright sun rather than falling back to the device', async () => {
+    start.run = () => new Promise(() => {});
+
+    await writeLook('sun');
+    const screen = await mountBoot();
+
+    expect(screen.has('boot-mark')).toBe(true);
+    expect(screen.background('boot')).toBe(THEMES.sun.ground);
     screen.unmount();
   });
 });

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View, type ImageSourcePropType } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import { startSync } from '@steading/core/sync/engine';
 import { setStorageBacking } from '@steading/core/sync/storage';
@@ -9,8 +9,43 @@ import { start, type Started } from './boot/start';
 import { openLocalStore } from './db/store';
 import { useAppFonts } from './theme/fonts';
 import type { CachedClaims } from './auth/session';
-import { useTheme } from './theme/ThemeProvider';
+import { useTheme, type ThemeName } from './theme/ThemeProvider';
 import { FONTS, SPACE, TYPE } from './theme/tokens';
+
+/**
+ * The mark, per theme, so the boot screen wears what the farm chose.
+ *
+ * **The native splash cannot do this and never will.** Android draws it from
+ * resource qualifiers before a line of JavaScript runs, so the only thing it
+ * can consult is the phone's own dark mode — which is why a farm that chose
+ * lamplight on a light-mode handset was shown the daylight mark and asked for
+ * *"a lamplight version with the glowing S"* it already had and could not
+ * reach.
+ *
+ * So the native splash keeps following the device, and this takes over the
+ * moment JS knows better. See the hide below for the ordering that makes the
+ * handover invisible when the two agree.
+ *
+ * `require` rather than `import`: Metro resolves bundled assets through it and
+ * an import cannot express the density set — the same reason `fonts.ts` and
+ * `Plaster.tsx` do it.
+ *
+ * Bright sun borrows the daylight mark. It is the one theme with no art of its
+ * own, and a pale ground is the thing the two have in common; inventing a
+ * third rendering to fill the row would be a drawing nobody asked for.
+ */
+/* eslint-disable @typescript-eslint/no-require-imports --
+   The three lines below are asset resolution, not module loading. Same
+   exemption and same reason as `fonts.ts` and `Plaster.tsx`. */
+const MARKS: Record<ThemeName, ImageSourcePropType> = {
+  daylight: require('../assets/splash/steading-daylight.png'),
+  lamplight: require('../assets/splash/steading-lamplight.png'),
+  sun: require('../assets/splash/steading-daylight.png'),
+};
+/* eslint-enable @typescript-eslint/no-require-imports */
+
+/** Matches `imageWidth` in app.json, so the handover does not resize the mark. */
+const MARK_WIDTH = 180;
 
 /**
  * Opening the database and starting the sync loop before the first screen renders.
@@ -62,7 +97,7 @@ export function Boot({
   }) => React.ReactNode;
 }): React.ReactElement {
   const [state, setState] = useState<State>({ kind: 'opening' });
-  const { colors } = useTheme();
+  const { colors, theme, ready: themeReady } = useTheme();
 
   /**
    * The faces, in parallel with the database.
@@ -159,46 +194,69 @@ export function Boot({
   const onSignedOut = useCallback(() => setState({ kind: 'ready' }), []);
 
   /**
-   * The splash comes down when there is something to read — **including bad news.**
+   * The splash comes down when this file can draw the same thing itself.
    *
-   * `index.ts` holds it open past the first frame so the mark covers the store
-   * opening and the faces loading, which is the whole of a cold start. This is
-   * the other half: without it the splash is held for the life of the process.
+   * `index.ts` holds it open past the first frame, because the first frame
+   * lands long before the store is open or the faces are read. This is the
+   * other half: without it the splash is held for the life of the process.
    *
-   * The failure branch hides it too, and that is the part worth being careful
-   * about. An app that cannot open its database has one job — say so in words
-   * — and a splash left up is a farm staring at a logo while the only screen
-   * that could explain anything sits behind it. Same reasoning as this file's
-   * refusal to render an empty list on that branch: silence is the one thing
-   * this app must not do about lost records.
+   * ## It used to wait for the database, and that is what made the theme wrong
+   *
+   * The condition was `fonts.ready && state.kind !== 'opening'` — the whole of
+   * a cold start spent under a splash Android had chosen from the *phone's*
+   * dark mode. A farm that picked lamplight on a light-mode handset booted into
+   * the daylight mark every time, and asked for the lamplight one it already
+   * had and could not reach.
+   *
+   * Two things gate it now, and neither is the database: the faces, and whether
+   * the stored theme has been read. Both are file reads that settle in single
+   * digits of milliseconds. The moment they do, this paints the mark itself in
+   * the theme that was actually chosen and holds the screen for the rest of the
+   * boot — so the store opening happens under a splash rather than after one.
+   *
+   * When the phone and the farm agree, which is most of the time, the handover
+   * is the same mark on the same ground at the same width and cannot be seen.
+   * When they disagree, the switch to the chosen theme *is* the correct
+   * behaviour and reads as intent.
+   *
+   * **The failure branch is reached sooner, which is the point.** An app that
+   * cannot open its database has one job — say so in words — and it no longer
+   * has to wait behind a logo to do it.
    *
    * `state.kind === 'opening'` recurs mid-run when a farm signs in to a
-   * different org. The splash is long gone by then and `hideAsync` is a no-op,
-   * so it costs nothing to leave the condition simple.
+   * different org. The splash is long gone by then and `hideAsync` is a no-op.
    */
-  const settled = fonts.ready && state.kind !== 'opening';
+  const canPaint = fonts.ready && themeReady;
   useEffect(() => {
-    if (!settled) return;
+    if (!canPaint) return;
     SplashScreen.hideAsync().catch(() => {
       // Already hidden. Nothing to do, and nothing a farmer could act on.
     });
-  }, [settled]);
+  }, [canPaint]);
 
-  // Both gates, and the font one never turns into a failure branch.
-  if (!fonts.ready) {
-    return (
-      <View style={[styles.centre, { backgroundColor: colors.ground }]}>
-        <ActivityIndicator color={colors.muted} />
-      </View>
-    );
-  }
+  /**
+   * Nothing at all until this file can paint in the right theme.
+   *
+   * Not a spinner and not a ground colour: the native splash is still up, and
+   * anything drawn here would be behind it. Painting a guess would only make
+   * the handover a flicker.
+   */
+  if (!canPaint) return <View style={styles.centre} />;
 
   if (state.kind === 'ready') return <>{render({ onSignedIn, onSignedOut })}</>;
 
   return (
-    <View style={[styles.centre, { backgroundColor: colors.ground }]}>
+    <View style={[styles.centre, { backgroundColor: colors.ground }]} testID="boot">
       {state.kind === 'opening' ? (
-        <ActivityIndicator color={colors.muted} />
+        <Image
+          source={MARKS[theme]}
+          style={styles.mark}
+          resizeMode="contain"
+          accessible
+          accessibilityRole="image"
+          accessibilityLabel="Steading"
+          testID="boot-mark"
+        />
       ) : (
         <>
           <Text style={[styles.title, { color: colors.ink }]}>Steading could not start</Text>
@@ -215,6 +273,7 @@ export function Boot({
 
 const styles = StyleSheet.create({
   centre: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACE.xl, gap: SPACE.md },
+  mark: { width: MARK_WIDTH, height: MARK_WIDTH },
   title: { fontFamily: FONTS.display, fontSize: TYPE.title, textAlign: 'center' },
   body: {
     fontFamily: FONTS.body,
