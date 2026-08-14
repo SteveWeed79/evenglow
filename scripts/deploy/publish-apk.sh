@@ -30,6 +30,11 @@
 set -euo pipefail
 
 DIST="${STEADING_DIST:-/var/lib/steading/dist}"
+# One level up from what Caddy serves. Deploy markers live here — which build
+# was fetched last, which version is on the shelf — because they are notes to
+# the next deploy rather than files to publish, and `$DIST` has `file_server`
+# pointed straight at it.
+STATE="$(dirname "$DIST")"
 SOURCE="${1:-}"
 
 die() { printf '\n  %s\n\n' "$*" >&2; exit 1; }
@@ -153,43 +158,38 @@ note "kept as $NAME"
 ln -sfn "$NAME" "$DIST/steading.apk"
 note "/app/steading.apk now serves it"
 
-# The install page travels with the repo so it is reviewed like everything else,
-# and is refreshed on every publish rather than being a file somebody edited on
-# the box once and forgot.
-HERE="$(cd "$(dirname "$0")" && pwd)"
-if [ -f "$HERE/install-page.html" ]; then
-  install -m 0644 "$HERE/install-page.html" "$DIST/index.html"
-
-  # ── Which build this is, on the page rather than only in the filename ──────
-  #
-  # CI moves `expo.version` on every release now, which makes the number worth
-  # reading — and a tester deciding whether to install again has no other way to
-  # tell what the box is serving without installing it first.
-  #
-  # Substituted here and not in `deploy.sh`, which installs the same page with
-  # nothing published yet: no build, no version, and the placeholder collapses
-  # to an empty line rather than claiming a version that is not there. The page
-  # is copied fresh above every time, so this never stacks.
-  # From whichever of the two knew. `aapt2` reads it out of the file when the
-  # box happens to have one; otherwise the caller was told by EAS and passed it
-  # as the label. Guarding this on the `aapt2` read alone — which is what it did
-  # — meant the stamp never rendered on the one box it was written for, because
-  # that box has no Android SDK and is not getting one.
-  STAMP=""
-  if [ -n "$VERSION" ]; then
-    STAMP="Version ${VERSION}${CODE:+ · build $CODE}"
-  elif [ -n "$LABEL" ]; then
-    STAMP="Version ${LABEL}"
-  fi
-
-  if [ -n "$STAMP" ]; then
-    # `|` as the delimiter: a version has dots but never a pipe, and the
-    # replacement is data rather than a pattern.
-    sed -i "s|<!--VERSION-->|${STAMP}|" "$DIST/index.html"
-  fi
-
-  note "install page refreshed"
+# ── Which build this is, remembered where the next deploy can find it ───────
+#
+# CI moves `expo.version` on every release now, which makes the number worth
+# reading — and a tester deciding whether to install again has no other way to
+# tell what the box is serving without installing it first.
+#
+# From whichever of the two knew. `aapt2` reads it out of the file when the box
+# happens to have one; otherwise the caller was told by EAS and passed it as the
+# label. Guarding this on the `aapt2` read alone — which it once did — meant the
+# stamp never rendered on the one box it was written for, because that box has
+# no Android SDK and is not getting one.
+STAMP=""
+if [ -n "$VERSION" ]; then
+  STAMP="Version ${VERSION}${CODE:+ · build $CODE}"
+elif [ -n "$LABEL" ]; then
+  STAMP="Version ${LABEL}"
 fi
+
+# **Written down, not just rendered.** `deploy.sh` re-renders this page every
+# five minutes and has no idea what is on the shelf; without a record it wrote
+# the template back over the stamped page and the version vanished. One line in
+# a file the deploy can read is the whole fix.
+#
+# In the state directory rather than in `$DIST`, because `$DIST` is served to
+# the internet by Caddy and a deploy marker is not something to publish. The
+# same applies to `.last-artifact` beside it. Still outside the repository, so a
+# `git clean` cannot reach either.
+install -d -m 0755 "$STATE"
+printf '%s' "$STAMP" > "$STATE/.version"
+
+"$(cd "$(dirname "$0")" && pwd)/render-install-page.sh" "$DIST" "$STAMP"
+note "install page refreshed${STAMP:+ — $STAMP}"
 
 chown -R caddy:caddy "$DIST" 2>/dev/null || true
 
