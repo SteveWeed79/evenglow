@@ -239,7 +239,21 @@ if [ -n "${EXPO_TOKEN:-}" ]; then
     note "already serving ${APK_VERSION} (build ${APK_CODE})"
   else
     note "fetching ${APK_VERSION:-the newest build}"
-    "${REPO_DIR}/scripts/deploy/publish-apk.sh" "$APK_URL" || note "could not publish it — the API is unaffected"
+    # The version is passed, not left to be read out of the file.
+    #
+    # `publish-apk.sh` reads it with `aapt2` when there is one — and there is
+    # not, on this box, by its own stated decision: "the box has no Android SDK
+    # and is not getting one". Without a label it therefore fell all the way
+    # through to a timestamp name, steading-20260814-0412.apk, which is unique,
+    # sortable and tells nobody anything — and the install page's version
+    # stamp, guarded on the same read, never appeared at all.
+    #
+    # EAS already told us both numbers a few lines up; they are what the
+    # "already serving" check compares. The answer was in hand and simply not
+    # handed on, and the script's own note says to pass one.
+    LABEL="${APK_VERSION:+${APK_VERSION}${APK_CODE:+-$APK_CODE}}"
+    "${REPO_DIR}/scripts/deploy/publish-apk.sh" "$APK_URL" "$LABEL" \
+      || note "could not publish it — the API is unaffected"
   fi
 fi
 

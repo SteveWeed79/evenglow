@@ -170,8 +170,19 @@ if [ -f "$HERE/install-page.html" ]; then
   # nothing published yet: no build, no version, and the placeholder collapses
   # to an empty line rather than claiming a version that is not there. The page
   # is copied fresh above every time, so this never stacks.
+  # From whichever of the two knew. `aapt2` reads it out of the file when the
+  # box happens to have one; otherwise the caller was told by EAS and passed it
+  # as the label. Guarding this on the `aapt2` read alone — which is what it did
+  # — meant the stamp never rendered on the one box it was written for, because
+  # that box has no Android SDK and is not getting one.
+  STAMP=""
   if [ -n "$VERSION" ]; then
     STAMP="Version ${VERSION}${CODE:+ · build $CODE}"
+  elif [ -n "$LABEL" ]; then
+    STAMP="Version ${LABEL}"
+  fi
+
+  if [ -n "$STAMP" ]; then
     # `|` as the delimiter: a version has dots but never a pipe, and the
     # replacement is data rather than a pattern.
     sed -i "s|<!--VERSION-->|${STAMP}|" "$DIST/index.html"
