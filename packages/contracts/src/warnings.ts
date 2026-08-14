@@ -384,7 +384,11 @@ function byUrgency(a: Warning, b: Warning): number {
 }
 
 function frostWarnings(day: ForecastDay, farm: FarmToday): Draft[] {
-  if (day.lowDeciC > FROST_DECI_C || farm.uncoveredPlantings === 0) return [];
+  // A day whose overnight half is not forecast raises nothing. Silence is the
+  // right failure for a warning — inventing a low would be a confident number
+  // nobody published, which is the same rule `humidity` follows below.
+  const low = day.lowDeciC;
+  if (low === undefined || low > FROST_DECI_C || farm.uncoveredPlantings === 0) return [];
 
   const count = farm.uncoveredPlantings;
 
@@ -392,7 +396,7 @@ function frostWarnings(day: ForecastDay, farm: FarmToday): Draft[] {
     {
       kind: 'frost',
       // Below freezing is not a "watch". Above it, on a clear night, is.
-      severity: day.lowDeciC <= FREEZE_DECI_C ? 'act' : 'watch',
+      severity: low <= FREEZE_DECI_C ? 'act' : 'watch',
       detail:
         'Which of them minds is your call — the app knows what is out, not what it can take.',
       at: day.day,
@@ -405,7 +409,8 @@ function frostWarnings(day: ForecastDay, farm: FarmToday): Draft[] {
 
 function freezeWarnings(day: ForecastDay, farm: FarmToday): Draft[] {
   const head = farm.groups.reduce((sum, group) => sum + group.count, 0);
-  if (day.lowDeciC > FREEZE_DECI_C || head === 0) return [];
+  const low = day.lowDeciC;
+  if (low === undefined || low > FREEZE_DECI_C || head === 0) return [];
 
   return [
     {
@@ -435,8 +440,19 @@ function heatWarnings(day: ForecastDay, farm: FarmToday): Draft[] {
     return kind === 'poultry' || kind === 'ratite';
   });
 
-  if (birds.length > 0 && day.highDeciC >= POULTRY_WATCH_DECI_C) {
-    const act = day.highDeciC >= POULTRY_ACT_DECI_C;
+  /**
+   * No daytime half, no heat warning.
+   *
+   * This is the one the fabricated high actually reached: with `highDeciC`
+   * filled in from the overnight low, a warm night on a day whose daytime
+   * period had passed could raise a heat watch off a number that was never
+   * forecast as a high. The hot part of such a day is over by definition.
+   */
+  const high = day.highDeciC;
+  if (high === undefined) return out;
+
+  if (birds.length > 0 && high >= POULTRY_WATCH_DECI_C) {
+    const act = high >= POULTRY_ACT_DECI_C;
     out.push({
       kind: 'heat-poultry',
       severity: act ? 'act' : 'watch',
@@ -456,7 +472,7 @@ function heatWarnings(day: ForecastDay, farm: FarmToday): Draft[] {
   // Both heat rules need humidity, and neither invents one. See `humidity`.
   if (day.humidity !== undefined) {
     if (camelids.length > 0) {
-      const index = camelidHeatIndex(day.highDeciC, day.humidity);
+      const index = camelidHeatIndex(high, day.humidity);
       if (index >= CAMELID_WATCH) {
         const act = index >= CAMELID_ACT;
         out.push({
@@ -472,7 +488,7 @@ function heatWarnings(day: ForecastDay, farm: FarmToday): Draft[] {
       }
     }
 
-    const index = thi(day.highDeciC, day.humidity);
+    const index = thi(high, day.humidity);
     // Paired with its threshold rather than looked up twice: the second lookup
     // is what would need a `!`, and a non-null assertion is a promise the type
     // system stops checking.
@@ -511,7 +527,8 @@ function heatWarnings(day: ForecastDay, farm: FarmToday): Draft[] {
 }
 
 function birthWarnings(day: ForecastDay, farm: FarmToday, today: number): Draft[] {
-  if (day.lowDeciC > FREEZE_DECI_C) return [];
+  const low = day.lowDeciC;
+  if (low === undefined || low > FREEZE_DECI_C) return [];
 
   // The window runs from TODAY, not from the forecast day being examined. A
   // birth eight days out is not imminent because tomorrow happens to be cold.

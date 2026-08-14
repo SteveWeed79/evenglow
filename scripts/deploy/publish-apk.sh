@@ -159,6 +159,24 @@ note "/app/steading.apk now serves it"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 if [ -f "$HERE/install-page.html" ]; then
   install -m 0644 "$HERE/install-page.html" "$DIST/index.html"
+
+  # ── Which build this is, on the page rather than only in the filename ──────
+  #
+  # CI moves `expo.version` on every release now, which makes the number worth
+  # reading — and a tester deciding whether to install again has no other way to
+  # tell what the box is serving without installing it first.
+  #
+  # Substituted here and not in `deploy.sh`, which installs the same page with
+  # nothing published yet: no build, no version, and the placeholder collapses
+  # to an empty line rather than claiming a version that is not there. The page
+  # is copied fresh above every time, so this never stacks.
+  if [ -n "$VERSION" ]; then
+    STAMP="Version ${VERSION}${CODE:+ · build $CODE}"
+    # `|` as the delimiter: a version has dots but never a pipe, and the
+    # replacement is data rather than a pattern.
+    sed -i "s|<!--VERSION-->|${STAMP}|" "$DIST/index.html"
+  fi
+
   note "install page refreshed"
 fi
 

@@ -146,6 +146,65 @@ const inventoryShape = {
 export const inventoryCreateSchema = z.object(inventoryShape).strict();
 export const inventoryUpdateSchema = z.object(inventoryShape).partial().strict();
 
+// ── stockAdjustment (append-only) ────────────────────────────────────────────
+
+/**
+ * Why a shelf quantity moved, as a fact rather than an edit.
+ *
+ * Reported from a farm: *"users should be able to add direct quantities to the
+ * items on the shelf as needed. Currently if an item is on the shelf it's there
+ * until used. What if some is lost? Mice etc?"*
+ *
+ * Exactly right, and the gap was not that the number could not be changed —
+ * `inventory` is mutable and `quantity` was always writable. It was that
+ * changing it **said nothing**. A sack that went from ten to six left no trace
+ * of whether it was fed out, sold, spilled, or eaten by something; and the one
+ * thing the app could already do — draw the shelf down when feed was logged —
+ * meant every *other* reason silently looked like consumption.
+ *
+ * That matters beyond tidiness. `feedCostPerEgg` divides what the feed cost by
+ * what came off the birds, and a farm that loses a quarter of a sack to vermin
+ * has not spent that on eggs. Counted as feed it inflates the cost of every egg
+ * that year; counted as loss it is a number somebody can act on — which is the
+ * difference between a figure and an accusation.
+ *
+ * ## Append-only, and paired rather than derived
+ *
+ * The adjustment is the history; `inventory.quantity` stays the running total,
+ * for the reason it always was — *a stock level is a running quantity that gets
+ * corrected, not an observation*. The screen writes both, the same way logging
+ * feed already writes a `feedLog` and draws the sack down.
+ *
+ * The two can disagree after a concurrent edit on two handsets, and that is
+ * accepted rather than overlooked: the quantity is last-write-wins by design,
+ * and rebuilding a live stock level by replaying every adjustment ever made
+ * would make the shelf unreadable offline. What the log guarantees is that the
+ * *reasons* are all kept, which is what was missing.
+ */
+export const STOCK_REASONS = ['bought', 'used', 'lost', 'spoiled', 'miscounted', 'other'] as const;
+
+export type StockReason = (typeof STOCK_REASONS)[number];
+
+export const stockAdjustmentCreateSchema = z
+  .object({
+    itemId: z.string().length(26),
+    /**
+     * Signed, and never zero.
+     *
+     * Negative is what left the shelf. Zero is not a correction anybody makes —
+     * it is a form submitted by accident — and accepting it would put rows in
+     * the history that say nothing happened.
+     *
+     * Fractional for the same reason `quantity` is: half a bale is a real
+     * amount, and so is half a bale gone mouldy.
+     */
+    delta: z.number().refine((value) => value !== 0, 'That is not a change.'),
+    reason: z.enum(STOCK_REASONS),
+    occurredAt: z.number().int(),
+    note: z.string().max(500).optional(),
+  })
+  .strict();
+
 // ── shared ───────────────────────────────────────────────────────────────────
 
 /** Delete payload. Reason is optional and surfaces in the audit trail. */

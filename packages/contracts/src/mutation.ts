@@ -34,6 +34,7 @@ export const ENTITIES = [
   'maintenance',
   'task',
   'inventory',
+  'stockAdjustment',
   'photo',
 
   // Growing (docs/DOMAIN-SCOPE.md). Additive, so the envelope version is
@@ -95,6 +96,7 @@ export const APPEND_ONLY_ENTITIES = new Set<Entity>([
   'weight',
   'shearing',
   'careLog',
+  'stockAdjustment',
 ]);
 
 export function isAppendOnly(entity: Entity): boolean {
@@ -264,6 +266,7 @@ export const ENTITY_NOUNS: Record<Entity, string> = {
   harvest: 'harvest',
   breeding: 'mating',
   incubation: 'set of eggs',
+  stockAdjustment: 'shelf adjustment',
   weight: 'weight',
   shearing: 'shearing',
   feedPlan: 'ration',

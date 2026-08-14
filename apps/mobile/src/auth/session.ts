@@ -385,6 +385,118 @@ export async function joinFarm(input: {
 }
 
 /**
+ * Renames the farm, here and on every other handset at its next refresh.
+ *
+ * A farm name is typed once during signup by somebody doing four other things
+ * at the same time, and shown on every screen afterwards. There was no way to
+ * change it: *"what happens if they get a partner, divorced, drunk when they
+ * start the farm in the app and misspell it?"*
+ *
+ * ## Two writes, and the local one is the point
+ *
+ * The server owns the name. The **cached claims** are what every screen
+ * actually reads — `useFarmName` and the Settings row and the Today subtitle —
+ * so writing them here is what makes the app answer immediately rather than at
+ * the next launch.
+ *
+ * `writeCachedClaims` publishes, so nothing has to be told twice: the same
+ * subscription that made signing out visible carries this. That is the whole
+ * return on having moved it there.
+ *
+ * Other devices pick it up from `refreshSession`, which re-reads the org's name
+ * on every resume and network regain and rewrites their cache with it.
+ *
+ * ## Called after the server agreed, never before
+ *
+ * This does not make the request — `MembersScreen` does, through the token
+ * dance it already owns for every other farm-admin call. This is the half that
+ * belongs to the session: the cache, and telling everything watching it.
+ *
+ * Deliberately not optimistic. Writing the name first and reconciling later
+ * would show a farm a name the server never accepted, on the one field whose
+ * whole job is to be recognised.
+ */
+export async function rememberFarmName(name: string): Promise<void> {
+  const previous = await readCachedClaims();
+  // Nothing to attach it to. A device that is not signed in has no farm name to
+  // hold, and inventing a claims record here would be the cache asserting a
+  // session that does not exist.
+  if (previous === null) return;
+
+  await writeCachedClaims({ ...previous, orgName: name.trim() });
+}
+
+/**
+ * What an invitation is for, before anybody types a password.
+ *
+ * The server has published this since invites were built and **nothing ever
+ * called it**. That is the half of the flow that was missing: a farm could mint
+ * a link and share it, and the person who received one had nowhere in the app
+ * to put it. The invite was a token in a text message and a dead end.
+ *
+ * It is a public read on purpose, rate limited on the server, and it answers
+ * with the farm's own name rather than the inviter's — *"Hollow Farm"* is what
+ * somebody recognises when deciding whether a link is the right one; *"Sam
+ * invited you"* is not.
+ *
+ * Returns null when the link is spent, revoked, expired or simply wrong. All
+ * four are one answer deliberately: distinguishing them tells a guesser which
+ * tokens exist.
+ */
+const invitationSchema = z.object({
+  orgName: z.string(),
+  invitedBy: z.string(),
+  role: roleSchema,
+  email: z.string(),
+  expiresAt: z.number(),
+});
+
+export type Invitation = z.infer<typeof invitationSchema>;
+
+export async function lookupInvite(token: string): Promise<Invitation | null> {
+  const res = await fetch(url(`/invites/${encodeURIComponent(token.trim())}`));
+  if (!res.ok) return null;
+
+  const parsed = invitationSchema.safeParse(await res.json());
+  return parsed.success ? parsed.data : null;
+}
+
+/**
+ * Taking up an invitation, which creates the account and signs it in.
+ *
+ * The email is asked for and sent even though the invite already carries one,
+ * and that is the point rather than a redundancy: **the token proves somebody
+ * has the link, the email proves they are who it was for.** The server compares
+ * them in constant time so a leaked link cannot be used to recover the invited
+ * address a character at a time.
+ *
+ * `retireLocalOrgId` for the same reason `joinFarm` does it: this device may
+ * have been keeping its own farm before it was invited to somebody else's, and
+ * that id is the only pointer to the database holding those records. Retired
+ * rather than deleted — see `local-org.ts`.
+ */
+export async function acceptInvite(input: {
+  token: string;
+  name: string;
+  email: string;
+  password: string;
+}): Promise<CachedClaims> {
+  const res = await fetch(url('/invites/accept'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ...input, token: input.token.trim() }),
+  });
+
+  if (!res.ok) {
+    throw await refusal(res, 'That invitation did not work. Ask for a fresh link.');
+  }
+
+  const claims = await establish(await res.json());
+  await retireLocalOrgId();
+  return claims;
+}
+
+/**
  * Exchanges the stored refresh token for a fresh access token.
  *
  * Returns null when there is nothing to exchange or the server refuses, and
@@ -678,11 +790,31 @@ export async function signOut(): Promise<void> {
   const refreshToken = await readRefreshToken();
 
   if (refreshToken !== null) {
-    await fetch(url('/auth/logout'), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
-    }).catch(() => undefined);
+    /**
+     * The whole call, not just the request.
+     *
+     * `.catch()` on the fetch covered a request that failed and missed
+     * everything that goes wrong before one is made — and `url()` **throws**
+     * when no API base is configured, which D14 makes an ordinary state rather
+     * than a broken one. So a farm running with no server address had a
+     * `signOut` that rejected, and the button sat on "Signing out…" for as long
+     * as anybody cared to look at it.
+     *
+     * Found by a test written about the screen, which is fitting: the promise
+     * this function makes below — *the server call is best-effort, a device
+     * with no signal must still be able to sign out* — was one it could not
+     * keep, and the case it could not keep it in is a device that never had a
+     * server at all.
+     */
+    try {
+      await fetch(url('/auth/logout'), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+    } catch {
+      // Best effort, and deliberately silent: the tokens go either way.
+    }
   }
 
   // Recorded before the wipe, so Diagnostics can tell a deliberate sign-out

@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { CONDITION_WORDS, degrees, forecastFor } from '@steading/contracts';
+import { CONDITION_WORDS, degrees, forecastFor, highLowWords } from '@steading/contracts';
 import { Icon, type IconName } from './Icon';
 import { Touch } from './Touch';
 import { useTheme } from '../theme/ThemeProvider';
@@ -95,11 +95,27 @@ export function WeatherRow(): React.ReactElement | null {
   const sky = live?.condition ?? weather.forecast.now.condition;
   const temp = degrees(live?.tempDeciC ?? weather.forecast.now.tempDeciC, units);
 
+  /**
+   * The compact pair, in as few characters as this row has room for.
+   *
+   * Narrowed into locals rather than read off `today` twice, because a second
+   * read is what would need a `!` — and invariant 11 has no exception for a
+   * field you have already checked once.
+   */
+  const range = ((): string | null => {
+    if (today === undefined) return null;
+    const { highDeciC: high, lowDeciC: low } = today;
+    if (high !== undefined && low !== undefined) {
+      return `${degrees(high, units)}° / ${degrees(low, units)}°`;
+    }
+    if (low !== undefined) return `${degrees(low, units)}° low`;
+    if (high !== undefined) return `${degrees(high, units)}° high`;
+    return null;
+  })();
+
   const said = [
     `${CONDITION_WORDS[sky]}, ${temp} degrees now`,
-    today === undefined
-      ? null
-      : `High ${degrees(today.highDeciC, units)}, low ${degrees(today.lowDeciC, units)}`,
+    today === undefined ? null : highLowWords(today, units),
     today === undefined || today.rainChance === 0
       ? null
       : `${today.rainChance} per cent chance of rain`,
@@ -111,10 +127,10 @@ export function WeatherRow(): React.ReactElement | null {
     <Shell onPress={() => nav.navigate('Weather')} label={said} mark={SKY_MARKS[sky]}>
       <Text style={[styles.now, { color: colors.ink }]}>{temp}°</Text>
 
-      {today === undefined ? null : (
-        <Text style={[styles.range, { color: colors.muted }]}>
-          {degrees(today.highDeciC, units)}° / {degrees(today.lowDeciC, units)}°
-        </Text>
+      {/* Only what was forecast. By evening today's daytime half is gone, and
+          printing the one that is left twice reads as a flat day. */}
+      {range === null ? null : (
+        <Text style={[styles.range, { color: colors.muted }]}>{range}</Text>
       )}
 
       {/* Only when there is a chance worth acting on. A row that says "rain 0%"

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
+import { looksLikeJoinCode, ROLE_WORDS } from '@steading/contracts';
 import { readExposure } from '@steading/core/backup/exposure';
 import { Choice, Failure, Field, Primary, Secondary, TextField, useSaver } from '../components/Form';
 import { Body, Panel } from '../components/Panel';
@@ -14,6 +15,9 @@ import {
   claimFarm,
   googleSignIn,
   joinFarm,
+  acceptInvite,
+  lookupInvite,
+  type Invitation,
   readBilling,
   redeemPromo,
   readCachedClaims,
@@ -45,8 +49,23 @@ import { FONTS, SPACE, TYPE } from '../theme/tokens';
  *   rather than assigning one (A2.2).
  * - **Sign in** is for a farm that already has an account: a second phone, or
  *   a reinstall. It opens that farm's database, which is a different file.
- * - **Join a farm** redeems six characters an owner is holding out (A2.5), and
- *   it is the one that costs something — see the warning it shows.
+ * - **Join a farm** takes either of the two things a farm can hand out — six
+ *   characters an owner is holding out (A2.5), or a link they sent — and it is
+ *   the one that costs something, because a user belongs to exactly one farm.
+ *   See the warning it shows.
+ *
+ * ## The invite half had no door
+ *
+ * The server has minted invitations, published a lookup for one, and accepted
+ * them since invites were built. **Nothing in the app called any of it.** A farm
+ * could invite somebody, share the link, and watch it go nowhere — there was no
+ * screen anywhere that would take it.
+ *
+ * Both now arrive in one box, because whoever is holding one did not pick which
+ * they were given: `looksLikeJoinCode` decides which route to take. A pasted
+ * link is looked up first so the farm's name and the role are on screen before
+ * anybody invents a password — which matters here more than most places, since
+ * accepting leaves this device's own farm behind.
  */
 
 type Mode = 'claim' | 'signin' | 'join';
@@ -149,6 +168,38 @@ export function AccountScreen({
   const [showPassword, setShowPassword] = useState(false);
   const [code, setCode] = useState('');
 
+  /**
+   * What a pasted link turns out to be for, looked up before anything is typed.
+   *
+   * The endpoint exists precisely for this and had no caller. Somebody handed a
+   * 43-character string has no way to tell whose farm it is or what it makes
+   * them, and asking them to invent a password first and find out afterwards is
+   * the wrong order — especially since accepting *leaves their own farm behind*,
+   * which is the warning directly above this field.
+   *
+   * Only for the link half: a join code has nothing public to read, which is
+   * the point of it lasting ten minutes. Null covers spent, revoked, expired
+   * and wrong alike, because telling them apart tells a guesser which tokens
+   * exist — so the field simply stays quiet and the server refuses on submit.
+   */
+  const [invitation, setInvitation] = useState<Invitation | null>(null);
+
+  useEffect(() => {
+    const token = code.trim();
+    if (mode !== 'join' || token.length < 20 || looksLikeJoinCode(token)) {
+      setInvitation(null);
+      return;
+    }
+
+    let live = true;
+    void lookupInvite(token).then((found) => {
+      if (live) setInvitation(found);
+    });
+    return () => {
+      live = false;
+    };
+  }, [code, mode]);
+
   useEffect(() => {
     void readCachedClaims().then((found) => {
       setClaims(found);
@@ -210,8 +261,17 @@ export function AccountScreen({
         }
 
         if (mode === 'join') {
+          // The shape of what they were handed decides the route. Both end in
+          // the same place: an account on somebody else's farm, signed in.
           onSignedIn(
-            await joinFarm({ code, name: name.trim(), email: email.trim(), password }),
+            looksLikeJoinCode(code)
+              ? await joinFarm({ code, name: name.trim(), email: email.trim(), password })
+              : await acceptInvite({
+                  token: code,
+                  name: name.trim(),
+                  email: email.trim(),
+                  password,
+                }),
           );
           return;
         }
@@ -440,16 +500,36 @@ export function AccountScreen({
             </Body>
           </Panel>
 
+          {/**
+            * One box for both things a farm can hand out.
+            *
+            * A six-character code read off a phone at the gate, or a long link
+            * texted to a particular address. The person holding one did not
+            * choose which they were given and should not have to know there are
+            * two — `looksLikeJoinCode` decides which door to knock on, and the
+            * server is the authority either way.
+            *
+            * **The link half had no door at all.** The server has minted
+            * invites, published a lookup and accepted them since invites were
+            * built; the app could send one and had nowhere to receive one. A
+            * farm invited somebody and the invitation went nowhere.
+            *
+            * Not `caps` any more: a join code is Crockford and case-free, but a
+            * base64url token is not, and upper-casing one destroys it.
+            */}
           <Field
-            label="The six characters they are showing you"
-            hint="Codes last ten minutes and work once. If it has gone stale, ask them to make another."
+            label="The code or link they sent you"
+            hint={
+              invitation === null
+                ? 'Six characters if they read it out — those last ten minutes. A long link lasts longer and only works for the address it was sent to.'
+                : `${invitation.orgName} — ${invitation.invitedBy} invited you as ${ROLE_WORDS[invitation.role].toLowerCase()}. Use the address it was sent to.`
+            }
           >
             <TextField
               value={code}
               onChangeText={setCode}
               placeholder="K4M9PT"
-              maxLength={12}
-              caps
+              maxLength={64}
               testID="account-code"
             />
           </Field>

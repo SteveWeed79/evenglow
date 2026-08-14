@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react';
-import { readCachedClaims } from '../auth/store';
+import { useAccount } from './useAccount';
 
 /**
  * The farm's own name, for the screens that should say it.
@@ -17,28 +16,18 @@ import { readCachedClaims } from '../auth/store';
  * shown a placeholder, a prompt, or the word "unnamed" — it is running
  * exactly as designed. Callers render nothing.
  *
- * ## Read once, like every other claim
+ * ## Watched, not read once
  *
- * Same shape as `SettingsScreen`'s account read and for the same reason: this
- * gates display and nothing else (invariant 8), so the cost of a stale value
- * is one render of a farm's previous name after it is renamed, and the tree
- * remounts on sign-in and on joining a farm anyway.
+ * This used to read the claims cache in a mount effect and keep the answer,
+ * on the argument that *the tree remounts on sign-in and on joining a farm
+ * anyway*. True, and it left out the direction that does not remount: signing
+ * **out**, after which every screen already standing went on saying the name of
+ * a farm this device was no longer signed in to, until the app was restarted.
  */
 export function useFarmName(): string | null {
-  const [name, setName] = useState<string | null>(null);
+  const account = useAccount();
 
-  useEffect(() => {
-    let live = true;
-    void readCachedClaims().then((claims) => {
-      if (!live) return;
-      // A farm named by the Google path with the field left blank is stored as
-      // "My farm" — which is a name somebody accepted, so it is said like one.
-      setName(claims?.orgName ?? null);
-    });
-    return () => {
-      live = false;
-    };
-  }, []);
-
-  return name;
+  // A farm named by the Google path with the field left blank is stored as
+  // "My farm" — which is a name somebody accepted, so it is said like one.
+  return account?.orgName ?? null;
 }

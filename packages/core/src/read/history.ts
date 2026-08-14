@@ -16,7 +16,9 @@ import {
   predatorCreateSchema,
   productionLogCreateSchema,
   shearingCreateSchema,
+  stockAdjustmentCreateSchema,
   taskCreateSchema,
+  type StockReason,
   type UnitSystem,
   weightCreateSchema,
 } from '@steading/contracts';
@@ -24,7 +26,7 @@ import { localStore } from '../db/store';
 import { listAnimals } from './animals';
 import { listGroups } from './groups';
 import { listPlantings, listVarieties } from './growing';
-import { listMachines } from './iron';
+import { listInventory, listMachines } from './iron';
 
 /**
  * What happened, in the order it happened.
@@ -44,7 +46,7 @@ import { listMachines } from './iron';
  * ## Append-only, and only append-only
  *
  * `eggLog`, `productionLog`, `feedLog`, `mortality`, `predator`, `hourReading`,
- * `harvest`, `weight`, `shearing`, `careLog`. These are the entities that
+ * `harvest`, `weight`, `shearing`, `careLog`, `stockAdjustment`. These are the entities that
  * describe an event at a moment — they all carry `occurredAt`, they cannot be
  * edited, and they cannot conflict.
  *
@@ -162,19 +164,31 @@ const plural = (n: number, one: string, many = `${one}s`): string =>
  * `system` decides whether a weight reads in kilos or pounds — the farm's own
  * setting, carried on the site.
  */
+/** What each reason is called in a history row, as a sentence's first word. */
+const STOCK_WORDS: Record<StockReason, string> = {
+  bought: 'Bought',
+  used: 'Used',
+  lost: 'Lost',
+  spoiled: 'Spoiled',
+  miscounted: 'Recounted',
+  other: 'Adjusted',
+};
+
 export async function listHistory(system: UnitSystem = 'metric'): Promise<HistoryDay[]> {
-  const [groups, animals, machines, plantings, varieties] = await Promise.all([
+  const [groups, animals, machines, plantings, varieties, stock] = await Promise.all([
     listGroups(),
     listAnimals(),
     listMachines(),
     listPlantings(),
     listVarieties(),
+    listInventory(),
   ]);
 
   /** Names, so a row reads "The hens" rather than an id nobody can pronounce. */
   const groupName = new Map(groups.map((g) => [g.id, g.name]));
   const animalName = new Map(animals.map((a) => [a.id, a.name]));
   const machineName = new Map(machines.map((m) => [m.id, m.name]));
+  const itemName = new Map(stock.map((i) => [i.id, i.name]));
   const varietyOf = new Map(varieties.map((v) => [v.id, v.name]));
   const plantingName = new Map(
     plantings.map((p) => [p.id, varietyOf.get(p.varietyId) ?? 'a planting']),
@@ -357,6 +371,23 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
         }`,
       })),
 
+      eventsFrom('stockAdjustment', stockAdjustmentCreateSchema, (v, id) => ({
+        id,
+        entity: 'stockAdjustment',
+        at: v.occurredAt,
+        /**
+         * The reason leads, because the reason is the whole point of the row.
+         * A shelf quantity could always be changed; what it could not do was
+         * say whether four bags were fed out or eaten by something.
+         */
+        title: `${STOCK_WORDS[v.reason]} ${Math.abs(v.delta)} — ${named(
+          itemName,
+          v.itemId,
+          'something on the shelf',
+        )}`,
+        ...(v.note === undefined ? {} : { detail: v.note }),
+      })),
+
       eventsFrom('hourReading', hourReadingCreateSchema, (v, id) => ({
         id,
         entity: 'hourReading',
@@ -407,6 +438,66 @@ export function intoDays(
       // like something changed.
       const ordered = [...list].sort((a, b) => b.at - a.at || (a.id < b.id ? -1 : 1));
       return { day, events: ordered, summary: summarise(ordered, system) };
+    });
+}
+
+export interface HistoryMonth {
+  /** Local midnight on the first, which is the key and the heading. */
+  month: number;
+  /** Newest first, and every one of them already sorted inside itself. */
+  days: HistoryDay[];
+  /** "312 eggs · 14 feeds" — what the month reads as when it is closed. */
+  summary: string;
+  /** How many days in it had anything at all. */
+  active: number;
+}
+
+/**
+ * Days gathered into months.
+ *
+ * Reported as a question, and the right one: *"Should the What happened screen
+ * collapse by month > day > stuff that happened?"*
+ *
+ * It should. A flat list of days grows without bound and there is no year at
+ * which it stops — by a second season a farm scrolling for last April is
+ * scrolling past three hundred headings, and the screen that holds everything
+ * the farm knows becomes the one nobody opens.
+ *
+ * The screen had a cap of thirty days and a "show all" button underneath, which
+ * is the shape of a problem rather than an answer to it: the fix for a list too
+ * long to read is not a button that makes it longer.
+ *
+ * ## The month's line is built from the days, not re-read
+ *
+ * `summarise` already knows how to turn events into "12 eggs · 2 feeds", so a
+ * month is the same function over a wider window. Re-implementing it here would
+ * be two definitions of what a total means, and they would drift the first time
+ * a tally unit changed.
+ */
+export function intoMonths(days: readonly HistoryDay[], system: UnitSystem = 'metric'): HistoryMonth[] {
+  const byMonth = new Map<number, HistoryDay[]>();
+
+  for (const day of days) {
+    const date = new Date(day.day);
+    const month = new Date(date.getFullYear(), date.getMonth(), 1).getTime();
+    const existing = byMonth.get(month);
+    if (existing === undefined) byMonth.set(month, [day]);
+    else existing.push(day);
+  }
+
+  return [...byMonth.entries()]
+    .sort(([a], [b]) => b - a)
+    .map(([month, list]) => {
+      const ordered = [...list].sort((a, b) => b.day - a.day);
+      return {
+        month,
+        days: ordered,
+        summary: summarise(
+          ordered.flatMap((day) => day.events),
+          system,
+        ),
+        active: ordered.length,
+      };
     });
 }
 

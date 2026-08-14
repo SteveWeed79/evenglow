@@ -7,6 +7,7 @@ import { AddAnimalScreen } from '../screens/AddAnimalScreen';
 import { AddBedScreen } from '../screens/AddBedScreen';
 import { AddGroupScreen } from '../screens/AddGroupScreen';
 import { AddItemScreen } from '../screens/AddItemScreen';
+import { AdjustStockScreen } from '../screens/AdjustStockScreen';
 import { AddMachineScreen } from '../screens/AddMachineScreen';
 import { AddServiceScreen } from '../screens/AddServiceScreen';
 import { AnimalsScreen } from '../screens/AnimalsScreen';
@@ -39,6 +40,9 @@ import { MachineScreen } from '../screens/MachineScreen';
 import { MembersScreen } from '../screens/MembersScreen';
 import { AddVarietyScreen } from '../screens/AddVarietyScreen';
 import { NumbersScreen } from '../screens/NumbersScreen';
+import { AnimalNumbersScreen } from '../screens/AnimalNumbersScreen';
+import { CropNumbersScreen } from '../screens/CropNumbersScreen';
+import { MachineNumbersScreen } from '../screens/MachineNumbersScreen';
 import { PickVarietyScreen } from '../screens/PickVarietyScreen';
 import { PlantingScreen } from '../screens/PlantingScreen';
 import { ProduceScreen } from '../screens/ProduceScreen';
@@ -178,11 +182,15 @@ export type RootParamList = {
   ServiceDone: { serviceId: string };
   Inventory: undefined;
   AddItem: { equipmentId?: string };
+  AdjustStock: { itemId: string };
 
   // Growing
   SiteSetup: undefined;
   AddBed: { siteId: string };
   Numbers: undefined;
+  CropNumbers: undefined;
+  AnimalNumbers: undefined;
+  MachineNumbers: undefined;
   PickVariety: { bedId: string };
   AddVariety: { bedId: string; crop?: string };
   Planting: { plantingId: string };
@@ -265,10 +273,14 @@ export function Root({
       <Stack.Screen name="ServiceDone" component={ServiceDoneScreen} />
       <Stack.Screen name="Inventory" component={InventoryScreen} />
       <Stack.Screen name="AddItem" component={AddItemScreen} />
+      <Stack.Screen name="AdjustStock" component={AdjustStockScreen} />
 
       <Stack.Screen name="SiteSetup" component={SiteSetupScreen} />
       <Stack.Screen name="AddBed" component={AddBedScreen} />
       <Stack.Screen name="Numbers" component={NumbersScreen} />
+      <Stack.Screen name="CropNumbers" component={CropNumbersScreen} />
+      <Stack.Screen name="AnimalNumbers" component={AnimalNumbersScreen} />
+      <Stack.Screen name="MachineNumbers" component={MachineNumbersScreen} />
       <Stack.Screen name="PickVariety" component={PickVarietyScreen} />
       <Stack.Screen name="AddVariety" component={AddVarietyScreen} />
       <Stack.Screen name="Planting" component={PlantingScreen} />

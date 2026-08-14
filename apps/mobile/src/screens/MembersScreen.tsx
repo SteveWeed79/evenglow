@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Share, StyleSheet, Text, View } from 'react-native';
 import { z } from 'zod';
-import { assignableRoles, canInvite, INVITE_TTL_DAYS, JOIN_CODE_TTL_MINUTES, type PendingInvite, type Role, roleSchema } from '@steading/contracts';
+import { assignableRoles, canInvite, canRenameFarm, ROLE_WORDS, INVITE_TTL_DAYS, JOIN_CODE_TTL_MINUTES, type PendingInvite, type Role, roleSchema } from '@steading/contracts';
 import { apiBase, currentAccessToken } from '@steading/core/api';
 import { Choice, Confirm, Failure, Field, Primary, Secondary, TextField, useSaver } from '../components/Form';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
-import { readCachedClaims, refreshSession } from '../auth/session';
+import { readCachedClaims, refreshSession, rememberFarmName } from '../auth/session';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
 
@@ -28,12 +28,6 @@ import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
  * the actor's role from the database on the request that acts, and an admin
  * who edits their way past the chips below gets a 403 rather than an owner.
  */
-
-const ROLE_LABELS: Record<Role, string> = {
-  owner: 'Owner',
-  admin: 'Manager',
-  hand: 'Farm hand',
-};
 
 const ROLE_NOTES: Record<Role, string> = {
   owner: 'Everything, including inviting other owners.',
@@ -147,6 +141,32 @@ export function MembersScreen(): React.ReactElement {
   const [minted, setMinted] = useState<{ token: string; expiresAt: number } | null>(null);
   const [code, setCode] = useState<JoinCode | null>(null);
 
+  /**
+   * The farm's name, which could be typed once and never corrected.
+   *
+   * Reported as the question nobody had asked: *"what happens if they get a
+   * partner, divorced, drunk when they start the farm in the app and misspell
+   * it?"* All three are the same case — names change — and the app's answer was
+   * that they do not.
+   *
+   * Here because this is where the farm's own settings already live: who is on
+   * it, who may do what, and the token dance every one of those calls needs.
+   * The screen is titled for its commonest job rather than its whole one.
+   */
+  const [farmName, setFarmName] = useState('');
+  const named = useSaver(useCallback(() => undefined, []));
+
+  const rename = useCallback(() => {
+    void named.save(async () => {
+      const next = farmName.trim();
+      await call('/org', { method: 'PATCH', body: { name: next } });
+      // Only after the server agreed. The cache is what every screen reads, and
+      // writing it publishes — so the Settings row and the Today subtitle
+      // correct themselves without anybody navigating anywhere.
+      await rememberFarmName(next);
+    });
+  }, [named, farmName]);
+
   const refresh = useCallback(async () => {
     setProblem(null);
     try {
@@ -155,6 +175,10 @@ export function MembersScreen(): React.ReactElement {
       setMe(claims?.userId ?? null);
 
       setMembers(membersSchema.parse(await call('/members')).members);
+      // Seeded from the cache rather than fetched: the name is already on this
+      // device, and a box that starts empty invites somebody to retype a name
+      // they only wanted to change one letter of.
+      setFarmName(claims?.orgName ?? '');
 
       // Only an owner or manager may list invites, so a hand asking would get
       // a 403 that is not a problem worth reporting to them.
@@ -237,6 +261,29 @@ export function MembersScreen(): React.ReactElement {
         </Panel>
       )}
 
+      {role === null || !canRenameFarm(role) ? null : (
+        <Panel label="The farm's name">
+          <Body>
+            What every screen calls it, and what somebody joining sees. Changing it here changes it
+            for everybody on the farm.
+          </Body>
+          <TextField
+            value={farmName}
+            onChangeText={setFarmName}
+            placeholder="Hollow Farm"
+            maxLength={120}
+            testID="farm-name"
+          />
+          <Failure message={named.failure} />
+          <Secondary
+            label={named.saving ? 'Renaming…' : 'Rename it'}
+            onPress={rename}
+            disabled={named.saving || farmName.trim() === ''}
+            testID="farm-rename"
+          />
+        </Panel>
+      )}
+
       {members === null ? null : members.length === 0 ? (
         <Panel label="Just you">
           <Body>Nobody else has been added yet.</Body>
@@ -252,7 +299,7 @@ export function MembersScreen(): React.ReactElement {
               {member.id === me ? ' (you)' : ''}
             </Text>
             <Text style={[styles.detail, { color: colors.muted }]}>
-              {member.email} · {ROLE_LABELS[member.role]}
+              {member.email} · {ROLE_WORDS[member.role]}
               {member.disabled ? ' · removed' : ''}
             </Text>
 
@@ -269,7 +316,7 @@ export function MembersScreen(): React.ReactElement {
                       call(`/members/${member.id}/role`, { method: 'PATCH', body: { role: next } }),
                     )
                   }
-                  labels={ROLE_LABELS}
+                  labels={ROLE_WORDS}
                 />
                 <Confirm
                   label="Remove from the farm"
@@ -289,7 +336,7 @@ export function MembersScreen(): React.ReactElement {
           {invites.map((pending) => (
             <View key={pending.id} style={styles.invite}>
               <Text style={[styles.detail, { color: colors.ink }]}>
-                {pending.email} · {ROLE_LABELS[pending.role]} · expires{' '}
+                {pending.email} · {ROLE_WORDS[pending.role]} · expires{' '}
                 {new Date(pending.expiresAt).toLocaleDateString(undefined, {
                   day: 'numeric',
                   month: 'short',
@@ -346,7 +393,7 @@ export function MembersScreen(): React.ReactElement {
                 {code.code}
               </Text>
               <Body>
-                They will join as {ROLE_LABELS[code.role].toLowerCase()}. It stops working once
+                They will join as {ROLE_WORDS[code.role].toLowerCase()}. It stops working once
                 somebody uses it.
               </Body>
             </>
@@ -357,7 +404,7 @@ export function MembersScreen(): React.ReactElement {
               options={grantable}
               value={inviteRole}
               onChange={setInviteRole}
-              labels={ROLE_LABELS}
+              labels={ROLE_WORDS}
             />
           </Field>
 
@@ -389,7 +436,7 @@ export function MembersScreen(): React.ReactElement {
               options={grantable}
               value={inviteRole}
               onChange={setInviteRole}
-              labels={ROLE_LABELS}
+              labels={ROLE_WORDS}
             />
           </Field>
 

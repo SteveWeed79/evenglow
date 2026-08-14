@@ -4,6 +4,7 @@ import {
   CONDITION_WORDS,
   type Condition,
   dayStart,
+  highLowWords,
   type ForecastDay,
   type ForecastHour,
   degrees,
@@ -26,7 +27,7 @@ import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
 import { locate, findPlace, type Place } from '../weather/where';
 
 /**
- * The forecast in full: the rest of today by the hour, then seven days.
+ * The forecast in full: the next twenty-four hours by the hour, then seven days.
  *
  * ## What this screen will not do
  *
@@ -36,11 +37,25 @@ import { locate, findPlace, type Place } from '../weather/where';
  * never something entered.
  *
  * **It does not promise thirty days.** The National Weather Service publishes
- * about fourteen half-day periods and no more, at any price. Seven days and the
- * rest of today is what there is, and saying so is better than a fortnight of
+ * about fourteen half-day periods and no more, at any price. Seven days and a
+ * day of hours is what there is, and saying so is better than a fortnight of
  * invented numbers. It is also the honest split: "rain from four" changes what
  * somebody does this afternoon, and "week four looks wet" changes nothing
  * anybody can act on.
+ *
+ * The hourly strip used to stop at midnight, which made it emptier the later it
+ * got — four hours at eight o'clock and nothing after eleven. It rolls a full
+ * day forward now, because the hour somebody checks a forecast in the dark is
+ * the hour they want tonight's low and the morning, not the tail of an
+ * afternoon that has already happened.
+ *
+ * ## Halves that have already happened
+ *
+ * A forecast day is two NWS periods, and by evening today's daytime half is
+ * simply gone. Both temperatures used to be required, so the remaining figure
+ * was printed twice and the week read "79° 79°" — see `highLowWords`. Absent is
+ * the honest answer, and a lone number is labelled so it reads as the half it
+ * is.
  *
  * ## The rain column
  *
@@ -172,9 +187,9 @@ function Forecast({
             <Text style={[styles.condition, { color: colors.ink }]}>
               {CONDITION_WORDS[nowCondition_]}
             </Text>
-            {today === undefined ? null : (
+            {today === undefined || highLowWords(today, units) === null ? null : (
               <Text style={[styles.label, { color: colors.muted }]}>
-                High {degrees(today.highDeciC, units)}° · Low {degrees(today.lowDeciC, units)}°
+                {highLowWords(today, units)}
               </Text>
             )}
           </View>
@@ -215,12 +230,37 @@ function Forecast({
 
       {hours.length === 0 ? null : (
         <View style={styles.section}>
-          <Text style={[styles.heading, { color: colors.muted }]}>The rest of today</Text>
+          {/**
+            * "The next while" rather than "the rest of today".
+            *
+            * The strip stopped at midnight, so it emptied out over the evening
+            * and at eight o'clock showed four hours and then nothing —
+            * *"it literally stops at 11pm"*. It runs twenty-four hours forward
+            * now, which is the half a farm asks about after dark: tonight's low,
+            * and what the morning looks like.
+            */}
+          <Text style={[styles.heading, { color: colors.muted }]}>The next 24 hours</Text>
           {/* Wraps rather than scrolling sideways. A horizontal strip inside a
               vertical scroll fights the gesture, and with a glove on it loses. */}
           <View style={styles.hours} testID="weather-hours">
-            {hours.map((hour) => (
+            {hours.map((hour, index) => (
               <View key={hour.at} style={styles.hour}>
+                {/* Midnight needs saying, or 2am reads as this afternoon. The
+                    first cell never carries it — "today" above a strip that
+                    starts now is noise. */}
+                <Text
+                  style={[
+                    styles.hourDay,
+                    {
+                      color:
+                        index > 0 && dayStart(hour.at) !== dayStart(hours[index - 1]?.at ?? hour.at)
+                          ? colors.lanternInk
+                          : 'transparent',
+                    },
+                  ]}
+                >
+                  {DAY_NAMES[new Date(hour.at).getDay()]}
+                </Text>
                 <Text style={[styles.label, { color: colors.muted }]}>{clock(hour.at)}</Text>
                 <Icon name={SKY_MARKS[hour.condition]} size={24} color={colors.muted} />
                 <Text style={[styles.hourTemp, { color: colors.ink }]}>
@@ -255,9 +295,23 @@ function Forecast({
               label={CONDITION_WORDS[day.condition]}
             />
 
+            {/**
+              * Only the halves that were forecast.
+              *
+              * Today's daytime period is gone by the evening, and printing the
+              * remaining figure twice produced the reported "79° 79°" — a real
+              * enough looking flat day that nothing on screen could contradict.
+              * A lone number is labelled instead, so it reads as the half it is.
+              */}
             <Text style={[styles.dayTemps, { color: colors.ink }]}>
-              {degrees(day.highDeciC, units)}°
-              <Text style={{ color: colors.muted }}> {degrees(day.lowDeciC, units)}°</Text>
+              {day.highDeciC === undefined ? null : `${degrees(day.highDeciC, units)}°`}
+              {day.lowDeciC === undefined ? null : (
+                <Text style={{ color: colors.muted }}>
+                  {day.highDeciC === undefined
+                    ? `${degrees(day.lowDeciC, units)}° low`
+                    : ` ${degrees(day.lowDeciC, units)}°`}
+                </Text>
+              )}
             </Text>
 
             <View
@@ -476,6 +530,19 @@ const styles = StyleSheet.create({
   age: { fontFamily: FONTS.data, fontSize: TYPE.label },
   hours: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
   hour: { alignItems: 'center', gap: 2, minWidth: 56, paddingVertical: SPACE.xs },
+  /**
+   * Always rendered, coloured transparent when it has nothing to say.
+   *
+   * A cell that only sometimes has this line would be a cell that only
+   * sometimes is the same height, and the wrap would step up and down across
+   * the midnight boundary. Same trick the rain percentage already uses.
+   */
+  hourDay: {
+    fontFamily: FONTS.data,
+    fontSize: TYPE.label - 2,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
   hourTemp: { fontFamily: FONTS.data, fontSize: TYPE.body, fontVariant: ['tabular-nums'] },
   hourRain: { fontFamily: FONTS.data, fontSize: TYPE.label - 1, fontVariant: ['tabular-nums'] },
   day: {

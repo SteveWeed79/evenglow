@@ -47,6 +47,7 @@ import {
   deleteSchema,
   inventoryCreateSchema,
   inventoryUpdateSchema,
+  stockAdjustmentCreateSchema,
   photoCreateSchema,
   photoUpdateSchema,
   taskCreateSchema,
@@ -98,6 +99,8 @@ export const PAYLOAD_SCHEMAS: Partial<Record<PayloadKey, z.ZodType>> = {
   'task:update': taskUpdateSchema,
   'task:delete': deleteSchema,
 
+  'stockAdjustment:create': stockAdjustmentCreateSchema,
+  'stockAdjustment:delete': deleteSchema,
   'inventory:create': inventoryCreateSchema,
   'inventory:update': inventoryUpdateSchema,
   'inventory:delete': deleteSchema,

@@ -10,6 +10,8 @@ import {
   newId,
   normalizeJoinCode,
   refusalMessage,
+  canRenameFarm,
+  renameFarmSchema,
   refuseRemoval,
   refuseRoleChange,
   roleSchema,
@@ -30,6 +32,7 @@ import {
   listMembers,
   normalizeEmail,
   setUserRole,
+  renameOrg,
 } from '../db/identity';
 import {
   acceptInvite,
@@ -308,6 +311,42 @@ export async function memberRoutes(app: FastifyInstance, env: Env): Promise<void
    * again** — only its hash is stored. An owner who loses the screen presses
    * the button again, which replaces the old one rather than adding to it.
    */
+  /**
+   * Renaming the farm.
+   *
+   * A farm name is typed once during signup by somebody doing four other things
+   * at the same time, and then shown on every screen forever. There was no way
+   * to change it — *"what happens if they get a partner, divorced, drunk when
+   * they start the farm in the app and misspell it?"*
+   *
+   * `PATCH`, because this changes one field of a thing that already exists. The
+   * org is found from the verified token and never from the payload (invariant
+   * 2), so there is no request shape that renames somebody else's farm.
+   *
+   * Every device picks it up at its next refresh: `refreshSession` re-reads the
+   * org's name and rewrites the cached claims, which is what makes the name on
+   * a second handset correct itself without anybody signing out.
+   */
+  app.patch('/org', async (request, reply) => {
+    try {
+      const claims = await requireMutationClaims(request.headers.authorization, env.AUTH_SECRET);
+      if (!canRenameFarm(claims.role)) throw new HttpError(403, refusalMessage('not-permitted'));
+
+      const parsed = renameFarmSchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        throw new HttpError(400, parsed.error.issues[0]?.message ?? 'A farm needs a name.');
+      }
+
+      const renamed = await renameOrg(claims.orgId, parsed.data.name);
+      if (!renamed) throw new HttpError(404, 'That farm is no longer here.');
+
+      return reply.send({ name: parsed.data.name });
+    } catch (error) {
+      const { status, body } = errorBody(error);
+      return reply.status(status).send(body);
+    }
+  });
+
   app.post('/join-codes', async (request, reply) => {
     try {
       const claims = await requireMutationClaims(request.headers.authorization, env.AUTH_SECRET);

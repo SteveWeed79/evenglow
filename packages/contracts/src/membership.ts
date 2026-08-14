@@ -235,6 +235,84 @@ export function normalizeJoinCode(raw: string): string {
 }
 
 /**
+ * Renaming the farm.
+ *
+ * A farm name is typed once, during signup, by somebody doing four other things
+ * at the same time — and then shown on every screen forever. Reported as the
+ * obvious question nobody had asked: *"what happens if they get a partner,
+ * divorced, drunk when they start the farm in the app and misspell it?"*
+ *
+ * All three are the same case. Names change, and the app had no answer.
+ *
+ * **Owner or manager, the same bar as inviting.** A manager is already trusted
+ * to bring people onto the farm and to take them off it, which is a larger
+ * power than fixing a spelling. It is not escalation either — unlike minting an
+ * owner, which `assignableRoles` refuses for exactly that reason — and a
+ * rename is visible to everybody the moment it happens, so a bad one cannot be
+ * quiet.
+ *
+ * A hand cannot. Not because it would be dangerous, but because the farm's name
+ * is not theirs to decide and a control that does nothing useful for the person
+ * holding it is a control in the way.
+ */
+export function canRenameFarm(role: Role): boolean {
+  return role === 'owner' || role === 'admin';
+}
+
+/**
+ * The name itself, held to the same shape signup asks for.
+ *
+ * Trimmed before the length is judged, so a name of four spaces is refused
+ * rather than stored as a farm called nothing.
+ */
+export const farmNameSchema = z
+  .string()
+  .trim()
+  .min(1, 'A farm needs a name.')
+  .max(120, 'That is longer than a name.');
+
+export const renameFarmSchema = z.object({ name: farmNameSchema }).strict();
+
+/**
+ * What a role is called on screen.
+ *
+ * Here rather than in a screen because two now say it — Members, listing who is
+ * on the farm, and Account, telling somebody what an invitation makes them. The
+ * wire name and the spoken name differ (`admin` is "Manager"), which is exactly
+ * the kind of pair that drifts when it is written down twice.
+ */
+export const ROLE_WORDS: Record<Role, string> = {
+  owner: 'Owner',
+  admin: 'Manager',
+  hand: 'Farm hand',
+};
+
+/**
+ * Which of the two things somebody was handed.
+ *
+ * A farm can pass on a **six-character code** read off a phone at the gate, or
+ * a **43-character link** sent by text to a particular address. Both end up in
+ * the same box, because the person holding one did not choose which they were
+ * given and should not have to know there are two.
+ *
+ * They cannot be confused: a join code is six characters of Crockford and an
+ * invite token is 32 random bytes as base64url, which is 43. Length alone
+ * separates them by a mile, and the alphabet check makes a near-miss fall to
+ * the invite branch — where the server refuses it — rather than being sent to
+ * the redeem route as a malformed code.
+ *
+ * The server is the authority on both either way. This only decides which door
+ * to knock on.
+ */
+export function looksLikeJoinCode(raw: string): boolean {
+  const normalized = normalizeJoinCode(raw);
+  return (
+    normalized.length === JOIN_CODE_LENGTH &&
+    [...normalized].every((character) => JOIN_CODE_ALPHABET.includes(character))
+  );
+}
+
+/**
  * Minting one.
  *
  * The role is chosen when the code is made rather than when it is redeemed,

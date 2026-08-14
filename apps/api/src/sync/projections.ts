@@ -24,6 +24,7 @@ export const ENTITY_COLLECTIONS: Record<Entity, CollectionName> = {
   maintenance: 'maintenance',
   task: 'tasks',
   inventory: 'inventory',
+  stockAdjustment: 'stockAdjustments',
   photo: 'photos',
   site: 'sites',
   bed: 'beds',

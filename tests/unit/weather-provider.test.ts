@@ -175,10 +175,18 @@ describe('folding half-days into days', () => {
     const forecast = await fetchForecast(GRID, Date.parse('2026-08-03T20:00:00-04:00'));
 
     expect(forecast.days).toHaveLength(2);
-    // Tonight, on its own: the one half reported is used for both rather than
-    // inventing a spread nobody forecast.
+    /**
+     * Tonight, on its own: the half that was forecast, and nothing standing in
+     * for the half that was not.
+     *
+     * This used to fill the high from the low, which read on screen as "79°
+     * 79°" — a flat day nobody forecast, and one no screen could contradict
+     * because an equal high and low is an ordinary value. Reported from a
+     * handset as *"the weather for today shows only the low? it's odd it shows
+     * 79 79"*.
+     */
     expect(forecast.days[0]?.lowDeciC).toBe(128);
-    expect(forecast.days[0]?.highDeciC).toBe(128);
+    expect(forecast.days[0]?.highDeciC).toBeUndefined();
     // A night with no day beside it still needs naming.
     expect(forecast.days[0]?.condition).toBe('cloud');
     // Tomorrow, paired properly.
@@ -309,39 +317,56 @@ describe('the hourly half', () => {
   }
 
   /**
-   * The times here sit well inside one UTC day on purpose.
+   * The strip used to stop at local midnight, and reported from a handset:
+   * *"under The rest of today it literally stops at 11pm."* Correct to its own
+   * label, and empty at the hour somebody is deciding whether to cover a bed.
    *
-   * "Today" is the DEVICE's today — see `fetchHours` for why that is the right
-   * choice and what it costs — so a test straddling local midnight would be
-   * asserting about the runner's timezone rather than about the folding. The
-   * assumption itself is pinned by the test below it.
+   * It rolls a day forward now. The window is what is asserted here — that it
+   * carries on past midnight, and that it does not carry on for a week.
    */
-  it('keeps the rest of today and drops the rest of the week', async () => {
+  it('carries on past midnight rather than emptying out over the evening', async () => {
     service({
       [GRID.forecastUrl]: { properties: { periods: [period({})] } },
       [HOURLY]: hours([
-        '2026-08-03T14:00:00Z',
-        '2026-08-03T19:00:00Z',
+        '2026-08-03T22:00:00Z',
+        '2026-08-03T23:00:00Z',
+        '2026-08-04T02:00:00Z',
         '2026-08-04T09:00:00Z',
       ]),
     });
 
-    const forecast = await fetchForecast(withHourly, Date.parse('2026-08-03T13:30:00Z'));
+    const forecast = await fetchForecast(withHourly, Date.parse('2026-08-03T21:30:00Z'));
 
-    expect(forecast.hours).toHaveLength(2);
+    // All four, including the two after midnight. Under the old rule an
+    // evening like this one kept two and then stopped.
+    expect(forecast.hours).toHaveLength(4);
   });
 
-  it('measures the day from the device, which is the farm standing on its land', async () => {
+  it('stops well short of a week, which is the daily view’s question', async () => {
+    const many = Array.from({ length: 40 }, (_, index) =>
+      new Date(Date.parse('2026-08-03T14:00:00Z') + index * 3_600_000).toISOString(),
+    );
     service({
       [GRID.forecastUrl]: { properties: { periods: [period({})] } },
-      [HOURLY]: hours(['2026-08-03T14:00:00Z', '2026-08-04T02:00:00Z']),
+      [HOURLY]: hours(many),
     });
 
     const forecast = await fetchForecast(withHourly, Date.parse('2026-08-03T13:30:00Z'));
-    const endOfToday = new Date(Date.parse('2026-08-03T13:30:00Z'));
-    endOfToday.setHours(23, 59, 59, 999);
 
-    for (const hour of forecast.hours) expect(hour.at).toBeLessThanOrEqual(endOfToday.getTime());
+    expect(forecast.hours).toHaveLength(24);
+  });
+
+  it('still drops hours that have already gone', async () => {
+    service({
+      [GRID.forecastUrl]: { properties: { periods: [period({})] } },
+      [HOURLY]: hours(['2026-08-03T09:00:00Z', '2026-08-03T14:00:00Z']),
+    });
+
+    // Opened at one o'clock: "rain at 9am" is a lie about the afternoon.
+    const forecast = await fetchForecast(withHourly, Date.parse('2026-08-03T13:30:00Z'));
+
+    expect(forecast.hours).toHaveLength(1);
+    expect(forecast.hours[0]?.at).toBe(Date.parse('2026-08-03T14:00:00Z'));
   });
 
   /**

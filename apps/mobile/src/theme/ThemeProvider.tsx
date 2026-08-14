@@ -1,5 +1,14 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
 import { useColorScheme } from 'react-native';
+import { readLook, writeLook } from './look';
 import { THEMES, type Theme, type ThemeName } from './tokens';
 
 /**
@@ -8,11 +17,26 @@ import { THEMES, type Theme, type ThemeName } from './tokens';
  * Three themes, not two. Bright sun is an attribute selector on the web and
  * simply a third theme here: warmth yields to legibility, never the reverse.
  *
- * The override is session-scoped, exactly as on web. It is not persisted, so
- * the next cold start follows the system again — which matches what the toggle
- * is *for*, the hour before sunrise when the phone still thinks it is day.
- * Persisting a display preference belongs with the SQLite settings table, not
- * here.
+ * ## Toggling and choosing are different acts
+ *
+ * The **lamp toggle** is session-scoped and stays that way. It exists for the
+ * hour before sunrise when the phone still thinks it is day, and a temporary
+ * answer to a temporary problem should not outlive the morning.
+ *
+ * The **row in Settings** is somebody stating a preference, and that is kept.
+ * It was not, and the difference had never been drawn: *"I selected lamplight
+ * and shut the app down and when I loaded the app again it was back on follow
+ * the device."* This file already knew — *"persisting a display preference
+ * belongs with the SQLite settings table"* — so the behaviour was understood
+ * and the other half was never built. See `look.ts` for why it is a file on the
+ * device rather than the settings table that sentence imagined.
+ *
+ * The read is async and nothing waits on it, because nothing has to: the splash
+ * is held until `start()` finishes opening SQLite and refreshing the session,
+ * and a one-file read settles long before that. Were it ever to lose that race
+ * the cost is a frame of daylight at 5am, which is precisely what lamplight
+ * exists to prevent — so if the splash ever stops covering boot, this wants
+ * revisiting rather than leaving to luck.
  */
 
 export type { ThemeName };
@@ -68,14 +92,38 @@ export function ThemeProvider({ children }: { children: ReactNode }): React.Reac
   const [override, setOverride] = useState<ThemeName | null>(null);
   const scheme = useColorScheme();
 
+  // What this handset was last told to wear. `undefined` means nothing was
+  // ever chosen, which is not the same as choosing to follow the device — and
+  // `readLook` keeps them apart so a stored `null` is honoured as the answer
+  // it is rather than read as a missing one.
+  useEffect(() => {
+    void readLook().then((look) => {
+      if (look !== undefined) setOverride(look);
+    });
+  }, []);
+
   // Until someone overrides it, sunrise while the app is open just happens.
   const theme = override ?? systemTheme(scheme === 'dark');
 
+  /** The lamp. Deliberately not written down — see the header. */
   const toggle = useCallback(() => setOverride(otherTheme(theme)), [theme]);
 
+  /**
+   * The Settings row, which is a decision rather than a moment.
+   *
+   * The state moves first and the write is not awaited: somebody who asked for
+   * lamplight gets lamplight now, and whether the disk cooperated is a question
+   * about the *next* launch. `writeLook` swallows its own failures for the same
+   * reason.
+   */
+  const choose = useCallback((next: ThemeName | null) => {
+    setOverride(next);
+    void writeLook(next);
+  }, []);
+
   const value = useMemo<ThemeValue>(
-    () => ({ theme, colors: THEMES[theme], toggle, setTheme: setOverride, override }),
-    [theme, toggle, override],
+    () => ({ theme, colors: THEMES[theme], toggle, setTheme: choose, override }),
+    [theme, toggle, choose, override],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

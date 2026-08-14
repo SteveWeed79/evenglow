@@ -40,6 +40,7 @@ export const COLLECTIONS = [
   'maintenance',
   'tasks',
   'inventory',
+  'stockAdjustments',
   'photos',
   'sites',
   'beds',
