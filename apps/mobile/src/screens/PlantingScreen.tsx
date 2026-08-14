@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { formatMass, PLANTING_STATUSES } from '@steading/contracts';
 import {
@@ -9,7 +9,16 @@ import {
   listVarieties,
 } from '@steading/core/read/growing';
 import { saidConfirmation } from '@steading/core/voice';
-import { Confirm, Confirmation, Failure, Primary, Secondary, useSaver } from '../components/Form';
+import {
+  Chip,
+  Confirm,
+  Confirmation,
+  DayPick,
+  Failure,
+  Primary,
+  Secondary,
+  useSaver,
+} from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Notes } from '../components/Notes';
 import { Body, Panel } from '../components/Panel';
@@ -36,7 +45,27 @@ import { FONTS, SPACE, TYPE } from '../theme/tokens';
  * does: seedlings that were never started cannot be moved out, and offering
  * the action would be the app being confidently wrong about the state of
  * somebody's propagator.
+ *
+ * ## The day it happened, not the day it was typed
+ *
+ * These buttons stamped `Date.now()`, which quietly asserted that nobody
+ * records anything in the evening about a morning, or on Sunday about Friday.
+ * On an app whose whole premise is that a phone comes out of a pocket in a
+ * field when it can, that is the wrong assumption — and it is not cosmetic:
+ * `sownAt` is what harvest is counted from, so a pumpkin recorded four days
+ * late is a pumpkin the app expects four days early for the rest of the season.
+ *
+ * So there is a date, it defaults to today, and it is **one line above the
+ * buttons rather than a field between them**. The common case is still one
+ * press and the buttons have not moved; backdating costs a tap and is visible
+ * before the press rather than discovered after it.
  */
+
+/** Local midnight, which is the resolution every date in this app is kept at. */
+function startOfToday(): number {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+}
 export function PlantingScreen({ route }: ScreenProps<'Planting'>): React.ReactElement {
   const { plantingId } = route.params;
   const nav = useNav();
@@ -53,6 +82,17 @@ export function PlantingScreen({ route }: ScreenProps<'Planting'>): React.ReactE
 
   const { saving, failure, said, save } = useSaver(useCallback(() => undefined, []));
   const pulled = useSaver(useLeave());
+
+  /**
+   * When the thing being recorded actually happened.
+   *
+   * Local midnight, which is what `DayPick` produces and what every other date
+   * on this app is stored at — a hatch, a mating, a birth. A planting date is
+   * the same kind of fact and there is no reason for it to be the one that
+   * carries a time of day.
+   */
+  const [at, setAt] = useState(startOfToday());
+  const [picking, setPicking] = useState(false);
 
   const mark = useCallback(
     (payload: Record<string, unknown>) => {
@@ -79,6 +119,35 @@ export function PlantingScreen({ route }: ScreenProps<'Planting'>): React.ReactE
   const started = planting.startedIndoorsAt !== undefined;
   const needsIndoorStart = planting.plannedStartIndoorsAt !== undefined;
 
+  const canStartIndoors = needsIndoorStart && !started;
+  const canSow = planting.sownAt === undefined && !needsIndoorStart;
+  /**
+   * Gated on the indoor start for the same reason the due builder is — and on
+   * there being a transplant stage at all, which the gate used to be missing.
+   *
+   * **A direct-sown crop offered both buttons.** "Sowed it" and "Planted it
+   * out" sat side by side for a pumpkin that goes straight in the ground, and
+   * pressing the second one recorded a transplant that never happened while
+   * leaving the sowing unrecorded — so the sow row stayed outstanding over a
+   * bed with a plant in it.
+   *
+   * `plannedTransplantAt` is what says a variety has that stage. The due
+   * builder has always required it, because `add` returns early on an absent
+   * date; this button never asked.
+   */
+  const canPlantOut =
+    planting.transplantedAt === undefined &&
+    planting.plannedTransplantAt !== undefined &&
+    (!needsIndoorStart || started);
+
+  /** Only the three stage buttons take a date. Picking and pulling do not. */
+  const dated = canStartIndoors || canSow || canPlantOut;
+  const today = startOfToday();
+  const when =
+    at === today
+      ? 'today'
+      : new Date(at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+
   return (
     <Screen title={variety?.name ?? 'A planting'} back>
       <Text style={[styles.label, { color: colors.muted }]}>
@@ -89,45 +158,68 @@ export function PlantingScreen({ route }: ScreenProps<'Planting'>): React.ReactE
         <Body>{describe(planting)}</Body>
       </Panel>
 
+      {/**
+        * One line, above the buttons, saying what day the press will record.
+        *
+        * Above rather than below because a default somebody has to press a
+        * button to discover is a default they discover by getting it wrong. It
+        * is a chip rather than an open `DayPick` because twelve month chips
+        * standing permanently between the heading and "Sowed it" would cost the
+        * one-press case to serve the occasional one.
+        */}
+      {dated ? (
+        <View style={styles.when}>
+          <Text style={[styles.whenLabel, { color: colors.muted }]}>Recording for</Text>
+          <Chip
+            label={when}
+            selected={picking}
+            onPress={() => setPicking(!picking)}
+            testID="planting-when"
+          />
+        </View>
+      ) : null}
+
+      {dated && picking ? <DayPick value={at} onChange={setAt} /> : null}
+
+      {/**
+        * A date after today is not refused, only said out loud.
+        *
+        * It is very probably a mis-tap on the day field, and saying so is worth
+        * doing because a sowing dated forward pushes the harvest estimate the
+        * same distance. But `DOMAIN-SCOPE.md` 2.4 is the rule here — *an app
+        * that tells a grower no is an app that is wrong about that grower* —
+        * and somebody logging across a date line at midnight is a likelier
+        * person than an app that knows better.
+        */}
+      {dated && at > today ? (
+        <Body>
+          That day has not happened yet. These buttons record what is already done, and a date in
+          the future moves the harvest estimate with it.
+        </Body>
+      ) : null}
+
       <View style={styles.actions}>
-        {needsIndoorStart && !started ? (
+        {canStartIndoors ? (
           <Secondary
             label="Started them indoors"
             testID="mark-indoors"
-            onPress={() => mark({ startedIndoorsAt: Date.now(), status: 'started' })}
+            onPress={() => mark({ startedIndoorsAt: at, status: 'started' })}
           />
         ) : null}
 
-        {planting.sownAt === undefined && !needsIndoorStart ? (
+        {canSow ? (
           <Secondary
             label="Sowed it"
             testID="mark-sown"
-            onPress={() => mark({ sownAt: Date.now(), status: 'in-ground' })}
+            onPress={() => mark({ sownAt: at, status: 'in-ground' })}
           />
         ) : null}
 
-        {/**
-          * Gated on the indoor start for the same reason the due builder is —
-          * and on there being a transplant stage at all, which the gate used to
-          * be missing.
-          *
-          * **A direct-sown crop offered both buttons.** "Sowed it" and "Planted
-          * it out" sat side by side for a pumpkin that goes straight in the
-          * ground, and pressing the second one recorded a transplant that never
-          * happened while leaving the sowing unrecorded — so the sow row stayed
-          * outstanding over a bed with a plant in it.
-          *
-          * `plannedTransplantAt` is what says a variety has that stage. The due
-          * builder has always required it, because `add` returns early on an
-          * absent date; this button never asked.
-          */}
-        {planting.transplantedAt === undefined &&
-        planting.plannedTransplantAt !== undefined &&
-        (!needsIndoorStart || started) ? (
+        {canPlantOut ? (
           <Secondary
             label="Planted it out"
             testID="mark-planted"
-            onPress={() => mark({ transplantedAt: Date.now(), status: 'in-ground' })}
+            onPress={() => mark({ transplantedAt: at, status: 'in-ground' })}
           />
         ) : null}
 
@@ -218,6 +310,13 @@ function describe(planting: { status: string; sownAt?: number; transplantedAt?: 
 
 const styles = StyleSheet.create({
   actions: { gap: SPACE.sm },
+  when: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  whenLabel: {
+    fontFamily: FONTS.data,
+    fontSize: TYPE.label,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
   label: {
     fontFamily: FONTS.data,
     fontSize: TYPE.label,

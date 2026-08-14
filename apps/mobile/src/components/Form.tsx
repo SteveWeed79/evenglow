@@ -5,6 +5,7 @@ import { reportTrouble } from '../hooks/useTrouble';
 import { describeLogFailure } from '@steading/core/sync/failure';
 import { Icon, type IconName } from './Icon';
 import { Body, Panel } from './Panel';
+import { useRevealOnFocus } from './reveal';
 import { Touch } from './Touch';
 import { useFade } from '../theme/motion';
 import { useTheme } from '../theme/ThemeProvider';
@@ -80,9 +81,13 @@ export function TextField({
   testID?: string;
 }): React.ReactElement {
   const { colors } = useTheme();
+  // Says where it is when it is focused, so the screen can scroll it clear of
+  // the keyboard. See reveal.tsx — the window no longer resizes for us.
+  const revealed = useRevealOnFocus<TextInput>();
 
   return (
     <TextInput
+      {...revealed}
       value={value}
       onChangeText={onChangeText}
       {...(placeholder === undefined ? {} : { placeholder })}
@@ -340,10 +345,12 @@ export function NumberField({
   whole?: boolean;
 }): React.ReactElement {
   const { colors } = useTheme();
+  const revealed = useRevealOnFocus<TextInput>();
 
   return (
     <View style={styles.number}>
       <TextInput
+        {...revealed}
         value={value}
         // One decimal point, digits only. Typing "1.2.3" into a weight field
         // and having it parse as NaN is a silent zero in a growth curve.
@@ -418,6 +425,7 @@ export function DayPick({
    * value is what is left on screen.
    */
   const [draft, setDraft] = useState<string | null>(null);
+  const revealed = useRevealOnFocus<TextInput>();
 
   const set = useCallback(
     (nextYear: number, nextMonth: number, nextDay: number) => {
@@ -449,6 +457,8 @@ export function DayPick({
 
       <View style={styles.dayRow}>
         <TextInput
+          ref={revealed.ref}
+          onFocus={revealed.onFocus}
           value={draft ?? String(day)}
           onChangeText={(text) => {
             const digits = text.replace(/[^0-9]/g, '').slice(0, 2);
@@ -459,7 +469,12 @@ export function DayPick({
             const next = Number(digits);
             if (digits !== '' && next >= 1) set(year, month, next);
           }}
-          onBlur={() => setDraft(null)}
+          // Both: the draft is dropped so the clamped date shows, and the
+          // screen is told there is no longer a field to keep above the fold.
+          onBlur={() => {
+            setDraft(null);
+            revealed.onBlur();
+          }}
           keyboardType="number-pad"
           inputMode="numeric"
           maxLength={2}

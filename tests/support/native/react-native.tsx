@@ -74,6 +74,28 @@ export const AppState = {
   addEventListener: (): { remove: () => void } => ({ remove: () => undefined }),
 };
 
+/** The same phone-shaped viewport `useWindowDimensions` reports. */
+export const Dimensions = {
+  get: (): { width: number; height: number } => ({ width: 390, height: 844 }),
+};
+
+/**
+ * A keyboard that never opens.
+ *
+ * `Screen` subscribes so it can make room for one — see `reveal.tsx`. Driving
+ * this double to fire `keyboardDidShow` would let a test watch the subscription
+ * run, and it would still prove nothing, because there is no layout engine here
+ * to have covered anything and no scroll surface to move: the header above says
+ * so, and it is worth not pretending otherwise.
+ *
+ * The arithmetic that decides how far to scroll is a pure function tested in
+ * `tests/unit/reveal.test.ts`. The rest genuinely needs a handset.
+ */
+export const Keyboard = {
+  addListener: (): { remove: () => void } => ({ remove: () => undefined }),
+  dismiss: (): void => undefined,
+};
+
 /** Records what was shared, so the invite screen can be asserted on. */
 export const shared: string[] = [];
 
