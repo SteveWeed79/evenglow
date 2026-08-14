@@ -23,7 +23,7 @@ import { useLive } from '../hooks/useLive';
 import { useWeather } from '../hooks/useWeather';
 import { useLog } from '../hooks/useSync';
 import { useTheme } from '../theme/ThemeProvider';
-import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
+import { FONTS, SPACE, TAP, TYPE } from '../theme/tokens';
 import { locate, findPlace, type Place } from '../weather/where';
 
 /**
@@ -156,16 +156,6 @@ function Forecast({
   const today = forecastFor(days, now);
 
   /**
-   * The widest chance in the list, which is what the bars are measured against.
-   *
-   * Not a fixed 0–100 scale. A week where the wettest day is 30% would draw
-   * seven stubs under a lot of empty space, and the question the column
-   * answers is "which day is the wet one" rather than "how close to certain".
-   * Floored at 20 so a dry week does not turn a 5% Tuesday into a full bar.
-   */
-  const widest = Math.max(20, ...days.map((day) => day.rainChance));
-
-  /**
    * A measured reading beats the forecast's figure for the hour.
    *
    * Null when no nearby station reports, or when the one that does has gone
@@ -264,35 +254,58 @@ function Forecast({
           >
             {hours.map((hour, index) => (
               <View key={hour.at} style={styles.hour}>
-                {/* Midnight needs saying, or 2am reads as this afternoon. The
-                    first cell never carries it — "today" above a strip that
-                    starts now is noise. */}
-                <Text
-                  style={[
-                    styles.hourDay,
-                    {
-                      color:
-                        index > 0 && dayStart(hour.at) !== dayStart(hours[index - 1]?.at ?? hour.at)
-                          ? colors.lanternInk
-                          : 'transparent',
-                    },
-                  ]}
-                >
-                  {DAY_NAMES[new Date(hour.at).getDay()]}
-                </Text>
+                {/**
+                  * Midnight needs saying, or 2am reads as this afternoon. The
+                  * first cell never carries it — "today" above a strip that
+                  * starts now is noise.
+                  *
+                  * ## The row is a fixed height and the text is simply absent
+                  *
+                  * This used to render the day on **every** cell and paint the
+                  * ones with nothing to say `'transparent'`, so all twenty-four
+                  * were the same height. Reported from a handset: *"the Day
+                  * text on the scrolling hourly weather is impossible to see on
+                  * lamplight, the font is black, it's there but not visible."*
+                  *
+                  * Black on every cell means the inline colour never reached
+                  * the `Text` at all — both branches were lost, `'transparent'`
+                  * included — and Android's default text colour is black. Why
+                  * it was lost is not something the bundler can be made to
+                  * show, so the dependency goes instead of being guessed at: a
+                  * cell with nothing to say now renders **no text**, and the
+                  * heights still line up because the row that holds it has a
+                  * height of its own.
+                  *
+                  * Invisibility that depends on a colour resolving correctly is
+                  * invisibility with a failure mode. An element that is not
+                  * there has none.
+                  */}
+                <View style={styles.hourDayRow}>
+                  {index > 0 &&
+                  dayStart(hour.at) !== dayStart(hours[index - 1]?.at ?? hour.at) ? (
+                    /* `inkQuiet`, not brass: this is a label to be read rather
+                       than a mark to be noticed, and it is the token that holds
+                       R7's 7:1 on all three grounds. Brass is 5.15:1 in
+                       daylight, which is a fine bar and a marginal word. */
+                    <Text style={[styles.hourDay, { color: colors.inkQuiet }]}>
+                      {DAY_NAMES[new Date(hour.at).getDay()]}
+                    </Text>
+                  ) : null}
+                </View>
                 <Text style={[styles.label, { color: colors.muted }]}>{clock(hour.at)}</Text>
                 <Icon name={SKY_MARKS[hour.condition]} size={24} color={colors.muted} />
                 <Text style={[styles.hourTemp, { color: colors.ink }]}>
                   {degrees(hour.tempDeciC, units)}°
                 </Text>
-                <Text
-                  style={[
-                    styles.hourRain,
-                    { color: hour.rainChance === 0 ? 'transparent' : colors.lanternInk },
-                  ]}
-                >
-                  {hour.rainChance}%
-                </Text>
+                {/* The same trick and therefore the same trap — a dry hour now
+                    renders nothing rather than a percentage painted out. */}
+                <View style={styles.hourRainRow}>
+                  {hour.rainChance === 0 ? null : (
+                    <Text style={[styles.hourRain, { color: colors.lanternInk }]}>
+                      {hour.rainChance}%
+                    </Text>
+                  )}
+                </View>
               </View>
             ))}
           </ScrollView>
@@ -333,25 +346,31 @@ function Forecast({
               )}
             </Text>
 
-            <View
-              style={[styles.bar, { backgroundColor: colors.shade }]}
-              accessible
+            {/**
+              * The number, and only the number.
+              *
+              * A brass bar used to sit here, and it was **scaled to the wettest
+              * day of the week** rather than to a hundred — so a week topping
+              * out at thirty per cent drew a full bar beside the words "30%",
+              * and the bar was the one that lied.
+              *
+              * That relative scale was deliberate: the question a week answers
+              * is *which day is the wet one*, not *how close to certain*. But
+              * the percentage is printed on every row, so the ranking was
+              * already readable, and the bar's only remaining contribution was
+              * to contradict it. Asked and answered from the farm: *"cut the
+              * bar, the % is enough."*
+              *
+              * The bar carried the row's accessibility label, so the label
+              * moves here rather than leaving a screen reader to announce a
+              * bare "30%".
+              */}
+            <Text
+              style={[styles.dayRain, { color: colors.muted }]}
               accessibilityLabel={`${day.rainChance} per cent chance of rain`}
             >
-              <View
-                style={[
-                  styles.barFill,
-                  {
-                    backgroundColor: colors.lantern,
-                    // Never zero-width: a 4% day should read as "a little",
-                    // not as "the app forgot to draw this one".
-                    width: `${Math.max(day.rainChance === 0 ? 0 : 6, (day.rainChance / widest) * 100)}%`,
-                  },
-                ]}
-              />
-            </View>
-
-            <Text style={[styles.dayRain, { color: colors.muted }]}>{day.rainChance}%</Text>
+              {day.rainChance}%
+            </Text>
           </View>
         ))}
       </View>
@@ -558,20 +577,35 @@ const styles = StyleSheet.create({
   hours: { flexDirection: 'row', gap: SPACE.sm, paddingRight: SPACE.lg },
   hour: { alignItems: 'center', gap: 2, minWidth: 56, paddingVertical: SPACE.xs },
   /**
-   * Always rendered, coloured transparent when it has nothing to say.
+   * The rows that keep the cells the same height whether or not they speak.
    *
-   * A cell that only sometimes has this line would be a cell that only
-   * sometimes is the same height, and the wrap would step up and down across
-   * the midnight boundary. Same trick the rain percentage already uses.
+   * A cell that only sometimes has a line would be a cell that only sometimes
+   * is the same height, and the strip would step up and down across the
+   * midnight boundary. That was solved by painting the spare lines
+   * `'transparent'`, which put the layout at the mercy of a colour arriving —
+   * and on a handset it did not, so twenty-four black day names appeared on a
+   * near-black ground.
+   *
+   * A fixed height holds the row open with nothing in it. `lineHeight` is set
+   * on the text to match, so the reserved space is the space the word takes
+   * rather than a number that happens to look right on one device.
    */
+  hourDayRow: { height: TYPE.label + 2, justifyContent: 'center' },
+  hourRainRow: { height: TYPE.label + 3, justifyContent: 'center' },
   hourDay: {
     fontFamily: FONTS.data,
     fontSize: TYPE.label - 2,
+    lineHeight: TYPE.label + 2,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
   hourTemp: { fontFamily: FONTS.data, fontSize: TYPE.body, fontVariant: ['tabular-nums'] },
-  hourRain: { fontFamily: FONTS.data, fontSize: TYPE.label - 1, fontVariant: ['tabular-nums'] },
+  hourRain: {
+    fontFamily: FONTS.data,
+    fontSize: TYPE.label - 1,
+    lineHeight: TYPE.label + 3,
+    fontVariant: ['tabular-nums'],
+  },
   day: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -581,7 +615,17 @@ const styles = StyleSheet.create({
   },
   dayName: { fontFamily: FONTS.body, fontSize: TYPE.body, width: 56 },
   dayTemps: { fontFamily: FONTS.data, fontSize: TYPE.body, width: 76, fontVariant: ['tabular-nums'] },
-  bar: { flex: 1, height: 10, borderRadius: RADII.pill, overflow: 'hidden' },
-  barFill: { height: '100%', borderRadius: RADII.pill },
-  dayRain: { fontFamily: FONTS.data, fontSize: TYPE.label, width: 44, textAlign: 'right' },
+  /**
+   * `flex: 1` rather than a fixed width, because it inherited the bar's job of
+   * filling the row. Without it the four columns bunch to the left and the
+   * percentages stop lining up under each other — which is the one thing a
+   * column of numbers has to do.
+   */
+  dayRain: {
+    fontFamily: FONTS.data,
+    fontSize: TYPE.label,
+    flex: 1,
+    textAlign: 'right',
+    fontVariant: ['tabular-nums'],
+  },
 });
