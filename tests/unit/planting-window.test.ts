@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   type FrostDates,
+  LIBRARY_VARIETIES,
   nextWindow,
   resolveMonthDay,
   timingOf,
@@ -155,16 +156,18 @@ describe('timing from a farms own record', () => {
    * instead of minting another one.
    */
   it('agrees with the library entry it was copied from', () => {
-    const entry = {
-      id: 'x',
-      name: 'Sungold',
-      crop: 'Tomato',
-      family: 'solanaceae' as const,
-      lifecycle: 'annual' as const,
-      daysToMaturity: 65,
-      startIndoorsWeeksBefore: 6,
-      transplantWeeksAfter: 2,
-    };
+    /**
+     * A real entry rather than a hand-built one. A literal shaped like a
+     * `LibraryVariety` has to be kept in step with the type by hand, which is
+     * a test that breaks for a reason having nothing to do with what it
+     * asserts — and it broke exactly that way once, on a `provenance` field
+     * this cares nothing about.
+     */
+    const entry = LIBRARY_VARIETIES.find(
+      (v) => v.startIndoorsWeeksBefore !== undefined && v.transplantWeeksAfter !== undefined,
+    );
+    expect(entry).toBeDefined();
+    if (entry === undefined) return;
 
     expect(timingOfRecord(entry)).toEqual(timingOf(entry));
   });
