@@ -7,6 +7,7 @@ import { AddAnimalScreen } from '../screens/AddAnimalScreen';
 import { AddBedScreen } from '../screens/AddBedScreen';
 import { AddGroupScreen } from '../screens/AddGroupScreen';
 import { AddItemScreen } from '../screens/AddItemScreen';
+import { AdjustStockScreen } from '../screens/AdjustStockScreen';
 import { AddMachineScreen } from '../screens/AddMachineScreen';
 import { AddServiceScreen } from '../screens/AddServiceScreen';
 import { AnimalsScreen } from '../screens/AnimalsScreen';
@@ -181,6 +182,7 @@ export type RootParamList = {
   ServiceDone: { serviceId: string };
   Inventory: undefined;
   AddItem: { equipmentId?: string };
+  AdjustStock: { itemId: string };
 
   // Growing
   SiteSetup: undefined;
@@ -271,6 +273,7 @@ export function Root({
       <Stack.Screen name="ServiceDone" component={ServiceDoneScreen} />
       <Stack.Screen name="Inventory" component={InventoryScreen} />
       <Stack.Screen name="AddItem" component={AddItemScreen} />
+      <Stack.Screen name="AdjustStock" component={AdjustStockScreen} />
 
       <Stack.Screen name="SiteSetup" component={SiteSetupScreen} />
       <Stack.Screen name="AddBed" component={AddBedScreen} />

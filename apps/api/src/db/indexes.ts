@@ -59,6 +59,13 @@ export const INDEXES: Record<CollectionName, IndexDescription[]> = {
   ],
   tasks: [{ key: { orgId: 1, dueAtDate: 1, completedAt: 1 } }],
   inventory: [{ key: { orgId: 1, _id: 1 } }, { key: { orgId: 1, reorderBelow: 1 } }],
+  // By item and newest first, because the only question asked of these is
+  // "what happened to this sack" — a shelf-wide chronology is What happened's
+  // job and it reads the mutation log, not this.
+  stockAdjustments: [
+    { key: { orgId: 1, _id: 1 } },
+    { key: { orgId: 1, itemId: 1, occurredAt: -1 } },
+  ],
   photos: [{ key: { orgId: 1, subjectId: 1 } }, { key: { orgId: 1, uploadedAt: -1 } }],
 
   // Growing. A farm has one or two sites and a handful of beds, so these are

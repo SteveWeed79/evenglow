@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { listInventory, runningLow, type StockItem } from '@steading/core/read/iron';
-import { Primary, Stepper } from '../components/Form';
+import { Primary, Secondary, Stepper } from '../components/Form';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
@@ -64,6 +64,7 @@ export function InventoryScreen(): React.ReactElement {
 
 function ItemCard({ item }: { item: StockItem }): React.ReactElement {
   const log = useLog();
+  const nav = useNav();
   const { colors } = useTheme();
 
   const setQuantity = useCallback(
@@ -93,7 +94,24 @@ function ItemCard({ item }: { item: StockItem }): React.ReactElement {
         {item.reorderBelow === undefined ? '' : ` · order below ${item.reorderBelow}`}
       </Text>
 
+      {/**
+        * The stepper corrects the count; the row below records an event.
+        *
+        * The same line `LossScreen` draws — *the head count stays as you set
+        * it, this app does not quietly subtract* — and the reason both exist.
+        * A number that was never right is a correction and wants no ceremony.
+        * A sack the mice got into is a thing that happened on a day, and it is
+        * worth keeping: counted as feed it would quietly inflate the cost of
+        * every egg that year.
+        */}
       <Stepper value={item.quantity} onChange={setQuantity} steps={[1, 5]} suffix={item.unit} />
+
+      <Secondary
+        label="Something happened to it"
+        icon="forward"
+        onPress={() => nav.navigate('AdjustStock', { itemId: item.id })}
+        testID={`adjust-${item.id}`}
+      />
     </View>
   );
 }

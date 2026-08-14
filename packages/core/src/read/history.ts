@@ -16,7 +16,9 @@ import {
   predatorCreateSchema,
   productionLogCreateSchema,
   shearingCreateSchema,
+  stockAdjustmentCreateSchema,
   taskCreateSchema,
+  type StockReason,
   type UnitSystem,
   weightCreateSchema,
 } from '@steading/contracts';
@@ -24,7 +26,7 @@ import { localStore } from '../db/store';
 import { listAnimals } from './animals';
 import { listGroups } from './groups';
 import { listPlantings, listVarieties } from './growing';
-import { listMachines } from './iron';
+import { listInventory, listMachines } from './iron';
 
 /**
  * What happened, in the order it happened.
@@ -44,7 +46,7 @@ import { listMachines } from './iron';
  * ## Append-only, and only append-only
  *
  * `eggLog`, `productionLog`, `feedLog`, `mortality`, `predator`, `hourReading`,
- * `harvest`, `weight`, `shearing`, `careLog`. These are the entities that
+ * `harvest`, `weight`, `shearing`, `careLog`, `stockAdjustment`. These are the entities that
  * describe an event at a moment — they all carry `occurredAt`, they cannot be
  * edited, and they cannot conflict.
  *
@@ -162,19 +164,31 @@ const plural = (n: number, one: string, many = `${one}s`): string =>
  * `system` decides whether a weight reads in kilos or pounds — the farm's own
  * setting, carried on the site.
  */
+/** What each reason is called in a history row, as a sentence's first word. */
+const STOCK_WORDS: Record<StockReason, string> = {
+  bought: 'Bought',
+  used: 'Used',
+  lost: 'Lost',
+  spoiled: 'Spoiled',
+  miscounted: 'Recounted',
+  other: 'Adjusted',
+};
+
 export async function listHistory(system: UnitSystem = 'metric'): Promise<HistoryDay[]> {
-  const [groups, animals, machines, plantings, varieties] = await Promise.all([
+  const [groups, animals, machines, plantings, varieties, stock] = await Promise.all([
     listGroups(),
     listAnimals(),
     listMachines(),
     listPlantings(),
     listVarieties(),
+    listInventory(),
   ]);
 
   /** Names, so a row reads "The hens" rather than an id nobody can pronounce. */
   const groupName = new Map(groups.map((g) => [g.id, g.name]));
   const animalName = new Map(animals.map((a) => [a.id, a.name]));
   const machineName = new Map(machines.map((m) => [m.id, m.name]));
+  const itemName = new Map(stock.map((i) => [i.id, i.name]));
   const varietyOf = new Map(varieties.map((v) => [v.id, v.name]));
   const plantingName = new Map(
     plantings.map((p) => [p.id, varietyOf.get(p.varietyId) ?? 'a planting']),
@@ -355,6 +369,23 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
         detail: `${formatMass(v.massUg, system)}${
           v.animalsShorn === undefined ? '' : ` from ${plural(v.animalsShorn, 'animal')}`
         }`,
+      })),
+
+      eventsFrom('stockAdjustment', stockAdjustmentCreateSchema, (v, id) => ({
+        id,
+        entity: 'stockAdjustment',
+        at: v.occurredAt,
+        /**
+         * The reason leads, because the reason is the whole point of the row.
+         * A shelf quantity could always be changed; what it could not do was
+         * say whether four bags were fed out or eaten by something.
+         */
+        title: `${STOCK_WORDS[v.reason]} ${Math.abs(v.delta)} — ${named(
+          itemName,
+          v.itemId,
+          'something on the shelf',
+        )}`,
+        ...(v.note === undefined ? {} : { detail: v.note }),
       })),
 
       eventsFrom('hourReading', hourReadingCreateSchema, (v, id) => ({
