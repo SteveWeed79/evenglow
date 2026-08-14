@@ -385,6 +385,48 @@ export async function joinFarm(input: {
 }
 
 /**
+ * Renames the farm, here and on every other handset at its next refresh.
+ *
+ * A farm name is typed once during signup by somebody doing four other things
+ * at the same time, and shown on every screen afterwards. There was no way to
+ * change it: *"what happens if they get a partner, divorced, drunk when they
+ * start the farm in the app and misspell it?"*
+ *
+ * ## Two writes, and the local one is the point
+ *
+ * The server owns the name. The **cached claims** are what every screen
+ * actually reads — `useFarmName` and the Settings row and the Today subtitle —
+ * so writing them here is what makes the app answer immediately rather than at
+ * the next launch.
+ *
+ * `writeCachedClaims` publishes, so nothing has to be told twice: the same
+ * subscription that made signing out visible carries this. That is the whole
+ * return on having moved it there.
+ *
+ * Other devices pick it up from `refreshSession`, which re-reads the org's name
+ * on every resume and network regain and rewrites their cache with it.
+ *
+ * ## Called after the server agreed, never before
+ *
+ * This does not make the request — `MembersScreen` does, through the token
+ * dance it already owns for every other farm-admin call. This is the half that
+ * belongs to the session: the cache, and telling everything watching it.
+ *
+ * Deliberately not optimistic. Writing the name first and reconciling later
+ * would show a farm a name the server never accepted, on the one field whose
+ * whole job is to be recognised.
+ */
+export async function rememberFarmName(name: string): Promise<void> {
+  const previous = await readCachedClaims();
+  // Nothing to attach it to. A device that is not signed in has no farm name to
+  // hold, and inventing a claims record here would be the cache asserting a
+  // session that does not exist.
+  if (previous === null) return;
+
+  await writeCachedClaims({ ...previous, orgName: name.trim() });
+}
+
+/**
  * What an invitation is for, before anybody types a password.
  *
  * The server has published this since invites were built and **nothing ever

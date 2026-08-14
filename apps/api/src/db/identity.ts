@@ -156,6 +156,23 @@ export async function insertOrg(org: OrgDoc): Promise<void> {
 }
 
 /**
+ * Renames a farm, and answers whether there was one to rename.
+ *
+ * Only the name. A `$set` of the whole document would carry whatever the caller
+ * happened to be holding, and this collection also holds the subscription —
+ * which is the one field on a farm that must never move because somebody
+ * corrected a spelling.
+ *
+ * False means no such farm, which the route turns into a 404 rather than a
+ * silent success. `matchedCount`, not `modifiedCount`: renaming a farm to the
+ * name it already has modifies nothing and is not a failure.
+ */
+export async function renameOrg(id: string, name: string): Promise<boolean> {
+  const result = await (await orgs()).updateOne({ _id: id }, { $set: { name } });
+  return result.matchedCount > 0;
+}
+
+/**
  * Every farm on this server, newest first.
  *
  * For the operator commands only — there is no route that reaches it, and

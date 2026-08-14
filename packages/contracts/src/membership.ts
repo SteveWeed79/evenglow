@@ -235,6 +235,45 @@ export function normalizeJoinCode(raw: string): string {
 }
 
 /**
+ * Renaming the farm.
+ *
+ * A farm name is typed once, during signup, by somebody doing four other things
+ * at the same time — and then shown on every screen forever. Reported as the
+ * obvious question nobody had asked: *"what happens if they get a partner,
+ * divorced, drunk when they start the farm in the app and misspell it?"*
+ *
+ * All three are the same case. Names change, and the app had no answer.
+ *
+ * **Owner or manager, the same bar as inviting.** A manager is already trusted
+ * to bring people onto the farm and to take them off it, which is a larger
+ * power than fixing a spelling. It is not escalation either — unlike minting an
+ * owner, which `assignableRoles` refuses for exactly that reason — and a
+ * rename is visible to everybody the moment it happens, so a bad one cannot be
+ * quiet.
+ *
+ * A hand cannot. Not because it would be dangerous, but because the farm's name
+ * is not theirs to decide and a control that does nothing useful for the person
+ * holding it is a control in the way.
+ */
+export function canRenameFarm(role: Role): boolean {
+  return role === 'owner' || role === 'admin';
+}
+
+/**
+ * The name itself, held to the same shape signup asks for.
+ *
+ * Trimmed before the length is judged, so a name of four spaces is refused
+ * rather than stored as a farm called nothing.
+ */
+export const farmNameSchema = z
+  .string()
+  .trim()
+  .min(1, 'A farm needs a name.')
+  .max(120, 'That is longer than a name.');
+
+export const renameFarmSchema = z.object({ name: farmNameSchema }).strict();
+
+/**
  * What a role is called on screen.
  *
  * Here rather than in a screen because two now say it — Members, listing who is
