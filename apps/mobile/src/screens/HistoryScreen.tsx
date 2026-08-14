@@ -1,6 +1,12 @@
 import { useCallback, useState } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
-import { type HistoryDay, type HistoryEvent, listHistory } from '@steading/core/read/history';
+import {
+  intoMonths,
+  type HistoryDay,
+  type HistoryEvent,
+  type HistoryMonth,
+  listHistory,
+} from '@steading/core/read/history';
 import { Confirm, Failure, useSaver } from '../components/Form';
 import { Icon } from '../components/Icon';
 import { Loading } from '../components/Missing';
@@ -58,8 +64,6 @@ import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
  * row goes and the day's readout above it re-adds without it.
  */
 
-const VISIBLE_DAYS = 30;
-
 export function HistoryScreen(): React.ReactElement {
   const units = useUnits();
   // Wrapped rather than module-level because it now closes over the farm's
@@ -68,12 +72,21 @@ export function HistoryScreen(): React.ReactElement {
   const readHistory = useCallback((): Promise<HistoryDay[]> => listHistory(units), [units]);
 
   const days = useLive(readHistory, 'what you have logged');
-  const { colors } = useTheme();
 
-  const [showAll, setShowAll] = useState(false);
-  // `undefined` means "nobody has chosen yet", which is what lets the newest
-  // day open itself without that decision surviving a deliberate close.
+  /**
+   * `undefined` means "nobody has chosen yet", which is what lets the newest
+   * month and the newest day open themselves without that decision surviving a
+   * deliberate close.
+   *
+   * The thirty-day cap and its "show all" button are gone, and the months are
+   * why rather than an oversight: the cap existed because a flat list of days
+   * grew without bound, and a list of months does not. Nothing is hidden that
+   * was reachable before — every day is still there, one heading further in,
+   * and the button that used to make the list *longer* is not the fix for a
+   * list too long to read.
+   */
   const [opened, setOpened] = useState<number | undefined>(undefined);
+  const [month, setMonth] = useState<number | undefined>(undefined);
 
   if (days === null) return <Loading title="What happened" />;
 
@@ -91,34 +104,83 @@ export function HistoryScreen(): React.ReactElement {
     );
   }
 
-  const shown = showAll ? days : days.slice(0, VISIBLE_DAYS);
+  const months = intoMonths(days, units);
   const open = opened ?? days[0]?.day;
+  const openMonth = month ?? months[0]?.month;
 
   return (
     <Screen title="What happened">
-      {shown.map((day) => (
-        <DayBlock
-          key={day.day}
-          day={day}
-          open={open === day.day}
-          // Tapping the open one shuts it; tapping any other moves the opening.
-          onToggle={() => setOpened(open === day.day ? -1 : day.day)}
+      {months.map((entry) => (
+        <MonthBlock
+          key={entry.month}
+          month={entry}
+          open={openMonth === entry.month}
+          onToggle={() => setMonth(openMonth === entry.month ? -1 : entry.month)}
+          openDay={open}
+          onToggleDay={(day) => setOpened(open === day ? -1 : day)}
         />
       ))}
-
-      {days.length > shown.length ? (
-        <Touch affordance="disclose"
-          onPress={() => setShowAll(true)}
-          accessibilityRole="button"
-          testID="show-all-days"
-          style={({ pressed }) => [styles.more, { opacity: pressed ? 0.7 : 1 }]}
-        >
-          <Text style={[styles.moreLabel, { color: colors.muted }]}>
-            Show all {days.length} days
-          </Text>
-        </Touch>
-      ) : null}
     </Screen>
+  );
+}
+
+/**
+ * A month, and the days in it.
+ *
+ * Closed it is one line — the month, how many days had something, and what came
+ * off the farm in it. Open it is the day list this screen has always shown.
+ *
+ * The newest month opens itself for the same reason the newest day does: the
+ * commonest visit is "what did I do yesterday", and making that a two-tap
+ * journey to save a one-line heading would be the wrong trade.
+ */
+function MonthBlock({
+  month,
+  open,
+  onToggle,
+  openDay,
+  onToggleDay,
+}: {
+  month: HistoryMonth;
+  open: boolean;
+  onToggle: () => void;
+  openDay: number | undefined;
+  onToggleDay: (day: number) => void;
+}): React.ReactElement {
+  const { colors } = useTheme();
+
+  return (
+    <View style={styles.month}>
+      <Touch affordance="disclose"
+        onPress={onToggle}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        testID={`month-${month.month}`}
+        style={({ pressed }) => [
+          styles.monthHead,
+          { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
+        ]}
+      >
+        <Text style={[styles.monthName, { color: colors.ink }]}>
+          {new Date(month.month).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+        </Text>
+        <Text style={[styles.monthSummary, { color: colors.muted }]}>
+          {month.active} {month.active === 1 ? 'day' : 'days'} · {month.summary}
+        </Text>
+      </Touch>
+
+      {!open
+        ? null
+        : month.days.map((day) => (
+            <DayBlock
+              key={day.day}
+              day={day}
+              open={openDay === day.day}
+              // Tapping the open one shuts it; tapping any other moves the opening.
+              onToggle={() => onToggleDay(day.day)}
+            />
+          ))}
+    </View>
   );
 }
 
@@ -304,6 +366,24 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
   },
   name: { flex: 1, gap: 2 },
+  /**
+   * The month, and the days indented under it.
+   *
+   * A small inset rather than a border or a background: the day blocks already
+   * carry one each, and nesting two framed things is how a list stops reading
+   * as a list. The gap is what says these belong to the heading above them.
+   */
+  month: { gap: SPACE.sm },
+  monthHead: {
+    gap: 2,
+    minHeight: TAP.min,
+    justifyContent: 'center',
+    paddingHorizontal: SPACE.md,
+    paddingVertical: SPACE.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  monthName: { fontFamily: FONTS.display, fontSize: TYPE.title },
+  monthSummary: { fontFamily: FONTS.data, fontSize: TYPE.label, letterSpacing: 0.4 },
   record: { gap: SPACE.xs },
   // A row is a tap target now, so it gets the height of one (R3).
   event: {

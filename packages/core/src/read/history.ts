@@ -441,6 +441,66 @@ export function intoDays(
     });
 }
 
+export interface HistoryMonth {
+  /** Local midnight on the first, which is the key and the heading. */
+  month: number;
+  /** Newest first, and every one of them already sorted inside itself. */
+  days: HistoryDay[];
+  /** "312 eggs · 14 feeds" — what the month reads as when it is closed. */
+  summary: string;
+  /** How many days in it had anything at all. */
+  active: number;
+}
+
+/**
+ * Days gathered into months.
+ *
+ * Reported as a question, and the right one: *"Should the What happened screen
+ * collapse by month > day > stuff that happened?"*
+ *
+ * It should. A flat list of days grows without bound and there is no year at
+ * which it stops — by a second season a farm scrolling for last April is
+ * scrolling past three hundred headings, and the screen that holds everything
+ * the farm knows becomes the one nobody opens.
+ *
+ * The screen had a cap of thirty days and a "show all" button underneath, which
+ * is the shape of a problem rather than an answer to it: the fix for a list too
+ * long to read is not a button that makes it longer.
+ *
+ * ## The month's line is built from the days, not re-read
+ *
+ * `summarise` already knows how to turn events into "12 eggs · 2 feeds", so a
+ * month is the same function over a wider window. Re-implementing it here would
+ * be two definitions of what a total means, and they would drift the first time
+ * a tally unit changed.
+ */
+export function intoMonths(days: readonly HistoryDay[], system: UnitSystem = 'metric'): HistoryMonth[] {
+  const byMonth = new Map<number, HistoryDay[]>();
+
+  for (const day of days) {
+    const date = new Date(day.day);
+    const month = new Date(date.getFullYear(), date.getMonth(), 1).getTime();
+    const existing = byMonth.get(month);
+    if (existing === undefined) byMonth.set(month, [day]);
+    else existing.push(day);
+  }
+
+  return [...byMonth.entries()]
+    .sort(([a], [b]) => b - a)
+    .map(([month, list]) => {
+      const ordered = [...list].sort((a, b) => b.day - a.day);
+      return {
+        month,
+        days: ordered,
+        summary: summarise(
+          ordered.flatMap((day) => day.events),
+          system,
+        ),
+        active: ordered.length,
+      };
+    });
+}
+
 /**
  * The one line a closed day shows.
  *
