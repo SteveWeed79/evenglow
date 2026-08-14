@@ -42,23 +42,25 @@ const withPlay = {
   GOOGLE_PLAY_PACKAGE: 'com.steading.app',
 };
 
-describe('a server that takes no payments', () => {
+describe('a server deliberately left open', () => {
   it('asks nobody for anything', () => {
-    // The self-hosted case, and the one the screenshots were taken on.
-    expect(syncAccess(readEnv(base), farm())).toEqual({ syncing: true, refusal: null });
+    // The self-hosted case, and the one the screenshots were taken on. It needs
+    // saying out loud now: `SYNC_OPEN_TO_ALL` is what makes this the answer.
+    expect(syncAccess(readEnv(opened), farm())).toEqual({ syncing: true, refusal: null });
   });
 
   it('says the same about a farm it has never heard of', () => {
-    expect(syncAccess(readEnv(base), null)).toEqual({ syncing: true, refusal: null });
+    expect(syncAccess(readEnv(opened), null)).toEqual({ syncing: true, refusal: null });
   });
 
   /**
-   * The exact contradiction, stated as a test: with no Play config the sync
-   * route has always let a farm through, so nothing may report it as held.
+   * The contradiction this file was written for: an open server has always let
+   * a farm through, so nothing may report it as held. Still true, now that
+   * being open is a choice rather than an accident.
    */
   it('never reports held on a server that cannot charge', () => {
     const lapsed = farm({ subscription: { state: 'lapsed', expiresAt: 1 } });
-    expect(syncAccess(readEnv(base), lapsed).syncing).toBe(true);
+    expect(syncAccess(readEnv(opened), lapsed).syncing).toBe(true);
   });
 });
 
@@ -105,9 +107,10 @@ describe('a server that does take payments', () => {
  * which is the part that costs — and D13 already says sync is the only thing
  * sold. This makes that true before Play exists rather than after.
  */
-const guarded = { ...base, SYNC_REQUIRES_GRANT: '1' };
+const guarded = base; // closed is the default now
+const opened = { ...base, SYNC_OPEN_TO_ALL: '1' };
 
-describe('a server that takes no payments and has been told to ask anyway', () => {
+describe('a server that takes no payments, which now asks by default', () => {
   it('holds a farm nobody has granted anything', () => {
     expect(syncAccess(readEnv(guarded), farm())).toEqual({
       syncing: false,
@@ -153,17 +156,22 @@ describe('a server that takes no payments and has been told to ask anyway', () =
 });
 
 describe('the flag itself', () => {
-  /** Off is the default, because the default must keep a self-hoster working. */
-  it('is off when unset', () => {
-    expect(syncAccess(readEnv(base), farm()).syncing).toBe(true);
+  /**
+   * **Closed is what you get by doing nothing**, and that is the correction.
+   * This was a `SYNC_REQUIRES_GRANT` flag defaulting off, which made the gate
+   * possible rather than actual — a hole stays open when closing it is a step
+   * somebody has to remember.
+   */
+  it('is closed when unset', () => {
+    expect(syncAccess(readEnv(base), farm()).syncing).toBe(false);
   });
 
-  it.each(['', '0', 'no'])('is off for %o', (value) => {
-    expect(syncAccess(readEnv({ ...base, SYNC_REQUIRES_GRANT: value }), farm()).syncing).toBe(true);
+  it.each(['', '0', 'no'])('stays closed for %o', (value) => {
+    expect(syncAccess(readEnv({ ...base, SYNC_OPEN_TO_ALL: value }), farm()).syncing).toBe(false);
   });
 
-  it.each(['1', 'true', 'TRUE'])('is on for %o', (value) => {
-    expect(syncAccess(readEnv({ ...base, SYNC_REQUIRES_GRANT: value }), farm()).syncing).toBe(false);
+  it.each(['1', 'true', 'TRUE'])('opens for %o', (value) => {
+    expect(syncAccess(readEnv({ ...base, SYNC_OPEN_TO_ALL: value }), farm()).syncing).toBe(true);
   });
 
   /**
@@ -173,7 +181,7 @@ describe('the flag itself', () => {
    */
   it('does not disturb a server that does take payments', () => {
     const paid = farm({ subscription: { state: 'active', expiresAt: Date.now() + 86_400_000 } });
-    expect(syncAccess(readEnv({ ...withPlay, SYNC_REQUIRES_GRANT: '1' }), paid).syncing).toBe(true);
-    expect(syncAccess(readEnv({ ...withPlay, SYNC_REQUIRES_GRANT: '1' }), farm()).syncing).toBe(false);
+    expect(syncAccess(readEnv({ ...withPlay, SYNC_OPEN_TO_ALL: '1' }), paid).syncing).toBe(true);
+    expect(syncAccess(readEnv({ ...withPlay, SYNC_OPEN_TO_ALL: '1' }), farm()).syncing).toBe(false);
   });
 });

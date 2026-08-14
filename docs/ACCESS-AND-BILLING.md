@@ -776,9 +776,19 @@ did. The page has to be public for a tester to reach it, and the hostname is in
 **Certificate Transparency logs** from the moment Caddy is issued a certificate,
 so *if* somebody finds it is a matter of when rather than whether.
 
-`SYNC_REQUIRES_GRANT=1` makes the first question ask rather than answer. The two
-comps below and a redeemed promotion code become the only ways through, on a
-server that has never heard of Play.
+So it asks by default. The two comps below and a redeemed promotion code are
+the ways through, on a server that has never heard of Play.
+
+**The first version of this was a `SYNC_REQUIRES_GRANT` flag that defaulted
+off**, which made the gate possible rather than actual — and a hole stays open
+when closing it is a step somebody has to remember. `SYNC_OPEN_TO_ALL` is the
+inversion: the safe state is what you get by doing nothing, and running an open
+server is the deliberate act.
+
+`pnpm db:seed` grants the farm it creates, so a fresh box syncs its own farm out
+of the box and nobody else's — without that, the first thing a self-hoster does
+after standing a box up is discover their own farm cannot reach it, which is the
+sort of surprise that gets fixed by opening the door for everybody.
 
 **Where the gate sits is the argument.** The app stays free to install and a
 farm may keep its whole records on its own handset for nothing — that is D14 and
@@ -808,15 +818,15 @@ mitigation is ordering rather than cleverness.
 
 ### The order that avoids it
 
-The same order applies to `SYNC_REQUIRES_GRANT`, which is the same cliff arriving
-earlier and on purpose — and is the cheaper one to rehearse on, because it can be
-turned back off in a file.
+**The same order applies to a box that has been running open.** Closing the gate
+is the same cliff Play configuration causes, arriving earlier — and any farm
+already syncing without a grant stops the moment the new default lands.
 
 1. **Comp everyone who must not be interrupted** — the farm running the box,
    every tester, anyone mid-season. All three mechanisms below are read *before*
    the subscription is, so they work in either state.
-2. **Then** turn the gate on: `SYNC_REQUIRES_GRANT=1` now, or
-   `GOOGLE_PLAY_SERVICE_ACCOUNT` and `GOOGLE_PLAY_PACKAGE` later. Restart.
+2. **Then** deploy the closed default, or add `GOOGLE_PLAY_SERVICE_ACCOUNT` and
+   `GOOGLE_PLAY_PACKAGE` later. Restart.
 3. **Then** verify from a handset that had been syncing that it still is —
    before anybody reports that it is not. The account screen and the sync chip
    both read `syncAccess`, so they agree or they are both wrong.
