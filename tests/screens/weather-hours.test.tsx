@@ -43,15 +43,31 @@ function json(body: unknown): Response {
 }
 
 /**
- * Twenty-four hours from 6pm, so the window crosses exactly one midnight —
- * the case the day marker exists for, and the one the old code got wrong.
+ * Thirty hours from **this** hour, and the anchor is the whole point.
+ *
+ * It used to start at a fixed 6pm, which made the suite fail every evening.
+ * `fetchHours` drops hours already gone — *"rain at 9am on a screen opened at
+ * one o'clock is a lie about the afternoon"* — so once the clock passed six the
+ * fixture's first hour, the only wet one, was filtered out before the screen
+ * ever saw it, and the strip had no percentages at all:
+ *
+ *     AssertionError: expected [] to have a length of 1 but got +0
+ *
+ * Green all day here and red on CI, which runs in UTC and happened to run at
+ * seven in the evening. A test that depends on the hour it is run is a test
+ * that reports the time, not the code.
+ *
+ * Anchored to the current hour, nothing is ever filtered: the wet hour is
+ * always the first one shown, and the twenty-four that follow always cross a
+ * midnight — except when the hour is exactly midnight itself, which is why the
+ * day-marker count is computed below rather than assumed.
  *
  * Rain on the first hour only, so the other trick on this strip (a dry hour
  * showing nothing) is exercised in both states by the same fixture.
  */
 function service(): void {
   const start = new Date();
-  start.setHours(18, 0, 0, 0);
+  start.setMinutes(0, 0, 0);
 
   const hourly = Array.from({ length: 30 }, (_, i) => {
     const at = new Date(start.getTime() + i * 3600_000);
@@ -158,17 +174,37 @@ afterEach(() => {
 });
 
 describe('the day marker above the hours', () => {
-  it('says the day once, where the day changes', async () => {
+  /**
+   * Counted from the fixture rather than hardcoded, because a strip that starts
+   * at midnight spans one day and crosses nothing. Plain local-date arithmetic,
+   * not the screen's own helper — the claim is that the screen draws one marker
+   * per change, and borrowing its rule to decide what a change is would assert
+   * nothing.
+   */
+  const boundariesInWindow = (): number => {
+    const start = new Date();
+    start.setMinutes(0, 0, 0);
+    const day = (at: number) => new Date(at).toDateString();
+
+    let crossings = 0;
+    for (let i = 1; i < 24; i += 1) {
+      const here = start.getTime() + i * 3600_000;
+      const before = start.getTime() + (i - 1) * 3600_000;
+      if (day(here) !== day(before)) crossings += 1;
+    }
+    return crossings;
+  };
+
+  it('says the day where the day changes, and only there', async () => {
     const screen = await mount(<WeatherScreen />);
 
     const days = wordsInStrip(screen).filter((w) =>
       ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].includes(w.text.toUpperCase()),
     );
 
-    // One midnight in the window, so one marker. Twenty-four would be the old
-    // behaviour with its paint stripped off — which is exactly what a handset
-    // saw.
-    expect(days).toHaveLength(1);
+    // Twenty-four would be the old behaviour with its paint stripped off, which
+    // is exactly what a handset saw.
+    expect(days).toHaveLength(boundariesInWindow());
 
     screen.unmount();
   });
