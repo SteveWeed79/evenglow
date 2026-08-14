@@ -34,6 +34,15 @@ on:
   # have created a second source of truth, and the failure mode is the one that
   # matters: testing one commit and shipping another, with both steps green.
   workflow_dispatch:
+    inputs:
+      # Not a ref, so it does not reintroduce the hazard the note above refuses
+      # — `verify` and `release` still act on the branch the form selected.
+      # This only says how far the number moves once they have.
+      bump:
+        description: 'Version to move before shipping'
+        type: choice
+        default: patch
+        options: [patch, minor, major, none]
 
 jobs:
   verify:
@@ -185,6 +194,42 @@ jobs:
           # clone on every pull request is a cost for no benefit.
           fetch-depth: 0
 
+      # ── The version, moved by the act of shipping ────────────────────────
+      #
+      # `expo.version` sat at 0.1.0 through every build this project has made,
+      # so every report from a handset has been about "0.1.0" — a number that
+      # identifies nothing. The support bundle carries it, the install page
+      # shows it, and neither was worth reading.
+      #
+      # **Here rather than in a person's hands**, for the reason
+      # `scripts/lib/version-bump.mjs` gives about `versionCode`: a rule that
+      # depends on remembering an edit is a rule that holds until the first
+      # time it matters. Shipping is already deliberate and already has a
+      # button, so the button is where the number moves.
+      #
+      # **Committed BEFORE `release` is moved, and that ordering is the whole
+      # point.** Bumping after the promote would ship a build stamped with the
+      # version before it — every artefact permanently off by one, which is
+      # worse than not bumping at all because it looks correct.
+      #
+      # The push to the release branch below is what actually ships, so if this
+      # push fails — a protected branch, or main moved under us — the job stops
+      # here and nothing has been released. Loud, and nothing half-done.
+      - name: Move the version on
+        if: inputs.bump != 'none'
+        run: |
+          set -euo pipefail
+          MOVED="$(node scripts/release-version.mjs '${{ inputs.bump }}')"
+          echo "VERSION_MOVED=$MOVED" >> "$GITHUB_ENV"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/mobile/app.json
+          # `[skip ci]` because this commit changes one string in app.json and
+          # its parent has just gone green on the full suite. Re-running verify
+          # over a version number is a quarter of an hour for no information.
+          git commit -m "Version ${MOVED} [skip ci]"
+          git push origin "HEAD:${{ github.ref_name }}"
+
       # `--force` is deliberately absent, and it is the guard rather than a
       # tidiness preference: `release` may only move FORWARD. A promote that
       # would rewind the server — shipping an older commit over a newer one —
@@ -201,8 +246,16 @@ jobs:
 
       - name: Say what shipped
         run: |
-          echo "### Shipped \`$(git rev-parse --short HEAD)\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Shipped \`$(git rev-parse --short HEAD)\` — v$(node scripts/release-version.mjs show)" \
+            >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
+          # Only when it actually moved. "none" is a legitimate promote — a
+          # re-ship of a version already cut — and claiming a bump that did not
+          # happen is the same lie this whole step exists to stop telling.
+          if [ -n "${VERSION_MOVED:-}" ]; then
+            echo "Version ${VERSION_MOVED}" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          fi
           echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
           git log -1 --format='%s%n%n%an, %ar' >> "$GITHUB_STEP_SUMMARY"
           echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"

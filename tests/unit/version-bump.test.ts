@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nextVersionCode, withVersionCode } from '../../scripts/lib/version-bump.mjs';
+import { nextVersion, nextVersionCode, withVersion, withVersionCode } from '../../scripts/lib/version-bump.mjs';
 import appJson from '../../apps/mobile/app.json';
 
 /**
@@ -94,5 +94,96 @@ describe('writing it back', () => {
 
   it('says so rather than silently doing nothing when the key is missing', () => {
     expect(withVersionCode('{"expo":{"android":{}}}', 2)).toBeNull();
+  });
+});
+
+/**
+ * The version a person reads, and moving it.
+ *
+ * `expo.version` sat at 0.1.0 through every build this project has made, so
+ * every report from a handset arrived stamped "0.1.0" — a number identifying
+ * nothing. It is the one the install page shows, Settings prints, and a support
+ * bundle carries, so it is the one worth having right.
+ *
+ * Moved by CI on the release button rather than by hand, for the same reason
+ * `versionCode` is: a rule that depends on remembering an edit holds until the
+ * first time it matters.
+ */
+
+describe('the next version', () => {
+  it('moves the patch by default', () => {
+    expect(nextVersion({ expo: { version: '0.1.0' } })).toMatchObject({
+      from: '0.1.0',
+      to: '0.1.1',
+    });
+  });
+
+  /** Semver's whole arithmetic: the parts below the one that moved go to zero. */
+  it('resets the parts below a minor bump', () => {
+    expect(nextVersion({ expo: { version: '0.1.9' } }, 'minor').to).toBe('0.2.0');
+  });
+
+  it('resets both below a major bump', () => {
+    expect(nextVersion({ expo: { version: '0.9.3' } }, 'major').to).toBe('1.0.0');
+  });
+
+  it('carries past ten without treating the parts as decimals', () => {
+    expect(nextVersion({ expo: { version: '0.9.9' } }, 'patch').to).toBe('0.9.10');
+    expect(nextVersion({ expo: { version: '1.10.0' } }, 'minor').to).toBe('1.11.0');
+  });
+
+  /**
+   * A prerelease is legal semver and this will not guess what incrementing one
+   * means. Nothing here mints them, so the only way one arrives is by hand —
+   * and a hand-written version is a decision CI should stop at rather than
+   * quietly overwrite.
+   */
+  it('refuses anything that is not plain major.minor.patch', () => {
+    for (const version of ['0.1.0-beta.2', '1.0', 'v1.0.0', '', 'latest']) {
+      expect(nextVersion({ expo: { version } }).to, version).toBeNull();
+    }
+  });
+
+  it('refuses a file with no version at all', () => {
+    expect(nextVersion({ expo: {} }).to).toBeNull();
+    expect(nextVersion({}).to).toBeNull();
+  });
+});
+
+describe('writing it back', () => {
+  it('changes the one string', () => {
+    expect(withVersion('{ "version": "0.1.0" }', '0.1.1')).toBe('{ "version": "0.1.1" }');
+  });
+
+  /**
+   * The collision worth guarding: `"versionCode"` starts with `"version`, so a
+   * pattern anchored loosely would write a semver string into an integer field
+   * and produce an app.json Expo refuses to build.
+   */
+  it('never mistakes versionCode for the version', () => {
+    const text = '{ "versionCode": 3, "version": "0.1.0" }';
+
+    expect(withVersion(text, '0.2.0')).toBe('{ "versionCode": 3, "version": "0.2.0" }');
+  });
+
+  it('leaves everything else in the file exactly as it was', () => {
+    const text = '{\n  "name": "steading",\n  "version": "0.1.0",\n  "icon": "./x.png"\n}\n';
+
+    expect(withVersion(text, '0.1.1')).toBe(
+      '{\n  "name": "steading",\n  "version": "0.1.1",\n  "icon": "./x.png"\n}\n',
+    );
+  });
+
+  it('says so rather than guessing when there is nothing to change', () => {
+    expect(withVersion('{ "versionCode": 3 }', '0.1.1')).toBeNull();
+  });
+});
+
+describe('the file that actually ships', () => {
+  it('carries a version this can move', () => {
+    const { to, reason } = nextVersion(appJson);
+
+    expect(reason, `app.json version is ${reason}`).toBeNull();
+    expect(to).not.toBeNull();
   });
 });

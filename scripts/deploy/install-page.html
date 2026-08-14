@@ -76,6 +76,16 @@
        * Reported from the page itself.
        */
       [hidden] { display: none !important; }
+      /* Empty until a build is published, and an empty paragraph should take
+         no room — `:empty` collapses it rather than leaving a gap nobody can
+         account for. */
+      .stamp {
+        color: var(--quiet);
+        font-size: 0.85rem;
+        margin: -1.75rem 0 2rem;
+        text-align: center;
+      }
+      .stamp:empty { display: none; }
       .sub { color: var(--quiet); margin: 0 0 2rem; }
       /* 64px, because R4 makes primary actions 64 and this is one. */
       .get {
@@ -112,6 +122,10 @@
     <p class="sub">Farm records that work without a signal.</p>
 
     <a class="get" id="get" href="steading.apk">Install on this phone</a>
+    <!-- Filled in by publish-apk.sh from the APK itself, so it describes the
+         file actually being served rather than whatever was last committed.
+         Left empty on a box with nothing published. -->
+    <p class="stamp"><!--VERSION--></p>
     <p class="sub" id="none" hidden>
       There is no build on the server yet. Nothing is broken — come back when
       you are told there is one.
