@@ -43,9 +43,32 @@ export const forecastDaySchema = z
     /** Local midnight for the day this describes. */
     day: z.number().int(),
     condition: conditionSchema,
-    /** Tenths of a degree Celsius. */
-    highDeciC: z.number().int(),
-    lowDeciC: z.number().int(),
+    /**
+     * Tenths of a degree Celsius, and **optional because half a day can be
+     * over**.
+     *
+     * NWS publishes day/night periods, so a forecast fetched at eight in the
+     * evening has a night for today and no day — the high already happened and
+     * is not forecast any more. Both fields used to be required and the
+     * provider filled the gap from the other half, on the reasoning that using
+     * the one reported figure beat inventing a spread nobody forecast.
+     *
+     * That reads as a flat day rather than as a missing number. Reported from
+     * the phone as *"the weather for today shows only the low? it's odd it
+     * shows 79 79"* — which is exactly right, and the screen had no way to say
+     * anything else, because a high equal to the low is a perfectly ordinary
+     * value.
+     *
+     * It is also not only cosmetic. `warnings.ts` reads `highDeciC` for heat
+     * and `lowDeciC` for frost, so a warm night with no daytime period left
+     * produced a "high" that was really the overnight low — a heat watch built
+     * on a number nobody forecast as a high.
+     *
+     * Absent means unknown, and every reader says so or stays quiet. Optional
+     * rather than removed, so a forecast cached by an older build still parses.
+     */
+    highDeciC: z.number().int().optional(),
+    lowDeciC: z.number().int().optional(),
     /** Per cent, 0–100. */
     rainChance: z.number().int().min(0).max(100),
     /** Micrometres of rain expected, so it charts in the same unit as depth. */
@@ -209,6 +232,31 @@ export function degrees(deciC: number, system: UnitSystem): number {
   // which reads as a bug to anyone who sees it. `trim` in units.ts does the
   // same thing for the same reason.
   return rounded + 0;
+}
+
+/**
+ * A day's high and low in words, saying only what was forecast.
+ *
+ * One place decides what an absent half *sounds* like, because the three
+ * screens that show it should not each invent their own phrasing — and because
+ * the wrong answer here is the one that was shipped: printing both numbers
+ * regardless produced "79° 79°", a flat day nobody forecast.
+ *
+ * Returns null when neither half is known, which is a day worth saying nothing
+ * about rather than a day of dashes.
+ */
+export function highLowWords(day: ForecastDay, system: UnitSystem): string | null {
+  const high = day.highDeciC;
+  const low = day.lowDeciC;
+
+  if (high !== undefined && low !== undefined) {
+    return `High ${degrees(high, system)}° · Low ${degrees(low, system)}°`;
+  }
+  // Named rather than left bare. A lone number beside a thermometer reads as
+  // "the temperature", and tonight's low is not that.
+  if (low !== undefined) return `Low ${degrees(low, system)}° tonight`;
+  if (high !== undefined) return `High ${degrees(high, system)}°`;
+  return null;
 }
 
 /** Local midnight for a moment, which is how a forecast day is keyed. */

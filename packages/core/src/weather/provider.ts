@@ -374,9 +374,6 @@ async function fetchHours(grid: Grid, now: number): Promise<ForecastHour[]> {
    * From `now` rather than from the wall clock, so a test gets the window it
    * asked about.
    */
-  const endOfToday = new Date(now);
-  endOfToday.setHours(23, 59, 59, 999);
-
   const thisHour = new Date(now);
   thisHour.setMinutes(0, 0, 0);
   const startOfHour = thisHour.getTime();
@@ -389,18 +386,27 @@ async function fetchHours(grid: Grid, now: number): Promise<ForecastHour[]> {
       rainChance: Math.round(period.probabilityOfPrecipitation?.value ?? 0),
     }))
     /**
-     * The rest of today, and no further.
+     * A rolling window forward, rather than whatever is left of today.
      *
-     * A list running to the same hour next week is one nobody scrolls, and the
-     * daily view already answers that question. Hours already gone are dropped
-     * too: NWS starts its hourly product at the current hour so this is usually
-     * moot, but a cached forecast read four hours later is not, and "rain at
-     * 9am" on a screen opened at one o'clock is a lie about the afternoon.
+     * It used to stop at midnight, which meant the section emptied out as the
+     * evening went on and at eight o'clock offered four hours and then nothing.
+     * Reported from the phone: *"under The rest of today it literally stops at
+     * 11pm."* Correct to its own label, and useless at the hour somebody is
+     * deciding whether to cover a bed or shut a coop.
+     *
+     * The original argument still holds and is why this is not a fortnight —
+     * *"rain starts at four" changes what somebody does this afternoon, and
+     * "week four looks wet" changes nothing anybody can act on.* Twenty-four
+     * hours keeps that and adds the half a farm actually asks about after dark:
+     * tonight's low and what the morning looks like.
+     *
+     * Hours already gone are still dropped. NWS starts its hourly product at
+     * the current hour so this is usually moot, but a cached forecast read four
+     * hours later is not, and "rain at 9am" on a screen opened at one o'clock
+     * is a lie about the afternoon.
      */
-    .filter(
-      (hour) =>
-        !Number.isNaN(hour.at) && hour.at <= endOfToday.getTime() && hour.at >= startOfHour,
-    );
+    .filter((hour) => !Number.isNaN(hour.at) && hour.at >= startOfHour)
+    .slice(0, 24);
 }
 
 /**
@@ -467,10 +473,21 @@ export async function fetchForecast(grid: Grid, now: number = Date.now()): Promi
     .map(([day, entry]) => ({
       day,
       condition: entry.condition ?? 'cloud',
-      // A day with only one half reported uses it for both rather than
-      // inventing a spread nobody forecast.
-      highDeciC: entry.high ?? entry.low ?? 0,
-      lowDeciC: entry.low ?? entry.high ?? 0,
+      /**
+       * Only the halves that were actually forecast.
+       *
+       * This used to fill each from the other, so a day whose daytime period
+       * had already passed reported its overnight low as the high too. The
+       * screen then read "79° 79°", which is a real-looking flat day rather
+       * than a missing number — and `warnings.ts` read that fabricated high
+       * when deciding whether to raise a heat watch.
+       *
+       * Absent is the honest answer and every reader now handles it. Nothing
+       * is invented and nothing falls back to zero, which would have been a
+       * hard freeze in the middle of August.
+       */
+      ...(entry.high === undefined ? {} : { highDeciC: entry.high }),
+      ...(entry.low === undefined ? {} : { lowDeciC: entry.low }),
       rainChance: Math.round(entry.chance),
       ...(entry.humidity === undefined ? {} : { humidity: entry.humidity }),
       /**
