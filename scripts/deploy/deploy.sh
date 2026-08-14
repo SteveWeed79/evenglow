@@ -182,6 +182,67 @@ systemctl restart steading-api
 # serving — and the two failures most likely here (a bad MONGODB_URI, a syntax
 # error in something that only loads at boot) both take a second or two to
 # surface. Without this check a deploy that killed the server reports success.
+# ── The app, which the server half never touched ────────────────────────────
+#
+# **This is the gap that kept catching us.** `release` moving updates the API
+# and the Caddyfile, and the phone runs an APK built on Expo's machines — so a
+# fix to a screen could be merged, promoted, and deployed, and the handset went
+# on showing the old one because nothing anywhere rebuilt it. Every report of
+# "none of the changes landed" traced back to this, and the answer was always
+# the same manual two steps that nobody should have had to remember.
+#
+# So the box pulls the app the way it already pulls the code. Same argument the
+# release note makes about not putting an SSH key in GitHub: nothing inbound is
+# opened, and the newest finished build is a question the box can ask Expo.
+#
+# Needs `EXPO_TOKEN` in /etc/steading/deploy.env, which is where the ref
+# override already lives. Without one this is skipped in a sentence rather than
+# failing — a farm server that stops deploying its API because it could not
+# reach Expo would be the tail wagging the dog.
+if [ -n "${EXPO_TOKEN:-}" ]; then
+  say "The app"
+
+  # `|| true` throughout: Expo being unreachable, rate limited or mid-outage is
+  # not a reason to fail a deploy that has already restarted the API.
+  ARTIFACT="$(EXPO_TOKEN="$EXPO_TOKEN" pnpm --filter @steading/mobile exec eas build:list \
+    --platform android --status finished --limit 1 --json --non-interactive 2>/dev/null || true)"
+
+  URL="$(printf '%s' "$ARTIFACT" | node -e '
+    let raw = "";
+    process.stdin.on("data", (d) => (raw += d));
+    process.stdin.on("end", () => {
+      // eas-cli prints the array on its own line; anything else on stdout is
+      // noise from the workspace runner and must not be parsed as the answer.
+      const start = raw.indexOf("[");
+      try {
+        const builds = JSON.parse(raw.slice(start === -1 ? 0 : start));
+        const build = builds?.[0];
+        const url = build?.artifacts?.buildUrl ?? build?.artifacts?.applicationArchiveUrl;
+        // The version too, so the publish can be skipped when it is the one
+        // already on the shelf rather than downloading forty megabytes to find
+        // out.
+        if (typeof url === "string" && url !== "") {
+          process.stdout.write(`${url}\t${build?.appVersion ?? ""}\t${build?.appBuildVersion ?? ""}`);
+        }
+      } catch {}
+    });
+  ' 2>/dev/null || true)"
+
+  APK_URL="${URL%%$'\t'*}"
+  REST="${URL#*$'\t'}"
+  APK_VERSION="${REST%%$'\t'*}"
+  APK_CODE="${REST##*$'\t'}"
+
+  if [ -z "$APK_URL" ]; then
+    note "no finished Android build to fetch (or Expo could not be reached)"
+  elif [ -n "$APK_VERSION" ] && [ -f "/var/lib/steading/dist/steading-${APK_VERSION}-${APK_CODE}.apk" ]; then
+    note "already serving ${APK_VERSION} (build ${APK_CODE})"
+  else
+    note "fetching ${APK_VERSION:-the newest build}"
+    "${REPO_DIR}/scripts/deploy/publish-apk.sh" "$APK_URL" || note "could not publish it — the API is unaffected"
+  fi
+fi
+
 say "Checking it came back"
 for attempt in 1 2 3 4 5 6 7 8 9 10; do
   if curl -fsS --max-time 3 "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then

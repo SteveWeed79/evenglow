@@ -244,6 +244,42 @@ jobs:
       - name: Move release to this commit
         run: git push origin HEAD:refs/heads/release
 
+      # ── The app, because promoting the server never rebuilt it ──────────
+      #
+      # **The gap that kept costing us a round trip.** `release` moving updates
+      # the API and the Caddyfile; the phone runs an APK built on Expo's
+      # machines. So a fix to a screen could be merged, promoted and deployed
+      # with the handset still showing the old one — reported more than once as
+      # "none of the changes landed", and correct every time.
+      #
+      # Kicked off here and not waited on: an EAS build is ten to twenty minutes
+      # mostly spent queueing, and holding a runner open for it would buy
+      # nothing. The box asks Expo for the newest finished build on its own
+      # timer and publishes it (`scripts/deploy/deploy.sh`), so the whole
+      # journey from this button to a phone is unattended.
+      #
+      # Needs `EXPO_TOKEN` in the repository secrets. Without one this says so
+      # and the promote still succeeds — a missing app token must not stop the
+      # server shipping.
+      - name: Build the app
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${EXPO_TOKEN:-}" ]; then
+            echo "No EXPO_TOKEN, so no app build was started." >> "$GITHUB_STEP_SUMMARY"
+            echo "Add one in Settings → Secrets → Actions to close the loop." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          corepack enable
+          pnpm install --frozen-lockfile
+          # `--no-wait` for the reason above. `--non-interactive` because a
+          # prompt on a runner is a job that hangs until it is cancelled.
+          pnpm --filter @steading/mobile exec eas build \
+            --profile preview-farm --platform android --non-interactive --no-wait
+          echo "App build started on EAS. The box publishes it within five minutes of it finishing." \
+            >> "$GITHUB_STEP_SUMMARY"
+
       - name: Say what shipped
         run: |
           echo "### Shipped \`$(git rev-parse --short HEAD)\` — v$(node scripts/release-version.mjs show)" \
