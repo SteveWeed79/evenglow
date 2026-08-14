@@ -98,7 +98,11 @@
     <h1>Steading</h1>
     <p class="sub">Farm records that work without a signal.</p>
 
-    <a class="get" href="steading.apk">Install on this phone</a>
+    <a class="get" id="get" href="steading.apk">Install on this phone</a>
+    <p class="sub" id="none" hidden>
+      There is no build on the server yet. Nothing is broken — come back when
+      you are told there is one.
+    </p>
 
     <div class="warn">
       <h2>Android will ask you two things. Both are normal.</h2>
@@ -144,5 +148,37 @@
         will not do anything on a computer.
       </p>
     </footer>
+
+    <script>
+      /*
+       * Saying so when there is no build, instead of a button that does nothing.
+       *
+       * The Caddyfile sends a missing APK back here with `try_files`, which is
+       * the right answer to a stale link and a confusing one to a fresh box: the
+       * button is live, tapping it re-serves this page, and nothing appears to
+       * happen.
+       *
+       * A status code cannot tell the two apart — the rewrite is a 200 either
+       * way. The content type can, and that is exactly why the Caddyfile's @apk
+       * matcher requires the file to exist as well as the name to match: a real
+       * build is typed as an Android package, and this page rewritten under an
+       * .apk name is typed as html.
+       *
+       * Fails open. If the probe cannot run — no fetch, offline, anything — the
+       * button is left alone, because a working link hidden by a failed check is
+       * worse than a dead one shown.
+       */
+      (function () {
+        if (typeof fetch !== 'function') return;
+        fetch('steading.apk', { method: 'HEAD' })
+          .then(function (response) {
+            var type = response.headers.get('content-type') || '';
+            if (type.indexOf('android.package-archive') !== -1) return;
+            document.getElementById('get').hidden = true;
+            document.getElementById('none').hidden = false;
+          })
+          .catch(function () {});
+      })();
+    </script>
   </body>
 </html>
