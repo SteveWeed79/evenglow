@@ -181,6 +181,31 @@ if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
   # not know the contents of.
   STAMP=""
   [ -f /var/lib/steading/.version ] && STAMP="$(cat /var/lib/steading/.version)"
+
+  # ── The shelf is asked when the note is missing ──────────────────────────
+  #
+  # Only `publish-apk.sh` writes that file, so every box already serving a build
+  # has no note for the one it is serving — and would show a blank version until
+  # the next app release, which on a server-only change is never.
+  #
+  # The APK on the shelf knows perfectly well what it is: `steading.apk` is a
+  # symlink to `steading-<version>-<code>.apk`, so the name is the answer. Read
+  # rather than remembered, which also means a box whose note is lost recovers
+  # on the next tick instead of staying blank.
+  #
+  # Only when it looks like a version. The publish script falls back to a
+  # timestamp name when it can read neither the file nor a label, and
+  # "Version 20260814-0412" would be a number that means nothing dressed up as
+  # one that means something — so a leading digit and a dot are required, which
+  # `20260814-0412` has not got.
+  if [ -z "$STAMP" ] && [ -L /var/lib/steading/dist/steading.apk ]; then
+    ON_SHELF="$(basename "$(readlink /var/lib/steading/dist/steading.apk)" .apk)"
+    ON_SHELF="${ON_SHELF#steading-}"
+    case "$ON_SHELF" in
+      [0-9]*.*) STAMP="Version ${ON_SHELF}" ;;
+    esac
+  fi
+
   "${REPO_DIR}/scripts/deploy/render-install-page.sh" /var/lib/steading/dist "$STAMP" || true
 fi
 
