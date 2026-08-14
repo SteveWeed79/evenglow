@@ -29,11 +29,14 @@ import type { OrgDoc } from '../db/identity';
  */
 export function syncAccess(env: Env, org: OrgDoc | null): Entitlement {
   /**
-   * A server that takes no payments asks for none. The self-hosted case, and
-   * the one where a subscription state is meaningless — nobody could have
-   * bought anything.
+   * Comped first, and this used to be third.
+   *
+   * The order did not matter while a server with no Play configuration said
+   * yes to everybody before it got here — the two checks below could never
+   * decide anything the line after them had not already decided. It matters
+   * now that `SYNC_REQUIRES_GRANT` can make that line ask rather than answer:
+   * a granted farm must be granted whether or not this server sells anything.
    */
-  if (env.playConfig === null) return { syncing: true, refusal: null };
 
   /** Comped in the server's own environment — testers, and whoever runs it. */
   if (org !== null && env.freeSyncOrgs.has(org._id)) return { syncing: true, refusal: null };
@@ -41,5 +44,31 @@ export function syncAccess(env: Env, org: OrgDoc | null): Entitlement {
   /** Comped in the database, by `pnpm farm:grant`. Same decision, no restart. */
   if (org?.syncGranted !== undefined) return { syncing: true, refusal: null };
 
+  /**
+   * A server that takes no payments asks for none. The self-hosted case, and
+   * the one where a subscription state is meaningless — nobody could have
+   * bought anything.
+   *
+   * **Unless it has been told to ask anyway.** A box whose install page is on
+   * the open internet is the case this default gets wrong: the app is free and
+   * meant to be, but a stranger's records landing in somebody else's database
+   * is not the free part. `SYNC_REQUIRES_GRANT` makes the two comps above and a
+   * redeemed promotion code the only ways through, which is what D13 says the
+   * shape is — sync is the thing sold — arriving before Play does rather than
+   * after.
+   *
+   * A refused farm is told *"Kept on this phone. Everything works; nothing is
+   * sent anywhere."* — which is true, mentions no store it could not reach, and
+   * sits directly above the field where a code goes.
+   */
+  if (env.playConfig === null && !env.SYNC_REQUIRES_GRANT) {
+    return { syncing: true, refusal: null };
+  }
+
+  /**
+   * A redeemed promotion code writes a subscription (A2.6), so it arrives here
+   * rather than as a fourth special case — which is why the code path needed no
+   * work to start meaning something on a server with no Play at all.
+   */
   return entitlementOf(org?.subscription, Date.now());
 }
