@@ -233,9 +233,31 @@ if [ -n "${EXPO_TOKEN:-}" ]; then
   APK_VERSION="${REST%%$'\t'*}"
   APK_CODE="${REST##*$'\t'}"
 
+  # ── What was fetched last, by the build's own identity ────────────────────
+  #
+  # **This guard was a filename, and a filename is not an identity.** The check
+  # looked for steading-<version>-<code>.apk; when the version could not be
+  # worked out the file was written under a timestamp instead, so the check
+  # never matched and the timer downloaded the same ninety megabytes again
+  # every six minutes. A box left overnight had five identical copies of one
+  # build and had pulled half a gigabyte from Expo to get them.
+  #
+  # The artefact url IS the identity — one build, one url — so remembering it
+  # closes the loop whatever the file ends up called, including the case that
+  # caused it: no version reported, no name to compare.
+  #
+  # Beside the APKs rather than in the repo, because it describes what is on
+  # this shelf and a deploy must never be able to `git clean` it away.
+  LAST="/var/lib/steading/dist/.last-artifact"
+
   if [ -z "$APK_URL" ]; then
     note "no finished Android build to fetch (or Expo could not be reached)"
+  elif [ -f "$LAST" ] && [ "$(cat "$LAST" 2>/dev/null)" = "$APK_URL" ]; then
+    note "already serving ${APK_VERSION:-that build}"
   elif [ -n "$APK_VERSION" ] && [ -f "/var/lib/steading/dist/steading-${APK_VERSION}-${APK_CODE}.apk" ]; then
+    # Kept as well as the url check: a box that published before this file
+    # existed has the APK and no marker, and should not re-fetch to learn that.
+    printf '%s' "$APK_URL" > "$LAST"
     note "already serving ${APK_VERSION} (build ${APK_CODE})"
   else
     note "fetching ${APK_VERSION:-the newest build}"
@@ -252,8 +274,13 @@ if [ -n "${EXPO_TOKEN:-}" ]; then
     # "already serving" check compares. The answer was in hand and simply not
     # handed on, and the script's own note says to pass one.
     LABEL="${APK_VERSION:+${APK_VERSION}${APK_CODE:+-$APK_CODE}}"
-    "${REPO_DIR}/scripts/deploy/publish-apk.sh" "$APK_URL" "$LABEL" \
-      || note "could not publish it — the API is unaffected"
+    if "${REPO_DIR}/scripts/deploy/publish-apk.sh" "$APK_URL" "$LABEL"; then
+      # Only after it actually landed. Writing this on a failed publish would
+      # make the next run skip a build that is not on the shelf.
+      printf '%s' "$APK_URL" > "$LAST"
+    else
+      note "could not publish it — the API is unaffected"
+    fi
   fi
 fi
 
