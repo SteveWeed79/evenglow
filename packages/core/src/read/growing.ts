@@ -254,15 +254,36 @@ export function occupants(plantings: readonly Planting[], bedId: string): Planti
 }
 
 /**
- * Varieties the farm has taken from the library or added itself.
+ * A variety this farm holds — copied out of the library, or its own invention.
  *
- * `daysToMaturity` rides along because the due engine needs it to anchor a
- * harvest to the day something actually went in the ground rather than to the
- * date a spring schedule predicted — see `growingDues`.
+ * The week offsets ride along so a screen can schedule one of these without
+ * going back to the library for the numbers. That matters most for the record
+ * the library cannot supply: a variety somebody added themselves has no entry
+ * to look up, and before this carried the offsets it could not be given dates
+ * at all.
  */
-export async function listVarieties(): Promise<
-  { id: string; name: string; crop: string; daysToMaturity?: number }[]
-> {
+export interface Variety {
+  id: string;
+  name: string;
+  crop: string;
+  /**
+   * The due engine needs it to anchor a harvest to the day something actually
+   * went in the ground rather than to the date a spring schedule predicted —
+   * see `growingDues`.
+   */
+  daysToMaturity?: number;
+  startIndoorsWeeksBefore?: number;
+  transplantWeeksAfter?: number;
+  directSowWeeksAfter?: number;
+  autumnSowWeeksBefore?: number;
+  hardyToDeciC?: number;
+  note?: string;
+}
+
+/**
+ * Varieties the farm has taken from the library or added itself.
+ */
+export async function listVarieties(): Promise<Variety[]> {
   const records = await localStore().readRecordsByEntity('variety');
   const stored = varietyCreateSchema.partial();
 
@@ -273,14 +294,31 @@ export async function listVarieties(): Promise<
       if (!parsed.success || parsed.data.name === undefined || parsed.data.crop === undefined) {
         return [];
       }
+      const { name, crop, ...rest } = parsed.data;
+
       return [
         {
           id: record.targetId,
-          name: parsed.data.name,
-          crop: parsed.data.crop,
-          ...(parsed.data.daysToMaturity === undefined
+          name,
+          crop,
+          // Spread rather than listed one key at a time: `exactOptionalPropertyTypes`
+          // makes `{ x: undefined }` and `{}` different types, and a parsed
+          // object simply does not carry the keys it did not have.
+          ...(rest.daysToMaturity === undefined ? {} : { daysToMaturity: rest.daysToMaturity }),
+          ...(rest.startIndoorsWeeksBefore === undefined
             ? {}
-            : { daysToMaturity: parsed.data.daysToMaturity }),
+            : { startIndoorsWeeksBefore: rest.startIndoorsWeeksBefore }),
+          ...(rest.transplantWeeksAfter === undefined
+            ? {}
+            : { transplantWeeksAfter: rest.transplantWeeksAfter }),
+          ...(rest.directSowWeeksAfter === undefined
+            ? {}
+            : { directSowWeeksAfter: rest.directSowWeeksAfter }),
+          ...(rest.autumnSowWeeksBefore === undefined
+            ? {}
+            : { autumnSowWeeksBefore: rest.autumnSowWeeksBefore }),
+          ...(rest.hardyToDeciC === undefined ? {} : { hardyToDeciC: rest.hardyToDeciC }),
+          ...(rest.note === undefined ? {} : { note: rest.note }),
         },
       ];
     })
