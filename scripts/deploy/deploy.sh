@@ -153,6 +153,24 @@ if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
   # so a box built before /app existed grows one without being rebuilt.
   install -d -m 0755 /var/lib/steading/dist
   chown caddy:caddy /var/lib/steading/dist 2>/dev/null || true
+
+  # The install page, before there is anything to install.
+  #
+  # `publish-apk.sh` also lays this down, but only on a successful publish — so
+  # between the first deploy and the first build the directory existed and was
+  # empty, and /app answered with Caddy's bodiless 404. Reported as *"this page
+  # can't be found"*, which reads as a broken box rather than as a box with no
+  # build on it yet.
+  #
+  # The Caddyfile already argues this case for a missing APK and routes it here
+  # with `try_files`; the hole was that the page it routes to did not exist yet.
+  # Copied on every deploy so a wording change ships with the rest of the repo,
+  # and it is the same file either way — nothing here can drift from what
+  # publish-apk.sh installs.
+  if [ -f "${REPO_DIR}/scripts/deploy/install-page.html" ]; then
+    install -m 0644 "${REPO_DIR}/scripts/deploy/install-page.html" \
+      /var/lib/steading/dist/index.html
+  fi
 fi
 
 say "Restarting"
