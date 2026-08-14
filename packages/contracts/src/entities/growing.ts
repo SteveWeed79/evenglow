@@ -222,6 +222,41 @@ export const varietyUpdateSchema = z.object(varietyShape).partial().strict();
  * late last year" instead of quietly overwriting the plan with reality and
  * losing the fact that they diverged.
  */
+/**
+ * What a planting's state is called on screen.
+ *
+ * The bed card on Growing printed the raw value — *"Roma · in-ground"* — which
+ * is a database enum shown to somebody standing in front of a bed. Reported as
+ * the planting setup not being user friendly, and this is the visible half of
+ * it: the app knew the answer and said it in its own words rather than theirs.
+ *
+ * Here rather than in a screen because two now say it, and a wire name that
+ * differs from a spoken one is exactly the pair that drifts when it is written
+ * down twice.
+ */
+export const PLANTING_WORDS: Record<(typeof PLANTING_STATUSES)[number], string> = {
+  planned: 'Planned',
+  started: 'Started indoors',
+  'in-ground': 'In the ground',
+  harvesting: 'Being picked',
+  finished: 'Finished',
+  failed: 'Failed',
+};
+
+/**
+ * The spoken form of a stored status, safe for a value this app did not write.
+ *
+ * The read layer types `status` as a plain string — a projection holds whatever
+ * the payload held — so a bare index would be a promise the type system stops
+ * checking. A status from a newer build reads as "In the ground", which is the
+ * commonest truth and never a crash.
+ */
+export function plantingWords(status: string): string {
+  return Object.prototype.hasOwnProperty.call(PLANTING_WORDS, status)
+    ? (PLANTING_WORDS[status as (typeof PLANTING_STATUSES)[number]] ?? 'In the ground')
+    : 'In the ground';
+}
+
 export const PLANTING_STATUSES = [
   'planned',
   'started',

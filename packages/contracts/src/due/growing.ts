@@ -43,6 +43,52 @@ export interface PlantingNames {
 const DAY = 24 * 60 * 60 * 1000;
 
 /**
+ * When a planting should be ready, counted from the day it actually went in.
+ *
+ * Exported because three places need the same answer and were never going to
+ * agree on it independently: the due row below, the planting screen, and the
+ * bed card on Growing — which showed a raw status and no date at all, so a farm
+ * that knew the days to maturity was told *"Roma · in-ground"* and left to work
+ * the rest out.
+ *
+ * ## Counted from the day it went in, not from the day it was meant to
+ *
+ * **Reported from a farm: a pumpkin put in the ground today was fifteen days
+ * overdue to harvest.** `plannedFirstHarvestAt` is computed once, when the
+ * planting is created, from the site's frost dates — "sow this many weeks after
+ * last frost, add days to maturity". That is a forecast for something not yet
+ * planted, and it was the only thing this used to look at. Plant late and the
+ * app announces a harvest that is already behind you.
+ *
+ * A plant does not know what the schedule said. It takes its days from the day
+ * it was sown or set out, so that is the anchor: `transplantedAt` when there is
+ * one, `sownAt` otherwise. That order is also how seed catalogues count — days
+ * to maturity runs from transplant for a crop raised indoors and from sowing
+ * for one direct sown.
+ *
+ * The planned date stays as the estimate for a planting that has not gone in
+ * yet, and for a variety with no days to maturity — a farm's own addition it
+ * has not filled in — because a rough date beats no date.
+ *
+ * Undefined when neither is known, which a caller must say nothing about rather
+ * than guess at.
+ */
+export function expectedHarvestAt(
+  planting: {
+    sownAt?: number | undefined;
+    transplantedAt?: number | undefined;
+    plannedFirstHarvestAt?: number | undefined;
+  },
+  daysToMaturity: number | undefined,
+): number | undefined {
+  const anchor = planting.transplantedAt ?? planting.sownAt;
+  if (anchor === undefined || daysToMaturity === undefined) {
+    return planting.plannedFirstHarvestAt;
+  }
+  return anchor + daysToMaturity * DAY;
+}
+
+/**
  * Statuses that produce nothing.
  *
  * A failed planting is deliberately included. A row that died in May must not
@@ -128,39 +174,14 @@ export function growingDues(
    * append-only and goes on for weeks. It clears when the planting is moved to
    * `harvesting` or beyond, which is what the status is for.
    *
-   * ## Counted from the day it went in, not from the day it was meant to
-   *
-   * **Reported from a farm: a pumpkin put in the ground today was fifteen days
-   * overdue to harvest.** `plannedFirstHarvestAt` is computed once, when the
-   * planting is created, from the site's frost dates — "sow this many weeks
-   * after last frost, add days to maturity". That is a forecast for something
-   * not yet planted, and it is the only thing this used to look at. Plant late
-   * and the app announces a harvest that is already behind you.
-   *
-   * A plant does not know what the schedule said. It takes its days from the
-   * day it was sown or set out, so that is the anchor: `transplantedAt` when
-   * there is one, `sownAt` otherwise. That order is also how seed catalogues
-   * count — days to maturity runs from transplant for a crop raised indoors and
-   * from sowing for one direct sown.
-   *
-   * This is the same rule the transplant row above already follows and says out
-   * loud: a stage waits on what actually happened, not on what was predicted.
-   * Harvest simply never got it.
-   *
-   * The planned date stays as the estimate for a planting that has not gone in
-   * yet, and for a variety with no days to maturity — a farm's own addition it
-   * has not filled in — because a rough row beats no row.
+   * The date itself is `expectedHarvestAt` above, which is where the reasoning
+   * about anchoring on what actually happened now lives — it is shared with the
+   * two screens that show the same estimate.
    */
   if (planting.status !== 'harvesting') {
-    const anchor = planting.transplantedAt ?? planting.sownAt;
-    const fromGround =
-      anchor === undefined || names.daysToMaturity === undefined
-        ? undefined
-        : anchor + names.daysToMaturity * DAY;
-
     add(
       'harvest',
-      fromGround ?? planting.plannedFirstHarvestAt,
+      expectedHarvestAt(planting, names.daysToMaturity),
       undefined,
       `${names.variety} should be ready in ${names.bed}`,
     );

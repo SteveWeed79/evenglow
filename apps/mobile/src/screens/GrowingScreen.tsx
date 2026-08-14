@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { growingSeasonDays } from '@steading/contracts';
+import { expectedHarvestAt, growingSeasonDays, plantingWords } from '@steading/contracts';
 import { type Bed, occupants, type Planting } from '@steading/core/read/growing';
 import { listVarieties } from '@steading/core/read/growing';
 import { Primary } from '../components/Form';
@@ -55,6 +55,11 @@ export function GrowingScreen(): React.ReactElement {
   const season = new Date().getFullYear();
   const days = growingSeasonDays(site.frost, season);
   const varietyNames = new Map((varieties ?? []).map((v) => [v.id, v.name]));
+  // Days to maturity, so a bed row can say when a thing is due rather than
+  // leaving the farm to count from a date it also does not show.
+  const maturity = new Map(
+    (varieties ?? []).flatMap((v) => (v.daysToMaturity === undefined ? [] : [[v.id, v.daysToMaturity] as const])),
+  );
 
   return (
     <Screen title="Growing" back>
@@ -80,6 +85,7 @@ export function GrowingScreen(): React.ReactElement {
             bed={bed}
             plantings={occupants(plantings, bed.id)}
             names={varietyNames}
+            maturity={maturity}
             onPlant={() => nav.navigate('PickVariety', { bedId: bed.id })}
             onOpen={(plantingId) => nav.navigate('Planting', { plantingId })}
           />
@@ -99,12 +105,14 @@ function BedCard({
   bed,
   plantings,
   names,
+  maturity,
   onPlant,
   onOpen,
 }: {
   bed: Bed;
   plantings: Planting[];
   names: Map<string, string>;
+  maturity: Map<string, number>;
   onPlant: () => void;
   onOpen: (plantingId: string) => void;
 }): React.ReactElement {
@@ -136,9 +144,24 @@ function BedCard({
               { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
             ]}
           >
-            <Text style={[styles.empty, { color: colors.ink }]}>
-              {names.get(p.varietyId) ?? 'A planting'} · {p.status}
-            </Text>
+            {/**
+              * The state in words, and the date the app already knew.
+              *
+              * This printed the raw enum — "Roma · in-ground" — which is a
+              * database value shown to somebody standing in front of a bed.
+              * And the estimate was computed, used to raise a due row, and
+              * never once shown here: the farm was told the days to maturity
+              * mattered and then left to count them.
+              */}
+            <View style={styles.plantingWords}>
+              <Text style={[styles.empty, { color: colors.ink }]}>
+                {names.get(p.varietyId) ?? 'A planting'}
+              </Text>
+              <Text style={[styles.plantingState, { color: colors.muted }]}>
+                {plantingWords(p.status)}
+                {readyWords(p, maturity.get(p.varietyId))}
+              </Text>
+            </View>
             <Icon name="forward" size={20} color={colors.muted} />
           </Touch>
         ))
@@ -159,7 +182,29 @@ function BedCard({
   );
 }
 
+/**
+ * " · ready about 12 Sep", or nothing.
+ *
+ * Nothing once it is being picked — the date is a prediction and the plant has
+ * already answered it — and nothing when the estimate cannot be made, which is
+ * a variety somebody added without filling in the days. A rough date beats no
+ * date; an invented one does not.
+ */
+function readyWords(planting: Planting, daysToMaturity: number | undefined): string {
+  if (planting.status === 'harvesting' || planting.status === 'finished') return '';
+
+  const at = expectedHarvestAt(planting, daysToMaturity);
+  if (at === undefined) return '';
+
+  return ` · ready about ${new Date(at).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+  })}`;
+}
+
 const styles = StyleSheet.create({
+  plantingWords: { flex: 1, gap: 2 },
+  plantingState: { fontFamily: FONTS.data, fontSize: TYPE.label, letterSpacing: 0.4 },
   season: {
     flexDirection: 'row',
     alignItems: 'center',

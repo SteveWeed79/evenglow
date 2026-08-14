@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { formatMass, PLANTING_STATUSES } from '@steading/contracts';
+import { expectedHarvestAt, formatMass, PLANTING_STATUSES } from '@steading/contracts';
 import {
   harvestTotals,
   listBeds,
@@ -116,6 +116,27 @@ export function PlantingScreen({ route }: ScreenProps<'Planting'>): React.ReactE
   const bed = beds?.find((b) => b.id === planting.bedId);
   const totals = harvestTotals(harvests ?? [], plantingId);
 
+  /**
+   * When it should be ready, in one sentence, or nothing.
+   *
+   * Nothing once it is finished, and "being picked" once it is — the estimate
+   * is a prediction and the plant has already answered it. Nothing either when
+   * there is no estimate to make, which is a variety somebody added without
+   * filling in the days: a rough date beats no date, an invented one does not.
+   */
+  const readyAt = expectedHarvestAt(planting, variety?.daysToMaturity);
+  const on = (at: number): string =>
+    new Date(at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+
+  const ready = ((): string | null => {
+    if (planting.status === 'finished' || planting.status === 'failed') return null;
+    if (planting.status === 'harvesting') return 'Being picked now.';
+    if (readyAt === undefined) return null;
+    return readyAt <= Date.now()
+      ? `Should be ready — due about ${on(readyAt)}.`
+      : `Ready about ${on(readyAt)}.`;
+  })();
+
   const started = planting.startedIndoorsAt !== undefined;
   const needsIndoorStart = planting.plannedStartIndoorsAt !== undefined;
 
@@ -156,6 +177,19 @@ export function PlantingScreen({ route }: ScreenProps<'Planting'>): React.ReactE
 
       <Panel label="Where it is">
         <Body>{describe(planting)}</Body>
+        {/**
+          * The date the app already knew and never said.
+          *
+          * `expectedHarvestAt` has been computed all along to raise the harvest
+          * due row; it was simply never shown on the screen about the planting.
+          * Asked plainly: *"if we know how long it takes roughly for things to
+          * grow why are we not showing a projected harvest date?"*
+          *
+          * "About", and it stays "about" — days to maturity is a fair season in
+          * a fair year, not a promise, and a farm that reads it as one will
+          * trust it less the first time the weather disagrees.
+          */}
+        {ready === null ? null : <Body>{ready}</Body>}
       </Panel>
 
       {/**
@@ -223,13 +257,21 @@ export function PlantingScreen({ route }: ScreenProps<'Planting'>): React.ReactE
           />
         ) : null}
 
-        {planting.status !== 'harvesting' && planting.status !== 'finished' ? (
-          <Secondary
-            label="It is ready — start picking"
-            testID="mark-harvesting"
-            onPress={() => mark({ status: 'harvesting' })}
-          />
-        ) : null}
+        {/**
+          * "It is ready — start picking" is gone, and logging a pick is why.
+          *
+          * Asked directly: *"do we need an 'it is ready - start picking' as a
+          * button or a notice? We have a Log a harvest button."* No — and the
+          * app already agreed with itself: `HarvestScreen` moves a planting to
+          * `harvesting` on the first pick, so the button did by hand what
+          * picking does by happening.
+          *
+          * Two controls that both mean "it is harvest time", one of which
+          * records nothing, is a screen asking somebody to tell it a thing it
+          * is about to find out. The state is a **notice** now — the panel
+          * above says when it is due and when it is ready — and the only
+          * button is the one that writes a record.
+          */}
       </View>
 
       <Failure message={failure} />
