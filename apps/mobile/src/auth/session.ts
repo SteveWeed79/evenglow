@@ -678,11 +678,31 @@ export async function signOut(): Promise<void> {
   const refreshToken = await readRefreshToken();
 
   if (refreshToken !== null) {
-    await fetch(url('/auth/logout'), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
-    }).catch(() => undefined);
+    /**
+     * The whole call, not just the request.
+     *
+     * `.catch()` on the fetch covered a request that failed and missed
+     * everything that goes wrong before one is made — and `url()` **throws**
+     * when no API base is configured, which D14 makes an ordinary state rather
+     * than a broken one. So a farm running with no server address had a
+     * `signOut` that rejected, and the button sat on "Signing out…" for as long
+     * as anybody cared to look at it.
+     *
+     * Found by a test written about the screen, which is fitting: the promise
+     * this function makes below — *the server call is best-effort, a device
+     * with no signal must still be able to sign out* — was one it could not
+     * keep, and the case it could not keep it in is a device that never had a
+     * server at all.
+     */
+    try {
+      await fetch(url('/auth/logout'), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+    } catch {
+      // Best effort, and deliberately silent: the tokens go either way.
+    }
   }
 
   // Recorded before the wipe, so Diagnostics can tell a deliberate sign-out

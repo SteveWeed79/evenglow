@@ -63,6 +63,19 @@
         margin-inline: auto;
       }
       h1 { font-size: 1.9rem; margin: 0 0 0.25rem; letter-spacing: -0.01em; }
+      /*
+       * `hidden` has to beat a class that sets `display`, and on this page one
+       * does.
+       *
+       * The attribute hides an element only through the user-agent rule
+       * `[hidden] { display: none }`, which any author rule setting `display`
+       * outranks — so `.get { display: block }` below kept the install button
+       * on screen while the script had already marked it hidden. The result was
+       * the worst of both: a live "Install on this phone" button sitting
+       * directly above the sentence saying there was no build to install.
+       * Reported from the page itself.
+       */
+      [hidden] { display: none !important; }
       .sub { color: var(--quiet); margin: 0 0 2rem; }
       /* 64px, because R4 makes primary actions 64 and this is one. */
       .get {

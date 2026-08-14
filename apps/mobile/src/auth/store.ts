@@ -74,9 +74,79 @@ export async function writeRefreshToken(token: string): Promise<void> {
   });
 }
 
+/**
+ * Who this device is, as something a screen can watch.
+ *
+ * ## Why a subscription and not another read
+ *
+ * Every screen that cared read `readCachedClaims()` once in a mount effect and
+ * kept the answer. That is correct for signing *in* — the tree remounts — and
+ * wrong for signing out, which changes the value under screens that are already
+ * standing. Reported from the phone: *"the sign out button never changes from
+ * sign out, even when the account is signed out. It doesn't look like anything
+ * changes on the app until after it is restarted."*
+ *
+ * Both halves of that are this: the button, and the farm's name, and the
+ * account row, all reading a value that nothing told them had changed. It only
+ * came right on restart because `clearCredentials` really had removed it — the
+ * storage was right the whole time and the screens were stale.
+ *
+ * ## Here rather than in a hook
+ *
+ * This module is the one that owns the value, so publishing from the two
+ * functions that change it means **nothing can change claims without saying
+ * so**. A notifier a caller has to remember is a notifier somebody forgets on
+ * the third sign-in path, and there are five.
+ *
+ * Still UX only (invariant 8). This makes a cached claim *timely*; it does not
+ * make it authorization, and the server re-derives identity on every mutation
+ * exactly as before.
+ */
+let snapshot: CachedClaims | null | undefined;
+const listeners = new Set<() => void>();
+
+/**
+ * Publishes, but only when the answer actually changed.
+ *
+ * Every read publishes what it found, and screens re-read on mount, so without
+ * this a value that had not moved would still hand out a fresh object and wake
+ * every subscriber on every navigation. `useSyncExternalStore` compares by
+ * reference — an equal-but-new object is a change as far as it is concerned.
+ *
+ * Compared by content rather than by identity for the same reason: the object
+ * is rebuilt by `JSON.parse` on every read, so it is never the same one twice.
+ */
+function publishClaims(next: CachedClaims | null): void {
+  const settled = snapshot !== undefined;
+  if (settled && JSON.stringify(snapshot) === JSON.stringify(next)) return;
+
+  snapshot = next;
+  for (const listener of listeners) listener();
+}
+
+/**
+ * `undefined` until something has read, `null` once it has read and there is
+ * nobody. The two are different sentences and a screen says a different thing
+ * for each — the same distinction `readNumbers` draws between no last year and
+ * nothing last year.
+ */
+export function claimsSnapshot(): CachedClaims | null | undefined {
+  return snapshot;
+}
+
+export function subscribeToClaims(onChange: () => void): () => void {
+  listeners.add(onChange);
+  return () => {
+    listeners.delete(onChange);
+  };
+}
+
 export async function readCachedClaims(): Promise<CachedClaims | null> {
   const raw = await SecureStore.getItemAsync(CLAIMS_KEY);
-  if (raw === null) return null;
+  if (raw === null) {
+    publishClaims(null);
+    return null;
+  }
 
   try {
     const parsed = cachedClaimsSchema.safeParse(JSON.parse(raw));
@@ -84,8 +154,11 @@ export async function readCachedClaims(): Promise<CachedClaims | null> {
     // gate UX only, so the cost of losing them is one render with fewer
     // controls, and the cost of half-trusting them is a screen built on a
     // value nobody validated.
-    return parsed.success ? parsed.data : null;
+    const claims = parsed.success ? parsed.data : null;
+    publishClaims(claims);
+    return claims;
   } catch {
+    publishClaims(null);
     return null;
   }
 }
@@ -94,6 +167,9 @@ export async function writeCachedClaims(claims: CachedClaims): Promise<void> {
   await SecureStore.setItemAsync(CLAIMS_KEY, JSON.stringify(claims), {
     keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK,
   });
+  // After the write, so a screen woken by this cannot read back a value that
+  // is not on disk yet.
+  publishClaims(claims);
 }
 
 /**
@@ -150,4 +226,8 @@ export async function clearCredentials(): Promise<void> {
     SecureStore.deleteItemAsync(REFRESH_KEY).catch(() => undefined),
     SecureStore.deleteItemAsync(CLAIMS_KEY).catch(() => undefined),
   ]);
+  // The half the sign-out report was actually about. Everything already on
+  // screen holds the old claims until it is told, and until this line nothing
+  // ever told it.
+  publishClaims(null);
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { readExposure } from '@steading/core/backup/exposure';
 import { readSite } from '@steading/core/read/growing';
@@ -6,7 +6,8 @@ import { Choice, Row } from '../components/Form';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { Touch } from '../components/Touch';
-import { type CachedClaims, readCachedClaims, signOut } from '../auth/session';
+import { signOut } from '../auth/session';
+import { useAccount } from '../hooks/useAccount';
 import { useFarmName } from '../hooks/useFarmName';
 import { useLive } from '../hooks/useLive';
 import { useNav } from '../hooks/useNav';
@@ -68,17 +69,27 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
   const [busy, setBusy] = useState(false);
 
   /**
-   * Whether this device has an account, read from the claims cache.
+   * Whether this device has an account, watched rather than read once.
    *
    * UX only, which is all a cached claim may ever be (invariant 8) — it
    * decides which of two sentences a row shows and nothing else. A device
    * that guessed wrong would offer somebody an account they already have,
    * which is a wasted tap rather than a security question.
+   *
+   * `useAccount` is what makes this screen answer to its own sign-out button.
+   * It used to be a mount effect and a `setAccount(null)` poked in by hand
+   * afterwards, which kept exactly one row honest and left the rest — the farm
+   * name, and the sign-out button itself — saying what they said before.
+   *
+   * ## Three states, and `undefined` is not `null`
+   *
+   * Collapsing them with `?? null` would have this screen assert "no account on
+   * this phone" for the frame before the read lands — on the one device where
+   * that sentence is false, and it is the sentence that decides whether a
+   * sign-out button is drawn. So the panel below waits, and the row above keeps
+   * the generic copy it has always started with.
    */
-  const [account, setAccount] = useState<CachedClaims | null>(null);
-  useEffect(() => {
-    void readCachedClaims().then(setAccount);
-  }, []);
+  const account = useAccount();
 
   /**
    * Two taps, and the second one says what it will do.
@@ -97,21 +108,21 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
     await signOut();
 
     /**
-     * Say it happened, because nothing else will.
+     * Nothing is poked at here any more, and that is the fix.
      *
      * Signing out deliberately does not drop to a door — the records are on
      * this device and the app still works, which is the premise (`Boot.tsx`).
-     * The consequence nobody accounted for is that **the screen looks
-     * identical afterwards**: this row is read once on mount, so it went on
-     * saying "Signed in as …" over a device that was no longer signed in.
+     * The consequence nobody accounted for is that **the screen looked
+     * identical afterwards**, so this used to call `setAccount(null)` by hand.
      *
-     * Reported as *"tap again to sign out does nothing"*, and it did not stop
-     * there — the tokens were gone, so the next flush deferred, and the fault
-     * surfaced later as six items stuck behind a message about signing in
-     * again (issue #125). A silent success that only shows up as a failure two
-     * screens away is worse than a failure.
+     * That corrected one row and nothing else, which is how the report came
+     * back a second time: *"the sign out button never changes from sign out"*.
+     * A repair that has to be remembered at each call site is a repair that
+     * covers whichever call site somebody was looking at.
+     *
+     * `clearCredentials` now publishes, so this screen, the farm's name and
+     * anything else watching are told by the thing that changed the value.
      */
-    setAccount(null);
     setArmed(false);
     setBusy(false);
 
@@ -147,9 +158,13 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
           * somebody can weigh.
           */}
         <Row
-          title={account === null ? 'Keep these records safe' : 'Your account'}
+          // `== null` rather than `=== null`, so "not read yet" reads the same
+          // as "no account" here. That is what this row already did when the
+          // value started as `null`, and the generic copy is the safe one to
+          // show for a frame — unlike the panel below, which draws a control.
+          title={account == null ? 'Keep these records safe' : 'Your account'}
           detail={
-            account !== null
+            account != null
               ? `Signed in${account.name === undefined ? '' : ` as ${account.name}`}`
               : exposure === null
                 ? 'An account keeps a copy off this phone'
@@ -270,11 +285,33 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
         <Choice options={LOOKS} value={look} onChange={chooseLook} labels={LOOK_LABELS} />
         <Body>
           Bright sun trades the warm ground for contrast, for reading the screen in direct light.
-          It lasts until you close the app.
+          Whichever you pick is kept on this phone — the lamp in the corner is just for now.
         </Body>
       </Panel>
 
+      {/**
+        * The half of the sign-out report that was not about staleness.
+        *
+        * This panel rendered unconditionally and always said "Sign out",
+        * whether or not there was anything to sign out of — so on a device with
+        * no account it offered to end a session that did not exist, and after a
+        * successful sign-out it sat there looking exactly as it had before.
+        * Reported as *"the sign out button never changes from sign out, even
+        * when the account is signed out"*.
+        *
+        * `account === null` is the ordinary state and not a failure (D14), so
+        * the answer is not a disabled button. There is nothing to sign out of,
+        * and the row above already leads to making an account, so this says
+        * where the records are and stops.
+        */}
       <Panel label="This device">
+        {account === undefined ? null : account === null ? (
+          <Body>
+            No account on this phone. Everything you have logged is here and nowhere else — the
+            row above is where a copy somewhere else starts.
+          </Body>
+        ) : (
+        <>
         <Body>
           Signing out leaves your farm&rsquo;s records here and keeps anything still waiting to
           send. It only means signing in again next time.
@@ -296,10 +333,12 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
         >
           <View style={styles.row}>
             <Text style={[styles.signOutLabel, { color: armed ? '#fff' : colors.ink }]}>
-              {armed ? 'Tap again to sign out' : 'Sign out'}
+              {busy ? 'Signing out…' : armed ? 'Tap again to sign out' : 'Sign out'}
             </Text>
           </View>
         </Touch>
+        </>
+        )}
       </Panel>
     </Screen>
   );
