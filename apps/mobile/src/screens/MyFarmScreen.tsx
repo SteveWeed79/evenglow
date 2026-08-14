@@ -14,6 +14,7 @@ import { listGroups } from '@steading/core/read/groups';
 import { readSiteOrBlank } from '@steading/core/read/growing';
 import { listBeds, listPlantings } from '@steading/core/read/growing';
 import { listMachines } from '@steading/core/read/iron';
+import { FarmName } from '../components/FarmName';
 import { Choice as Picker, Failure, Field, Primary, Toggle, useSaver } from '../components/Form';
 import { Loading } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
@@ -167,6 +168,16 @@ export function MyFarmScreen(): React.ReactElement {
 
   return (
     <Screen title="My farm" back>
+      {/**
+        * First, because it is the answer to "which farm is this?" and the rest
+        * of the screen is the answer to "what does it do?".
+        *
+        * Renders nothing at all for a hand, or before the account has been
+        * read — see `FarmName` for the four guards and for why it lives here
+        * rather than on the screen about people or the screen about you.
+        */}
+      <FarmName />
+
       <Panel label="What do you run?">
         <Body>
           Turning something off only hides it. Everything you have logged stays where it is and

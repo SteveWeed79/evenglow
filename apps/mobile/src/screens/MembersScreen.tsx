@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Share, StyleSheet, Text, View } from 'react-native';
 import { z } from 'zod';
-import { assignableRoles, canInvite, canRenameFarm, ROLE_WORDS, INVITE_TTL_DAYS, JOIN_CODE_TTL_MINUTES, type PendingInvite, type Role, roleSchema } from '@steading/contracts';
-import { apiBase, currentAccessToken } from '@steading/core/api';
+import { assignableRoles, canInvite, ROLE_WORDS, INVITE_TTL_DAYS, JOIN_CODE_TTL_MINUTES, type PendingInvite, type Role, roleSchema } from '@steading/contracts';
 import { Choice, Confirm, Failure, Field, Primary, Secondary, TextField, useSaver } from '../components/Form';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
-import { readCachedClaims, refreshSession, rememberFarmName } from '../auth/session';
+import { call } from '../auth/call';
+import { readCachedClaims } from '../auth/session';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
 
@@ -66,67 +66,6 @@ const joinCodeSchema = z.object({
 });
 type JoinCode = z.infer<typeof joinCodeSchema>;
 
-async function call(
-  path: string,
-  init: { method?: string; body?: unknown } = {},
-): Promise<unknown> {
-  const base = apiBase();
-  if (base === null) throw new Error('This build has no farm server configured.');
-
-  /**
-   * No token yet? Get one, rather than telling somebody to wait for something
-   * that was never going to happen.
-   *
-   * The access token is held in memory only (see `core/api` for why) and is
-   * minted by `refreshSession` — at boot, on resume, and on network regain. A
-   * boot that happened before the network was up takes the offline path, which
-   * correctly keeps the session but leaves the token null for the rest of the
-   * process.
-   *
-   * That left this screen permanently stuck, and the recovery it offered could
-   * not work: "Try again" re-ran the members fetch with the same absent token,
-   * so the button was decoration and "in a moment" never came. Nothing else in
-   * the app shows the difference, because every other screen renders the local
-   * projection and never needs a header.
-   */
-  let token = currentAccessToken();
-  if (token === null) {
-    // Refuses only on a server that actually rejects the refresh token, in
-    // which case it has already cleared this device — so a null return here
-    // means signed out, not offline.
-    const renewed = await refreshSession();
-    token = currentAccessToken();
-
-    if (token === null) {
-      throw new Error(
-        renewed === null
-          ? 'This device is signed out. Sign in again to manage who is on the farm.'
-          : 'The farm server could not be reached to renew this session.',
-      );
-    }
-  }
-
-  const res = await fetch(`${base}${path}`, {
-    method: init.method ?? 'GET',
-    headers: {
-      authorization: `Bearer ${token}`,
-      ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
-    },
-    ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
-  });
-
-  if (res.status === 204) return null;
-
-  const body: unknown = await res.json().catch(() => null);
-  if (!res.ok) {
-    const message = (body as { error?: unknown })?.error;
-    // The server names its refusals — "A farm needs at least one owner" — and
-    // passing them through verbatim is what makes them useful.
-    throw new Error(typeof message === 'string' ? message : 'The farm server refused that.');
-  }
-  return body;
-}
-
 export function MembersScreen(): React.ReactElement {
   const { colors } = useTheme();
 
@@ -141,32 +80,6 @@ export function MembersScreen(): React.ReactElement {
   const [minted, setMinted] = useState<{ token: string; expiresAt: number } | null>(null);
   const [code, setCode] = useState<JoinCode | null>(null);
 
-  /**
-   * The farm's name, which could be typed once and never corrected.
-   *
-   * Reported as the question nobody had asked: *"what happens if they get a
-   * partner, divorced, drunk when they start the farm in the app and misspell
-   * it?"* All three are the same case — names change — and the app's answer was
-   * that they do not.
-   *
-   * Here because this is where the farm's own settings already live: who is on
-   * it, who may do what, and the token dance every one of those calls needs.
-   * The screen is titled for its commonest job rather than its whole one.
-   */
-  const [farmName, setFarmName] = useState('');
-  const named = useSaver(useCallback(() => undefined, []));
-
-  const rename = useCallback(() => {
-    void named.save(async () => {
-      const next = farmName.trim();
-      await call('/org', { method: 'PATCH', body: { name: next } });
-      // Only after the server agreed. The cache is what every screen reads, and
-      // writing it publishes — so the Settings row and the Today subtitle
-      // correct themselves without anybody navigating anywhere.
-      await rememberFarmName(next);
-    });
-  }, [named, farmName]);
-
   const refresh = useCallback(async () => {
     setProblem(null);
     try {
@@ -175,11 +88,6 @@ export function MembersScreen(): React.ReactElement {
       setMe(claims?.userId ?? null);
 
       setMembers(membersSchema.parse(await call('/members')).members);
-      // Seeded from the cache rather than fetched: the name is already on this
-      // device, and a box that starts empty invites somebody to retype a name
-      // they only wanted to change one letter of.
-      setFarmName(claims?.orgName ?? '');
-
       // Only an owner or manager may list invites, so a hand asking would get
       // a 403 that is not a problem worth reporting to them.
       if (claims !== null && canInvite(claims.role)) {
@@ -261,28 +169,10 @@ export function MembersScreen(): React.ReactElement {
         </Panel>
       )}
 
-      {role === null || !canRenameFarm(role) ? null : (
-        <Panel label="The farm's name">
-          <Body>
-            What every screen calls it, and what somebody joining sees. Changing it here changes it
-            for everybody on the farm.
-          </Body>
-          <TextField
-            value={farmName}
-            onChangeText={setFarmName}
-            placeholder="Hollow Farm"
-            maxLength={120}
-            testID="farm-name"
-          />
-          <Failure message={named.failure} />
-          <Secondary
-            label={named.saving ? 'Renaming…' : 'Rename it'}
-            onPress={rename}
-            disabled={named.saving || farmName.trim() === ''}
-            testID="farm-rename"
-          />
-        </Panel>
-      )}
+      {/* The farm's name used to be here. It moved to My farm, where the other
+          farm-wide settings live — a screen about people was never its home,
+          and an editable box holding the live name sat one stray tap away from
+          renaming the farm. See `components/FarmName.tsx`. */}
 
       {members === null ? null : members.length === 0 ? (
         <Panel label="Just you">
