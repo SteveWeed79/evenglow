@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   CONDITION_WORDS,
   type Condition,
@@ -240,9 +240,28 @@ function Forecast({
             * and what the morning looks like.
             */}
           <Text style={[styles.heading, { color: colors.muted }]}>The next 24 hours</Text>
-          {/* Wraps rather than scrolling sideways. A horizontal strip inside a
-              vertical scroll fights the gesture, and with a glove on it loses. */}
-          <View style={styles.hours} testID="weather-hours">
+          {/**
+            * Sideways, on one line, and the premise changed under the old note.
+            *
+            * This used to wrap, on the argument that *a horizontal strip inside
+            * a vertical scroll fights the gesture, and with a glove on it
+            * loses*. That was written when the strip was whatever was left of
+            * today — often four or six cells, one tidy row. It is a full
+            * twenty-four now, which wraps to four rows and pushes the week off
+            * the screen, so the thing it was protecting is gone either way.
+            *
+            * The gesture objection is real and is answered rather than ignored:
+            * the row is one cell tall, so a drag that starts vertically has
+            * almost no chance of landing on it, and React Native picks the
+            * responder from the direction the finger actually moves. What is
+            * left is a strip that reads left to right like a day does.
+            */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.hours}
+            testID="weather-hours"
+          >
             {hours.map((hour, index) => (
               <View key={hour.at} style={styles.hour}>
                 {/* Midnight needs saying, or 2am reads as this afternoon. The
@@ -276,7 +295,7 @@ function Forecast({
                 </Text>
               </View>
             ))}
-          </View>
+          </ScrollView>
         </View>
       )}
 
@@ -528,7 +547,15 @@ const styles = StyleSheet.create({
   nowWords: { flex: 1, gap: 2 },
   condition: { fontFamily: FONTS.body, fontSize: TYPE.body },
   age: { fontFamily: FONTS.data, fontSize: TYPE.label },
-  hours: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
+  /**
+   * One row, and the padding is what makes the last cell reachable.
+   *
+   * A horizontal `contentContainerStyle` with no trailing padding puts the
+   * twenty-fourth hour flush against the edge of the screen, where a thumb
+   * cannot comfortably land on it — the same reason the vertical scroll has a
+   * bottom inset.
+   */
+  hours: { flexDirection: 'row', gap: SPACE.sm, paddingRight: SPACE.lg },
   hour: { alignItems: 'center', gap: 2, minWidth: 56, paddingVertical: SPACE.xs },
   /**
    * Always rendered, coloured transparent when it has nothing to say.
