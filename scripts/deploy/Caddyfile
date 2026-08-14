@@ -103,7 +103,23 @@ api.example.com {
 
 		# The install page is small and the APK is not. Caching the page would
 		# hide the version note somebody was sent to read.
-		header /index.html Cache-Control "no-cache"
+		#
+		# **Matched by what it is NOT, and the `/index.html` version did not
+		# work.** `header` runs before `try_files` — the same ordering the @apk
+		# matcher above is built around — so a request for `/app/` is still `/`
+		# when this is evaluated and never matched. The header landed only on
+		# `/app/index.html`, which nobody types.
+		#
+		# The effect was invisible and exactly wrong for what this page is for:
+		# it is the thing somebody refreshes to check whether a new build has
+		# reached the box, and with no `Cache-Control` a browser is free to
+		# heuristically cache it and answer from memory — showing yesterday's
+		# version stamp to somebody asking whether today's build had landed.
+		#
+		# Found by asking whether the page was trustworthy as that test, then
+		# checking the headers rather than reading the config and assuming.
+		@page not path *.apk
+		header @page Cache-Control "no-cache"
 
 		# `browse` is deliberately absent: this directory holds exactly what is
 		# meant to be downloaded, and a listing is a habit that stops being safe
