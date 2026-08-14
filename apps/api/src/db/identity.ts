@@ -38,6 +38,16 @@ export interface UserDoc {
   role: Role;
   createdAt: Date;
   disabledAt?: Date;
+  /**
+   * The address and the Google subject this account had before it was removed.
+   *
+   * Kept because the row is kept: a farm's records name who typed them, and
+   * "who was that?" is a question somebody asks about a person who left. Moved
+   * out of `email` and `googleSub` so they no longer identify a live account —
+   * see `disableUser` for why removal has to release them.
+   */
+  formerEmail?: string;
+  formerGoogleSub?: string;
 }
 
 export interface OrgDoc {
@@ -306,17 +316,57 @@ export async function setUserRole(orgId: string, userId: string, role: Role): Pr
 }
 
 /**
- * Removal is a disable, never a delete.
+ * Removal is a disable, never a delete — and it gives the address back.
  *
- * Their records stay — a morning's egg logs do not stop being true because the
+ * Their records stay: a morning's egg logs do not stop being true because the
  * person who typed them left, and a delete would either orphan them or take
  * them with it. `requireMutationClaims` already refuses a disabled account on
  * every write, so access ends immediately.
+ *
+ * ## Why the email has to move
+ *
+ * **Reported from a farm: somebody who joined with a code and was then removed
+ * could not create a farm of their own.** They could not do anything at all.
+ * `email` is globally unique, so the disabled row went on owning the address;
+ * sign-in refused it for being disabled, and signup refused it for existing —
+ * with the one message that makes the trap airtight, *"that email already has a
+ * Steading account, sign in with it instead"*, which is advice to do the thing
+ * that also fails. One removal burned an address permanently.
+ *
+ * So removal releases it. The row keeps the name and the history; the address
+ * stops pointing at an account nobody can enter.
+ *
+ * `removed:<userId>` rather than unsetting it. The unique index is not sparse,
+ * so two removed people would both hold `null` and the second removal would
+ * fail — and a colon cannot appear before the `@` in an address, so this token
+ * can never collide with somebody's real one.
+ *
+ * **Google's subject id goes with it**, or the release is half a release: a
+ * tester who signed up with Google would still be found by `findUserByGoogleSub`
+ * and 401'd, having freed an address they never used.
+ *
+ * This is one-way, as removal already was — nothing in this service clears
+ * `disabledAt`. Somebody who comes back comes back as a new account, which is
+ * what "removed from the farm" means.
  */
 export async function disableUser(orgId: string, userId: string, at: Date): Promise<boolean> {
+  const found = await (await users()).findOne({ _id: userId, orgId, disabledAt: { $exists: false } });
+  if (!found) return false;
+
   const result = await (await users()).updateOne(
     { _id: userId, orgId, disabledAt: { $exists: false } },
-    { $set: { disabledAt: at } },
+    {
+      $set: {
+        disabledAt: at,
+        // `email` is required on the document, so it is always there to keep.
+        // `googleSub` is not — an account that only ever used a password has
+        // none, and writing `formerGoogleSub: undefined` would store a null.
+        formerEmail: found.email,
+        email: `removed:${userId}`,
+        ...(found.googleSub === undefined ? {} : { formerGoogleSub: found.googleSub }),
+      },
+      $unset: { googleSub: '' },
+    },
   );
   return result.matchedCount === 1;
 }

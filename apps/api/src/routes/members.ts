@@ -267,7 +267,11 @@ export async function memberRoutes(app: FastifyInstance, env: Env): Promise<void
         members: members.map((m) => ({
           id: m._id,
           name: m.name,
-          email: m.email,
+          // Removal moves the address to `formerEmail` and leaves a
+          // `removed:<id>` token in its place, so that the person can make an
+          // account again — see `disableUser`. The farm should still see who it
+          // was, so the list asks for the one that is a real address.
+          email: m.formerEmail ?? m.email,
           role: m.role,
           disabled: m.disabledAt !== undefined,
         })),
