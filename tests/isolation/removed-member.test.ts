@@ -120,7 +120,13 @@ beforeEach(async () => {
 });
 
 describeDb('after somebody is removed from a farm', () => {
-  /** The report, exactly: this is a 409 before the fix and a farm after it. */
+  /**
+   * The report, exactly: a 409 before the fix and a farm after it.
+   *
+   * 201 rather than 200 — `/auth/signup` creates something and says so, and it
+   * signs them in on the same response so there is no sign-in screen between a
+   * farm being made and it being usable.
+   */
   it('lets them start a farm of their own with the same address', async () => {
     const app = await server();
     await removeTheHand(app);
@@ -137,7 +143,7 @@ describeDb('after somebody is removed from a farm', () => {
       },
     });
 
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBe(201);
     await app.close();
   });
 

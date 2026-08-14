@@ -358,8 +358,11 @@ export async function disableUser(orgId: string, userId: string, at: Date): Prom
     {
       $set: {
         disabledAt: at,
+        // `email` is required on the document, so it is always there to keep.
+        // `googleSub` is not — an account that only ever used a password has
+        // none, and writing `formerGoogleSub: undefined` would store a null.
+        formerEmail: found.email,
         email: `removed:${userId}`,
-        ...(found.email === undefined ? {} : { formerEmail: found.email }),
         ...(found.googleSub === undefined ? {} : { formerGoogleSub: found.googleSub }),
       },
       $unset: { googleSub: '' },
