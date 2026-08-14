@@ -35,8 +35,18 @@ function json(body: unknown): Response {
   });
 }
 
-/** Today sunny, 81/58, 20% — and tomorrow wet, so the bars differ. */
-function service(options: { fails?: boolean } = {}): void {
+/**
+ * Today sunny, 81/58, 20% — and tomorrow wet, so the two rows differ.
+ *
+ * Two more weeks the row had never been given, each internally coherent
+ * because a fixture that could not happen is a fixture nobody trusts:
+ *
+ *  - `hot` — a hundred-degree day. Three digits is what wrapped the column.
+ *  - `winter` — below freezing, with a signed low and a snow forecast. Between
+ *    them they cover both ways `fallsAs` can reach "Snow": the condition
+ *    saying so, and a day that never climbs above freezing.
+ */
+function service(options: { fails?: boolean; hot?: boolean; winter?: boolean } = {}): void {
   const day = new Date();
   day.setHours(12, 0, 0, 0);
   const night = new Date(day.getTime() + 8 * 3600_000);
@@ -74,15 +84,17 @@ function service(options: { fails?: boolean } = {}): void {
           {
             startTime: day.toISOString(),
             isDaytime: true,
-            temperature: 81,
+            temperature: options.winter === true ? 28 : options.hot === true ? 100 : 81,
             temperatureUnit: 'F',
             probabilityOfPrecipitation: { value: 20 },
-            shortForecast: 'Sunny',
+            shortForecast: options.winter === true ? 'Cloudy' : 'Sunny',
           },
           {
             startTime: night.toISOString(),
             isDaytime: false,
-            temperature: 58,
+            // Twelve below: a signed, four-character low, which with a
+            // three-character high is the widest this column can be asked for.
+            temperature: options.winter === true ? -12 : options.hot === true ? 78 : 58,
             temperatureUnit: 'F',
             probabilityOfPrecipitation: { value: 20 },
             shortForecast: 'Clear',
@@ -90,10 +102,10 @@ function service(options: { fails?: boolean } = {}): void {
           {
             startTime: tomorrow.toISOString(),
             isDaytime: true,
-            temperature: 66,
+            temperature: options.winter === true ? 30 : 66,
             temperatureUnit: 'F',
             probabilityOfPrecipitation: { value: 80 },
-            shortForecast: 'Rain Showers Likely',
+            shortForecast: options.winter === true ? 'Snow Likely' : 'Rain Showers Likely',
           },
         ],
       },
@@ -349,6 +361,87 @@ describe('the forecast screen', () => {
       .map((node) => String(node.props['accessibilityLabel']));
 
     expect(labels).toContain('80 per cent chance of rain');
+    screen.unmount();
+  });
+
+  /**
+   * *"The high/low temperatures wrap if the high is 100."*
+   *
+   * The column was a fixed 76dp — enough for "81° 58°" and nothing longer. It
+   * takes the row's spare width now, the width the rain bar was using before it
+   * was cut, and refuses to wrap explicitly rather than relying on the space
+   * happening to be enough.
+   *
+   * `numberOfLines` rather than a measurement, because this harness does not
+   * lay anything out: what it can hold is the instruction, and a screen that
+   * has it cannot fold a temperature onto two lines whatever the font does.
+   */
+  it('keeps a three-digit high on one line', async () => {
+    service({ hot: true });
+    await sited();
+
+    const screen = await mount(<WeatherScreen />);
+    const said = tight(screen.text());
+
+    expect(said).toContain('100°');
+    const temps = screen
+      .get('weather-day-0')
+      .findAll((node) => typeof node.props['numberOfLines'] === 'number');
+    expect(temps.length).toBeGreaterThan(0);
+    for (const node of temps) expect(node.props['numberOfLines']).toBe(1);
+
+    screen.unmount();
+  });
+
+  it('prints a below-zero low without folding it either', async () => {
+    service({ winter: true });
+    await sited();
+
+    const screen = await mount(<WeatherScreen />);
+
+    expect(tight(screen.text())).toContain('-12°');
+    screen.unmount();
+  });
+});
+
+/**
+ * What the chance is a chance **of**.
+ *
+ * `rainChance` is `probabilityOfPrecipitation`, so a bare "40%" beside a snow
+ * mark left a farm to work out which. Asked plainly: *"how do we handle
+ * snow?"* — and the rule is `fallsAs`, covered as arithmetic in
+ * `unit/falls-as.test.ts`. These two are the wiring, which is the half this
+ * repo keeps shipping at one end only.
+ */
+describe('rain or snow, on the week', () => {
+  it('says rain on a wet day above freezing', async () => {
+    service();
+    await sited();
+
+    const screen = await mount(<WeatherScreen />);
+
+    expect(tight(screen.text())).toContain('Rain80%');
+    screen.unmount();
+  });
+
+  it('says snow when snow is what is forecast', async () => {
+    service({ winter: true });
+    await sited();
+
+    const screen = await mount(<WeatherScreen />);
+    const said = tight(screen.text());
+
+    // Tomorrow is forecast snow; today is merely cloudy and never gets above
+    // freezing, so both routes to "Snow" are on screen at once.
+    expect(said).toContain('Snow80%');
+    expect(said).toContain('Snow20%');
+
+    const labels = screen
+      .get('weather-day-1')
+      .findAll((node) => typeof node.props['accessibilityLabel'] === 'string')
+      .map((node) => String(node.props['accessibilityLabel']));
+    expect(labels).toContain('80 per cent chance of snow');
+
     screen.unmount();
   });
 

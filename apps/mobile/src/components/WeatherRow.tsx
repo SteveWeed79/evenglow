@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { CONDITION_WORDS, degrees, forecastFor, highLowWords } from '@steading/contracts';
+import { CONDITION_WORDS, degrees, fallsAs, forecastFor, highLowWords } from '@steading/contracts';
 import { Icon, type IconName } from './Icon';
 import { Touch } from './Touch';
 import { useTheme } from '../theme/ThemeProvider';
@@ -113,12 +113,15 @@ export function WeatherRow(): React.ReactElement | null {
     return null;
   })();
 
+  // Once, so the words and the spoken label cannot disagree about what falls.
+  const falls = fallsAs(sky, today?.highDeciC);
+
   const said = [
     `${CONDITION_WORDS[sky]}, ${temp} degrees now`,
     today === undefined ? null : highLowWords(today, units),
     today === undefined || today.rainChance === 0
       ? null
-      : `${today.rainChance} per cent chance of rain`,
+      : `${today.rainChance} per cent chance of ${falls.toLowerCase()}`,
   ]
     .filter((part): part is string => part !== null)
     .join('. ');
@@ -133,10 +136,20 @@ export function WeatherRow(): React.ReactElement | null {
         <Text style={[styles.range, { color: colors.muted }]}>{range}</Text>
       )}
 
-      {/* Only when there is a chance worth acting on. A row that says "rain 0%"
-          every day in August is a row people stop reading. */}
+      {/**
+        * Only when there is a chance worth acting on. A row that says "rain 0%"
+        * every day in August is a row people stop reading.
+        *
+        * The word comes from `fallsAs` rather than being the literal "rain" it
+        * was: `rainChance` is `probabilityOfPrecipitation`, and this row sat
+        * under a snow mark saying "40% rain" all winter. Fixed here as well as
+        * on the week, because a rule applied at one end only is the shape this
+        * repo keeps shipping.
+        */}
       {today === undefined || today.rainChance === 0 ? null : (
-        <Text style={[styles.rain, { color: colors.lanternInk }]}>{today.rainChance}% rain</Text>
+        <Text style={[styles.rain, { color: colors.lanternInk }]}>
+          {today.rainChance}% {falls.toLowerCase()}
+        </Text>
       )}
     </Shell>
   );
