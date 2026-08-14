@@ -39,7 +39,7 @@ on:
       # — `verify` and `release` still act on the branch the form selected.
       # This only says how far the number moves once they have.
       bump:
-        description: 'Version to move before shipping'
+        description: 'Version to move before shipping. "none" also skips the app build.'
         type: choice
         default: patch
         options: [patch, minor, major, none]
@@ -261,7 +261,19 @@ jobs:
       # Needs `EXPO_TOKEN` in the repository secrets. Without one this says so
       # and the promote still succeeds — a missing app token must not stop the
       # server shipping.
+      # `none` means nothing new is being cut, so nothing is built.
+      #
+      # A server-only change — a Caddy rule, a deploy script, an API fix — has
+      # no new app in it. Building one anyway mints a version that differs from
+      # the last only in its build number, and the box then pulls ninety
+      # megabytes of an identical app because the artefact url is new. On the
+      # free tier it also spends a queue slot to do it.
+      #
+      # Tied to `bump` rather than given a dropdown of its own, because the two
+      # questions are one question: "am I shipping a new app?" A second control
+      # that could disagree with the first is a second thing to get wrong.
       - name: Build the app
+        if: inputs.bump != 'none'
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
@@ -290,8 +302,12 @@ jobs:
           # happen is the same lie this whole step exists to stop telling.
           if [ -n "${VERSION_MOVED:-}" ]; then
             echo "Version ${VERSION_MOVED}" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
+          else
+            # Said, so a server-only release does not read as a build that
+            # failed to start. Not building is the point of choosing `none`.
+            echo "Server only — no version change and no app build." >> "$GITHUB_STEP_SUMMARY"
           fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
           git log -1 --format='%s%n%n%an, %ar' >> "$GITHUB_STEP_SUMMARY"
           echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
