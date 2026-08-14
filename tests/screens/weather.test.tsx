@@ -322,8 +322,33 @@ describe('the forecast screen', () => {
     expect(said).toContain('Today');
     expect(said).toContain('81°');
     expect(said).toContain('58°');
-    // Tomorrow's chance, so the bar column has something to be different about.
     expect(said).toContain('80%');
+    screen.unmount();
+  });
+
+  /**
+   * The rain chance is still announced in words, with the bar gone.
+   *
+   * A brass bar used to carry that label, and it was scaled to the wettest day
+   * of the week rather than to a hundred — so a week topping out at thirty per
+   * cent drew a full bar beside the words "30%". Cut on the farm's own reading:
+   * *"cut the bar, the % is enough."*
+   *
+   * The label was the bar's, and this is the half of a deletion that goes
+   * quietly wrong. A screen reader was announcing "eighty per cent chance of
+   * rain" and would now be reading out "80%" on its own.
+   */
+  it('still says the chance of rain in words, without the bar to carry it', async () => {
+    service();
+    await sited();
+
+    const screen = await mount(<WeatherScreen />);
+    const labels = screen
+      .get('weather-day-1')
+      .findAll((node) => typeof node.props['accessibilityLabel'] === 'string')
+      .map((node) => String(node.props['accessibilityLabel']));
+
+    expect(labels).toContain('80 per cent chance of rain');
     screen.unmount();
   });
 

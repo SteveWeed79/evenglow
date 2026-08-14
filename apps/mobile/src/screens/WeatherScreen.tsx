@@ -23,7 +23,7 @@ import { useLive } from '../hooks/useLive';
 import { useWeather } from '../hooks/useWeather';
 import { useLog } from '../hooks/useSync';
 import { useTheme } from '../theme/ThemeProvider';
-import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
+import { FONTS, SPACE, TAP, TYPE } from '../theme/tokens';
 import { locate, findPlace, type Place } from '../weather/where';
 
 /**
@@ -154,16 +154,6 @@ function Forecast({
   const { colors } = useTheme();
   const now = Date.now();
   const today = forecastFor(days, now);
-
-  /**
-   * The widest chance in the list, which is what the bars are measured against.
-   *
-   * Not a fixed 0–100 scale. A week where the wettest day is 30% would draw
-   * seven stubs under a lot of empty space, and the question the column
-   * answers is "which day is the wet one" rather than "how close to certain".
-   * Floored at 20 so a dry week does not turn a 5% Tuesday into a full bar.
-   */
-  const widest = Math.max(20, ...days.map((day) => day.rainChance));
 
   /**
    * A measured reading beats the forecast's figure for the hour.
@@ -356,25 +346,31 @@ function Forecast({
               )}
             </Text>
 
-            <View
-              style={[styles.bar, { backgroundColor: colors.shade }]}
-              accessible
+            {/**
+              * The number, and only the number.
+              *
+              * A brass bar used to sit here, and it was **scaled to the wettest
+              * day of the week** rather than to a hundred — so a week topping
+              * out at thirty per cent drew a full bar beside the words "30%",
+              * and the bar was the one that lied.
+              *
+              * That relative scale was deliberate: the question a week answers
+              * is *which day is the wet one*, not *how close to certain*. But
+              * the percentage is printed on every row, so the ranking was
+              * already readable, and the bar's only remaining contribution was
+              * to contradict it. Asked and answered from the farm: *"cut the
+              * bar, the % is enough."*
+              *
+              * The bar carried the row's accessibility label, so the label
+              * moves here rather than leaving a screen reader to announce a
+              * bare "30%".
+              */}
+            <Text
+              style={[styles.dayRain, { color: colors.muted }]}
               accessibilityLabel={`${day.rainChance} per cent chance of rain`}
             >
-              <View
-                style={[
-                  styles.barFill,
-                  {
-                    backgroundColor: colors.lantern,
-                    // Never zero-width: a 4% day should read as "a little",
-                    // not as "the app forgot to draw this one".
-                    width: `${Math.max(day.rainChance === 0 ? 0 : 6, (day.rainChance / widest) * 100)}%`,
-                  },
-                ]}
-              />
-            </View>
-
-            <Text style={[styles.dayRain, { color: colors.muted }]}>{day.rainChance}%</Text>
+              {day.rainChance}%
+            </Text>
           </View>
         ))}
       </View>
@@ -619,7 +615,17 @@ const styles = StyleSheet.create({
   },
   dayName: { fontFamily: FONTS.body, fontSize: TYPE.body, width: 56 },
   dayTemps: { fontFamily: FONTS.data, fontSize: TYPE.body, width: 76, fontVariant: ['tabular-nums'] },
-  bar: { flex: 1, height: 10, borderRadius: RADII.pill, overflow: 'hidden' },
-  barFill: { height: '100%', borderRadius: RADII.pill },
-  dayRain: { fontFamily: FONTS.data, fontSize: TYPE.label, width: 44, textAlign: 'right' },
+  /**
+   * `flex: 1` rather than a fixed width, because it inherited the bar's job of
+   * filling the row. Without it the four columns bunch to the left and the
+   * percentages stop lining up under each other — which is the one thing a
+   * column of numbers has to do.
+   */
+  dayRain: {
+    fontFamily: FONTS.data,
+    fontSize: TYPE.label,
+    flex: 1,
+    textAlign: 'right',
+    fontVariant: ['tabular-nums'],
+  },
 });
