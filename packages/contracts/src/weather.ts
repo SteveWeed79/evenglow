@@ -295,6 +295,36 @@ export const CONDITION_WORDS: Record<Condition, string> = {
 };
 
 /**
+ * What the chance is a chance **of**.
+ *
+ * `rainChance` is NWS's `probabilityOfPrecipitation`, and the field name has
+ * been quietly wrong about that since the day it was written: what falls at
+ * −6 °C is snow, and a farm reading "40%" beside a snow mark was left to work
+ * out which. Asked from the phone — *"how do we handle snow?"* — and this is
+ * the answer, in one place, because the day row and anything that comes after
+ * it must not each decide it separately.
+ *
+ * The condition answers it whenever the condition carries precipitation at
+ * all. When it does not — a clear or cloudy day with a small chance on it —
+ * the high decides: **a day that never gets above freezing cannot rain.**
+ *
+ * That fallback is arithmetic and not a forecast, which is the line this stays
+ * on. It is the HIGH rather than the low deliberately: a day that climbs above
+ * freezing by afternoon is a day rain is possible on, and calling that snow
+ * because it froze at dawn would be the app inventing weather. The residual
+ * error is an above-freezing day whose precipitation happens to fall overnight
+ * as snow, and "Rain" is the commoner truth there.
+ *
+ * Not exposed for the hourly strip: those cells are 56dp wide and a word in
+ * each is a column of noise. The week has the room, which is what prompted it.
+ */
+export function fallsAs(condition: Condition, highDeciC: number | undefined): 'Rain' | 'Snow' {
+  if (condition === 'snow') return 'Snow';
+  if (condition === 'rain' || condition === 'drizzle' || condition === 'storm') return 'Rain';
+  return highDeciC !== undefined && highDeciC <= 0 ? 'Snow' : 'Rain';
+}
+
+/**
  * Coordinates, rounded to about a kilometre.
  *
  * A farm's position identifies a family's home. Two decimals is ample for a

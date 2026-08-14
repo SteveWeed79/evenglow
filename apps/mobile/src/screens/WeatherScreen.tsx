@@ -4,6 +4,7 @@ import {
   CONDITION_WORDS,
   type Condition,
   dayStart,
+  fallsAs,
   highLowWords,
   type ForecastDay,
   type ForecastHour,
@@ -314,7 +315,12 @@ function Forecast({
 
       <View style={styles.section}>
         <Text style={[styles.heading, { color: colors.muted }]}>The week</Text>
-        {days.map((day, index) => (
+        {days.map((day, index) => {
+          // Once per row: the words and the spoken label must not be able to
+          // disagree about what is falling.
+          const falls = fallsAs(day.condition, day.highDeciC);
+
+          return (
           <View key={day.day} style={styles.day} testID={`weather-day-${index}`}>
             <Text style={[styles.dayName, { color: colors.ink }]}>
               {day.day === dayStart(now) ? 'Today' : DAY_NAMES[new Date(day.day).getDay()]}
@@ -334,8 +340,22 @@ function Forecast({
               * remaining figure twice produced the reported "79° 79°" — a real
               * enough looking flat day that nothing on screen could contradict.
               * A lone number is labelled instead, so it reads as the half it is.
+              *
+              * ## It wrapped as soon as a number needed three digits
+              *
+              * Reported from the phone: *"the high/low temperatures wrap if the
+              * high is 100."* The column was a fixed 76dp, which fits "81° 58°"
+              * and nothing longer — so a hundred-degree day, and every
+              * below-zero one, folded onto two lines. `-12° -25°` is nine
+              * characters and the widest this can ever be asked to draw.
+              *
+              * It takes the row's spare width now, which is exactly what the
+              * rain bar was using before it was cut, and `numberOfLines` makes
+              * the refusal to wrap explicit rather than a consequence of the
+              * width happening to be enough. Every row flexes identically, so
+              * the columns still line up.
               */}
-            <Text style={[styles.dayTemps, { color: colors.ink }]}>
+            <Text style={[styles.dayTemps, { color: colors.ink }]} numberOfLines={1}>
               {day.highDeciC === undefined ? null : `${degrees(day.highDeciC, units)}°`}
               {day.lowDeciC === undefined ? null : (
                 <Text style={{ color: colors.muted }}>
@@ -364,15 +384,27 @@ function Forecast({
               * The bar carried the row's accessibility label, so the label
               * moves here rather than leaving a screen reader to announce a
               * bare "30%".
+              *
+              * ## And the number says what it is a chance of
+              *
+              * `rainChance` is `probabilityOfPrecipitation`, so a bare "40%"
+              * beside a snow mark left a farm to work out which. `fallsAs`
+              * decides, once, for everything that shows this — see it for why
+              * the high rather than the low breaks the tie.
+              *
+              * "Rain" and "Snow" rather than "Precipitation", which is the word
+              * a forecast office uses and not the one anybody says out loud.
               */}
             <Text
               style={[styles.dayRain, { color: colors.muted }]}
-              accessibilityLabel={`${day.rainChance} per cent chance of rain`}
+              numberOfLines={1}
+              accessibilityLabel={`${day.rainChance} per cent chance of ${falls.toLowerCase()}`}
             >
-              {day.rainChance}%
+              {falls} {day.rainChance}%
             </Text>
           </View>
-        ))}
+          );
+        })}
       </View>
     </>
   );
@@ -614,17 +646,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.xs,
   },
   dayName: { fontFamily: FONTS.body, fontSize: TYPE.body, width: 56 },
-  dayTemps: { fontFamily: FONTS.data, fontSize: TYPE.body, width: 76, fontVariant: ['tabular-nums'] },
   /**
-   * `flex: 1` rather than a fixed width, because it inherited the bar's job of
-   * filling the row. Without it the four columns bunch to the left and the
-   * percentages stop lining up under each other — which is the one thing a
-   * column of numbers has to do.
+   * The flexible column, which is what stops it wrapping.
+   *
+   * It was a fixed 76dp — enough for "81° 58°" and nothing longer, so a
+   * hundred-degree day and every below-zero one folded onto two lines. The bar
+   * that used to hold the row's spare width is gone, so this takes it: nine
+   * characters of `-12° -25°` fit several times over on any handset.
+   *
+   * Flex rather than a wider fixed number, because a fixed one is a guess about
+   * a font at a text size the reader is allowed to change.
+   */
+  dayTemps: {
+    fontFamily: FONTS.data,
+    fontSize: TYPE.body,
+    flex: 1,
+    fontVariant: ['tabular-nums'],
+  },
+  /**
+   * Fixed, and the right-hand column stays the fixed one so the percentages
+   * line up under each other — which is the one thing a column of numbers has
+   * to do. Wide enough for the longest it can say: "Snow 100%".
    */
   dayRain: {
     fontFamily: FONTS.data,
     fontSize: TYPE.label,
-    flex: 1,
+    width: 84,
     textAlign: 'right',
     fontVariant: ['tabular-nums'],
   },
