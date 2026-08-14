@@ -189,6 +189,23 @@ Run `pnpm test`, `pnpm lint`, `pnpm typecheck` before declaring a task done.
 
 ---
 
+## Branches and Pull Requests
+
+**Branches are deleted on merge. Every time, without exception.**
+
+So **fetch and check whether the branch's PR has already merged before every push**, not after. Pushing to a merged branch's name silently *recreates* it behind a closed PR, the push reports `[new branch]` and looks like it worked, and the commit is stranded where nothing will ever merge it. That has happened twice; both times the giveaway — `[new branch]` for a branch that already existed — was there in the push output and read straight past.
+
+A merged PR is finished and cannot track new work. When one has merged, restart the branch from the new default branch, replay any unmerged commits onto it, and open a **new** PR:
+
+```
+git fetch origin main
+git merge-base --is-ancestor <my-commit> origin/main   # is it already in?
+git checkout -B <branch> origin/main
+git cherry-pick <my-commit>                            # keep it, never discard
+```
+
+---
+
 ## Style
 
 - Function components and hooks. No class components.
