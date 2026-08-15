@@ -496,6 +496,56 @@ So EAS builds it and the box serves it.
 endpoint is a static file and an upload endpoint is a way to put a file on a
 server, and those are not the same risk at all.
 
+### Building it ourselves, when EAS will not
+
+The free tier caps Android builds per month, and hitting that cap is not a
+gentle failure: issue #153 is the promote that shipped the server, was refused
+a build, and skipped the step that would have said so.
+
+`.github/workflows/apk.yml` is the way round it — **Actions → APK → Run
+workflow**, with a `versionCode` higher than the last one shipped. It runs
+`expo prebuild` and Gradle on a GitHub runner, signs with our own keystore,
+and attaches the APK to a Release. No Expo account is involved at any point;
+`expo prebuild` is local and the queue is not in the path.
+
+**It is a runner and not the box, and the reasons above still stand.** The
+keystore argument in §8 is the same wherever the machine is — except that a
+repository secret is materialised for the length of one job, while a box holds
+what it holds all the time, next to a public web server. There is also a
+practical blocker the section above predates: the box is aarch64 and Google
+ships the Android build-tools as x86_64 binaries only, so `aapt2` and
+`zipalign` there would come from emulation or a community rebuild.
+
+**Four secrets, and the job refuses to start without them:**
+
+| Secret | What |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | `base64 -w0 steading.jks` |
+| `ANDROID_KEYSTORE_PASSWORD` | keystore password |
+| `ANDROID_KEY_ALIAS` | alias inside it |
+| `ANDROID_KEY_PASSWORD` | key password |
+| `ANDROID_CERT_SHA256` | `keytool -list -v -keystore steading.jks -alias <alias> \| grep SHA256:` |
+
+All of them come out of the export in §8.
+
+**The last one is the guard, not bookkeeping.** Everything else can succeed and
+still produce an APK signed by the wrong key — the wrong account's keystore,
+the wrong alias inside the right one, a secret pasted with a line break — and
+none of those look like errors. The job verifies the certificate it actually
+signed with against that fingerprint and fails if they differ, because the
+alternative is finding out on a tablet, where the fix is an uninstall and an
+uninstall takes the records with it (§3, last row).
+
+And it **never falls back to a debug key**. `expo prebuild` points the release
+build type at the debug signingConfig, so the natural failure mode here is a
+perfectly normal-looking APK that Android treats as a different app. A missing
+secret stops the job instead.
+
+**It does not put the APK on the box.** Nothing above opens an upload route.
+Download the artefact and `publish-apk.sh <path>` — the local-file form the
+script has always had — or teach the box to pull the Release, which is #153's
+remaining half.
+
 ### A GitHub Release is for the archive
 
 Attached to a tag, it answers "the build that was on her phone in August" after

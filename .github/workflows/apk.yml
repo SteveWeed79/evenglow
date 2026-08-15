@@ -1,0 +1,297 @@
+name: APK
+
+# ── Building the app on our own runner, instead of on EAS ───────────────────
+#
+# The free tier caps Android builds per month. Issue #153 is what hitting that
+# cap looked like: `release` promoted the server, the app build was refused,
+# and the step that would have said so is the one that skips on failure. This
+# is the other half of that answer — a build that does not depend on somebody
+# else's quota.
+#
+# ## Why not on the box, which is the obvious place
+#
+# `docs/TESTING-BUILD.md` §7 already answered it and the answer holds:
+#
+#   - **The keystore.** Building there means the signing key lives on the
+#     internet-facing machine, and §8 is emphatic that it is the one piece of
+#     state in this project that cannot be regenerated from anything.
+#   - **Ten gigabytes** of JDK and Android SDK on a free-tier instance the repo
+#     already has a disk-resize section for.
+#
+# And a third the docs do not mention, because it only shows up when you try:
+# the box is **aarch64** (Oracle Ampere, `ACCESS-AND-BILLING.md` §4.1a) and
+# Google ships the Android build-tools as **x86_64 binaries only**. `aapt2` and
+# `zipalign` would have to come from Box64 emulation or a community aarch64
+# rebuild. That is a fine thing to do to a hobby machine and not a thing to put
+# under a signed release artefact.
+#
+# A GitHub runner is x86_64 with the SDK already on it, and the keystore lives
+# in encrypted repository secrets — materialised for the length of one job
+# rather than sitting beside a public web server. That is the same trade EAS's
+# credential store was making, with the queue removed.
+#
+# ## What this does NOT do
+#
+# It does not put the APK on the box. `TESTING-BUILD.md` §7 is deliberate that
+# there is no upload route — *"a download endpoint is a static file and an
+# upload endpoint is a way to put a file on a server, and those are not the
+# same risk at all"* — so nothing here opens one. The APK is attached to a
+# GitHub Release, which the same section calls the right place for the archive,
+# and getting it onto the box stays a pull the box makes. See #153.
+
+on:
+  workflow_dispatch:
+    inputs:
+      versionCode:
+        description: >-
+          Android versionCode. MUST be higher than the last one shipped, or
+          Android refuses the update. EAS last used 17.
+        type: number
+        required: true
+      release:
+        description: 'Attach the APK to a GitHub Release for this version.'
+        type: boolean
+        default: true
+
+# The release step needs to create one. Nothing else here writes anything.
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Refuse early, and refuse loudly ──────────────────────────────────
+      #
+      # **The one failure this workflow must never have is a quiet one.** An
+      # APK signed with a different key is not a broken build — it is an app
+      # Android treats as a different app, so installing it means uninstalling
+      # first, and an uninstall takes the farm's records with it
+      # (`TESTING-BUILD.md` §3, last row). A missing secret must stop the job
+      # here rather than fall through to the debug keystore that
+      # `expo prebuild` wires up by default, which would produce exactly that
+      # APK and look completely normal doing it.
+      - name: The keystore has to be here
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          CERT_SHA256: ${{ secrets.ANDROID_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in KEYSTORE_B64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD CERT_SHA256; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing secret for ${name}."
+              missing=1
+            fi
+          done
+          if [ "$missing" = "1" ]; then
+            {
+              echo "### No signing key, so no APK"
+              echo ""
+              echo "This job will not fall back to a debug key. An APK signed with"
+              echo "the wrong key cannot be installed over the one on a farm's"
+              echo "tablet without uninstalling first, and an uninstall takes the"
+              echo "records with it."
+              echo ""
+              echo "See \`docs/TESTING-BUILD.md\` §8 for exporting the keystore from"
+              echo "EAS, and the header of this workflow for the four secrets."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # Gradle needs a JDK; the runner's Android SDK is already on PATH via
+      # ANDROID_HOME. 17 is what AGP wants for this Expo version.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - run: pnpm install --frozen-lockfile
+
+      # ── The versionCode, stamped in rather than counted remotely ─────────
+      #
+      # `eas.json` sets `appVersionSource: remote`, so the number lives in
+      # Expo's project state and `app.json`'s copy is stale — it says 3 while
+      # EAS has reached 17. Building outside EAS means the number has to come
+      # from somewhere, and an input is the honest somewhere until the repo
+      # owns the counter itself.
+      #
+      # Written to the working copy only, never committed. `android/` is
+      # generated by the prebuild below and gitignored, so nothing here leaves
+      # a trace in the tree.
+      - name: Stamp the version
+        env:
+          CODE: ${{ inputs.versionCode }}
+        run: |
+          set -euo pipefail
+          node -e '
+            const fs = require("fs");
+            const path = "apps/mobile/app.json";
+            const config = JSON.parse(fs.readFileSync(path, "utf8"));
+            const code = Number(process.env.CODE);
+            if (!Number.isInteger(code) || code < 1) {
+              throw new Error(`versionCode must be a positive integer, got ${process.env.CODE}`);
+            }
+            config.expo.android.versionCode = code;
+            fs.writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`);
+            console.log(`v${config.expo.version} (${code})`);
+          '
+          echo "APP_VERSION=$(node -p "require('./apps/mobile/app.json').expo.version")" >> "$GITHUB_ENV"
+
+      # `--clean`, for the reason CLAUDE.md gives: `android/` is generated and
+      # gitignored, so there is nothing to preserve and stale resources are the
+      # whole failure mode. This is also what picks up every icon, splash,
+      # permission and plugin change in app.json.
+      - name: Prebuild the native project
+        run: pnpm mobile:prebuild
+
+      - name: Build the release APK
+        working-directory: apps/mobile/android
+        run: ./gradlew assembleRelease --no-daemon
+
+      # ── Sign it ourselves ────────────────────────────────────────────────
+      #
+      # `expo prebuild` points the release build type at the **debug**
+      # signingConfig, so what Gradle just produced is a release build carrying
+      # a debug signature. Rather than patch the generated Gradle — a string
+      # edit against a file that regenerates on every run — the signature is
+      # replaced afterwards with `apksigner`, which is what it is for.
+      #
+      # `zipalign` first, because apksigner will not align an APK it signs and
+      # an unaligned APK is rejected on install.
+      - name: Sign it
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          TOOLS="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          echo "Using $TOOLS"
+
+          # Outside the workspace, so a stray `git add -A` in a later step
+          # cannot pick it up.
+          KEYSTORE="$RUNNER_TEMP/steading.jks"
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$KEYSTORE"
+
+          IN=apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+          "$TOOLS/zipalign" -p -f 4 "$IN" "$RUNNER_TEMP/aligned.apk"
+
+          "$TOOLS/apksigner" sign \
+            --ks "$KEYSTORE" \
+            --ks-pass "env:KEYSTORE_PASSWORD" \
+            --ks-key-alias "$KEY_ALIAS" \
+            --key-pass "env:KEY_PASSWORD" \
+            --out "$RUNNER_TEMP/steading.apk" \
+            "$RUNNER_TEMP/aligned.apk"
+
+          rm -f "$KEYSTORE"
+
+      # ── The guard that makes this safe to run at all ─────────────────────
+      #
+      # Everything above can succeed and still produce an APK signed by the
+      # wrong key — a keystore exported from the wrong account, the wrong alias
+      # inside the right keystore, a secret pasted with a line break. None of
+      # those look like errors. The only thing that tells them apart is the
+      # certificate itself, so the fingerprint is compared against one recorded
+      # when the key was exported.
+      #
+      # Get the expected value from the keystore you exported:
+      #
+      #   keytool -list -v -keystore steading.jks -alias <alias> \
+      #     | grep 'SHA256:' | head -1
+      #
+      # Store it as `ANDROID_CERT_SHA256`, colons and all, uppercase.
+      - name: It is the same key the farm already has
+        env:
+          EXPECTED: ${{ secrets.ANDROID_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          TOOLS="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+
+          "$TOOLS/apksigner" verify --print-certs "$RUNNER_TEMP/steading.apk" \
+            | tee "$RUNNER_TEMP/certs.txt"
+
+          ACTUAL="$(grep -m1 -i 'SHA-256 digest:' "$RUNNER_TEMP/certs.txt" \
+            | sed 's/.*: *//' | tr -d ' :' | tr '[:lower:]' '[:upper:]')"
+          WANT="$(printf '%s' "$EXPECTED" | tr -d ' :' | tr '[:lower:]' '[:upper:]')"
+
+          if [ "$ACTUAL" != "$WANT" ]; then
+            echo "::error::Signing certificate does not match ANDROID_CERT_SHA256."
+            {
+              echo "### Wrong signing key — nothing was published"
+              echo ""
+              echo "This APK would install as a *different app*. Every existing"
+              echo "copy would have to be uninstalled first, and an uninstall"
+              echo "takes the farm's records with it."
+              echo ""
+              echo "| | |"
+              echo "|---|---|"
+              echo "| expected | \`$WANT\` |"
+              echo "| got | \`$ACTUAL\` |"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "Signature matches."
+
+      - name: Name it the way the box does
+        run: |
+          set -euo pipefail
+          # `publish-apk.sh` keeps every build under `steading-<version>-<code>`
+          # and refuses to overwrite a name that already exists, so matching the
+          # convention here means the archive and the shelf agree.
+          NAME="steading-${APP_VERSION}-${{ inputs.versionCode }}.apk"
+          mv "$RUNNER_TEMP/steading.apk" "$RUNNER_TEMP/$NAME"
+          echo "APK_NAME=$NAME" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APK_NAME }}
+          path: ${{ runner.temp }}/${{ env.APK_NAME }}
+          if-no-files-found: error
+
+      # A Release is the archive, per `TESTING-BUILD.md` §7: it answers "the
+      # build that was on her tablet in August" after the box has been rebuilt
+      # or the file pruned. It is a poor *channel* and is not being used as one
+      # — the box still serves the install page.
+      - name: Attach it to a release
+        if: inputs.release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="v${APP_VERSION}+${{ inputs.versionCode }}"
+          gh release create "$TAG" "$RUNNER_TEMP/$APK_NAME" \
+            --title "$TAG" \
+            --notes "Built on a GitHub runner rather than EAS. Signature verified against ANDROID_CERT_SHA256." \
+            --target "$GITHUB_SHA"
+          echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
+
+      - name: Say what was built
+        if: always()
+        run: |
+          {
+            echo "### \`${APK_NAME:-no APK}\`"
+            echo ""
+            if [ -n "${APK_NAME:-}" ]; then
+              echo "- version \`${APP_VERSION}\`, versionCode \`${{ inputs.versionCode }}\`"
+              echo "- signature verified against \`ANDROID_CERT_SHA256\`"
+              [ -n "${RELEASE_TAG:-}" ] && echo "- release \`${RELEASE_TAG}\`"
+              echo ""
+              echo "Not on the box. Download it from the artifacts above and"
+              echo "\`scripts/deploy/publish-apk.sh <path>\` puts it on the shelf."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
