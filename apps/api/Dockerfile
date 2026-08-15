@@ -14,15 +14,27 @@
 # under `moduleResolution: bundler`. Node's own type stripping cannot load
 # that (verified: `Cannot find module '/…/apps/api/src/env'`), and neither can
 # `tsc` output, because the emitted JavaScript keeps the extensionless
-# specifier that Node's ESM resolver rejects. Either route means rewriting
-# every import in the service.
+# specifier that Node's ESM resolver rejects. Either of *those two* routes
+# means rewriting every import in the service.
 #
-# So `tsx` runs the source, exactly as `pnpm dev:api` and `pnpm farm` always
-# have. It moved from devDependencies to dependencies for this and nothing
-# else. It is not a new dependency, and the thing it buys is that the deployed
-# process and the local one are the same code path — worth more here than a
-# build step, in a repo whose expensive failures have all been environment
-# drift.
+# **This paragraph used to end "either route means rewriting every import",
+# full stop, and that sentence is true of the two options examined and false in
+# general.** A bundler built for Node — esbuild, tsup — resolves extensionless
+# specifiers as a matter of course, strips the types, and emits plain
+# JavaScript with no import rewritten by hand. It was never evaluated, and a
+# comment that forecloses an option it did not test is worse than silence,
+# because it stops the next person looking. Untested, here too: nobody has run
+# it against this tree.
+#
+# The decision stands anyway, on its own argument rather than on a false
+# dichotomy. `tsx` runs the source, exactly as `pnpm dev:api` and `pnpm farm`
+# always have. It moved from devDependencies to dependencies for this and
+# nothing else. It is not a new dependency, and the thing it buys is that the
+# deployed process and the local one are **the same code path** — worth more
+# here than a build step, in a repo whose expensive failures have all been
+# environment drift. A bundler would put a transform between the two and hand
+# back some startup time and image size; that is the trade to weigh if anyone
+# reopens this, and it is a preference call rather than a forced one.
 
 # ── build ───────────────────────────────────────────────────────────────────
 FROM node:22-slim AS build

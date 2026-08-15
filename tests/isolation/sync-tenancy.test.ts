@@ -21,11 +21,11 @@ import { makeMutation } from '../support/fixtures';
  * inbox depending on which server answered.
  */
 
-const harness = await startTestDb('steading_isolation');
+const harness = await startTestDb('steading_sync_tenancy');
 
 if (harness) {
   process.env.MONGODB_URI = harness.uri;
-  process.env.MONGODB_DB = 'steading_isolation';
+  process.env.MONGODB_DB = 'steading_sync_tenancy';
 }
 
 const SECRET = 'a-test-secret-long-enough-for-hs256-abcdef';
@@ -105,7 +105,7 @@ async function buildApp() {
     readEnv({
       AUTH_SECRET: SECRET,
       MONGODB_URI: harness!.uri,
-      MONGODB_DB: 'steading_isolation',
+      MONGODB_DB: 'steading_sync_tenancy',
       CORS_ORIGINS: 'https://app.test',
       /**
        * Open deliberately, because none of this file is about entitlement.

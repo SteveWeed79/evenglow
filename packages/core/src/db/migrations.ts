@@ -272,6 +272,49 @@ export const MIGRATIONS: readonly Migration[] = [
        )`,
     ],
   },
+  {
+    version: 7,
+    statements: [
+      /**
+       * What a record looked like before a local `update` or `delete` touched
+       * it — so discarding a refused one can put it back exactly (N-1).
+       *
+       * The residue was the open half of N-1. A refused `create` can be taken
+       * back by deleting the row, because the target owes its whole local
+       * existence to this device. A refused `update` cannot: its fields are
+       * merged into a record that may have come from anywhere, and nothing on
+       * disk remembered what they replaced. A refused `delete` leaves the
+       * record hidden for the same reason. Neither is repaired by a later pull,
+       * because the server has no mutation for a command it refused.
+       *
+       * **Replaying this device's outbox history is the wrong answer**, and
+       * N-1 records why: it reconstructs the record from local mutations alone
+       * and drops everything that arrived by pull. A pre-image has no such
+       * flaw — it is the record itself, whatever produced it.
+       *
+       * `after` is what makes the restore safe. It holds the `updatedAt` this
+       * device's optimistic write produced, and the restore only happens when
+       * the record still carries it. Anything else means a pull or a later edit
+       * has landed since, and newer wins — so the pre-image is dropped rather
+       * than resurrecting a value the farm has moved past.
+       *
+       * One row per outstanding local update or delete, removed when the
+       * mutation leaves the outbox in either direction. A table rather than
+       * columns on `outbox` for the reason `record_gen` gives above: every
+       * statement in this ladder must be `IF NOT EXISTS`, and SQLite has no
+       * `ADD COLUMN IF NOT EXISTS`.
+       */
+      `CREATE TABLE IF NOT EXISTS record_undo (
+         mutationId TEXT PRIMARY KEY NOT NULL,
+         key TEXT NOT NULL,
+         existed INTEGER NOT NULL,
+         value TEXT,
+         updatedAt INTEGER,
+         deleted INTEGER,
+         after INTEGER NOT NULL
+       )`,
+    ],
+  },
 ];
 
 /** The version a fresh database is brought to. */

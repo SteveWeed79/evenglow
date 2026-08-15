@@ -475,7 +475,20 @@ Ordered by cost, cheapest first, and all four are now done:
    server, so they never move it. §4.1b.
 
    ~~**Before the first real farm syncs: a nightly `mongodump` to S3.**~~
-   Done — `scripts/backup-mongo.sh`.
+   ~~Done — `scripts/backup-mongo.sh`.~~
+
+   **That line said "Done" for a script nothing ran.** `backup-mongo.sh` was
+   written, complete, and unscheduled: no timer, no service, and nothing that
+   noticed when a backup stopped happening — so the farm's only off-box copy
+   depended on somebody remembering to type a command. `PICK-UP-HERE.md` said
+   the opposite of this line the whole time, which is how it survived.
+
+   Done now, and the word means something different: `steading-backup.timer`
+   runs it nightly, the script reads the object back out of S3 before calling
+   it a backup, and `steading-backup-check.timer` fails a unit when the last
+   one is more than thirty-six hours old. A **restore drill stays manual and
+   periodic** — see `DEPLOY-THE-SERVER.md` — because the age identity is
+   deliberately not on the box and no automated test can hold it.
 
 **D13, the billing, is now built to the edge of the store.** The rules, the
 gate, the Play mapping and the copy are in; the purchase flow and a Play

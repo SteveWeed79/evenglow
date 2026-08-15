@@ -1,4 +1,5 @@
 import type { Scoped, Tenanted } from '../db/scoped';
+import { inOrgOrder, resetOrgLanes } from '../org-lane';
 
 /**
  * Making `(serverTs, _id)` an order over commits rather than over intentions.
@@ -64,13 +65,6 @@ import type { Scoped, Tenanted } from '../db/scoped';
  * next pull, but a disappearing record is not a thing to introduce on purpose.
  */
 
-/**
- * One chain per org. The value is the tail of the queue, and it never rejects —
- * it is resolved from a `finally`, so a mutation that throws cannot wedge every
- * later mutation for that farm behind it.
- */
-const chains = new Map<string, Promise<void>>();
-
 /** Highest `serverTs` this process has issued per org, seeded lazily. */
 const lastIssued = new Map<string, number>();
 
@@ -83,25 +77,14 @@ const lastIssued = new Map<string, number>();
  * the same farm in the same moment. Per mutation rather than per batch on
  * purpose — a hundred-mutation batch must not hold the farm's lock for its
  * whole flush.
+ *
+ * **The lane itself lives in `org-lane.ts` and is shared with the membership
+ * routes**, which are check-then-act for the same reason and rest on the same
+ * one-process assumption. Two mutexes over one farm would be two places to find
+ * out that assumption had changed.
  */
 export async function inCommitOrder<T>(orgId: string, work: () => Promise<T>): Promise<T> {
-  const previous = chains.get(orgId) ?? Promise.resolve();
-
-  let release!: () => void;
-  const mine = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  chains.set(orgId, mine);
-
-  await previous;
-  try {
-    return await work();
-  } finally {
-    release();
-    // Only when nobody queued behind us, so a server holding many farms does
-    // not accumulate a promise per org for ever.
-    if (chains.get(orgId) === mine) chains.delete(orgId);
-  }
+  return inOrgOrder(orgId, work);
 }
 
 interface StampedDoc extends Tenanted {
@@ -145,6 +128,6 @@ export async function nextServerTs(scope: Scoped): Promise<Date> {
 
 /** Test seam. The maps are process-wide, and a suite must not inherit another's. */
 export function resetCommitOrder(): void {
-  chains.clear();
+  resetOrgLanes();
   lastIssued.clear();
 }

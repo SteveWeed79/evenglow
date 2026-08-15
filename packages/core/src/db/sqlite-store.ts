@@ -368,46 +368,141 @@ export async function openSqliteStore(
     await db.run('DELETE FROM records WHERE key = ?', [recordKey(entity, targetId)]);
   }
 
-  return {
-    /**
-     * ONE transaction: mint the sequence number, write the outbox row, advance
-     * the counter, update the projection (invariant 5).
-     *
-     * Assigning clientSeq outside the transaction is the classic way to end up
-     * with two mutations holding the same sequence number after a crash
-     * mid-write, at which point ordering is quietly broken and nothing reports
-     * it.
-     */
-    async enqueue(request: EnqueueRequest): Promise<QueuedMutation> {
-      const targetId = request.targetId;
+  /** The record as it stands, or nothing, for the undo table. */
+  interface UndoRow {
+    mutationId: string;
+    key: string;
+    existed: number;
+    value: string | null;
+    updatedAt: number | null;
+    deleted: number | null;
+    after: number;
+  }
 
-      try {
-        return await driver.transaction(async (tx) => {
-          // A corrupt or missing deviceId is safe to replace: it only groups a
-          // device's own mutations for ordering.
-          let deviceId = parseMeta('deviceId', await readMeta(tx, 'deviceId'));
-          if (deviceId === undefined) {
-            deviceId = deps.randomUUID();
-            await writeMeta(tx, META.deviceId, deviceId);
-          }
+  /**
+   * Remembers what a record looked like before a local `update` or `delete`.
+   *
+   * Only for those two ops: a `create` is taken back by `dropRefusedCreate`,
+   * which needs no pre-image because the target owes its whole local existence
+   * to this device.
+   *
+   * `existed` is kept separately from a null `value`, because "there was no
+   * record" and "there was a record whose value is null" are different states
+   * and restoring the wrong one is how a row nobody asked for appears.
+   */
+  async function rememberBefore(
+    db: SqlOps,
+    mutationId: string,
+    key: string,
+    after: number,
+  ): Promise<void> {
+    const before = await db.get<RecordRow>('SELECT * FROM records WHERE key = ?', [key]);
 
-          /**
-           * A corrupt or missing counter is NOT safe to replace with zero —
-           * that reuses sequence numbers and silently breaks ordering. Take
-           * the highest seq still in the outbox as a floor, so monotonicity
-           * survives losing the counter as long as the queue did.
-           */
-          const stored = parseMeta('nextClientSeq', await readMeta(tx, 'nextClientSeq')) ?? 0;
-          const highest = await tx.get<{ seq: number | null }>(
-            'SELECT MAX(clientSeq) AS seq FROM outbox',
-          );
-          const floor = highest?.seq === null || highest?.seq === undefined ? 0 : highest.seq + 1;
-          const clientSeq = Math.max(stored, floor);
+    await db.run(
+      `INSERT INTO record_undo (mutationId, key, existed, value, updatedAt, deleted, after)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(mutationId) DO NOTHING`,
+      [
+        mutationId,
+        key,
+        before === undefined ? 0 : 1,
+        before?.value ?? null,
+        before?.updatedAt ?? null,
+        before?.deleted ?? null,
+        after,
+      ],
+    );
+  }
 
+  /**
+   * Puts a record back the way a refused command found it.
+   *
+   * **Only when nothing has happened to it since.** `after` is the `updatedAt`
+   * this device's optimistic write produced, so a record still carrying it is
+   * a record nothing else has touched. Anything else — a pull delivering the
+   * server's version, a later edit by the same hand, a second delete somebody
+   * else made — is newer than the command being discarded, and newer wins.
+   * Restoring over it would resurrect a value the farm has moved past, which
+   * is a worse fault than the residue this exists to clear.
+   *
+   * The pre-image is dropped either way. It describes a mutation that is no
+   * longer in the outbox, and keeping it would leave the table growing a row
+   * per discarded edit for ever.
+   */
+  async function restoreBefore(db: SqlOps, mutationId: string): Promise<void> {
+    const undo = await db.get<UndoRow>('SELECT * FROM record_undo WHERE mutationId = ?', [
+      mutationId,
+    ]);
+    if (undo === undefined) return;
+
+    await db.run('DELETE FROM record_undo WHERE mutationId = ?', [mutationId]);
+
+    const now = await db.get<{ updatedAt: number }>(
+      'SELECT updatedAt FROM records WHERE key = ?',
+      [undo.key],
+    );
+    if (now?.updatedAt !== undo.after) return;
+
+    if (undo.existed === 0) {
+      await db.run('DELETE FROM records WHERE key = ?', [undo.key]);
+      return;
+    }
+
+    await db.run(
+      'UPDATE records SET value = ?, updatedAt = ?, deleted = ? WHERE key = ?',
+      [undo.value, undo.updatedAt, undo.deleted, undo.key],
+    );
+  }
+
+  /** A mutation that has left the outbox owns no pre-image. */
+  async function forgetBefore(db: SqlOps, mutationIds: readonly string[]): Promise<void> {
+    for (const id of mutationIds) {
+      await db.run('DELETE FROM record_undo WHERE mutationId = ?', [id]);
+    }
+  }
+
+  /**
+   * Every mutation in `requests`, in one transaction, or none of them.
+   *
+   * `enqueue` is this with a list of one. Written the other way round —
+   * `enqueueAll` looping over `enqueue` — it would be one transaction per
+   * mutation, which is the defect rather than the fix.
+   */
+  async function enqueueTransactionally(
+    requests: readonly EnqueueRequest[],
+  ): Promise<QueuedMutation[]> {
+    if (requests.length === 0) return [];
+
+    try {
+      return await driver.transaction(async (tx) => {
+        // A corrupt or missing deviceId is safe to replace: it only groups a
+        // device's own mutations for ordering.
+        let deviceId = parseMeta('deviceId', await readMeta(tx, 'deviceId'));
+        if (deviceId === undefined) {
+          deviceId = deps.randomUUID();
+          await writeMeta(tx, META.deviceId, deviceId);
+        }
+
+        /**
+         * A corrupt or missing counter is NOT safe to replace with zero —
+         * that reuses sequence numbers and silently breaks ordering. Take the
+         * highest seq still in the outbox as a floor, so monotonicity survives
+         * losing the counter as long as the queue did.
+         */
+        const stored = parseMeta('nextClientSeq', await readMeta(tx, 'nextClientSeq')) ?? 0;
+        const highest = await tx.get<{ seq: number | null }>(
+          'SELECT MAX(clientSeq) AS seq FROM outbox',
+        );
+        const floor = highest?.seq === null || highest?.seq === undefined ? 0 : highest.seq + 1;
+        let clientSeq = Math.max(stored, floor);
+
+        const written: QueuedMutation[] = [];
+
+        for (const request of requests) {
           const envelope = {
             schemaVersion: MUTATION_SCHEMA_VERSION,
             id: newId(),
-            targetId,
+            targetId: request.targetId,
             entity: request.entity,
             op: request.op,
             payload: request.payload,
@@ -451,26 +546,66 @@ export async function openSqliteStore(
             ],
           );
 
-          await writeMeta(tx, META.nextClientSeq, clientSeq + 1);
+          /**
+           * Projected inside the loop, not after it, because a later request
+           * may depend on an earlier one's projection — a restore's `delete`
+           * archives the record its own `create` has just made. Writing all
+           * the rows first and projecting afterwards would work today and
+           * break the first time somebody relied on the order.
+           */
+          const at = Date.now();
+
+          // Before the projection, or there is nothing left to remember. Only
+          // for the two ops whose refusal cannot be undone by deleting the row.
+          if (request.op !== 'create') {
+            await rememberBefore(tx, queued.id, recordKey(request.entity, request.targetId), at);
+          }
 
           await projectOne(
             tx,
             request.entity,
-            targetId,
+            request.targetId,
             request.op,
             request.payload,
-            Date.now(),
+            at,
           );
 
-          return queued;
-        });
-      } catch (error) {
-        // The transaction aborts as a unit, so no sequence number is consumed
-        // and nothing partial is left behind.
-        if (isFullError(error)) throw new StorageFullError();
-        throw error;
-      }
+          written.push(queued);
+          clientSeq += 1;
+        }
+
+        await writeMeta(tx, META.nextClientSeq, clientSeq);
+
+        return written;
+      });
+    } catch (error) {
+      // The transaction aborts as a unit, so no sequence number is consumed
+      // and nothing partial is left behind — for one mutation or for five.
+      if (isFullError(error)) throw new StorageFullError();
+      throw error;
+    }
+  }
+
+  return {
+    /**
+     * ONE transaction: mint the sequence number, write the outbox row, advance
+     * the counter, update the projection (invariant 5).
+     *
+     * Assigning clientSeq outside the transaction is the classic way to end up
+     * with two mutations holding the same sequence number after a crash
+     * mid-write, at which point ordering is quietly broken and nothing reports
+     * it.
+     */
+    async enqueue(request: EnqueueRequest): Promise<QueuedMutation> {
+      const [only] = await enqueueTransactionally([request]);
+      // One request in, one mutation out. Checked rather than asserted with
+      // `!`: an empty result would mean the mutation had gone quietly, which
+      // is the one outcome this whole file exists to make impossible.
+      if (only === undefined) throw new InvalidMutationError('Could not build a valid mutation.');
+      return only;
     },
+
+    enqueueAll: enqueueTransactionally,
 
     /**
      * Applied and duplicate leave the outbox and count as cleared; anything
@@ -511,6 +646,10 @@ export async function openSqliteStore(
               'UPDATE outbox SET status = ?, lastError = NULL WHERE id = ?',
               ['applied', mutation.id],
             );
+            // The server took it, so there is nothing left to undo. Kept for a
+            // *rejected* row, because that one is still a decision the person
+            // has not made — `retryRejected` may put it back on the wire.
+            await forgetBefore(tx, [mutation.id]);
             cleared += 1;
             continue;
           }
@@ -615,8 +754,19 @@ export async function openSqliteStore(
         await tx.run('DELETE FROM outbox WHERE id = ?', [id]);
         await bumpCleared(tx, 1);
 
+        /**
+         * A refused command leaves nothing of itself behind.
+         *
+         * `create` is the one op whose target owes its whole local existence
+         * to this device, so it is taken back by deleting the row. `update`
+         * and `delete` merged into a record that may have come from anywhere,
+         * so they are taken back from the pre-image recorded at enqueue — and
+         * only when nothing has touched the record since. See `restoreBefore`.
+         */
         if (existing.op === 'create') {
           await dropRefusedCreate(tx, existing.entity, existing.targetId);
+        } else {
+          await restoreBefore(tx, id);
         }
       });
     },
@@ -861,6 +1011,10 @@ export async function openSqliteStore(
         await writeMeta(tx, META.pulledThrough, 0);
         await tx.run('DELETE FROM meta WHERE key = ?', [META.pulledThroughId]);
 
+        // Same reasoning as the marks below: the replay reads every row again,
+        // so a running count that survived it would double.
+        await tx.run('DELETE FROM meta WHERE key = ?', [META.unmodelableRows]);
+
         // Marks are only meaningful within one run. Left over from an earlier
         // one they would vouch for rows this replay never reaches, and the
         // sweep would spare exactly the orphans it exists to find.
@@ -905,12 +1059,40 @@ export async function openSqliteStore(
         // a row per record for ever.
         await tx.run('DELETE FROM record_gen');
         await writeMeta(tx, META.repairDone, PROJECTION_REPAIR);
+        // Kept, so the diagnostics sheet can say what was taken away. A record
+        // vanishing from a farm's screens is a thing somebody deserves a
+        // sentence about, even when removing it was right.
+        await writeMeta(tx, META.repairedRecords, orphans.length);
         return orphans.length;
       });
     },
 
     async projectionRepairDone(): Promise<boolean> {
       return !(await repairInProgress(driver));
+    },
+
+    /**
+     * Adds to the running total of rows this build could not model.
+     *
+     * Read-then-write rather than a SQL increment because `meta` stores JSON
+     * text, and the whole point of `parseMeta` is that nothing here trusts what
+     * it reads. Called once per pull pass, from a loop that is already doing a
+     * round trip.
+     */
+    async noteUnmodelable(rows: number): Promise<void> {
+      if (rows <= 0) return;
+      await driver.transaction(async (tx) => {
+        const soFar = parseMeta('unmodelableRows', await readMeta(tx, 'unmodelableRows')) ?? 0;
+        await writeMeta(tx, META.unmodelableRows, soFar + rows);
+      });
+    },
+
+    async unmodelableRows(): Promise<number> {
+      return parseMeta('unmodelableRows', await readMeta(driver, 'unmodelableRows')) ?? 0;
+    },
+
+    async repairedRecords(): Promise<number> {
+      return parseMeta('repairedRecords', await readMeta(driver, 'repairedRecords')) ?? 0;
     },
 
     async getLastSyncAt(): Promise<number | null> {
@@ -1169,6 +1351,10 @@ export async function openSqliteStore(
           // Added to this list in the same change that created it, which is the
           // whole lesson of the comment above.
           'record_gen',
+          // And this one, for the same reason at the same time. It holds a
+          // farm's own record values — the pre-image of an edit — so leaving
+          // it behind on a handed-on tablet would leave that farm's data on it.
+          'record_undo',
           /**
            * **`tickets` was missed for the same reason the weather tables
            * were**, and it is the one on this list that holds a farm's records

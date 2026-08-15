@@ -150,6 +150,48 @@ export interface LocalStore {
   enqueue(request: EnqueueRequest): Promise<QueuedMutation>;
 
   /**
+   * The same guarantee across SEVERAL mutations: all of them, in the order
+   * given, or none of them.
+   *
+   * For the case where one thing a farmer did is more than one mutation, and
+   * the half-done state is wrong. A restore puts an archived record back as a
+   * `create` followed by a `delete` — "archived" is not a field any create
+   * schema has, it is the outcome of a delete — and two separate `enqueue`
+   * calls meant a crash or a full disk between them left the record **live**.
+   * A retired flock reappears on every screen on the morning somebody sets the
+   * new phone up, and the resume pass does not repair it because the record is
+   * present and that is all it checks.
+   *
+   * Sequence numbers are consecutive and in argument order, so the server
+   * applies them in the order they were meant. Implementations MUST project
+   * each one before building the next, or a mutation that depends on its
+   * predecessor's projection — which is exactly the `delete` above — sees a
+   * record that is not there yet.
+   */
+  enqueueAll(requests: readonly EnqueueRequest[]): Promise<QueuedMutation[]>;
+
+  /**
+   * Adds to the running total of rows this build could not model.
+   *
+   * A device quietly missing a whole kind of record — because the server is
+   * newer than the app — is the shape of failure the pull path already had
+   * once, so the rows are counted rather than merely skipped. A count nobody
+   * can see is barely an improvement, which is why this is stored rather than
+   * only returned: the pass that discovers it is not the moment anybody is
+   * looking.
+   *
+   * Cleared when a projection repair starts, since the replay reads every row
+   * again and a total that survived it would double.
+   */
+  noteUnmodelable(rows: number): Promise<void>;
+
+  /** The running total, for the diagnostics sheet. */
+  unmodelableRows(): Promise<number>;
+
+  /** What the one-time projection repair swept, if it has run. */
+  repairedRecords(): Promise<number>;
+
+  /**
    * Applies a batch's server results as one unit: applied and duplicate are
    * removed and counted as cleared, anything else is marked rejected with its
    * reason and KEPT.

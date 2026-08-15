@@ -190,6 +190,60 @@ export function DiagnosticsScreen(): React.ReactElement {
       </Panel>
 
       {/**
+       * Records the farm has that this build cannot read.
+       *
+       * The server ships a new kind of record to every device the moment it
+       * knows one, including the ones running last month's APK. Those rows are
+       * skipped deliberately — parsing the page as a unit meant one unreadable
+       * row failed all of it and that install stopped receiving **anything**,
+       * permanently, while reporting itself up to date.
+       *
+       * So the skip is right and the silence was not. A device missing a whole
+       * kind of record must not look identical to one that has everything, and
+       * until this panel the count existed and nothing showed it.
+       *
+       * Not phrased as a fault: nothing is wrong with the phone and nothing is
+       * lost on the server. The action is an app update, and saying so is the
+       * whole value of the panel.
+       */}
+      {report.unmodelable > 0 ? (
+        <Panel label="Newer than this app">
+          <Body>
+            {report.unmodelable} {report.unmodelable === 1 ? 'record' : 'records'} on the farm’s
+            server {report.unmodelable === 1 ? 'is' : 'are'} a kind this version of the app does
+            not know about, so {report.unmodelable === 1 ? 'it was' : 'they were'} left out.
+          </Body>
+          <Body>
+            Nothing is lost — the server still has {report.unmodelable === 1 ? 'it' : 'them'}, and
+            updating the app is what brings {report.unmodelable === 1 ? 'it' : 'them'} in.
+            Everything else on this phone is up to date.
+          </Body>
+        </Panel>
+      ) : null}
+
+      {/**
+       * What the one-time repair took away.
+       *
+       * Those records were commands the server refused, written into this
+       * device as though they had been accepted — so removing them was right,
+       * and it is still a record vanishing off a farm's screens. Somebody who
+       * notices deserves to find a sentence about it here rather than wonder.
+       */}
+      {report.repaired > 0 ? (
+        <Panel label="Records put right">
+          <Body>
+            {report.repaired} {report.repaired === 1 ? 'record' : 'records'} on this phone had
+            never actually been accepted by the farm’s server, and{' '}
+            {report.repaired === 1 ? 'was' : 'were'} removed once the server’s own history had
+            been read back in full.
+          </Body>
+          <Body>
+            This happened once, automatically. Nothing that reached the server was touched.
+          </Body>
+        </Panel>
+      ) : null}
+
+      {/**
        * The one check that can detect data leaving storage without the server
        * ever acknowledging it — eviction, a failed migration, a wipe. Two
        * integers rather than a duplicate of the whole store, which is why it

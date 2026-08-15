@@ -185,7 +185,8 @@ jobs:
       #
       # `/health` touches nothing — no database connection — which is exactly
       # what makes it the right probe here: this is asking whether the service
-      # can start, not whether Mongo is reachable. Readiness is P2-4's job.
+      # can start, not whether Mongo is reachable. The step after this one asks
+      # `/ready`, which is the opposite question.
       #
       # AUTH_SECRET has a 32-character floor in `env.ts`, and MONGODB_URI only
       # has to be non-empty for a boot that never dials it.
@@ -218,6 +219,34 @@ jobs:
           echo "::error::The API image booted but never answered /health."
           docker logs steading-api-ci
           exit 1
+
+      # ── The other half of the split (P2-4) ───────────────────────────────
+      #
+      # This container is given a MONGODB_URI with nothing listening behind it,
+      # which is precisely the shape of a deployment with a wrong one: the
+      # process is up, `/health` is green, and every route that touches a
+      # record fails. `deploy.sh` polls `/ready` so that a deploy fails there
+      # rather than at the first farm to log an egg — and this asserts the two
+      # endpoints really do disagree in the built image. A `/ready` that
+      # quietly stopped dialling Mongo would look perfectly healthy here and
+      # wave through exactly the deploy it exists to stop.
+      - name: Ask /ready, which must refuse
+        run: |
+          set -euo pipefail
+
+          # Ten seconds, not three. The driver waits five to select a server
+          # before giving up, so a shorter deadline times the request out
+          # instead of reading the answer it was about to give.
+          code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
+            http://127.0.0.1:3001/ready || true)"
+
+          if [ "$code" != "503" ]; then
+            echo "::error::/ready answered '${code}' with no database behind it. It must refuse."
+            docker logs steading-api-ci
+            exit 1
+          fi
+
+          echo "/ready refused, as it must"
 
       - name: What it said
         if: always()

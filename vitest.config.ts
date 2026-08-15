@@ -112,8 +112,30 @@ export default defineConfig({
     environment: 'node',
     include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx'],
     setupFiles: ['./tests/support/native/setup.ts'],
-    // Each file gets its own database harness, so let them run in isolation
-    // rather than racing for the same collections.
+    /**
+     * Serial, and the reason is not the one this comment used to give.
+     *
+     * It said *"each file gets its own database harness, so let them run in
+     * isolation rather than racing for the same collections"* — which reads as
+     * self-contradictory (if every file had its own, there would be nothing to
+     * race for) and is in fact merely imprecise. Both halves are true at once.
+     * The **harness** is per file — its own `TestDb`, its own `MongoClient`,
+     * its own `stop()`. The **database name** was not: under `MONGODB_TEST_URI`
+     * every file connects to one shared mongod and picks a database by name,
+     * and five files shared `steading_isolation` while wiping collections in
+     * `beforeEach`. That is literally racing for the same collections.
+     *
+     * Those five now name their own (B-3), so the collection race is gone —
+     * **and this setting still has to stay**, for a second shared thing that
+     * both the original note and the audit of it missed: every database-backed
+     * file assigns `process.env.MONGODB_URI`, because `apps/api/src/db/client.ts`
+     * reads it from the environment rather than taking it as an argument. One
+     * process, one environment; two files setting it concurrently would point
+     * one of them at the other's server.
+     *
+     * So the honest statement is: serial because the suites share a process
+     * environment, not because they share a database.
+     */
     fileParallelism: false,
     testTimeout: 120_000,
     hookTimeout: 120_000,

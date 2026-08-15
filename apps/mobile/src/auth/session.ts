@@ -203,6 +203,14 @@ async function establish(body: unknown): Promise<CachedClaims> {
     ...(pair.org?.name === undefined ? {} : { orgName: pair.org.name }),
   };
 
+  /**
+   * Before the writes, so a refresh still in the air from the previous session
+   * cannot land its rotation on top of these. It will find the epoch moved and
+   * abandon — without clearing, because `signed-in` is the state this device is
+   * now supposed to be in.
+   */
+  beginTransition('signed-in');
+
   await writeRefreshToken(pair.refreshToken);
   await writeCachedClaims(named);
   setAccessToken(pair.accessToken);
@@ -508,6 +516,71 @@ export async function acceptInvite(input: {
 let refreshing: Promise<CachedClaims | null> | null = null;
 
 /**
+ * Which session this device is meant to be in, and what decided it.
+ *
+ * **A refresh is single-flight against other refreshes and was fenced against
+ * nothing else.** It reads a token, posts it, and writes credentials back — and
+ * every one of those steps is an await, so a sign-out landing inside the round
+ * trip finished with `clearCredentials()` having run and the refresh writing a
+ * live rotation on top of it. The device is signed out on screen and signed in
+ * on disk; the next launch presents the token and comes back a full session.
+ *
+ * That is two taps by an ordinary user on a shared tablet, and the triggers
+ * that start the refresh are exactly the ones that precede it — `wake()` fires
+ * on app resume and on network regain, so unlocking the phone or walking back
+ * into signal seconds before somebody hands the tablet over is the ordinary
+ * case rather than a contrived one. It pairs with P1-5(a): the same hand, the
+ * same end of the same shift.
+ *
+ * The counter moves on every transition that decides the answer — sign-out, and
+ * `establish` for all five ways in — so a refresh can compare what it started
+ * under with what is true now. The intent beside it says which kind, because
+ * the two need opposite handling and conflating them would sign somebody out of
+ * the session they had just opened.
+ */
+let sessionEpoch = 0;
+let sessionIntent: 'signed-in' | 'signed-out' = 'signed-out';
+
+/**
+ * Records a decision about the session, and returns nothing, because the point
+ * is the side effect: any refresh already in the air is stale from here.
+ *
+ * Synchronous, and called before the first await of whatever is transitioning.
+ * A bump after an await would leave a window in which the refresh still
+ * believed it was current.
+ */
+function beginTransition(next: 'signed-in' | 'signed-out'): void {
+  sessionEpoch += 1;
+  sessionIntent = next;
+}
+
+/**
+ * Whether the refresh that started at `epoch` has been overtaken — and if a
+ * sign-out overtook it, tidying up after it.
+ *
+ * **Checked after a write as well as before one.** `clearCredentials()` can run
+ * *while* `setItemAsync` is in flight, so the delete is overtaken by the write
+ * and the device keeps a live refresh token nobody asked it to keep. Checking
+ * on both sides means whoever finishes last clears up, and every interleaving
+ * ends signed out.
+ *
+ * **A sign-in is not tidied after.** Those credentials are the ones the device
+ * is supposed to be holding; clearing them would answer a stale refresh by
+ * signing somebody out of the session they just opened, which is worse than the
+ * fault being fixed.
+ */
+async function overtaken(epoch: number): Promise<boolean> {
+  if (epoch === sessionEpoch) return false;
+
+  if (sessionIntent === 'signed-out') {
+    await clearCredentials();
+    setAccessToken(null);
+  }
+
+  return true;
+}
+
+/**
  * Single-flight, and this is a real defect rather than an optimisation.
  *
  * ## Two triggers, one token, and a device signed out
@@ -594,6 +667,10 @@ async function noteSessionEnd(
 }
 
 async function runRefresh(): Promise<CachedClaims | null> {
+  // The session this refresh belongs to. Everything below is checked against
+  // it before anything is written, and again after.
+  const epoch = sessionEpoch;
+
   const refreshToken = await readRefreshToken();
   if (refreshToken === null) {
     /**
@@ -626,7 +703,7 @@ async function runRefresh(): Promise<CachedClaims | null> {
      * and keep logging — that is the entire premise. Only a server that
      * actually refuses ends a session.
      */
-    return readCachedClaims();
+    return (await overtaken(epoch)) ? null : readCachedClaims();
   }
 
   /**
@@ -643,6 +720,14 @@ async function runRefresh(): Promise<CachedClaims | null> {
    * session and lets the next refresh try again.
    */
   if (res.status === 401 || res.status === 403) {
+    /**
+     * A refusal that arrives after a deliberate sign-out is not what ended
+     * this session, and recording it would overwrite the breadcrumb that says
+     * so — the one distinction Diagnostics exists to draw. The credentials are
+     * already gone either way.
+     */
+    if (await overtaken(epoch)) return null;
+
     /**
      * Written down before the credentials go, because afterwards there is
      * nothing left to explain it with.
@@ -669,7 +754,7 @@ async function runRefresh(): Promise<CachedClaims | null> {
     return null;
   }
 
-  if (!res.ok) return readCachedClaims();
+  if (!res.ok) return (await overtaken(epoch)) ? null : readCachedClaims();
 
   /**
    * **From here the old refresh token is already spent.**
@@ -706,10 +791,19 @@ async function runRefresh(): Promise<CachedClaims | null> {
      * The cached claims keep the right farm open. The next refresh gets the
      * 401 this one could not, and that is where the session properly ends.
      */
-    return readCachedClaims();
+    return (await overtaken(epoch)) ? null : readCachedClaims();
   }
 
+  /**
+   * The first write, and the first place a sign-out can be undone.
+   *
+   * Checked before, so the ordinary case writes nothing at all; and again
+   * after, because the delete and this write can be in flight together and the
+   * one that lands second is the one that counts.
+   */
+  if (await overtaken(epoch)) return null;
   await writeRefreshToken(pair.refreshToken);
+  if (await overtaken(epoch)) return null;
 
   const claims = readClaims(pair.accessToken);
   if (claims === null) {
@@ -724,7 +818,7 @@ async function runRefresh(): Promise<CachedClaims | null> {
      * keeps the work queued, which is what it does in a barn. Nothing is lost
      * and nothing is wrongly claimed.
      */
-    return readCachedClaims();
+    return (await overtaken(epoch)) ? null : readCachedClaims();
   }
 
   /**
@@ -754,6 +848,7 @@ async function runRefresh(): Promise<CachedClaims | null> {
   };
 
   await writeCachedClaims(named);
+  if (await overtaken(epoch)) return null;
   setAccessToken(pair.accessToken);
 
   return named;
@@ -787,6 +882,16 @@ async function runRefresh(): Promise<CachedClaims | null> {
  * to sign out.
  */
 export async function signOut(): Promise<void> {
+  /**
+   * The first line, and synchronous, so nothing can slip in front of it.
+   *
+   * A refresh started before this — by app resume or network regain, the two
+   * things most likely to have just happened — is now stale, and will neither
+   * write its rotation nor leave one behind. Every await below is a window
+   * that used to be open.
+   */
+  beginTransition('signed-out');
+
   const refreshToken = await readRefreshToken();
 
   if (refreshToken !== null) {

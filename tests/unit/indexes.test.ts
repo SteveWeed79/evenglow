@@ -89,3 +89,44 @@ describe('the purchase-token binding', () => {
     expect(indexPlan().map(([name]) => name)).toContain('orgs');
   });
 });
+
+/**
+ * The other way a person is identified.
+ *
+ * Same argument as the purchase-token block above, and the same reason for
+ * being here rather than only in a database-backed suite: an index that exists
+ * only in a test which skips without a mongod is exactly the thing D15 warns
+ * about, *"a thing somebody can forget to create"*.
+ *
+ * `findUserByGoogleSub` is the first query every Google sign-in makes and had
+ * no index at all — a collection scan on the hot path of one of two ways into
+ * the app. Uniqueness is the half that matters more: `linkGoogleSub` binds a
+ * subject to an existing account with nothing stopping the same subject being
+ * bound twice, after which `findOne` returns whichever row it reached first and
+ * one Google identity signs into two farms depending on the wind.
+ */
+describe('the Google subject binding', () => {
+  const userIndexes = () => indexPlan().find(([name]) => name === 'users')?.[1] ?? [];
+
+  it('is indexed at all, rather than scanned on every Google sign-in', () => {
+    expect(userIndexes().find((index) => 'googleSub' in index.key)).toBeDefined();
+  });
+
+  it('is unique, so one Google account cannot hold two', () => {
+    expect(userIndexes().find((index) => 'googleSub' in index.key)?.unique).toBe(true);
+  });
+
+  /**
+   * Partial for two reasons, and the second is easy to miss: most accounts are
+   * password-only and have no `googleSub` at all, and `disableUser` `$unset`s
+   * the field when somebody is removed so their Google account can sign up
+   * again. A plain `unique: true` would admit one row with the field missing
+   * and refuse every other — every password-only signup, and every removal
+   * after the first.
+   */
+  it('is partial, so accounts without one do not collide', () => {
+    const bound = userIndexes().find((index) => 'googleSub' in index.key);
+
+    expect(bound?.partialFilterExpression).toEqual({ googleSub: { $type: 'string' } });
+  });
+});

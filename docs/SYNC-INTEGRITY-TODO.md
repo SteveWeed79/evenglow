@@ -599,9 +599,17 @@ clients tolerate unknown rows.
       bearing and wrong, which is worse than absent. It now separates what a
       client SENDS — where the original reasoning holds — from what it reads,
       where it did not.
-- [ ] **Surface `unmodelable` somewhere a person can see it.** The count exists
-      and nothing displays it, so a device quietly missing a record type still
-      looks healthy. The diagnostics sheet is the obvious home.
+- [x] **Surface `unmodelable` somewhere a person can see it.** Done — and it
+      needed storing before it could be shown. The count lived only in
+      `PullOutcome`, and the pass that discovers it is never the moment somebody
+      is looking at a screen, so `noteUnmodelable` keeps a running total.
+      Cleared when a projection repair starts, because that winds the watermark
+      to zero and reads every row again — a total that survived it would double,
+      the same reasoning `record_gen` gets.
+
+      The panel is phrased as news rather than as a fault: nothing is wrong with
+      the phone and nothing is lost on the server, and the action is an app
+      update. Saying that is most of the value.
 
 ## P1-2 · A Farm Hand cannot finish a photo
 
@@ -789,7 +797,50 @@ fires, a refresh token too. It pairs directly with P1-5(a).
       grace window should return the *same* child, not mint a new one.
 - [ ] Make revocation cover rows inserted after it — a family-level generation or
       a revoked-at floor rather than a bulk update of known rows.
-- [ ] Fence the client refresh against sign-out.
+- [x] Fence the client refresh against sign-out.
+
+### What (c) does, 15 August — and the correction it needed
+
+A session epoch in `session.ts`, bumped **synchronously** by `signOut()` on its
+first line and by `establish()` immediately before its writes, so a bump can
+never land behind an await. `runRefresh` samples it on entry and compares before
+every return and around every write.
+
+**The remedy as written — "fence the refresh against sign-out" — is half of
+it, and the missing half would have caused a worse fault than the one being
+fixed.** A fence that only records *that* a transition happened has to decide
+what an overtaken refresh should do, and the obvious answer, clear up after
+itself, is right for a sign-out and catastrophic for a sign-in: `establish` is
+the shared path for all five ways into a session, so a stale refresh landing
+just after one would answer by wiping the credentials somebody had opened a
+moment earlier. So the epoch carries an intent, and only `signed-out` tidies.
+
+**Checked on both sides of the write, not once before it.** A single check
+before `writeRefreshToken` leaves the interleaving where `clearCredentials()`
+runs *while* `setItemAsync` is in flight: the delete is overtaken by the write
+and the device keeps a live rotation. Whoever finishes last clears up, so both
+orderings end signed out.
+
+**Also fenced: the 401 branch.** A refusal arriving after a deliberate sign-out
+would record `reason: 'refused'` over the `signed-out` breadcrumb — overwriting
+the one distinction Diagnostics exists to draw, with the misleading half.
+
+### Verification
+
+`tests/unit/sign-out-fence.test.ts`. Four cases: a sign-out during the round
+trip leaves no refresh token, no claims and no access token; the wipe-crossing-
+the-write interleaving, driven by signing out from *inside* the stubbed
+keychain write so the delete really does land first; the 401-after-sign-out
+breadcrumb; and the sign-in case, which must keep the new session and drop the
+stale one without clearing anything.
+
+Checked by breaking it: short-circuiting `overtaken()` to `false` fails all
+four. The existing `refresh-race`, `sign-out-visible` and `boot-refusal` suites
+stay green, so the single-flight behaviour they cover is untouched.
+
+**(a) and (b) remain open**, and both are server-side. Neither is reachable
+without an attacker who has already extracted a refresh token from the device
+keystore or a backup.
 
 ## P1-5 · Farm switching is not one transition
 
@@ -865,14 +916,29 @@ only the token half.
       `openLocalStore` closes the outgoing handle and then installs the next,
       and installing bumps the generation — so anything mid-flight for the old
       farm stops rather than reaching a closed handle.
-- [ ] **Not covered: a screen already rendering when the swap happens.** The
-      fence protects sync, which is where the cross-tenant write lived. A hook
-      that read `localStore()` before the swap and awaits after it still holds
-      the old handle; `Boot` re-renders through `opening` on both paths, which
-      should unmount them, but that is reasoning about React rather than a
-      tested guarantee. It needs a device.
+- [x] ~~**Not covered: a screen already rendering when the swap happens.**~~
+      **Half of it did not need a device after all.** The claim was *"`Boot`
+      re-renders through `opening` on both paths, which should unmount them,
+      but that is reasoning about React rather than a tested guarantee"* — and
+      that is a claim about one component, which mounts perfectly well in the
+      screen harness. `tests/screens/farm-swap-unmount.test.tsx` holds
+      `openLocalStore` open and asserts that during **both** transitions the app
+      tree is gone and the boot mark is up, then that it comes back — so the
+      unmount is an unmount rather than a hang. Removing either
+      `setState({kind:'opening'})` fails both cases.
+
+      A screen cannot hold a stale handle across an await it is no longer alive
+      to return from, so the hazard is unreachable rather than merely unlikely.
+
+      **What still needs a handset** is the narrower question the test renderer
+      cannot answer: whether a native module holds a reference across the swap.
+      That is on the device list with everything else on this branch.
 
 ## P1-6 · An interrupted restore can leave an archived record live
+
+> **Fixed.** An entry's `create` and its archiving `delete` go into one SQLite
+> transaction, so the pair is inseparable. The work list's own remedy — making
+> an archived entry one mutation — was the wrong one; see below.
 
 **Trusted.** `packages/core/src/backup/restore.ts:282-313` recreates an archived
 entry as two queued mutations — `create`, then `delete`. A crash, a full disk, or
@@ -900,9 +966,69 @@ removes the window.
 **To do**
 
 - [ ] ~~Compare archive state, not just key presence, when resuming.~~ Secondary.
-- [ ] Make an archived entry **one mutation** rather than two. This is the fix.
+- [x] ~~Make an archived entry **one mutation** rather than two. This is the fix.~~
+      **Wrong remedy — one *transaction*, not one mutation.**
+
+### The correction, 15 August
+
+Both remedies as filed are wrong, and the second is wrong in an expensive way.
+
+"One mutation" means an archive flag on the create — and `restore.ts` already
+had the argument against it, written down beside the code: *"archived is not a
+field any create schema has. It is the outcome of a delete, and the delete is
+what produces it."* Doing it would mean an `archivedAt` in fourteen create
+schemas, a matching server applier, a client able to mint an arbitrary archive
+date, and P13's model inverted — all to close a window that atomicity closes
+outright.
+
+**The window is the defect, not the pair.** Two mutations is the right shape;
+two *transactions* is the bug. `enqueueAll` on the port puts every mutation of
+one entry in one transaction — all of them in order, or none — and nothing
+about the wire contract, the schemas or P13 moves.
+
+Sequence numbers come out consecutive and in argument order, and each mutation
+is projected before the next is built, because the `delete` archives the record
+its own `create` has just made.
+
+**`enqueue` is now `enqueueAll` with a list of one**, not the other way round.
+The other way round is one transaction per mutation, which is the defect.
+
+**Validation happens for every payload before any of them is stored.** A refusal
+is far likelier than a crash or a full disk, and validating as it went would let
+the first mutation reach the queue and the second be turned away — the same
+split state, arrived at by the ordinary route.
+
+**Also corrected:** `restore.ts`'s header said *"a batch write would need a new
+port method whose whole purpose was to weaken the guarantee above"*. It was
+reasoning about batching for speed and foreclosed the case that actually turned
+up. The rule is one transaction per *entry*; an entry is not always one
+mutation. The paragraph now says so.
+
+### Verification
+
+`tests/offline/restore-atomicity.test.ts`. The interruption is injected at the
+driver — a wrapper that throws on the outbox insert whose op is `delete`, so a
+transaction is cut in half from outside without the store knowing, and the
+wrapping is on the handle the body writes through rather than the outer driver.
+After it: nothing written, nothing queued, no record, and the entry back in the
+next `planRestore`'s `toWrite`. That last assertion is what "never repaired"
+meant — a half-written entry looked complete.
+
+Two more: the refused-payload route to the same split state, which needs no
+fault injection; and the ordinary case, asserting `['create','delete']` with
+consecutive `clientSeq` and a projection that agrees — invariant 5 across the
+pair rather than across each half.
+
+Checked by breaking it: splitting the call back into two `enqueueAll`s fails
+the first test. The existing `backup.test.ts` stays green, including its
+interruption case — which stops between entries, and is why this was never seen
+there.
 
 ## P1-7 · Membership invariants are check-then-act
+
+> **Fixed, (a) through (c).** A per-farm lane makes the count and the act one
+> unit; a spent credential is given back when the account it was spent on could
+> not be made. (d) was not a defect and its bullet is rewritten below.
 
 **Trusted.** Four places where a concurrent request defeats an application-level
 precheck:
@@ -916,7 +1042,13 @@ precheck:
 - Invites and join credentials are marked spent before the slow Argon2 hash and
   the user insert. A crash or an email-uniqueness race **burns the invite without
   creating the account.**
-- Initial org claiming has the same shape around its memberless-org check.
+- ~~Initial org claiming has the same shape around its memberless-org check.~~
+  **Rewritten, 15 August: signup is the model, not another instance.**
+  `auth.ts:199-218` has both a genuine database constraint (the unique email
+  index) and a rollback — it takes the empty org back out when the insert loses
+  the race. That is the pattern (c) was missing and now copies. Nothing to fix
+  here; the bullet was reading a correct implementation as a fourth instance of
+  the bug.
 
 ### Verification (15 August) — (a) and (c) confirmed, (b) confirmed but low-harm, **(d) is wrong**.
 
@@ -957,13 +1089,83 @@ Ranked by real likelihood on a single-node Mongo serving one small farm:
 
 **To do**
 
-- [ ] Enforce these in the database — unique partial indexes, or a transaction —
-      rather than in the handler. A precheck and an act are two statements and
-      something can always happen between them.
-- [ ] Make (c) copy the signup pattern at `auth.ts:212-218` — spend the credential
-      *after* the account exists, or roll it back if the insert fails.
-- [ ] Rewrite the (d) bullet: signup is the model, not another instance.
-- [ ] Reconcile the `join-codes.ts:87-88` comment with what `deleteMany` does.
+- [x] ~~Enforce these in the database — unique partial indexes, or a transaction —
+      rather than in the handler.~~ **Neither is available; a per-farm lane is.**
+- [x] Make (c) copy the signup pattern at `auth.ts:212-218` — roll the credential
+      back if the insert fails.
+- [x] Rewrite the (d) bullet: signup is the model, not another instance.
+- [x] Reconcile the `join-codes.ts:87-88` comment with what `deleteMany` does.
+
+### What it does, 15 August — and why not the database
+
+**The first remedy names two mechanisms and neither one works here.**
+
+A unique partial index expresses *at most one*. The rule in (a) is *at least
+one*, which no index can express — there is no constraint that refuses a delete
+for leaving a collection empty. And for (b), Mongo's `partialFilterExpression`
+does not accept `$exists: false`, so "the live code" is not directly indexable
+without adding a marker field and migrating every existing document to carry it.
+
+A multi-document transaction needs a replica set, and `setup-mongo.sh` and
+`DEPLOY-THE-SERVER.md` record a checked decision to run standalone *because
+nothing needed one*. Reaching for it here would be reversing an architectural
+decision to fix a race that a mutex fixes outright — the same argument P0-3
+already made about the counter document, and the same conclusion.
+
+**So: a lane per farm.** `org-lane.ts` holds the mutex that `sync/commit-order.ts`
+already ran on, lifted out and shared rather than duplicated — the two rest on
+exactly the same one-process assumption, and two mutexes over one farm would be
+two places to discover that assumption had changed. (a)'s count-and-act and
+(b)'s delete-and-insert each run inside it.
+
+Uncontended: a membership change is a rare deliberate act, and the sync path
+holds the lane per mutation rather than per batch.
+
+**(c) is not a race and the lane does not help it.** The credential is spent
+before the account is made — which is the right order and stays, because a crash
+between the two must leave a link that no longer works rather than one that
+does. What it cost was the other half: the invitation burned with nothing to
+show for it, so somebody who did everything right is told their invitation is no
+longer valid and the farm has to issue a new link. `unacceptInvite` and
+`unredeemJoinCode` give it back, **filtered on the id that spent it** — a
+rollback matching on the hash alone could take back the *successful* acceptance
+that beat it, which is worse than the fault being fixed.
+
+A duplicate-key failure answers 409; anything else propagates. The distinction
+is worth drawing because the alternative is telling somebody their email is
+taken when Mongo was briefly unavailable, which sends them to a sign-in screen
+for an account that does not exist. `isDuplicateKey` lives in `db/identity.ts`,
+because the number is the driver's and a route testing `error.code === 11000`
+would be a route that knows which database this is.
+
+**Also corrected:** `join-codes.ts` claimed *"expired and redeemed rows are left
+alone: they are the audit trail"*. The filter is `redeemedAt: {$exists: false}`
+only, so an expired-unredeemed code **is** deleted — and rightly, since nobody
+was let in by it. The code was right and the comment described an intent nothing
+implemented. `replaceJoinCode` now also says outright that it is not atomic on
+its own and that the guarantee comes from the caller's lane.
+
+### Verification
+
+`tests/isolation/membership-races.test.ts`, which is the coverage this item
+correctly reported as absent: nothing anywhere tested the *gap*.
+`membership.test.ts` covers the pure predicates with `ownerCount` passed in, and
+`claim.test.ts` and `invites.test.ts` cover **sequential** double-use — the case
+the conditional-update filters already handled.
+
+Seven cases: two owners removing each other and two demoting each other, both
+asserting exactly one owner survives and exactly one request is refused; a
+non-last removal, so the lane is shown to serialise rather than refuse; two
+simultaneous mints leaving one live code; the invitation and the join code each
+surviving an account that could not be made; and a rollback proving it cannot
+take back somebody else's acceptance.
+
+**These run in CI only.** No mongod is obtainable in the environment they were
+written in — `fastdl.mongodb.org` is blocked by the proxy, there is no docker
+daemon, and no distro package — so `startTestDb` skips them locally and CI's
+`STEADING_REQUIRE_DB=1` turns a skip into a failure there. Stated rather than
+implied: unlike every other fix on this branch, these were not watched to fail
+before they passed.
 
 ---
 
@@ -1023,6 +1225,11 @@ actually hits.
 
 ## P2-2 · APK promotion is not bound to the released commit
 
+> **Fixed.** The build query is pinned to the profile CI builds, this
+> application id, and the commit the box is serving. The signing-certificate
+> bullet is deliberately **not** done; the reason is below and it is not
+> "later".
+
 **Trusted.** CI starts a `preview-farm` EAS build, but deployment asks for the
 newest finished Android build with no constraint on profile, branch, commit,
 build ID, or workflow run (`scripts/deploy/deploy.sh:238-270`). `eas.json:8-27`
@@ -1044,10 +1251,85 @@ dev-client APK that demands Metro, or a preview APK pointed at nothing.
 
 **To do**
 
-- [ ] Promote by build ID captured from the CI run that produced it.
-- [ ] Verify application ID and signing certificate before publishing.
+- [x] ~~Promote by build ID captured from the CI run that produced it.~~
+      **Promote by commit hash, which is better** — see below.
+- [x] Verify application ID before publishing.
+- [ ] ~~Verify signing certificate before publishing.~~ **Declined, with reasons.**
+
+### What it does, 15 August
+
+Three filters on `eas build:list`, all applied by EAS rather than checked after
+forty megabytes have been downloaded:
+
+```
+--build-profile   preview-farm      the profile CI builds, and no other
+--app-identifier  com.steading.app  this application, not a fork or a sibling
+--git-commit-hash <full sha>        the build made from the commit being served
+```
+
+**`--git-commit-hash` is better than the build id the remedy asked for**, and
+that is the one place this improves on the work list rather than agreeing with
+it. A build id has to be captured by CI and carried to the box somehow — a
+channel that does not exist and would have to be built and then kept working.
+The commit needs no channel at all: the box already knows which one it just
+deployed, and EAS already records every build against the commit it was made
+from. Same guarantee, nothing new to maintain.
+
+The behaviour that falls out is right in both edge cases. A server-only release
+matches no build and publishes nothing, so the shelf keeps the APK it had. A
+build still running matches nothing either, and the next tick picks it up —
+which is why this block runs *before* P2-1's no-change exit.
+
+`publish-apk.sh` also checks the file that arrived, not only the query that
+asked for it: the application id is matched against the manifest's string pool.
+That is the only check on the hand-run path, where there is no query.
+
+### Why the signing certificate is not checked
+
+**Not deferred — declined, and the reasoning belongs in the record.**
+
+Verifying a signature means verifying that the APK's *contents* are signed by a
+certificate, and that needs `apksigner` from the Android SDK. The box has none
+by a stated decision (`publish-apk.sh`: *"the box has no Android SDK and is not
+getting one"*). What is reachable without it is reading the certificate out of
+`META-INF/*.RSA` with openssl and comparing a fingerprint — which proves a
+certificate is *present in the archive* and nothing whatever about whether it
+signed anything. That is a check that looks like signature verification and is
+not, which is the exact class of defect this whole document keeps finding.
+
+And after the three filters it would have almost nothing left to catch. To reach
+the shelf a build must now be of this project, from this commit, on this
+profile, under this application id — and such a build is signed with this
+project's own EAS credentials. A signing check would defend only against
+somebody who had already changed those credentials inside the Expo project, and
+that person can publish through the front door.
+
+The threat the item actually names — *"a colleague running the wrong `eas build`
+line"* — is fully covered by the profile filter alone.
+
+### Verification
+
+The mechanism, not the deployment. `eas build:list`'s flags were confirmed
+against eas-cli 21.8.0's own source (`build/commands/build/list.js`) rather than
+from memory: `--build-profile`, `--app-identifier` and `--git-commit-hash` all
+exist and all reach the GraphQL filter.
+
+The manifest check was run against constructed fixtures — a UTF-8 string pool,
+a UTF-16LE one, and one naming a different application — through the real
+`publish-apk.sh`. Both encodings publish; the wrong application is refused with
+its own sentence. `tr -d '\0'` is what makes one grep cover both, since a
+UTF-16LE ASCII string is the same bytes with a null after each.
+
+**Not run against a real EAS build or a real APK**, because neither is
+obtainable here. The first deploy after this lands is the first real test, and
+its failure mode is bounded: the shelf keeps the APK it has, the deploy notes
+that it could not publish, and the API is untouched.
 
 ## P2-3 · Backups are designed but not operationally closed
+
+> **Fixed.** A nightly timer, a service, and a second timer whose whole job is
+> to fail when the backup stops. The two documents that disagreed now say the
+> same thing, and the one that was wrong is the one that said "Done".
 
 **Trusted.** `scripts/backup-mongo.sh` is good work — strict shell settings,
 tight permissions, `age` encryption, offsite upload, oplog-aware consistency. But
@@ -1084,17 +1366,85 @@ P3 nicety at most, and it should not be listed beside the scheduling gap.
 
 **To do**
 
-- [ ] A timer, a service, and an alert on absence — a backup nobody is told about
+- [x] A timer, a service, and an alert on absence — a backup nobody is told about
       is not a backup.
-- [ ] Reconcile `ROADMAP.md:478` with `PICK-UP-HERE.md:125`. One of them is
+- [x] Reconcile `ROADMAP.md:478` with `PICK-UP-HERE.md:125`. One of them is
       telling the next reader the job is finished.
 - [ ] ~~Refuse a restore into a non-empty database unless explicitly forced.~~
-      Optional. It contradicts a documented decision and the harm is bounded to
-      un-archiving; if it is done, do it as a confirmation prompt rather than a
-      refusal.
-- [ ] Restore-test on a schedule. Untested backups are a belief, not a control.
+      Optional, and not taken. It contradicts a documented decision and the harm
+      is bounded to un-archiving.
+- [x] ~~Restore-test on a schedule.~~ **Documented as a manual drill, and it
+      cannot be automated here** — see below.
+
+### What it does, 15 August
+
+`steading-backup.service` and `.timer` — nightly at 02:00 UTC, `Persistent=true`
+so a box that was off backs up on the way back rather than skipping a night in
+silence, which is precisely the silence this item is about. Settings come from
+`/etc/steading/backup.env`, its own file: the bucket credentials have no
+business beside the auth secret, and the reverse.
+
+**The alert is the harder half and it needed its own unit.** A backup that did
+not run produces no output from a service that did not start, so the thing that
+notices has to be something else on its own schedule.
+`steading-backup-check.service` runs `check-backup.sh` at 09:00 and **exits
+non-zero when the last successful backup is over thirty-six hours old**.
+
+There is no mail sender on this box and no monitoring agent, so a failing
+oneshot *is* the channel: it puts the machine into `systemctl --failed`, which
+is where an operator already looks and what any monitoring added later already
+watches. That is a genuinely different level of visibility from a line in a
+journal nobody opens, which is what a `note` in `deploy.sh` would have been.
+
+Thirty-six hours rather than twenty-four: a run that started late — a reboot, a
+slow dump, the timer's own randomised delay — must not be reported as a failure,
+because a check that cries wolf is a check somebody disables.
+
+**The marker it reads is written only after the object has been read back out
+of S3.** `aws s3 cp` exiting zero means the request succeeded, not that the
+object is in the bucket at the size it should be — a truncated body, a lifecycle
+rule expiring the prefix, or a copy to a path nobody lists all exit zero. So
+`backup-mongo.sh` now lists the key it just wrote and checks its size against
+the same floor the dump is checked against, and only then records the time.
+
+### Why the restore test is not scheduled
+
+**Not a gap — a property.** A real restore needs the age identity, and the whole
+design is that the private half never exists on this machine. Nothing running
+here can decrypt a backup, which is the point of encrypting to a public key: a
+box compromise does not become a history compromise.
+
+So the drill is manual, twice a year, on a machine that is not this one, and
+`DEPLOY-THE-SERVER.md` now carries the procedure. What it proves is the thing
+the nightly job cannot: **that the identity in the password manager matches the
+recipient on the box.** An `age` keypair mismatch is invisible until somebody
+tries to decrypt, and by then the backups it silently ruined are all of them.
+
+### The documents that disagreed
+
+`ROADMAP.md` said *"Done — `scripts/backup-mongo.sh`"* for a script nothing ran.
+`PICK-UP-HERE.md` said it was waiting on a bucket and a keypair. Both are
+rewritten, and both now say what changed and which was wrong — a roadmap reading
+"Done" is how an unscheduled backup stays unscheduled, and that is worth leaving
+on the record rather than quietly correcting.
+
+### Verification
+
+`check-backup.sh` was run against six states with a scratch marker: no marker
+(exit 1), a fresh one (0), forty hours (1), thirty hours (0), a marker that is
+not a timestamp (1), and a fresh one under a one-hour limit (0). Every unit file
+and both scripts parse.
+
+**Not run against a real bucket**, because there is none here — the S3 read-back
+and the marker write are exercised only by the code path's own shape. The first
+real backup is the first real test, and its failure mode is the one this item
+asked for: the check unit goes red.
 
 ## P2-4 · `/health` does not check the database
+
+> **Fixed.** `/ready` opens the connection `/health` deliberately does not, and
+> `deploy.sh` polls it — so the script now does the first of the two things its
+> own comment has always claimed. Fly's liveness check stays on `/health`.
 
 **Trusted.** `apps/api/src/server.ts:53-58` reports process liveness only, and
 Mongo connects lazily — so deploy gates and Fly checks can read healthy while
@@ -1129,9 +1479,72 @@ not gated on.
 
 **To do**
 
-- [ ] Split liveness from readiness; have readiness ping Mongo.
-- [ ] Point `deploy.sh:334` at `/ready` rather than `/health`, so the script does
+- [x] Split liveness from readiness; have readiness ping Mongo.
+- [x] Point `deploy.sh` at `/ready` rather than `/health`, so the script does
       what its own comment claims. Leave the Fly liveness check alone.
+
+### What it does, 15 August
+
+`ping()` in `db/client.ts` — the only module allowed to hold a `MongoClient` —
+opens the connection and issues `{ping:1}` against the database `databaseName()`
+chose. `server.ts` wraps it: 200 `{ok:true,database:'reachable'}`, or 503
+`{ok:false,database:'unreachable'}` and **nothing else**, because the endpoint
+needs no token and a Mongo connection error names the host, the replica set and
+often the user. The reason goes to the journal.
+
+**Honest about its reach.** The connection is where the driver handshakes and
+authenticates, so an unreachable host, a wrong replica set and rejected
+credentials all surface. `ping` itself needs no privilege, so this does *not*
+prove the app's role can read its collections — a deliberate stop, since
+readiness gets polled and a check costing a real query every thirty seconds is a
+check somebody eventually turns off.
+
+**No caching, including none that looked tempting.** A first draft made `ping()`
+single-flight against a flood on an unauthenticated endpoint; `connect()`
+already caches the client promise, so concurrent callers share one connection
+attempt and one five-second server selection, and what remained was a pooled
+round trip per request. It was removed rather than shipped with a comment
+overstating it. Caching the *answer* would be worse than useless: a poll a
+second after `systemctl restart` has to see this process's state.
+
+**The deploy script now distinguishes the two failures**, which the old
+paragraph beside it wanted to and could not. The poll asks `/ready` with a
+six-second deadline (the driver's own timeout is five, so three aborted the
+request before it could answer). When it never passes, one probe of `/health`
+decides the message: a process answering that but not `/ready` is running the
+new code perfectly well and cannot reach Mongo, so the script points at
+`/etc/steading/api.env` and **withholds the rollback** — reverting would restore
+code that was never the problem and hide the setting that was.
+
+**Fly stays on `/health`, and that is not an oversight.** Its check is wired to
+a machine restart every thirty seconds; pointing it at readiness would kill a
+healthy process because a managed database blinked, and restarting fixes nothing
+about a database. Liveness restarts, readiness reports.
+
+**Also corrected:** the comment above the poll in `deploy.sh` claimed the check
+caught "a bad `MONGODB_URI`". It never could. The claim is now annotated with
+what was true instead.
+
+### Verification
+
+`tests/unit/readiness.test.ts`. The unreachable half needs no database — the
+point being that the failure it covers is the one where there isn't one — and
+uses a URI that fails at the driver's scheme check so it costs no timeout.
+Three cases: `/health` still answers 200 (not a bug — that is what liveness
+means), `/ready` answers 503, and the body is asserted with `toEqual` against
+the exact object, so adding the driver's message to it fails the test. The
+reachable half runs against `startTestDb('steading_readiness')` — its own
+database name — and skips without a mongod, as every database-backed suite here
+does.
+
+Checked by breaking it: replacing `await ping()` with `await Promise.resolve()`
+fails two of the three.
+
+`.github/workflows/ci.yml` also asserts it end to end in the built image. That
+container is given a `MONGODB_URI` with nothing listening behind it, which is
+exactly the shape of a deployment with a wrong one, so `/health` must pass and
+`/ready` must return 503 — a `/ready` that quietly stopped dialling Mongo would
+look healthy there and wave through the deploy it exists to stop.
 
 ---
 
@@ -1153,6 +1566,21 @@ six spot-checked in the 15 August pass, which are annotated inline.**
   collection scan on every Google sign-in, and its absence is exactly the
   structural guarantee that `indexes.ts:160-176` argues for at length one
   collection over — *"a check in a route is a thing somebody can refactor past."*
+  → **Index done, 15 August.** `{googleSub: 1}`, unique, partial on
+  `$type: 'string'`. Partial for two reasons and the second is easy to miss:
+  most accounts are password-only, *and* `disableUser` `$unset`s the field on
+  removal so a removed person's Google account can sign up again — a plain
+  `unique: true` would admit one row with the field missing and refuse every
+  other, which is every password-only signup and every removal after the first.
+  Asserted in `tests/unit/indexes.test.ts` rather than only in a database-backed
+  suite, for the reason that file already gives about the purchase token: an
+  index checked only where a mongod is needed is exactly the thing D15 calls
+  *"a thing somebody can forget to create"*. Checked by breaking it — removing
+  the declaration fails three cases. **Note for an existing deployment:**
+  `pnpm db:indexes` will refuse if two live accounts already share a
+  `googleSub`, which is the state the index exists to prevent; that refusal is
+  the finding, not a fault in the migration. **The binding itself is still
+  open** — it is the P3 item this was split out of.
 - **Referential integrity is schema-shaped, not enforced.** Parent IDs are
   accepted without checking the referent exists, so out-of-order sync or a
   crafted client creates permanent orphans.
@@ -1318,19 +1746,60 @@ side, and it should be scheduled beside P0-2 for that reason.
       here — so it is the one that can be taken back without a base value.
       Guarded on no `applied` row for the same target, so a record the server
       accepted after all is never removed.
-- [ ] **The residue, which is now the open half.** A refused `update` leaves its
-      merged fields in place, and a refused `delete` leaves the record hidden;
-      neither is repaired by a later pull, because the server has no mutation
-      for a command it refused. `delete` is exactly revertible (only the
-      `deleted` flag moved, `nextRecordValue` keeps the value) but needs
-      guarding against a second, accepted delete. `update` needs a stored
-      last-server-confirmed value per record — a second column, and the only
-      thing that would make the revert exact. Asserted as-is in
-      `refused-create.test.ts` so the limit is visible rather than assumed.
-- [ ] Make `checkIntegrity` able to see this: a record with no server-side
+- [x] ~~**The residue, which is now the open half.**~~ **Done, 15 August.** A
+      refused `update` left its merged fields in place and a refused `delete`
+      left the record hidden; neither is repaired by a later pull, because the
+      server has no mutation for a command it refused.
+      **Not the remedy this bullet proposed.** It asked for "a stored
+      last-server-confirmed value per record", which is a value maintained on
+      the *pull* path — one extra write per hydrated row, for a farm's whole
+      history, to serve the rare case of a refusal. A **pre-image per mutation**
+      costs one write per local edit instead, is exact for `update` and `delete`
+      alike, and needs no separate guard for a second accepted delete: the guard
+      falls out of the design. See below.
+- [x] ~~Make `checkIntegrity` able to see this: a record with no server-side
       provenance and no queued mutation is a phantom, and the counter arithmetic
-      cannot tell. **Still open** — the revert stops new phantoms, but a device
-      that already has one gets no help, and nothing reports it.
+      cannot tell.~~ **The premise is out of date, and no new code was the right
+      answer.** The one-time projection repair (P0-2) already sweeps exactly
+      this set — `finishProjectionRepair` deletes every record the accepted-log
+      replay did not vouch for — and it is already pinned by *"sweeps a record
+      the server has nothing for"* in `projection-repair.test.ts`. So a device
+      that already has a phantom **does** get help, once, automatically. What
+      was true is that **nothing reported it**, and that half is now done: the
+      count is persisted and the diagnostics sheet says what was taken away.
+      No ongoing detector is needed, because with the create revert and the
+      residue fix nothing can produce a new one — and a counter that cannot
+      distinguish a pulled record from a phantom would be a detector that
+      guesses.
+### How the residue is taken back, 15 August
+
+A **pre-image per mutation**, in `record_undo`, written in the same transaction
+as the optimistic projection and only for `update` and `delete` — a `create` is
+taken back by deleting the row, because the target owes its whole local
+existence to this device.
+
+**Not a replay, for the reason N-1 already gives**: replaying this device's
+outbox history reconstructs a record from local mutations alone and drops
+everything that arrived by pull. A pre-image has no such flaw — it *is* the
+record, whatever produced it.
+
+**`after` is what makes restoring safe**, and it removes the extra guard the
+bullet asked for. It holds the `updatedAt` this device's optimistic write
+produced, and the restore only happens when the record still carries it.
+Anything else — a pull delivering the server's version, a later edit, somebody
+else's accepted delete — is newer than the command being discarded, and newer
+wins. That covers "a second, accepted delete" without a delete-specific rule,
+and it covers the case the bullet did not think to name: a refusal can sit in
+the inbox for days, and the farm moves on.
+
+The pre-image leaves when the mutation does, in both directions: `resolveBatch`
+forgets it when the server accepts, `discardRejected` consumes it, and a
+**rejected** row keeps its own because `retryRejected` may put it back on the
+wire and it can be refused again. A table that only grew would keep a copy of
+every value a farm ever edited past, on a device whose whole storage argument is
+that it holds one farm's records and no more. It is on the `wipe()` list for the
+same reason.
+
 - [x] Test: hand creates a group, server rejects, hand discards → the record is
       gone. Then the same with `retryRejected` → the record survives. Both in
       `tests/offline/refused-create.test.ts`, along with the pull-does-not-bring-
@@ -1614,6 +2083,24 @@ local one are the same code path — worth more here than a build step, in a rep
 whose expensive failures have all been environment drift."* That is defensible.
 Re-decide it against a bundler; do not assume the answer changes.
 
+### Done, 15 August — the comment, not the runtime
+
+The paragraph now says that the two routes it examined require rewriting every
+import, that a Node bundler does not, and that nobody has run one against this
+tree either — so the next reader gets an open question rather than a closed one.
+It also states the trade if anyone reopens it: a bundler puts a transform
+between the deployed process and the local one, and hands back startup time and
+image size.
+
+**The runtime is unchanged**, deliberately. The decision stands on its own
+argument once the false dichotomy is removed from underneath it, and swapping a
+working `tsx` for an unevaluated build step to satisfy a comment correction
+would be the tail wagging the dog.
+
+- [x] Correct the comment.
+- [ ] ~~Move to a bundler.~~ Not taken, and not a to-do: a preference call, now
+      recorded as one.
+
 ### Verification (15 August) — fair characterisation, zero operational impact.
 
 Nothing breaks and nothing is at risk. This is a documentation-completeness
@@ -1624,11 +2111,14 @@ to say it should be re-weighed rather than assumed to lose.
 
 **To do**
 
-- [ ] Correct the comment so it names the bundler route and says why it was not
+- [x] Correct the comment so it names the bundler route and says why it was not
       taken.
 - [ ] Optional, separately: evaluate `esbuild`/`tsup` against the same-code-path
       argument. Image size is a weaker motive than it first appears — the image
-      already carries production dependencies only.
+      already carries production dependencies only. **Left open deliberately:**
+      it is a preference call, and swapping a working runtime for an unevaluated
+      build step to satisfy a comment correction would be the tail wagging the
+      dog.
 
 ## B-3 · The vitest parallelism comment contradicts itself — **P3**
 
@@ -1636,8 +2126,9 @@ to say it should be re-weighed rather than assumed to lose.
 *"Each file gets its own database harness, so let them run in isolation rather
 than racing for the same collections."*
 
-**Both halves cannot be true.** If every file genuinely had its own harness there
-would be nothing to race for. Something is shared — almost certainly the database
+~~**Both halves cannot be true.** If every file genuinely had its own harness there
+would be nothing to race for.~~ **They can, and they were — see below.**
+Something is shared — almost certainly the database
 name — and the comment hides which, so the constraint reads as inherent when it is
 incidental.
 
@@ -1672,14 +2163,51 @@ the original item missed it: all twelve files mutate `process.env.MONGODB_URI`.
 
 **To do**
 
-- [ ] Correct the comment to say the harness is per-file but the database name is
+- [x] Correct the comment to say the harness is per-file but the database name is
       not always, and that it bites only when `MONGODB_TEST_URI` points several
       files at one server. Name the `process.env` sharing too.
-- [ ] Give the five `steading_isolation` files distinct names and tear them down,
+- [x] Give the five `steading_isolation` files distinct names and tear them down,
       which removes the collection race. Note it does **not** remove the reason
       for `fileParallelism: false` on its own, because of the `process.env`
       mutation.
-- [ ] Correct this item: "both halves cannot be true" is false.
+- [x] Correct this item: "both halves cannot be true" is false — struck through
+      in the heading of the verification above, and the reasoning kept, because
+      how it went wrong is the useful part.
+
+### What it does, 15 August
+
+The five files now name their own databases — `steading_removed_member`,
+`steading_sign_in`, `steading_refresh`, `steading_sync_tenancy`,
+`steading_auth_routes` — so the collection race is gone.
+
+`stop()` drops the database it made, so a shared mongod does not accumulate one
+per suite for ever and a rerun does not start on top of what the last one left.
+**Guarded on the name**, and the guard is why dropping is safe to do at all:
+`startTestDb`'s default is `steading`, which is the *production* database name,
+so a call site that forgot to name its own would otherwise drop the real one the
+moment somebody pointed `MONGODB_TEST_URI` at a server holding it.
+
+`vitest.config.ts` now says the true thing, which is a different sentence from
+the one the item asked for: **serial because the suites share a process
+environment, not because they share a database.** Every database-backed file
+assigns `process.env.MONGODB_URI`, because `db/client.ts` reads it from the
+environment rather than taking it as an argument — so the collection fix does
+not on its own let `fileParallelism` come back.
+
+### Verification
+
+`tests/unit/test-db-names.test.ts` reads every suite's source and fails when two
+claim one name, or when any claims the production name. Reads rather than
+imports, because importing a database-backed suite runs it — and it asserts it
+found more than five call sites first, so it cannot pass by matching nothing.
+
+A test rather than a convention, because the failure is invisible in the
+ordinary case: it needs a shared server *and* concurrency, so it is green
+locally, green in CI today, and waits for whoever turns file parallelism back
+on.
+
+Checked by breaking it: pointing `refresh.test.ts` at `steading_sign_in` fails
+with both filenames in the message.
 
 ## B-4 · `TRUSTED_PROXY_HOPS` is coupled to deployment topology — **P3, ops note**
 
@@ -1706,8 +2234,29 @@ more dangerous of the two.
 
 **To do**
 
-- [ ] Note the coupling in `DEPLOY-THE-SERVER.md` next to the proxy configuration,
+- [x] Note the coupling in `DEPLOY-THE-SERVER.md` next to the proxy configuration,
       naming both the too-few and too-many failure directions.
+
+### What it says, 15 August
+
+A block beside `TRUSTED_PROXY_HOPS=1` in step 5, and two rows in the
+troubleshooting table. It states the number as a fact about topology, says what
+makes it change (Cloudflare, an Oracle load balancer, a second reverse proxy),
+and names both directions:
+
+- **Too few** — `request.ip` collapses to the proxy and one stranger's failed
+  sign-in throttles the whole farm. The failure this variable exists to prevent,
+  reached from the other side.
+- **Too many** — a header segment the *client* wrote is read as the address, so
+  a caller presents a new one per request and the auth limiter never fires.
+  Authorization failing open (invariant 10), and the more dangerous by a
+  distance because nothing about it is visible: the service looks healthy while
+  the password limiter is off.
+
+The troubleshooting table needed both rows for the same reason. "Everybody is
+rate limited at once" sends somebody looking; "password guessing is never
+throttled" is a symptom nobody observes, so the row exists to be found by
+someone reading the table for another reason entirely.
 
 ## Reviewed and rejected — the tenancy guard critique
 
@@ -1817,14 +2366,20 @@ Add, alongside the existing sync tests:
 - [ ] Crash between log write and projection → repaired, not duplicated. **Needs
       a seam that does not exist**: `applyMutation` takes no clock and no hook.
 - [ ] Farm Hand photo, end to end, across two devices.
-- [ ] N-1: hand creates a group, server rejects, hand discards → record gone.
-- [ ] N-2: a `NetworkStateEvent` with `isConnected: undefined` → the engine does
-      not go offline.
-- [ ] N-3: `medication:update` carrying both `flockId` and `animalId` → refused,
-      or the withdrawal holds for both subjects.
-- [ ] Concurrency tests for P1-7 (a), (b) and (c). None exist; the codebase
-      already does concurrency correctly elsewhere and tests it with
-      `Promise.all`, so the pattern is there to copy.
+- [x] N-1: hand creates a group, server rejects, hand discards → record gone.
+      `tests/offline/refused-create.test.ts`, which also covers the residue now:
+      a refused `update` and a refused `delete` are both put back, and are
+      **not** put back when something has touched the record since.
+- [x] N-2: a `NetworkStateEvent` with `isConnected: undefined` → the engine does
+      not go offline. `tests/unit/network-trigger.test.ts`.
+- [x] N-3: `medication:update` carrying both `flockId` and `animalId` → refused,
+      or the withdrawal holds for both subjects. `tests/unit/merged-invariants.test.ts`
+      — refused, and the audit step found `maintenanceUpdateSchema` dropping its
+      refine the same way, which the item had not noticed.
+- [x] Concurrency tests for P1-7 (a), (b) and (c).
+      `tests/isolation/membership-races.test.ts`. **CI only** — no mongod is
+      obtainable in the environment they were written in, so unlike everything
+      else here they were not watched to fail before they passed.
 
 ---
 
@@ -1845,7 +2400,9 @@ From the verification pass, with the dependencies that force it:
    what turns the crash window into something a farm hits.
 2. ~~**N-1**, beside it. Same confusion, opposite direction, and no server change
    fixes it.~~ **Done for the create case**; the `update`/`delete` residue and
-   the `checkIntegrity` phantom detection remain.
+   the `checkIntegrity` phantom detection remain.~~ **All three done now** — and
+   the phantom half by finding it was already closed, since the P0-2 repair
+   sweeps exactly that set.
 3. ~~**P1-2** and **N-2**. Both cheap, both high-frequency, both invisible to the
    person affected.~~ **Both done.**
 4. ~~**P1-1**, which unblocks ever putting a new field on the wire — including
@@ -1860,9 +2417,38 @@ From the verification pass, with the dependencies that force it:
    wraps the same critical section.~~ **Done**, and the ordering turned out to
    matter: the mutex wraps the outcome stamp, which did not exist when this was
    written.
-6. **P1-5(a)** with the `tickets` wipe fix ahead of it, then ~~P1-3~~, P1-4(c).
-   P1-3 is done.
+6. ~~**P1-5(a)** with the `tickets` wipe fix ahead of it, then ~~P1-3~~,
+   P1-4(c).~~ **All done**, including P1-5's last uncovered case, which turned
+   out to need the screen harness rather than a handset.
 7. **P0-1's fresh-ULID work**, with the correction editor it exists to support.
+   **The only substantial thing left in this document.** It is a feature —
+   correcting a refused mutation and sending it as a new one — rather than a
+   defect, which is why it has stayed at the bottom of every pass.
+
+---
+
+# Where this stands, 15 August
+
+Everything in P0, P1, P2, B-1 to B-4 and the two P3 items split out for being
+cheap is now either **done** or **declined with a reason written down**. The
+declines are worth listing, because a decline that is not recorded reads as an
+omission:
+
+| | Why not |
+|---|---|
+| P2-2's signing-certificate check | Real verification needs `apksigner`, which the box has by decision no Android SDK for. Reading a certificate out of `META-INF` proves one is present and nothing about what it signed — a check that looks like verification and is not. After the profile, application-id and commit filters it would have almost nothing left to catch. |
+| P2-3's restore-into-non-empty refusal | Contradicts a documented decision, and the harm is bounded to un-archiving. |
+| P2-3's scheduled restore test | Cannot be automated *here*: a restore needs the age identity, and the design is that the private half never exists on the box. Documented as a twice-yearly drill performed elsewhere. |
+| B-2's move to a bundler | The comment was the defect and is corrected. Swapping a working runtime for an unevaluated build step to satisfy a comment correction would be the tail wagging the dog. |
+| P0-1's fresh-ULID work | A feature, not a defect. Still open, deliberately. |
+| P1-4 (a) and (b) | Server-side, and unreachable without a refresh token already extracted from a device keystore. Still open. |
+
+**And the thing no amount of this substitutes for.** Several of these changes are
+in the mobile client — the sign-out fence, the pre-image revert, the diagnostics
+panels, the farm-swap unmount — and **none of them has run on a handset.**
+`CLAUDE.md` is explicit: *"Verify on a real device before calling any storage,
+camera, haptics, or sync task done."* Green CI is not that, and this document
+should not be read as though it were.
 
 ---
 

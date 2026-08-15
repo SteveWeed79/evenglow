@@ -181,6 +181,33 @@ Two more are already in the file and should stay:
   internet as one caller and lock a farm out over a stranger's failed sign-in.
   A number rather than `true`, so a caller cannot forge past it by sending the
   header themselves.
+
+  > **This number is a fact about your topology, and it is wrong in a different
+  > way in each direction. Change it whenever you change what sits in front of
+  > the service.**
+  >
+  > It is `1` because exactly one proxy — Caddy on this box — appends to
+  > `X-Forwarded-For`. Put Cloudflare, an Oracle load balancer, or a second
+  > reverse proxy in front and it becomes `2`. `fly.toml` sets `1` for Fly's own
+  > single forwarding hop, for the same reason.
+  >
+  > **Too few, and the farm throttles itself.** Fastify takes the address that
+  > many hops from the right, so with a real proxy in front and a count that is
+  > short, `request.ip` collapses to the proxy for every caller. One stranger's
+  > failed sign-in then rate-limits everybody — the exact failure this variable
+  > exists to prevent, arrived at from the other side.
+  >
+  > **Too many, and a caller chooses their own address.** Counting past the
+  > proxies you actually run means reading a header segment the client wrote, so
+  > anyone can present a new `request.ip` per request and the auth limiter never
+  > fires at all. That is the more dangerous direction by a distance: it is
+  > authorization failing open (invariant 10), and unlike the throttling case
+  > nothing about it is visible — the service looks perfectly healthy while the
+  > password limiter has been switched off.
+  >
+  > Neither can be inferred from inside the process, which is why this is
+  > configuration and why the default is `0`: trusting nothing is the answer
+  > that fails closed for a service reachable directly.
 - **`PORT=3001`** — what Caddy proxies to. Change both or neither.
 
 Everything else in `apps/api/src/env.ts` has a default, and each feature it
@@ -249,17 +276,44 @@ difference between "it did not work" and knowing which of five things to look
 at. `{"ok":true}` and you are done with the server.
 
 `/health` deliberately touches nothing — it opens no database connection — so a
-green health check means the process is up, and it is still worth doing one real
-request afterwards to prove the database is reachable.
+green health check means the process is up and nothing more than that.
 
 **What the reply tells you:**
 
 | | |
 |---|---|
-| `200` and `{"ok":true}` | Done |
+| `200` and `{"ok":true}` | The process is running |
 | Hangs, then times out | The Oracle ingress rule (step 2) |
 | `Connection refused` | The port is open, Caddy is not running |
 | A certificate error | `sudo journalctl -u caddy -n 50` — usually DNS was not ready when it asked |
+
+### Then ask whether it can actually serve
+
+```bash
+curl -i https://api.swbuild.dev/ready
+```
+
+`/ready` opens the database connection `/health` does not. That distinction is
+the whole point: Mongo connects lazily, so a wrong `MONGODB_URI` — an
+unreachable host, a rejected password, a cluster that was paused — leaves the
+process up and answering `/health` while every route that touches a record
+fails. The two endpoints together tell you which half is broken.
+
+| | |
+|---|---|
+| `200` and `{"ok":true,"database":"reachable"}` | Done with the server |
+| `503` and `{"ok":false,"database":"unreachable"}` | The process is fine; `MONGODB_URI` or `MONGODB_DB` in `/etc/steading/api.env` is not |
+| Takes about five seconds first | Normal — that is the driver's server-selection timeout on the first connection |
+
+The reply says `unreachable` and nothing else on purpose. This endpoint needs no
+token and is on the open internet, and a Mongo connection error names the host,
+the replica set and sometimes the user. The reason is in
+`sudo journalctl -u steading-api -n 50`.
+
+`deploy.sh` polls `/ready` after every restart, so a deploy that cannot reach
+the database fails at the deploy rather than at the first farm to log an egg.
+Fly's health check stays on `/health`, because it is wired to a machine restart
+and restarting a process fixes nothing about a database.
 | `502 Bad Gateway` | Caddy is up, the API is not. `sudo journalctl -u steading-api -n 50` |
 
 `502` is the likeliest one after a first run, because the service will not start
@@ -284,6 +338,19 @@ an Android phone, allow the browser to install once.
 there is no runtime setting, deliberately: a server address a stranger can talk
 somebody into changing is a phishing surface. Pointing at a different server
 means another build.
+
+**A cloud build of any other profile will not reach `/app`.** The deploy script
+asks EAS for the build matching the `preview-farm` profile, the `com.steading.app`
+application id, *and* the exact commit the box is serving — so a `development`
+build somebody runs from a laptop is invisible to it. It used to ask for the
+newest finished Android build of anything, and the next timer tick would have
+published a dev-client APK that demands Metro to whoever downloaded the link.
+`publish-apk.sh` checks the application id again on the file that arrives, which
+is the only check on the hand-run path.
+
+A release that changes no app code matches no build and publishes nothing, which
+is what you want: the shelf keeps the APK it has until a commit that actually
+produced one is deployed.
 
 ---
 
@@ -541,6 +608,11 @@ itself.
 can write backups it cannot read, upload; `restore` is a subcommand of the same
 script. §4.1a-i calls this a condition of the first real farm rather than a
 nicety, and it was already true on M0, which has no automated backups either.
+
+Enable `steading-backup.timer` **and** `steading-backup-check.timer` together —
+"Before a farm that is not yours depends on this", below, has the settings and
+the restore drill. The second timer is not optional decoration: without it a
+backup that quietly stops is indistinguishable from one that is working.
 
 **Photos stay in GridFS**, and that was re-argued rather than assumed once the
 database moved — §4A.3 has the three reasons the box's own filesystem is not an
@@ -843,8 +915,15 @@ sudo /opt/steading/scripts/deploy/deploy.sh
 Pull, install, restart, and then **check that it actually came back** — a
 `systemctl restart` returns when the process is spawned, not when it is
 serving, so without the check a deploy that killed the server reports success.
-If it does not come back the script prints the last thirty log lines and the
-command to go back to the previous commit.
+The check asks `/ready` rather than `/health`, so "came back" means *reached the
+database*, not merely *started*.
+
+If it does not come back the script says which of the two failed. A process that
+answers `/health` but not `/ready` is running the new code fine and cannot reach
+Mongo, so it points at `/etc/steading/api.env` and does **not** offer the
+rollback — going back would restore code that was never the problem. Otherwise
+it prints the last thirty log lines and the command to return to the previous
+commit.
 
 It refuses to merge anything but a fast-forward, so a box somebody edited in
 place at 6am stops and says so rather than resolving it silently.
@@ -859,6 +938,91 @@ subcommand of the same script, and a tested restore is a rehearsed migration.
 rather than a nicety, and that is still right even with Atlas holding the data:
 the free M0 tier has no automated backups either.
 
+**The script existed for months with nothing running it**, which is the state
+this section is really about: a backup that depends on somebody remembering to
+type a command is not a control, it is an intention. Two timers close it.
+
+#### Turning it on
+
+Put the settings in their own file — not `api.env`, because the bucket
+credentials have no business beside the auth secret and vice versa:
+
+```bash
+sudo install -m 0600 /dev/null /etc/steading/backup.env
+sudo nano /etc/steading/backup.env
+```
+
+```
+MONGODB_URI=…                    the same value api.env has
+STEADING_BACKUP_BUCKET=s3://your-bucket/steading
+STEADING_BACKUP_RECIPIENT=age1…  the PUBLIC half
+AWS_ACCESS_KEY_ID=…              an IAM user that can only PutObject on the prefix
+AWS_SECRET_ACCESS_KEY=…
+AWS_DEFAULT_REGION=…
+```
+
+**No `STEADING_BACKUP_IDENTITY`.** The private half of the age key must never
+be on this machine — that is the entire argument for encrypting to a public
+key, and it is why a restore is a deliberate act performed somewhere else. Put
+it in a password manager. You need it once, on the worst day.
+
+```bash
+sudo cp /opt/steading/scripts/deploy/steading-backup.{service,timer} /etc/systemd/system/
+sudo cp /opt/steading/scripts/deploy/steading-backup-check.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now steading-backup.timer steading-backup-check.timer
+sudo systemctl start steading-backup      # don't wait until 02:00 to find out
+```
+
+#### How you find out it stopped
+
+`steading-backup-check` runs at 09:00 and **exits non-zero when the last
+successful backup is more than thirty-six hours old**, which puts the box into
+`systemctl --failed`. That is deliberate: there is no mail sender here and no
+monitoring agent, so systemd's own state is the one channel an operator already
+reads and any monitoring added later already watches.
+
+```bash
+systemctl --failed                          # a stale backup shows up here
+systemctl status steading-backup-check
+journalctl -u steading-backup -n 50
+```
+
+Thirty-six hours rather than twenty-four, so a run that started late — a
+reboot, a slow dump, the timer's own randomised delay — is not reported as a
+failure. A check that cries wolf is a check somebody disables.
+
+The marker it reads is written **only after the script has read the uploaded
+object back out of S3**. `aws s3 cp` exiting zero means the request succeeded,
+which is not the same claim as the object being in the bucket at the size it
+should be.
+
+#### The restore drill, which stays manual
+
+**Twice a year, and it is not automated on purpose.** A real restore test needs
+the age identity, and the whole design is that the private half never exists on
+this box — so nothing running here can perform one. That is a property to keep,
+not a gap to close.
+
+On a machine that is not this one, with the identity to hand:
+
+```bash
+export STEADING_BACKUP_IDENTITY=/path/to/age-identity
+export STEADING_BACKUP_BUCKET=s3://your-bucket/steading
+./scripts/backup-mongo.sh list
+./scripts/backup-mongo.sh restore steading-2026-08-05T02-00-00Z.age
+```
+
+Restore into a **fresh** database and point a scratch API at it. The script
+does not pass `--drop`, so a restore over live data cannot overwrite a current
+record — but it can resurrect archived ones, and there is no reason to find
+that out on the day you need the backup.
+
+What the drill proves that the nightly job cannot: that the identity in the
+password manager is the one that matches the recipient on the box. An `age`
+keypair mismatch is invisible until somebody tries to decrypt, and by then the
+backups it silently ruined are all of them.
+
 ---
 
 ## When something is wrong
@@ -867,7 +1031,7 @@ the free M0 tier has no automated backups either.
 |---|---|
 | `curl` hangs, no response at all | The Oracle ingress rule (step 2). Then the instance iptables: `sudo iptables -L INPUT -n --line-numbers` |
 | Certificate error, or Caddy will not start | DNS. `dig +short api.swbuild.dev` must return the box. Then `journalctl -u caddy -n 50` |
-| `{"ok":true}` but everything else fails | Atlas Network Access (step 3), or a wrong `MONGODB_URI`. On a local mongod: `systemctl status mongod` |
+| `{"ok":true}` but everything else fails | Ask `/ready`. A `503` there confirms it: Atlas Network Access (step 3), or a wrong `MONGODB_URI`. On a local mongod: `systemctl status mongod` |
 | Service will not start | `systemctl status steading-api` then `journalctl -u steading-api -n 50`. Usually an empty `AUTH_SECRET` |
 | Restarting in a loop | It stops itself after five in a minute. The reason is in `systemctl status` |
 | Connects fine, but the farm is empty | `MONGODB_DB`. The default is `steading`; a cluster holding records under another name serves an empty one without complaining (step 5) |
@@ -875,4 +1039,7 @@ the free M0 tier has no automated backups either.
 | App says **Not set up** | The APK was built without an origin — that is `preview`, not `preview-farm` |
 | Sync refused with a 402 | Billing, and only possible once `GOOGLE_PLAY_SERVICE_ACCOUNT` is set. With no Play config `access.ts` returns `syncing: true` for every farm, so a 402 here means something else |
 | Deploy timer runs, nothing ever deploys | `journalctl -u steading-deploy -n 30`. Either the box is ahead of `release` — never `git pull` there — or git is refusing the checkout's ownership |
+| `systemctl --failed` lists `steading-backup-check` | No backup for over 36 hours. `journalctl -u steading-backup -n 50` — usually `/etc/steading/backup.env` is missing a variable, or the IAM user cannot write the prefix |
+| Everybody is rate limited at once, or one stranger locks the farm out | `TRUSTED_PROXY_HOPS` is lower than the number of proxies actually in front (step 5). `request.ip` has collapsed to the proxy |
+| Password guessing is never throttled | `TRUSTED_PROXY_HOPS` is *higher* than the proxies you run, so callers are choosing their own `request.ip`. Nothing looks wrong; check the number against the topology |
 | One farm sees another's records | Stop and report it. That is the invariant everything else is built on |

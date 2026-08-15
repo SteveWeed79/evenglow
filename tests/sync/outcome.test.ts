@@ -23,9 +23,10 @@ import { startTestDb } from '../support/mongo';
  * those two meanings, asserted from both ends: what the applier stamps, and
  * what hydration is willing to hand to a second device.
  *
- * Its own database name rather than the shared `steading_isolation`, because
- * these suites wipe collections in `beforeEach` and several files pointed at
- * one server would wipe each other's fixtures mid-test.
+ * Its own database name, because these suites wipe collections in `beforeEach`
+ * and several files pointed at one server would wipe each other's fixtures
+ * mid-test. Five files used to share `steading_isolation` for exactly that
+ * reason; they no longer do (B-3), and every call site now names its own.
  */
 
 const harness = await startTestDb('steading_outcome');
