@@ -789,7 +789,50 @@ fires, a refresh token too. It pairs directly with P1-5(a).
       grace window should return the *same* child, not mint a new one.
 - [ ] Make revocation cover rows inserted after it — a family-level generation or
       a revoked-at floor rather than a bulk update of known rows.
-- [ ] Fence the client refresh against sign-out.
+- [x] Fence the client refresh against sign-out.
+
+### What (c) does, 15 August — and the correction it needed
+
+A session epoch in `session.ts`, bumped **synchronously** by `signOut()` on its
+first line and by `establish()` immediately before its writes, so a bump can
+never land behind an await. `runRefresh` samples it on entry and compares before
+every return and around every write.
+
+**The remedy as written — "fence the refresh against sign-out" — is half of
+it, and the missing half would have caused a worse fault than the one being
+fixed.** A fence that only records *that* a transition happened has to decide
+what an overtaken refresh should do, and the obvious answer, clear up after
+itself, is right for a sign-out and catastrophic for a sign-in: `establish` is
+the shared path for all five ways into a session, so a stale refresh landing
+just after one would answer by wiping the credentials somebody had opened a
+moment earlier. So the epoch carries an intent, and only `signed-out` tidies.
+
+**Checked on both sides of the write, not once before it.** A single check
+before `writeRefreshToken` leaves the interleaving where `clearCredentials()`
+runs *while* `setItemAsync` is in flight: the delete is overtaken by the write
+and the device keeps a live rotation. Whoever finishes last clears up, so both
+orderings end signed out.
+
+**Also fenced: the 401 branch.** A refusal arriving after a deliberate sign-out
+would record `reason: 'refused'` over the `signed-out` breadcrumb — overwriting
+the one distinction Diagnostics exists to draw, with the misleading half.
+
+### Verification
+
+`tests/unit/sign-out-fence.test.ts`. Four cases: a sign-out during the round
+trip leaves no refresh token, no claims and no access token; the wipe-crossing-
+the-write interleaving, driven by signing out from *inside* the stubbed
+keychain write so the delete really does land first; the 401-after-sign-out
+breadcrumb; and the sign-in case, which must keep the new session and drop the
+stale one without clearing anything.
+
+Checked by breaking it: short-circuiting `overtaken()` to `false` fails all
+four. The existing `refresh-race`, `sign-out-visible` and `boot-refusal` suites
+stay green, so the single-flight behaviour they cover is untouched.
+
+**(a) and (b) remain open**, and both are server-side. Neither is reachable
+without an attacker who has already extracted a refresh token from the device
+keystore or a backup.
 
 ## P1-5 · Farm switching is not one transition
 
