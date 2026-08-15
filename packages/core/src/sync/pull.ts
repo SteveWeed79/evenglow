@@ -6,7 +6,7 @@ import {
 } from '@steading/contracts';
 import { apiUrl, renewSession, syncHeaders } from '../api';
 import type { PullResult } from '../db/port';
-import { localStore } from '../db/store';
+import { localStore, storeGeneration } from '../db/store';
 
 /**
  * Hydration — the read half of sync.
@@ -69,6 +69,10 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
    * because this is the only loop that can also tell when the replay has
    * finished — and the sweep at the end is safe only then.
    */
+  // The farm this pass belongs to. Applying a page into a store that has since
+  // been swapped would write one farm's records into another's database, which
+  // is the worst version of this hazard and the one no server check can catch.
+  const tenant = storeGeneration();
   const repairing = !(await localStore().projectionRepairDone());
   if (repairing) await localStore().startProjectionRepair();
 
@@ -136,6 +140,8 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
      * locally advances past what was skipped, exactly as the server's own
      * unknown-entity skip does.
      */
+    if (storeGeneration() !== tenant) return { ...outcome, deferred: 'farm-switched' };
+
     const { known, unmodelable } = readableRows(parsed.data.mutations);
     outcome.unmodelable += unmodelable;
 

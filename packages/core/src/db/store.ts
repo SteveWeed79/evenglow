@@ -20,8 +20,32 @@ import type { LocalStore } from './port';
 
 let current: LocalStore | null = null;
 
+/**
+ * Which farm's store is installed, as a number that only moves forward.
+ *
+ * **A device holds one farm's database at a time and swaps files to change
+ * farms, so "the store" is not a stable thing to have read a moment ago.** The
+ * sync loop reads the outbox, awaits a round trip, and writes the answers back
+ * — and a farm switch landing inside that gap meant one farm's queued work
+ * could be sent under another farm's token, or another farm's results written
+ * into this one's outbox. Neither is caught by `scoped()`: the server is doing
+ * exactly what the token says, and the mistake is on the device.
+ *
+ * So every step that spans an await captures this first and refuses to
+ * continue if it moved. Cheaper and harder to get wrong than passing a store
+ * handle down every call — and it fails closed, because a stale generation can
+ * only stop work, never misdirect it.
+ */
+let generation = 0;
+
 export function setLocalStore(store: LocalStore): void {
   current = store;
+  generation += 1;
+}
+
+/** Captured before an await, re-read after it. See the note above. */
+export function storeGeneration(): number {
+  return generation;
 }
 
 export function localStore(): LocalStore {
@@ -36,4 +60,5 @@ export function localStore(): LocalStore {
 /** Tests only: drops the handle so the next call must install one again. */
 export function resetLocalStore(): void {
   current = null;
+  generation += 1;
 }

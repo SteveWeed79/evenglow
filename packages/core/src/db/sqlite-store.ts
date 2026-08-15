@@ -1169,6 +1169,18 @@ export async function openSqliteStore(
           // Added to this list in the same change that created it, which is the
           // whole lesson of the comment above.
           'record_gen',
+          /**
+           * **`tickets` was missed for the same reason the weather tables
+           * were**, and it is the one on this list that holds a farm's records
+           * rather than a cache of somebody else's data: `tickets.records` is
+           * the opt-in export a support report carries (S2). A barn tablet
+           * handed to the next farm would keep the previous one's export,
+           * invisibly, because the wipe appears to have run.
+           *
+           * Latent until now — nothing called `clearSession` — which is
+           * precisely why it had to be fixed before sign-out started using it.
+           */
+          'tickets',
           'quarantine',
           'forecast',
           'observation',

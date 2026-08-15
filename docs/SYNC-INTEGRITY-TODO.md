@@ -793,6 +793,10 @@ fires, a refresh token too. It pairs directly with P1-5(a).
 
 ## P1-5 · Farm switching is not one transition
 
+> **Fixed.** Sign-out now reopens the device's own farm instead of leaving the
+> employer's on screen, and a store generation stops a flush or a pull that is
+> mid-round-trip from finishing against whichever farm replaced it.
+
 **Trusted.** Sign-out clears tokens but deliberately leaves the tenant database
 open, and `Boot.tsx:182-194` keeps rendering it with the sync engine running.
 
@@ -837,11 +841,36 @@ only the token half.
 
 **To do**
 
-- [ ] Make auth state, org selection, store handle, and engine state one
-      serialised transition with a generation number the engine checks before it
-      flushes.
-- [ ] Close or blank the outgoing store at sign-out rather than at next boot.
-- [ ] Cover the closed-handle window at `store.ts:83-104` with the same fence.
+- [x] ~~Make auth state, org selection, store handle, and engine state one
+      serialised transition~~ with a generation number the engine checks before
+      it flushes.
+      **Corrected: the generation alone, not a serialised transition.**
+      Serialising four pieces of state across the app would need every caller to
+      hold a lock it cannot forget, and the failure mode of forgetting is
+      silent. A generation bumped by `setLocalStore` and re-read after every
+      await **fails closed** — a stale value can only stop work, never
+      misdirect it — and it needs nothing from the callers at all. Checked in
+      three places: before the flush sends, before it writes the answers back,
+      and before a pulled page is applied.
+- [x] Close or blank the outgoing store at sign-out rather than at next boot.
+      Shipped as **reopening the device's own farm** rather than blanking:
+      `ensureLocalOrgId` already exists for exactly this and says so — *"signing
+      out again is the moment that reverses"* — it was simply only ever called
+      at the next boot. **Nothing is wiped.** The employer's database is a
+      separate file that stays where it is, unsent work included, and opens
+      again on the next sign-in; the queue is the only copy of work that never
+      reached the server, and discarding it to close a display bug would be the
+      worse trade.
+- [x] Cover the closed-handle window at `store.ts:83-104` with the same fence.
+      `openLocalStore` closes the outgoing handle and then installs the next,
+      and installing bumps the generation — so anything mid-flight for the old
+      farm stops rather than reaching a closed handle.
+- [ ] **Not covered: a screen already rendering when the swap happens.** The
+      fence protects sync, which is where the cross-tenant write lived. A hook
+      that read `localStore()` before the swap and awaits after it still holds
+      the old handle; `Boot` re-renders through `opening` on both paths, which
+      should unmount them, but that is reasoning about React rather than a
+      tested guarantee. It needs a device.
 
 ## P1-6 · An interrupted restore can leave an archived record live
 
@@ -1194,12 +1223,16 @@ six spot-checked in the 15 August pass, which are annotated inline.**
   failure the provenance section warns about, and it was inside this document.**
 - **The local wipe skips the `tickets` table**, which can hold full record data.
   Sign-out does not currently call wipe, so this is latent rather than live.
-  → **Verified: confirmed, correctly filed.** Nobody is affected today. But if
-  sign-out wiping is ever restored on the shared-tablet argument — which P1-5(a)
-  argues for — a barn tablet handed to the next farm keeps the previous farm's
-  full record export in `tickets.records`, invisible because the wipe appears to
-  have run. Fix it as a one-line list addition now rather than scheduling it,
-  **and fix it before P1-5, not after.**
+  → **Verified, then fixed.** `tickets` is on the wipe list, added before P1-5
+  as its own note said it should be. It is the one table there holding a farm's
+  RECORDS rather than a cache of somebody else's data — `tickets.records` is the
+  opt-in export a support report carries (S2) — so a barn tablet handed to the
+  next farm would have kept the previous farm's export, invisible because the
+  wipe appeared to have run. Still latent in the sense that nothing calls
+  `wipe` even now: P1-5's sign-out swaps the store rather than clearing it, on
+  the grounds that the queue is the only copy of unsent work. `clearSession` in
+  `packages/core/src/sync/session.ts` remains written and uncalled, and is
+  correct for the day a farm genuinely wants a device emptied.
 - **Flush response parsing is loose** — it checks only that `results` is an array,
   unlike the strict pull boundary. Malformed entries read as rejections.
   → **Verified: confirmed, and P3 undersells it if P0-2 is scheduled.** Not
