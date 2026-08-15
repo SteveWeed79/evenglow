@@ -667,6 +667,12 @@ of pictures that never arrive. High frequency in any farm with a hand.
 
 ## P1-3 · Session expiry is not recovered while the app is open
 
+> **Fixed.** A 401 now renews the session once and retries the same request, in
+> both the flush and the pull, so a lapsed token costs one round trip instead of
+> stalling until a lifecycle event. The `lastError` copy tells the two failures
+> apart. The cold-start suspicion in the third bullet was investigated and is
+> unfounded — see below.
+
 **Trusted.** Access tokens last fifteen minutes (`apps/api/src/auth/tokens.ts:20-43`).
 The mobile token-pair schema does not retain the expiry the server returns
 (`apps/mobile/src/auth/session.ts:26-50`), so nothing is scheduled against it.
@@ -711,13 +717,39 @@ the severity the Trusted label did not reach.
 
 **To do**
 
-- [ ] Keep `expiresAt` in the stored pair and refresh ahead of it — or simply
-      read `exp` from the claims already decoded by `parseClaims`.
-- [ ] One refresh-and-retry path on 401, shared by every authenticated call.
-- [ ] Fix the `lastError` copy. It instructs a signed-in user to sign in.
-- [ ] Check the cold-start ordering the audit flags at
+- [x] ~~Keep `expiresAt` in the stored pair and refresh ahead of it — or simply
+      read `exp` from the claims already decoded by `parseClaims`.~~
+      **Not needed once the retry exists, so deliberately not built.** A
+      proactive refresh saves one round trip per fifteen minutes; the reactive
+      path already costs nothing else, because a renewal that succeeds means no
+      deferral is recorded and therefore no backoff. Two mechanisms for the same
+      guarantee is two things to keep correct, and the second buys a round trip.
+- [x] One refresh-and-retry path on 401, shared by every authenticated call.
+      **Shared by every SYNC call**, which is where the stall lived:
+      `setSessionRefresher` in `packages/core/src/api.ts`, told rather than
+      detected like `setApiBase` and `setOnline`, because core compiles for a
+      server and cannot import secure storage. `apps/mobile/src/auth/call.ts`
+      already refreshes when the token is absent and is not on the stalling
+      path — its calls are user-initiated and report their failure to a screen.
+      Photo transfer is untouched: a 401 there leaves the bytes pending and the
+      next pass carries them, so it never stalls permanently.
+- [x] Fix the `lastError` copy. It instructs a signed-in user to sign in.
+      Now three-valued: `signed-out` says sign in, `unavailable` says the server
+      could not be reached, and both still open with "Nothing is lost" — which
+      is the half that came from a farm actually asking whether its morning was
+      about to be.
+- [x] ~~Check the cold-start ordering the audit flags at
       `apps/mobile/src/boot/start.ts:166-182` and `Boot.tsx:166-179` — the sync
-      loop appears to start before the lifecycle triggers are installed.
+      loop appears to start before the lifecycle triggers are installed.~~
+      **Checked, and it does not.** `start.ts:214-216` is
+      `triggers = startTriggers(); startSync();` — triggers first. `start()`
+      runs on every boot, signed in or not, because a device without an account
+      still opens its own farm through `ensureLocalOrgId`. The listeners are
+      process-global and survive a later sign-in, so `Boot.tsx`'s `onSignedIn`
+      calling `startSync()` alone is correct rather than a gap. The verification
+      note that the sign-in-after-boot path was "unrecoverable without an app
+      restart" followed from the same misreading and is withdrawn: resume and
+      network regain reach both paths.
 
 ## P1-4 · Refresh rotation leaves long-lived siblings
 
@@ -1795,7 +1827,8 @@ From the verification pass, with the dependencies that force it:
    wraps the same critical section.~~ **Done**, and the ordering turned out to
    matter: the mutex wraps the outcome stamp, which did not exist when this was
    written.
-6. **P1-5(a)** with the `tickets` wipe fix ahead of it, then P1-3, P1-4(c).
+6. **P1-5(a)** with the `tickets` wipe fix ahead of it, then ~~P1-3~~, P1-4(c).
+   P1-3 is done.
 7. **P0-1's fresh-ULID work**, with the correction editor it exists to support.
 
 ---

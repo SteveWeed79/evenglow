@@ -5,7 +5,7 @@ import {
   type SyncRefusal,
   type SyncResponse,
 } from '@steading/contracts';
-import { apiUrl, syncHeaders } from '../api';
+import { apiUrl, renewSession, type SessionRenewal, syncHeaders } from '../api';
 import { localStore } from '../db/store';
 import type { QueuedMutation } from '../db/records';
 
@@ -76,6 +76,11 @@ const defaultTransport: SyncTransport = async (mutations) => {
   return { status: res.status, body };
 };
 
+/** A session the server no longer accepts, as opposed to work it refuses. */
+function isLapsed(status: number): boolean {
+  return status === 401 || status === 403;
+}
+
 let inFlight: Promise<FlushOutcome> | null = null;
 
 /**
@@ -107,8 +112,27 @@ async function runFlush(transport: SyncTransport): Promise<FlushOutcome> {
   if (batch.length === 0) return outcome;
 
   let response: { status: number; body: unknown };
+  let renewal: SessionRenewal = 'renewed';
   try {
     response = await transport(batch.map(toEnvelope));
+
+    /**
+     * One renewal, one retry, and only for a lapsed session.
+     *
+     * Access tokens last fifteen minutes and nothing in this loop could mint a
+     * new one, so an app left open and online stopped syncing at the quarter
+     * hour and stayed stopped until a lifecycle event happened to occur —
+     * behind a chip that said work was waiting and an error that told a
+     * signed-in farmer to sign in.
+     *
+     * Once, not in a loop: a second 401 after a successful renewal is a
+     * refusal about this request rather than about the session, and retrying
+     * that would spin.
+     */
+    if (isLapsed(response.status)) {
+      renewal = await renewSession();
+      if (renewal === 'renewed') response = await transport(batch.map(toEnvelope));
+    }
   } catch (error) {
     // Network failure: keep everything queued and count the attempt (A1).
     await recordAttempt(batch, error instanceof Error ? error.message : 'Network error');
@@ -136,8 +160,18 @@ async function runFlush(transport: SyncTransport): Promise<FlushOutcome> {
    * A farmer who believes their morning is about to be lost stops using the
    * app, and no amount of it being untrue afterwards gets that back.
    */
-  if (response.status === 401 || response.status === 403) {
-    await setLastError('Nothing is lost — sign in again to send the work waiting here.');
+  if (isLapsed(response.status)) {
+    /**
+     * Reached only when a renewal was tried and did not produce a token, so the
+     * two answers are genuinely different actions. Telling somebody to sign in
+     * when they already are, and the server simply could not be reached, is the
+     * same class of defect as the sentence this one replaced.
+     */
+    await setLastError(
+      renewal === 'signed-out'
+        ? 'Nothing is lost — sign in again to send the work waiting here.'
+        : 'Nothing is lost — this session needs renewing and the farm server could not be reached.',
+    );
     return { ...outcome, deferred: 'unauthenticated' };
   }
 

@@ -1,3 +1,4 @@
+import { currentAccessToken, setSessionRefresher } from '@steading/core/api';
 import { localStore } from '@steading/core/db/store';
 import { startSync, stopSync } from '@steading/core/sync/engine';
 import { setPhotoBytes } from '@steading/core/sync/photos';
@@ -109,6 +110,28 @@ export async function start(raw?: string): Promise<Started> {
    * moves them.
    */
   setPhotoBytes(deviceBytes);
+
+  /**
+   * How the sync loop renews a lapsed session, told rather than detected.
+   *
+   * Same pattern and same reason as `setPhotoBytes` above: `packages/core`
+   * cannot import secure storage. Without it a token expiring while the app sat
+   * open and online stopped sync until a lifecycle event happened to occur —
+   * the loop could see the 401 and had no way to do anything about it.
+   *
+   * `refreshSession` is already single-flight, so a flush and a pull that both
+   * hit a 401 in the same tick share one round trip rather than racing.
+   *
+   * Three answers, because the two failures are different instructions. It
+   * returns the cached claims when the REQUEST failed and null only when the
+   * server actually refused — so a null is genuinely signed out, and claims
+   * with no token is a server that could not be reached.
+   */
+  setSessionRefresher(async () => {
+    const renewed = await refreshSession();
+    if (renewed === null) return 'signed-out';
+    return currentAccessToken() === null ? 'unavailable' : 'renewed';
+  });
 
   /**
    * A photograph taken by a process that did not survive to keep it.

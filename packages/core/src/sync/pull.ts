@@ -4,7 +4,7 @@ import {
   type PulledMutation,
   readableRows,
 } from '@steading/contracts';
-import { apiUrl, syncHeaders } from '../api';
+import { apiUrl, renewSession, syncHeaders } from '../api';
 import type { PullResult } from '../db/port';
 import { localStore } from '../db/store';
 
@@ -92,8 +92,28 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
       return { ...outcome, deferred: 'offline' };
     }
 
+    /**
+     * One renewal, one retry, for the same reason the flush does it: a token
+     * lasts fifteen minutes and nothing else in this loop can mint another, so
+     * a device left open simply stopped hydrating at the quarter hour.
+     *
+     * Once, not in a loop — a second 401 after a successful renewal is about
+     * this request rather than the session.
+     */
     if (response.status === 401 || response.status === 403) {
-      return { ...outcome, deferred: 'unauthenticated' };
+      if ((await renewSession()) !== 'renewed') {
+        return { ...outcome, deferred: 'unauthenticated' };
+      }
+
+      try {
+        response = await transport(since, sinceId);
+      } catch {
+        return { ...outcome, deferred: 'offline' };
+      }
+
+      if (response.status !== 200) {
+        return { ...outcome, deferred: `server-${response.status}` };
+      }
     }
     if (response.status !== 200) {
       return { ...outcome, deferred: `server-${response.status}` };
