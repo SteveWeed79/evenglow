@@ -1,7 +1,13 @@
 # Steading — The Landscape Plus-Up
 
-**Status: design only. Nothing here is built.** It is a plan for using the room
-a tablet in landscape actually has, written against what ships today.
+**Status: phases A–C built; phase D is this document and a device.** Written
+first as a design, then kept as the record of what the building changed about
+it. Where the two differ, §11 says so — a plan that was quietly edited to match
+its outcome is worth nothing to whoever reads it next.
+
+**What is not done: none of it has been seen on a tablet.** The suite has no
+layout engine and every phone falls on the narrow side of every branch here, so
+the wide path has been reasoned about and never looked at. See §12.
 
 Read `docs/UX-SPEC.md` first — R1–R10 are binding and this document proposes an
 amendment to exactly one of them (R3), stated openly rather than worked around.
@@ -448,14 +454,14 @@ against a stubbed react-native that does not lay out.
 
 ## 9. Order of work
 
-**A — vocabulary and the free wins.** No navigation change, no pane machinery.
+**A — vocabulary and the free wins.** No navigation change, no pane machinery. ✅
 
 1. `theme/window.ts`, `useWindowClass`, the `LAYOUT` additions. Pure, tested.
 2. `insets.left`/`insets.right` in `Screen`. A real bug, currently masked.
 3. Grid the hubs: Farm, QuickAdd, MyFarm, Settings, and the three place lists.
 4. Let Numbers, Trend and Weather exceed the column.
 
-**B — the plus-up proper.**
+**B — the plus-up proper.** ✅
 
 5. `Screen` grows an optional `aside`; two panes at ≥ 992 usable.
 6. History as the list-detail pilot.
@@ -465,13 +471,13 @@ against a stubbed react-native that does not lay out.
 8. The two reach details from §5a.1: group the steps inboard, move a due's tick
    to the trailing edge. Both are small and neither waits on anything.
 
-**C — navigation and the rest.**
+**C — navigation and the rest.** ✅ (Growing excepted — see §11)
 
 9. The rail at ≥ 840, with `TabDividers` and `TabMark` taught the other axis.
 10. Stock, Iron, Growing to list-detail via the prop-not-param refactor.
 11. Form context asides.
 
-**D — write it down and prove it.**
+**D — write it down and prove it.** Written; not yet proved.
 
 12. The R3 amendment into UX-SPEC.
 13. **On the tablet.** Every serious bug in this project so far has been one only
@@ -481,10 +487,101 @@ against a stubbed react-native that does not lay out.
 
 ---
 
-## 10. The one-line summary
+## 10. Where each piece landed
 
-The app has a single breakpoint at 600dp that means both "stop growing" and
+| Plan | Code |
+|---|---|
+| §3 vocabulary | `apps/mobile/src/theme/window.ts`, `hooks/useWindow.ts`, `LAYOUT` in `theme/tokens.ts` |
+| §1 cutout insets | `components/Screen.tsx` — on the children, never the ground |
+| §5d hub grids | `components/Grid.tsx`; Farm, QuickAdd, Settings, Stock, Iron, Growing |
+| §5e charts | `wide` on Numbers, Trend, Weather |
+| §5a supporting pane | `above` and `aside` on `Screen`; Today |
+| §5b list-detail | History; then Stock via `GroupBody`, Iron via `MachineBody` |
+| §5f form context | Weigh — the last three weighings beside the scale |
+| §4 rail | `navigation/Tabs.tsx`, `hasRail` in `theme/window.ts` |
+| §7 R3 | `docs/UX-SPEC.md`, amended |
+
+Tests: `tests/unit/panes.test.ts` (the arithmetic), `tests/unit/tabs.test.ts`
+(the rail's budget), `tests/screens/reading-column.test.tsx` (both caps and the
+insets), `tests/screens/grid.test.tsx`, `tests/screens/panes.test.tsx`,
+`tests/screens/list-detail.test.tsx`.
+
+Two seams were added to the harness so the wide path is reachable at all:
+`seedWindow` in `tests/support/native/react-native.tsx` and `seedInsets` in
+`tests/support/native/modules.tsx`. Both default to a portrait handset, which
+is what makes every *other* screen test a standing assertion that the narrow
+path still renders what it always did.
+
+---
+
+## 11. What the building changed
+
+Five things. Each was a plan that met a component and lost.
+
+**The 8" tablet is decided by the rail.** §3's table said 944 and one pane,
+computed with the rail's width already deducted; the code separates a window's
+*class* from what is left for *content*, and `tests/unit/panes.test.ts` caught
+the plan having it backwards. 1024 clears 992 on its own, so an 8" landscape
+tablet is a two-pane window until the rail exists and a one-pane window
+afterwards. That is why `windowClass` takes the chrome as an argument rather
+than assuming it, and why the shortfall is 64dp rather than 32.
+
+**The rail is 96dp, not 80.** Material's 80 is sized for a 24dp glyph with a
+short word under it. This bar has no icons — the word is the whole tab — and
+`tab-marks.ts` allows eight characters, which is about 70dp of Plex Mono with
+its tracking and does not fit inside 80 less padding. `TabMark` records this
+bar clipping its labels twice already, both times because a word went in a box
+measured for something else.
+
+**The weather does not go in the aside.** §5a put the forecast row there.
+`aside` restacks *under* the column at one pane, so anything moved into it
+moves below the tallies on every handset — and the row is deliberately above
+them. A layout change for a tablet may not reorder a phone. It spans both panes
+instead, which also keeps the three weather strips in the order their own
+comments argue for rather than splitting them across two columns.
+
+**Neither "reach detail" existed.** §5a.1 asked for the tally steps to be
+grouped inboard and a due's tick moved to the trailing edge. Reading the
+components: `styles.steps` is already a centred row of `TAP.min` targets — a
+260dp group, not a row spanning the pane — and `DueRow` already renders its
+Done control as the trailing child. Both mockups had been drawn from this
+document rather than from the code. The trap the study was right about is real
+and still open, so it is kept as a test instead: the step order may not be a
+function of the window.
+
+**MyFarm is a form and Growing has no detail.** §5d listed MyFarm as a hub from
+its filename; it is Fields, Toggles and Pickers, so it keeps one column by
+§5f's own rule. And Growing's list is *beds* while its pushed detail is a
+*planting*, so "the selected bed's detail" is the plantings the bed card
+already shows. Making it list-detail means listing plantings instead of beds,
+which is a redesign of the screen rather than a layout for it.
+
+---
+
+## 12. What a device still has to answer
+
+Everything below is reasoned from tokens and has never been looked at.
+
+- **The rail's labels.** Three uppercase mono words in a 96dp rail is the
+  arithmetic saying yes; this bar has clipped twice on arithmetic that said
+  yes. Look before believing it.
+- **`tabBarVariant: 'material'`.** Used with a custom `tabBarLabel` and no
+  icon, which is not the combination it was drawn for.
+- **Which pane the tally wants.** §5a.1 settles it on an argument, not on a
+  measurement. The reach arcs are ±40dp.
+- **The cutout insets.** `insets.left`/`insets.right` are now reserved and no
+  device in the suite reports a non-zero one.
+- **The two-pane fold.** `landscape-fold.test.ts` says the stack clears
+  800dp; whether it looks right with 480dp of dues beside it is a different
+  question and only a screen answers it.
+
+---
+
+## 13. The one-line summary
+
+The app had a single breakpoint at 600dp that meant both "stop growing" and
 "start turning", and a tablet in landscape is a *large*-width, *medium*-height
-window that neither of those numbers describes. Give it a vocabulary for
-expanded and large, keep the 600dp measure exactly where it is, and spend the
-recovered 680dp on a second pane and a rail — not on a wider column.
+window that neither of those numbers described. It has a vocabulary for
+expanded and large now, the 600dp measure has not moved a dp, and the
+recovered width went into a second pane and a rail rather than into a wider
+column.

@@ -12,7 +12,7 @@ The competitive finding that drives this document: the market leader loses on **
 |---|---|---|
 | R1 | **Five-second rule.** Any daily log is ≤3 taps from cold app launch. | Stopwatch, airplane mode, on device. |
 | R2 | **Home is today, not a dashboard.** Charts live one level down. | Home shows chores + tally, no analytics above the fold. |
-| R3 | **Primary actions live in the bottom third.** Top of screen is for status only. | Thumb-reach audit on a 6.7" phone. |
+| R3 | **Primary actions live in the reachable zone** — the bottom third on a compact window, the bottom **outer corners** of the pane that owns them on an expanded one. Top of screen is for status only. | Thumb-reach audit on a 6.7" phone *and* on a 10" tablet held in two hands. |
 | R4 | **Tap targets ≥56px, primary actions 64px, ≥12px spacing.** Gloves cut touch precision to roughly 12–25mm even with capacitive tips; the 44px accessibility floor is a floor, not a target. | Automated audit in CI. |
 | R5 | **Numbers are entered with steppers, never a keyboard,** unless the value can exceed 99. | No numeric `<input>` on any daily log screen. |
 | R6 | **Nothing waits on the network.** Every write is optimistic; the queue is visible and calm. | No spinner blocks a log action, ever. |
@@ -34,6 +34,24 @@ The competitive finding that drives this document: the market leader loses on **
 > Reading R7 as *one colour for all prose* is what left the app with a single
 > volume for every sentence it says. It is a floor, not a target: `ink` clears
 > it by 1.8–2.7×, and `inkQuiet` is quieter while still AAA.
+>
+> **R3 gained a second half, and it is the phone half that was incomplete.**
+> The rule used to read "the bottom third", tested by a thumb-reach audit on a
+> 6.7" phone. That is right about a phone — one hand, a thumb arcing from a
+> bottom corner — and it does not transfer. A tablet in landscape is held in
+> **two** hands, with the thumbs on the left and right edges and the fingers
+> behind the glass; the centre-bottom of a 1280dp window is one of the worst
+> places on the screen rather than the best. So the rule now names the zone
+> instead of a fraction of the screen, and the zone is a different shape at
+> each size. Nothing about a phone changed.
+>
+> The arrangement this produced on Today is worth stating, because it is the
+> reason the tally kept the left column: **each hand gets a side and a job.**
+> Left thumb logs — the commit and all four steps sit in its sweep. Right thumb
+> ticks off — the dues are in the pane under it. Mirroring the layout would
+> have bought the commit a shorter reach for a right-hander and moved the dues
+> across with it, leaving one hand carrying the whole screen. See
+> `docs/LANDSCAPE-PLAN.md` §5a.1 for the reach study and its error bars.
 
 ---
 
