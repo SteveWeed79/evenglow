@@ -26,6 +26,16 @@ a clock step, or concurrency the one-box deployment does not produce — see the
 verification blocks under each. Single-device offline use is unaffected by all
 three.
 
+> **P0-2 and P0-1(a) have shipped, as one change.** The log now carries an
+> `outcome` — `pending` on insert, the projection's own decision after — the
+> feed withholds everything that did not change domain state, and a duplicate
+> projects the stored envelope instead of the request. They were not two items:
+> the same field and the same re-projection path solve both, and either alone
+> leaves the other worse. `apps/api/src/sync/outcome.ts` is new;
+> `apply.ts` and `snapshot.ts` changed; `tests/sync/outcome.test.ts` covers it.
+> **Devices that already pulled a refused row still hold it** — the repair
+> bullet under P0-2 is the outstanding half.
+
 ---
 
 ## How to read the status column
@@ -163,16 +173,16 @@ migration attach one.
 
 **To do** — *the first bullet as originally written is dangerous; see below.*
 
-- [ ] ~~On a duplicate ID, project from the **stored** envelope rather than the
+- [x] ~~On a duplicate ID, project from the **stored** envelope rather than the
       request — **or skip projection entirely** and return the stored terminal
       result. One change at `apply.ts:139`.~~
       **Corrected:** project from the **stored** envelope. Do **not** ship the
       skip-projection variant on its own — reasoning below.
-- [ ] The stored-envelope read is an external boundary (invariant 11). Re-parse
+- [x] The stored-envelope read is an external boundary (invariant 11). Re-parse
       `stored.payload` through `payloadSchemaFor(stored.entity, stored.op)`
       rather than casting, and decide what an unparseable stored row does. It
       should return `duplicate` without projecting, and log.
-- [ ] Take `entity`, `op` and `targetId` from the stored row too, not just the
+- [x] Take `entity`, `op` and `targetId` from the stored row too, not just the
       payload. `project()` reads all three (`apply.ts:158-161`); swapping only
       the payload fixes the least dangerous third of the bug and leaves a reused
       ID writing to a document the audit row does not name.
@@ -283,7 +293,7 @@ everybody else.
 
 **To do**
 
-- [ ] ~~Add a terminal `outcome` to the mutation document, written after
+- [x] ~~Add a terminal `outcome` to the mutation document, written after
       `project()` returns — `applied | duplicate | rejected | conflict | noop`.~~
       **Corrected:** `$setOnInsert` the row with `outcome: 'pending'` alongside
       the envelope, then stamp the terminal value after `project()` with
@@ -298,7 +308,7 @@ everybody else.
       through machinery that already exists — the client never got a response, so
       the row stays queued, the resend hits the duplicate branch, sees `pending`,
       and re-projects from the stored envelope (P0-1's fix, same code path).
-- [ ] Store the projection's own vocabulary, not the wire status.
+- [x] Store the projection's own vocabulary, not the wire status.
       `ProjectionDecision['kind']` (`insert`/`update`/`archive`/`noop`/
       `conflict`/`rejected`) is already the honest answer. **Do not add `noop` to
       the wire enum**: `MutationResult['status']` is a contract, and
@@ -308,20 +318,29 @@ everybody else.
       two enums.
 - [ ] Add a sweeper for `pending` rows older than about an hour whose client
       never came back. It runs the same stored-envelope re-projection.
-- [ ] Filter `readSnapshotPage` to accepted effects only. The watermark must
+- [x] Filter `readSnapshotPage` to accepted effects only. The watermark must
       still advance past the excluded rows, the way the unknown-entity skip at
-      `snapshot.ts:99-104` already does. **Put the filter in the query, not the
-      read loop**, so `PULL_PAGE_SIZE + 1` still measures real rows and `more`
-      stays meaningful — unlike the unknown-entity skip, which can currently
-      return a page of nothing. The cursor pair from the last returned row is
-      still a valid seek point, so nothing in the paging argument at
-      `snapshot.ts:71-82` changes.
-- [ ] Write the filter as **exclusion** — `{ outcome: { $nin: ['pending',
-      'conflict', 'rejected', 'noop'] } }` — and add a test that enumerates the
-      `ProjectionDecision['kind']` union and asserts every value is explicitly
-      classified replicate/do-not-replicate, so adding a seventh kind fails the
-      suite. Exclusion fails open by default; that test converts it into a
-      compile-and-test-time guarantee, the same trick the tenancy lint rule uses.
+      `snapshot.ts:99-104` already does.
+      ~~**Put the filter in the query, not the read loop**, so
+      `PULL_PAGE_SIZE + 1` still measures real rows and `more` stays
+      meaningful.~~
+      **Corrected while implementing — the filter went in the read loop.** The
+      query form loses the watermark advancement the same bullet asks for: a
+      page whose remaining rows are all withheld returns nothing, so `through`
+      stays at `since` and every later pull rescans that run for ever. The loop
+      form keeps the cursor moving past what it skips, and `more` is honest
+      either way because it is measured on rows **read**, not rows kept. The
+      cost is a page that can be short, which is exactly what the unknown-entity
+      skip beside it already does.
+- [x] Write the filter as **exclusion**, so legacy rows with no field pass
+      through unchanged and no backfill is needed. Implemented as a total
+      `Record<StoredOutcome, boolean>` in `apps/api/src/sync/outcome.ts` rather
+      than a literal `$nin` list: the record makes the compiler demand a
+      decision for every kind, so adding one to `ProjectionDecision` without
+      classifying it fails `pnpm typecheck`. `tests/sync/outcome.test.ts` also
+      asserts the split is total and disjoint at runtime. Exclusion fails open
+      by default; those two together are what convert that into a guarantee,
+      the same trick the tenancy lint rule uses.
 - [ ] ~~Decide whether the feed carries the outcome so clients can *show* a
       refused command, or simply omits it.~~
       **Corrected: this is not open, it is blocked.** `pulledMutationSchema`
@@ -333,8 +352,8 @@ everybody else.
       device in the field at once.** Carrying the outcome is blocked on P1-1. The
       motive is weak anyway: the issuing device already learns the rejection from
       the flush response and already has the inbox row.
-- [ ] ~~Backfill `outcome` for existing rows.~~
-      **Corrected: delete this bullet.** Written as exclusion, legacy rows have
+- [x] ~~Backfill `outcome` for existing rows.~~
+      **Corrected: no backfill.** Written as exclusion, legacy rows have
       no field and pass through unchanged, which is current behaviour and
       therefore not a regression. No migration, no ambiguity. The original framed
       this as a convention to pick, but legacy rows and crashed rows both present
