@@ -137,7 +137,11 @@ describe('the two-pane threshold', () => {
     expect(windowClass(w, h).panes).toBe(2);
     expect(windowClass(w, h, { chrome: LAYOUT.rail }).panes).toBe(1);
 
-    expect(TWO_PANE_AT - (w - LAYOUT.rail)).toBe(48);
+    // Both forms, as everywhere else in this file: the shortfall as a sum of
+    // its parts, and the number it currently comes to. It moved from 48 to 64
+    // when the rail widened to hold a word instead of a glyph, and a test that
+    // only asserted the sum would not have mentioned it.
+    expect(TWO_PANE_AT - (w - LAYOUT.rail)).toBe(64);
     expect(heightClass(h)).toBe('medium');
   });
 
@@ -152,7 +156,7 @@ describe('the two-pane threshold', () => {
     const [w, h] = WINDOWS['10" tablet, turned'];
     expect(windowClass(w, h).panes).toBe(2);
     expect(windowClass(w, h, { chrome: LAYOUT.rail }).panes).toBe(2);
-    expect(w - LAYOUT.rail - TWO_PANE_AT).toBe(208);
+    expect(w - LAYOUT.rail - TWO_PANE_AT).toBe(192);
   });
 
   /**

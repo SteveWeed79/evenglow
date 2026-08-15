@@ -114,6 +114,22 @@ export function widthClass(width: number): WidthClass {
   return 'large';
 }
 
+/**
+ * Whether the tab bar becomes a rail at this width.
+ *
+ * Expanded is where Material moves a bottom bar to the leading edge, and it is
+ * the right line for this app for a reason of its own: a landscape tablet is
+ * *medium* height and *large* width, so it is short of exactly the axis an
+ * 88dp bar spends on three words.
+ *
+ * Only screens that HAVE the bar pay for it. A pushed screen has no tab bar
+ * under it and no rail beside it — `Screen` already uses `back` as that
+ * signal for the bottom inset, and this is the same fact asked sideways.
+ */
+export function hasRail(width: WidthClass): boolean {
+  return width === 'expanded' || width === 'large';
+}
+
 export function heightClass(height: number): HeightClass {
   if (height < HEIGHT.medium) return 'compact';
   if (height < HEIGHT.expanded) return 'medium';

@@ -1,14 +1,17 @@
+import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { listInventory, listMachines, type Machine, runningLow } from '@steading/core/read/iron';
 import { Primary, Row } from '../components/Form';
 import { Grid } from '../components/Grid';
 import { Icon } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
-import { Screen } from '../components/Screen';
+import { PaneTitle, Screen } from '../components/Screen';
 import { Touch } from '../components/Touch';
 import { useLive } from '../hooks/useLive';
 import { useTheme } from '../theme/ThemeProvider';
 import { useNav } from '../hooks/useNav';
+import { useWindow } from '../hooks/useWindow';
+import { MachineBody } from './MachineScreen';
 import { FONTS, LAYOUT, RADII, SPACE, TYPE } from '../theme/tokens';
 
 /**
@@ -28,16 +31,48 @@ import { FONTS, LAYOUT, RADII, SPACE, TYPE } from '../theme/tokens';
  */
 export function IronScreen(): React.ReactElement {
   const nav = useNav();
+  const { panes } = useWindow();
 
   const machines = useLive(listMachines);
   const inventory = useLive(listInventory);
+  const [chosen, setChosen] = useState<string | null>(null);
 
   if (machines === null) return <Screen title="Iron" back>{null}</Screen>;
 
   const low = runningLow(inventory ?? []);
 
+  /**
+   * List-detail, on the same terms History set.
+   *
+   * The machine opens **beside** the list instead of over it, and the pushed
+   * route is untouched — a narrow window still navigates, so nothing about
+   * this screen changes on a phone. `MachineScreen` was split by taking its
+   * `<Screen>` wrapper off rather than by writing a second detail view, so the
+   * pane and the pushed screen are the same component and cannot disagree.
+   *
+   * The first machine selects itself. A detail pane that opens empty is half a
+   * screen of nothing, and this list is ordered so the first row is the one
+   * most likely to be wanted.
+   */
+  const split = panes === 2 && machines.length > 0;
+  const open = split ? (machines.find((m) => m.id === chosen) ?? machines[0] ?? null) : null;
+
   return (
-    <Screen title="Iron" back wide>
+    <Screen
+      title="Iron"
+      back
+      wide
+      {...(open === null
+        ? {}
+        : {
+            aside: (
+              <>
+                <PaneTitle>{open.name}</PaneTitle>
+                <MachineBody machine={open} />
+              </>
+            ),
+          })}
+    >
       {machines.length === 0 ? (
         <Panel label="No equipment yet">
           {/* Empty screens invite (UX-SPEC §6). */}
@@ -49,7 +84,13 @@ export function IronScreen(): React.ReactElement {
             <MachineCard
               key={machine.id}
               machine={machine}
-              onPress={() => nav.navigate('Machine', { machineId: machine.id })}
+              // Beside a pane a row selects; without one it navigates. The
+              // pushed route is still the only way in on a phone.
+              onPress={() =>
+                split
+                  ? setChosen(machine.id)
+                  : nav.navigate('Machine', { machineId: machine.id })
+              }
             />
           ))}
         </Grid>

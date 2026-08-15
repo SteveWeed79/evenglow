@@ -1,6 +1,7 @@
 import { useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { windowClass, type WindowClass } from '../theme/window';
+import { LAYOUT } from '../theme/tokens';
+import { hasRail, widthClass, windowClass, type WindowClass } from '../theme/window';
 
 /**
  * How much room this screen has, right now.
@@ -21,17 +22,23 @@ import { windowClass, type WindowClass } from '../theme/window';
  * into, and a layout that counted it would promise a pane the safe area cannot
  * hold.
  */
-export function useWindow(): WindowClass {
+export function useWindow({ bar = false }: { bar?: boolean } = {}): WindowClass {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
   /**
-   * No `chrome` yet, because nothing is standing in the width.
+   * `bar` is "this screen has the tab bar under it", which above the expanded
+   * boundary means "and it is a rail beside it, taking 96dp of my width".
    *
-   * The navigation rail will be, and `LAYOUT.rail` is already declared for it
-   * — but a rail that is not drawn must not be reserved for, or every hub
-   * would lay out 80dp narrower than the room it actually has. This is the one
-   * place that learns about it when it lands.
+   * Composed here rather than inside `windowClass` on purpose: the pure
+   * function stays general and takes a plain number, and the app-specific
+   * question of *which* chrome is standing where is answered in the one place
+   * that can see both the window and the screen asking.
+   *
+   * A pushed screen passes nothing, because it has neither.
    */
-  return windowClass(width, height, { insets });
+  const chrome =
+    bar && hasRail(widthClass(width - insets.left - insets.right)) ? LAYOUT.rail : 0;
+
+  return windowClass(width, height, { insets, chrome });
 }

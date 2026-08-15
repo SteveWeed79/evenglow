@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { newId } from '@steading/contracts';
 import { LAYOUT, SPACE } from '../../apps/mobile/src/theme/tokens';
-import { columnsFor } from '../../apps/mobile/src/theme/window';
+import { columnsFor, hasRail, widthClass } from '../../apps/mobile/src/theme/window';
 import { FarmScreen } from '../../apps/mobile/src/screens/FarmScreen';
 import { freshStore } from '../support/store';
 import { mount } from '../support/screen';
@@ -47,9 +47,20 @@ beforeEach(async () => {
   });
 });
 
-/** The width `Screen` hands down: the capped column, less its own padding. */
-function content(windowWidth: number, cap: number): number {
-  return Math.min(windowWidth, cap) - SPACE.lg * 2;
+/**
+ * The width `Screen` hands down: the safe window, less the rail, capped, less
+ * its own padding.
+ *
+ * The rail is in here because **a hub is a tab screen**. Farm sits behind the
+ * bar, so above the expanded boundary it sits beside a rail and has 96dp less
+ * to divide than the window suggests. Modelled rather than hard-coded so this
+ * helper fails loudly if the rail's width or the boundary moves — which is
+ * exactly what happened when `LAYOUT.rail` grew from 80 to 96.
+ */
+function content(windowWidth: number, cap: number, insets = 0): number {
+  const safe = windowWidth - insets;
+  const usable = safe - (hasRail(widthClass(safe)) ? LAYOUT.rail : 0);
+  return Math.min(usable, cap) - SPACE.lg * 2;
 }
 
 interface Node {
@@ -173,7 +184,7 @@ describe('a hub on a tablet in landscape', () => {
     seedInsets({ left: 64, right: 64 });
     const screen = await mount(<FarmScreen />);
 
-    const width = content(TABLET.width - 128, LAYOUT.wide);
+    const width = content(TABLET.width, LAYOUT.wide, 128);
     const expected = (width - SPACE.md) / 2;
     const widths = cellWidths(screen.tree.toJSON(), 'farm-grid');
 

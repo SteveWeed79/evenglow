@@ -361,15 +361,24 @@ export const LAYOUT = {
    */
   cell: 400,
   /**
-   * The navigation rail, once there is one.
+   * The navigation rail.
    *
-   * Declared before it is drawn on purpose: it is **chrome that eats width**,
-   * so the pane arithmetic has to be able to say so, and a number invented at
-   * the point of use would be a number the sizing tests never saw. 80 is
-   * Material's rail width and the bar it replaces is `TAP.primary + 24`, so
-   * the swap returns 88dp of height for 80dp of width.
+   * **Chrome that eats width**, which is why it is a token the pane arithmetic
+   * can see rather than a number invented at the point of use.
+   *
+   * 96 rather than Material's 80, and the reason is that this bar has no
+   * icons. A rail is 80 wide because it holds a 24dp glyph with a short word
+   * under it; ours holds the word alone, and `tab-marks.ts` caps a name at
+   * eight characters — 8 × IBM Plex Mono at `TYPE.label` plus its tracking is
+   * about 70dp, which does not fit inside 80 less padding. `TabMark`'s comment
+   * records this bar clipping its labels twice already, both times because a
+   * word was put in a box measured for something else. Not a third time.
+   *
+   * The trade still favours the rail: 96dp of width for the 88dp of height the
+   * bottom bar was spending, on a landscape tablet that is *medium* height and
+   * *large* width.
    */
-  rail: 80,
+  rail: 96,
 } as const;
 
 /**

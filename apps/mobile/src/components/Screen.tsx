@@ -111,7 +111,13 @@ export function Screen({
 }): React.ReactElement {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const { usable, panes } = useWindow();
+  /**
+   * `!back` is "this is a tab screen", which is the same signal the bottom
+   * inset below already reads and for the same underlying fact: a pushed
+   * screen has no tab bar under it, and above the expanded boundary that bar
+   * is a rail taking width off the side.
+   */
+  const { usable, panes } = useWindow({ bar: !back });
 
   const cap = wide ? LAYOUT.wide : LAYOUT.column;
 
@@ -458,6 +464,23 @@ export function Screen({
    </ContentWidthProvider>
    </RevealProvider>
   );
+}
+
+/**
+ * The hero of a supporting pane.
+ *
+ * A pane has no `Screen` of its own, so nothing gives its contents a name —
+ * and the row that selected them is one of many in the other column and may
+ * well have been scrolled past. A pane that opened with "1.9 kg, 27 Jul" and
+ * no heading would be a list of numbers about nothing.
+ *
+ * The same face and size as the screen hero, deliberately: it is the title of
+ * what you are looking at, and a smaller one would rank the pane below the
+ * list rather than beside it.
+ */
+export function PaneTitle({ children }: { children: React.ReactNode }): React.ReactElement {
+  const { colors } = useTheme();
+  return <Text style={[styles.hero, { color: colors.ink }]}>{children}</Text>;
 }
 
 const styles = StyleSheet.create({
