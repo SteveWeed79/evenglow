@@ -1058,6 +1058,11 @@ re-derived from source and, where noted, confirmed by running code.
 
 ## N-1 · A rejected `create` leaves a phantom record on the device for ever — **P0**
 
+> **Fixed for the create case.** `discardRejected` now takes the optimistic
+> projection back in the same transaction that resolves the row
+> (`sqlite-store.ts`, `dropRefusedCreate`). The refused `update` and `delete`
+> residue is still open — see the third bullet under **To do**.
+
 **Verified, and confirmed by running it.** This is the mirror image of P0-2 and
 it is arguably as bad.
 
@@ -1092,16 +1097,45 @@ side, and it should be scheduled beside P0-2 for that reason.
 
 **To do**
 
-- [ ] `discardRejected` and `resolveBatch`'s rejection branch must revert the
-      projection in the same transaction that resolves the row (invariant 5).
-- [ ] Reverting means replaying the surviving outbox history for that `targetId`
-      — or, for a rejected `create` with no prior history, deleting the record
-      row outright. The second case is the common one and is cheap.
+- [x] ~~`discardRejected` **and `resolveBatch`'s rejection branch**~~ must revert
+      the projection in the same transaction that resolves the row (invariant 5).
+      **Corrected while implementing: `discardRejected` only.** Reverting at
+      rejection time is wrong twice over — a rejected mutation is a decision the
+      user has not made yet, so hiding the record leaves them reading an inbox
+      entry about a group they can no longer see, and `retryRejected` would have
+      nothing left to re-project. Discard is the point at which they have
+      decided. `tests/offline/refused-create.test.ts` pins the retry case so the
+      timing cannot be quietly changed back.
+- [x] ~~Reverting means replaying the surviving outbox history for that
+      `targetId`~~ — or, for a rejected `create` with no prior history, deleting
+      the record row outright.
+      **Corrected: replay is wrong and only the create case shipped.** Replaying
+      this device's outbox history reconstructs the record from local mutations
+      alone, which drops everything that arrived from another device by pull: a
+      group created on phone B and then edited-and-refused on phone A would
+      replay to nothing and be deleted off A. A `create` is the one op whose
+      target owes its whole local existence to this device — the ULID is minted
+      here — so it is the one that can be taken back without a base value.
+      Guarded on no `applied` row for the same target, so a record the server
+      accepted after all is never removed.
+- [ ] **The residue, which is now the open half.** A refused `update` leaves its
+      merged fields in place, and a refused `delete` leaves the record hidden;
+      neither is repaired by a later pull, because the server has no mutation
+      for a command it refused. `delete` is exactly revertible (only the
+      `deleted` flag moved, `nextRecordValue` keeps the value) but needs
+      guarding against a second, accepted delete. `update` needs a stored
+      last-server-confirmed value per record — a second column, and the only
+      thing that would make the revert exact. Asserted as-is in
+      `refused-create.test.ts` so the limit is visible rather than assumed.
 - [ ] Make `checkIntegrity` able to see this: a record with no server-side
       provenance and no queued mutation is a phantom, and the counter arithmetic
-      cannot tell.
-- [ ] Test: hand creates a group, server rejects, hand discards → the record is
-      gone. Then the same with `retryRejected` → the record survives.
+      cannot tell. **Still open** — the revert stops new phantoms, but a device
+      that already has one gets no help, and nothing reports it.
+- [x] Test: hand creates a group, server rejects, hand discards → the record is
+      gone. Then the same with `retryRejected` → the record survives. Both in
+      `tests/offline/refused-create.test.ts`, along with the pull-does-not-bring-
+      it-back case. Four of the eight fail without the revert, checked by
+      disabling it.
 
 ## N-2 · One `undefined` from `expo-network` stops automatic sync for the life of the process — **P1**
 
@@ -1538,8 +1572,9 @@ From the verification pass, with the dependencies that force it:
    reaches every handset already in the field on deploy: no APK, no migration, no
    wire change. Carry **P2-1's `exit 0`** in the same push — the restart loop is
    what turns the crash window into something a farm hits.
-2. **N-1**, beside it. Same confusion, opposite direction, and no server change
-   fixes it.
+2. ~~**N-1**, beside it. Same confusion, opposite direction, and no server change
+   fixes it.~~ **Done for the create case**; the `update`/`delete` residue and
+   the `checkIntegrity` phantom detection remain.
 3. **P1-2** and **N-2**. Both cheap, both high-frequency, both invisible to the
    person affected.
 4. **P1-1**, which unblocks ever putting a new field on the wire — including

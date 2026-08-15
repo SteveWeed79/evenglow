@@ -300,6 +300,44 @@ export async function openSqliteStore(
     );
   }
 
+  /**
+   * Removes a record that only ever existed because of a create the server
+   * refused.
+   *
+   * **A rejected mutation is not a resolved one, and until this the projection
+   * could not tell the difference.** Enqueue writes the record optimistically —
+   * correctly, that is the whole point of offline-first — but nothing ever took
+   * it back. Marking the outbox row `rejected` and later discarding it left the
+   * record exactly where the optimistic write put it, and no later pull could
+   * repair it: hydration only overwrites a target the server has a mutation
+   * for, and for a create the server refused there is no such mutation and
+   * never will be. So a Farm Hand whose group was refused on the role check
+   * kept that group in their list for good, and could go on logging egg tallies
+   * against a record no other device had ever heard of.
+   *
+   * It is the mirror of the server-side outcome filter: that one stops a
+   * refused command reaching OTHER devices, and this one stops it staying on
+   * the device that issued it. No server change reaches this half.
+   *
+   * **Only a create, and only unconfirmed.** A create is the one op whose
+   * target owes its whole local existence to this device — the ULID is minted
+   * here, so nothing else can have put that record on this phone. An update or
+   * a delete lands on a record that may have arrived from another device by
+   * pull, and reverting those needs a base value this table does not keep; see
+   * the note in `docs/SYNC-INTEGRITY-TODO.md` under N-1. An `applied` row for
+   * the same target means the server accepted something for it after all, so
+   * the record is real and stays.
+   */
+  async function dropRefusedCreate(db: SqlOps, entity: string, targetId: string): Promise<void> {
+    const confirmed = await db.get<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM outbox WHERE targetId = ? AND status = 'applied'",
+      [targetId],
+    );
+    if ((confirmed?.n ?? 0) > 0) return;
+
+    await db.run('DELETE FROM records WHERE key = ?', [recordKey(entity, targetId)]);
+  }
+
   return {
     /**
      * ONE transaction: mint the sequence number, write the outbox row, advance
@@ -519,20 +557,37 @@ export async function openSqliteStore(
      * Bumps the cleared counter. A discard is a resolution, and skipping it
      * makes the integrity check later report data loss for something the user
      * did on purpose.
+     *
+     * **It also takes the optimistic projection back**, in the same
+     * transaction, which is what stops a refused create becoming a permanent
+     * phantom record — see `dropRefusedCreate`.
+     *
+     * The revert is here and NOT at rejection time, deliberately. A rejected
+     * mutation is a decision the user has not made yet: the inbox says "needs a
+     * look", and "Send it again" has to have something to send. Hiding the
+     * record the moment the server refused it would leave them reading about a
+     * group they can no longer see, and would make a retry re-project from
+     * nothing. Discard is the point at which they have decided.
      */
     async discardRejected(id): Promise<void> {
       await driver.transaction(async (tx) => {
         // ONLY a rejected mutation. Without the status check a stray call
         // deletes queued work that has not been sent yet — the one thing the
         // outbox exists to make impossible.
-        const existing = await tx.get<{ status: string }>(
-          'SELECT status FROM outbox WHERE id = ?',
+        const existing = await tx.get<{ status: string; op: string; entity: string; targetId: string }>(
+          'SELECT status, op, entity, targetId FROM outbox WHERE id = ?',
           [id],
         );
         if (!existing || existing.status !== 'rejected') return;
 
+        // Deleted first, so it cannot count itself as the confirmation that
+        // keeps the record alive.
         await tx.run('DELETE FROM outbox WHERE id = ?', [id]);
         await bumpCleared(tx, 1);
+
+        if (existing.op === 'create') {
+          await dropRefusedCreate(tx, existing.entity, existing.targetId);
+        }
       });
     },
 
