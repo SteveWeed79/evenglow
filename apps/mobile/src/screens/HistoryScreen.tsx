@@ -14,6 +14,7 @@ import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { Touch } from '../components/Touch';
 import { useLive } from '../hooks/useLive';
+import { useWindow } from '../hooks/useWindow';
 import { useLog } from '../hooks/useSync';
 import { useUnits } from '../hooks/useUnits';
 import { useReveal } from '../theme/motion';
@@ -72,6 +73,7 @@ export function HistoryScreen(): React.ReactElement {
   const readHistory = useCallback((): Promise<HistoryDay[]> => listHistory(units), [units]);
 
   const days = useLive(readHistory, 'what you have logged');
+  const { panes } = useWindow();
 
   /**
    * `undefined` means "nobody has chosen yet", which is what lets the newest
@@ -108,8 +110,28 @@ export function HistoryScreen(): React.ReactElement {
   const open = opened ?? days[0]?.day;
   const openMonth = month ?? months[0]?.month;
 
+  /**
+   * The list-detail pilot, and this screen was chosen for it because it is
+   * already list-detail wearing a phone's clothes.
+   *
+   * Days collapse to one line — "12 eggs · 2 feeds · 1 loss" — and expand **in
+   * place**, which the header above explains as the right call for a phone: no
+   * screen change, because the rows under a day are the same kind of thing as
+   * the line that summarises them. That reasoning holds and it runs out at
+   * 992dp, where expanding in place means a 600dp list pushing itself down the
+   * screen while a whole column sits empty beside it.
+   *
+   * Nothing here is a new component and nothing moves route. The same rows
+   * render in the same order; only which container they land in changes.
+   */
+  const split = panes === 2;
+  const openDay = days.find((day) => day.day === open) ?? null;
+
   return (
-    <Screen title="What happened">
+    <Screen
+      title="What happened"
+      {...(split && openDay !== null ? { aside: <DayRecords day={openDay} /> } : {})}
+    >
       {months.map((entry) => (
         <MonthBlock
           key={entry.month}
@@ -117,10 +139,77 @@ export function HistoryScreen(): React.ReactElement {
           open={openMonth === entry.month}
           onToggle={() => setMonth(openMonth === entry.month ? -1 : entry.month)}
           openDay={open}
-          onToggleDay={(day) => setOpened(open === day ? -1 : day)}
+          /**
+           * Beside the list, a day is *selected* rather than *expanded*, so
+           * tapping the open one does nothing instead of closing it. An empty
+           * detail pane is a dead half-screen, and the second tap that
+           * produces one is a mistake somebody makes once and then distrusts
+           * the row for.
+           */
+          onToggleDay={(day) => setOpened(split ? day : open === day ? -1 : day)}
+          inline={!split}
         />
       ))}
     </Screen>
+  );
+}
+
+/**
+ * One day's records, for the pane beside the list.
+ *
+ * The heading is repeated here on purpose. The row that selected this day is
+ * one of thirty in the other column and may well have been scrolled past, so a
+ * pane that opened with "18 eggs, 06:42" and no date would be a list of
+ * numbers about nothing — the same argument the accessibility label on the day
+ * head already makes.
+ */
+function DayRecords({ day }: { day: HistoryDay }): React.ReactElement {
+  const { colors } = useTheme();
+
+  return (
+    <View style={styles.day}>
+      <Text style={[styles.heading, { color: colors.ink }]}>
+        {new Date(day.day).toLocaleDateString(undefined, {
+          weekday: 'long',
+          day: 'numeric',
+          month: 'long',
+        })}
+      </Text>
+      <DayEvents day={day} />
+    </View>
+  );
+}
+
+/**
+ * The rows themselves, wherever they are being drawn.
+ *
+ * Extracted so the pane and the expanded day cannot drift: taking a record
+ * back has to behave identically whichever container it happens to be in, and
+ * two copies of a list whose rows delete things is two chances to get exactly
+ * that wrong.
+ */
+function DayEvents({ day }: { day: HistoryDay }): React.ReactElement {
+  /**
+   * Which row is showing its options, if any.
+   *
+   * Per day rather than per app, because only one day is open at a time — and
+   * held here rather than in the row so that opening a second row shuts the
+   * first. Two armed delete buttons on screen at once is how somebody taps the
+   * wrong one.
+   */
+  const [selected, setSelected] = useState<string | null>(null);
+
+  return (
+    <>
+      {day.events.map((event) => (
+        <EventRow
+          key={event.id}
+          event={event}
+          selected={selected === event.id}
+          onSelect={() => setSelected(selected === event.id ? null : event.id)}
+        />
+      ))}
+    </>
   );
 }
 
@@ -140,12 +229,15 @@ function MonthBlock({
   onToggle,
   openDay,
   onToggleDay,
+  inline,
 }: {
   month: HistoryMonth;
   open: boolean;
   onToggle: () => void;
   openDay: number | undefined;
   onToggleDay: (day: number) => void;
+  /** Whether a day opens under itself, or beside the list. See `DayRecords`. */
+  inline: boolean;
 }): React.ReactElement {
   const { colors } = useTheme();
 
@@ -178,6 +270,7 @@ function MonthBlock({
               open={openDay === day.day}
               // Tapping the open one shuts it; tapping any other moves the opening.
               onToggle={() => onToggleDay(day.day)}
+              inline={inline}
             />
           ))}
     </View>
@@ -188,23 +281,15 @@ function DayBlock({
   day,
   open,
   onToggle,
+  inline,
 }: {
   day: HistoryDay;
   open: boolean;
   onToggle: () => void;
+  inline: boolean;
 }): React.ReactElement {
   const { colors } = useTheme();
   const reveal = useReveal();
-
-  /**
-   * Which row is showing its options, if any.
-   *
-   * Per day rather than per app, because only one day is open at a time — and
-   * held here rather than in the row so that opening a second row shuts the
-   * first. Two armed delete buttons on screen at once is how somebody taps the
-   * wrong one.
-   */
-  const [selected, setSelected] = useState<string | null>(null);
 
   const heading = new Date(day.day).toLocaleDateString(undefined, {
     weekday: 'long',
@@ -236,22 +321,25 @@ function DayBlock({
           <Text style={[styles.label, { color: colors.muted }]}>{day.summary}</Text>
         </View>
 
-        <Icon name={open ? 'minus' : 'plus'} size={20} color={colors.muted} />
+        {/**
+          * The mark promises what pressing does, so it only appears when
+          * pressing expands something.
+          *
+          * Beside a detail pane the row selects rather than opens, and a plus
+          * that turned into a minus while the rows stayed put in the other
+          * column would be the affordance lying about the act — the same rule
+          * `Row`'s `mark` prop exists for. Selection is said by the brass
+          * border and by the pane changing.
+          */}
+        {inline ? <Icon name={open ? 'minus' : 'plus'} size={20} color={colors.muted} /> : null}
       </Touch>
 
       {/* The rows settle in rather than appearing whole. The day's height
           still changes in one frame; see `useReveal` for why that is the half
           worth leaving alone. */}
-      {open ? (
+      {inline && open ? (
         <Animated.View style={[styles.events, reveal]}>
-          {day.events.map((event) => (
-            <EventRow
-              key={event.id}
-              event={event}
-              selected={selected === event.id}
-              onSelect={() => setSelected(selected === event.id ? null : event.id)}
-            />
-          ))}
+          <DayEvents day={day} />
         </Animated.View>
       ) : null}
     </View>

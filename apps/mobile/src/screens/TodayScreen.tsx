@@ -18,6 +18,7 @@ import { useDues } from '../hooks/useDues';
 import { useFarmName } from '../hooks/useFarmName';
 import { useGroups } from '../hooks/useGroups';
 import { useNav } from '../hooks/useNav';
+import { useWindow } from '../hooks/useWindow';
 import { useLog } from '../hooks/useSync';
 import { useUnits } from '../hooks/useUnits';
 import { reportTrouble } from '../hooks/useTrouble';
@@ -129,6 +130,7 @@ export function TodayScreen(): React.ReactElement {
   const { colors } = useTheme();
   const farmName = useFarmName();
   const nav = useNav();
+  const { panes } = useWindow();
 
   /**
    * Where a row is discharged.
@@ -220,8 +222,18 @@ export function TodayScreen(): React.ReactElement {
    */
   const bundles = useMemo(() => todayBundles(dues, Date.now()), [dues]);
 
+  /**
+   * The cap, and why it lifts beside a column of its own.
+   *
+   * `VISIBLE_DUES` is a readability cap rather than a fold calculation — a
+   * farm in spring produces twenty rows and a list that long under the
+   * tallies is one nobody finishes. Both halves of that reasoning are about
+   * the list being *under* something. In its own pane it is not competing
+   * with the tally for vertical space and there is nothing below it to push
+   * off the screen, so the cap is what would be arbitrary.
+   */
   const [showAll, setShowAll] = useState(false);
-  const shown = showAll ? bundles : bundles.slice(0, VISIBLE_DUES);
+  const shown = showAll || panes === 2 ? bundles : bundles.slice(0, VISIBLE_DUES);
 
   const [opened, setOpened] = useState<string | null>(null);
   // A farm with one thing to log should not have to tap to reach it.
@@ -259,29 +271,84 @@ export function TodayScreen(): React.ReactElement {
      * available and earns its place. D14 is a supported permanent state, not
      * an unfinished one.
      */
-    <Screen title={farmName ?? 'Today'}>
-      {/* What the weather MEANS comes before what it is, and both come before
-          the tallies. Warnings are silent on an ordinary day, so this costs
-          nothing on the mornings it has nothing to say — see WeatherWarnings.
-          The row below it is one line, so neither displaces a tally.
+    <Screen
+      title={farmName ?? 'Today'}
+      /**
+       * ## What goes where, once there are two columns
+       *
+       * **Everything weather-shaped spans both panes**, and that is not where
+       * this was first drawn. The mockups put the forecast row in the side
+       * column with the dues; writing it revealed why that is wrong, and the
+       * reason is the phone rather than the tablet. `aside` restacks *under*
+       * the column at one pane, so anything moved into it moves below the
+       * tallies on every handset — and the row is deliberately above them. A
+       * layout change for a tablet may not reorder a phone (invariant 13).
+       *
+       * Spanning is the better answer anyway. It keeps the three weather
+       * strips together in the order their own comments argue for, instead of
+       * splitting them across two columns, and one line of forecast across
+       * 1104dp is a status strip rather than a waste.
+       *
+       * **The dues are what actually wanted a column.** They are the thing
+       * that competes with the tally for vertical space — `VISIBLE_DUES`
+       * exists because three groups of routine look-overs pushed the egg tally
+       * below the fold — so they are what moves, and the tally keeps the
+       * column to itself.
+       */
+      above={
+        <>
+          {/* What the weather MEANS comes before what it is, and both come before
+              the tallies. Warnings are silent on an ordinary day, so this costs
+              nothing on the mornings it has nothing to say — see WeatherWarnings.
+              The row below it is one line, so neither displaces a tally.
 
-          An official alert outranks all of it. The strip below this one is
-          this app's opinion about the farm's own animals; that one is a
-          meteorologist saying a tornado is on the ground, and a farm reading
-          top to bottom must not meet "your hens are warm" first. */}
-      <WeatherAlerts />
-      <WeatherWarnings />
-      <WeatherRow />
+              An official alert outranks all of it. The strip below this one is
+              this app's opinion about the farm's own animals; that one is a
+              meteorologist saying a tornado is on the ground, and a farm reading
+              top to bottom must not meet "your hens are warm" first. */}
+          <WeatherAlerts />
+          <WeatherWarnings />
+          <WeatherRow />
 
-      {/* Below the weather and above the tallies, and both halves of that are
-          arguments. A meteorologist saying a tornado is on the ground outranks
-          this app's opinion about filing. And below the tallies is where a
-          thing goes to be scrolled past — which is precisely what the Settings
-          row this replaces had already become. Silent on a farm that syncs,
-          silent on a new one, and it ends when somebody acts rather than when
-          they agree to stop being told. */}
-      <ExposureNotice />
+          {/* Below the weather and above the tallies, and both halves of that are
+              arguments. A meteorologist saying a tornado is on the ground outranks
+              this app's opinion about filing. And below the tallies is where a
+              thing goes to be scrolled past — which is precisely what the Settings
+              row this replaces had already become. Silent on a farm that syncs,
+              silent on a new one, and it ends when somebody acts rather than when
+              they agree to stop being told. */}
+          <ExposureNotice />
+        </>
+      }
+      {...(bundles.length === 0
+        ? {}
+        : {
+            aside: (
+              <View style={styles.duesBelow}>
+                {/* Named, because a list of jobs under the tallies with no heading
+                    reads as more tallies until you have read one. */}
+                <Text style={[styles.moreLabel, { color: colors.muted }]}>Also today</Text>
 
+                {shown.map((bundle) => (
+                  <DueBundleRow key={bundle.key} bundle={bundle} now={now} open={openDue} />
+                ))}
+
+                {bundles.length > shown.length ? (
+                  <Touch affordance="disclose"
+                    onPress={() => setShowAll(true)}
+                    accessibilityRole="button"
+                    testID="show-all-dues"
+                    style={({ pressed }) => [styles.more, { opacity: pressed ? 0.7 : 1 }]}
+                  >
+                    <Text style={[styles.moreLabel, { color: colors.muted }]}>
+                      Show all {bundles.length}
+                    </Text>
+                  </Touch>
+                ) : null}
+              </View>
+            ),
+          })}
+    >
       {groups.length === 0 ? (
         <Panel label="Nothing to log yet">
           {/* Empty screens invite (UX-SPEC §6). */}
@@ -314,30 +381,6 @@ export function TodayScreen(): React.ReactElement {
         />
       ))}
 
-      {bundles.length > 0 ? (
-        <View style={styles.duesBelow}>
-          {/* Named, because a list of jobs under the tallies with no heading
-              reads as more tallies until you have read one. */}
-          <Text style={[styles.moreLabel, { color: colors.muted }]}>Also today</Text>
-
-          {shown.map((bundle) => (
-            <DueBundleRow key={bundle.key} bundle={bundle} now={now} open={openDue} />
-          ))}
-
-          {bundles.length > shown.length ? (
-            <Touch affordance="disclose"
-              onPress={() => setShowAll(true)}
-              accessibilityRole="button"
-              testID="show-all-dues"
-              style={({ pressed }) => [styles.more, { opacity: pressed ? 0.7 : 1 }]}
-            >
-              <Text style={[styles.moreLabel, { color: colors.muted }]}>
-                Show all {bundles.length}
-              </Text>
-            </Touch>
-          ) : null}
-        </View>
-      ) : null}
     </Screen>
   );
 }
