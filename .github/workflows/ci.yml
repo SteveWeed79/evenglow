@@ -138,6 +138,91 @@ jobs:
       - name: Secret hygiene
         run: pnpm check:secrets
 
+  # ── The image, which nothing exercised until Fly or the box booted it ───────
+  #
+  # **`.npmrc` sets `node-linker=hoisted`, and that is a deliberate trade with a
+  # blind spot.** A flat tree means a package can `import` something it never
+  # declared — the file says so itself — and it is the right trade, because
+  # unwinding it re-breaks the Windows Android build over a CMake path-length
+  # wall. But the Docker build and `deploy.sh` both run
+  # `pnpm install --filter "@steading/api..."`, so an undeclared import resolves
+  # everywhere a developer looks — local dev, `pnpm test`, the whole `verify`
+  # job above — and is absent exactly where the service actually runs. There is
+  # no compile step to catch it, so the failure is `MODULE_NOT_FOUND` at boot.
+  #
+  # The image narrows once more than the box does: `--prod` drops
+  # devDependencies, which the box keeps. So this catches a second class the box
+  # never would.
+  #
+  # Nothing violates it today — every non-relative import in `apps/api/src` is
+  # declared in its manifest, checked. This is a gate against the next one, and
+  # the reason it needs to exist is what happens without it: the timer runs
+  # `deploy.sh` with no human present, the restart fails, and the script
+  # deliberately refuses to roll back — so the API stays down until somebody
+  # notices. A red check here costs a build; the alternative costs an outage.
+  #
+  # Its own job rather than a step in `verify`: it needs none of that job's
+  # setup, it runs alongside rather than after, and "the image does not boot" is
+  # a sentence worth reading on its own rather than at the bottom of a long log.
+  container:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The build context is the repository root, because the Dockerfile copies
+      # the lockfile, the workspace file and four manifests from it.
+      - name: Build the API image
+        env:
+          DOCKER_BUILDKIT: '1'
+        run: docker build -f apps/api/Dockerfile -t steading-api:ci .
+
+      # ── Booting it is the half that matters ──────────────────────────────
+      #
+      # A build that succeeds proves the install resolved; only starting the
+      # process proves every module it imports at boot is present, which is the
+      # defect this job exists for.
+      #
+      # `/health` touches nothing — no database connection — which is exactly
+      # what makes it the right probe here: this is asking whether the service
+      # can start, not whether Mongo is reachable. Readiness is P2-4's job.
+      #
+      # AUTH_SECRET has a 32-character floor in `env.ts`, and MONGODB_URI only
+      # has to be non-empty for a boot that never dials it.
+      - name: Boot it and ask /health
+        run: |
+          set -euo pipefail
+
+          docker run -d --name steading-api-ci -p 3001:3001 \
+            -e AUTH_SECRET=ci-only-secret-not-used-anywhere-else \
+            -e MONGODB_URI=mongodb://127.0.0.1:27017 \
+            steading-api:ci
+
+          for attempt in $(seq 1 30); do
+            if curl -fsS --max-time 3 http://127.0.0.1:3001/health >/dev/null 2>&1; then
+              echo "answering on :3001 after ${attempt}s"
+              exit 0
+            fi
+
+            # A container that has already exited will never answer, so say so
+            # now rather than after thirty seconds of silence.
+            if [ "$(docker inspect -f '{{.State.Running}}' steading-api-ci)" != "true" ]; then
+              echo "::error::The API image built but the process did not stay up."
+              docker logs steading-api-ci
+              exit 1
+            fi
+
+            sleep 1
+          done
+
+          echo "::error::The API image booted but never answered /health."
+          docker logs steading-api-ci
+          exit 1
+
+      - name: What it said
+        if: always()
+        run: docker logs steading-api-ci 2>&1 | tail -40 || true
+
   # ── What the server is allowed to run ───────────────────────────────────────
   #
   # `release` is a branch that only ever points at a commit this workflow went
@@ -159,8 +244,12 @@ jobs:
   # cost is latency — up to five minutes — which for an app whose clients queue
   # offline by design is not a cost at all.
   release:
-    # Only from the button. A push to main runs `verify` and stops there.
-    needs: verify
+    # Only from the button. A push to main runs the checks and stops there.
+    #
+    # Both gates, not just `verify`. A promotion that skipped `container` would
+    # move `release` to a commit whose image cannot start, and the box would
+    # find that out on a five-minute timer with nobody watching.
+    needs: [verify, container]
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:

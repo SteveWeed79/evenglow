@@ -1410,6 +1410,11 @@ Severity is noted per item against the same scale.
 
 ## B-1 · CI never builds or boots the container — **P2**
 
+> **Fixed.** A `container` job builds `apps/api/Dockerfile` and boots it against
+> `/health`, and `release` now needs it as well as `verify` — a promotion that
+> skipped it would move the branch the box follows to a commit whose image
+> cannot start.
+
 **Confirmed.** `.github/workflows/ci.yml` has no docker step of any kind. The
 image is therefore completely unexercised until Fly boots it.
 
@@ -1456,11 +1461,32 @@ for a problem CI can catch directly.
 
 **To do**
 
-- [ ] A CI step that builds `apps/api/Dockerfile` and boots the container against
+- [x] A CI step that builds `apps/api/Dockerfile` and boots the container against
       `/health`. Turns an invisible runtime failure into a red check, and also
       catches the devDependency class the box does not have.
-- [ ] Correct this item's blast-radius sentence: on the Oracle path the failure
+      **Shipped as its own job rather than a step in `verify`:** it needs none
+      of that job's setup, it runs alongside rather than after, and "the image
+      does not boot" is a sentence worth reading on its own rather than at the
+      bottom of a long log.
+- [x] **Gate `release` on it too.** `needs: [verify, container]`. A promotion
+      that skipped it would move the branch the box follows to a commit whose
+      image cannot start — and the box would find that out on a five-minute
+      timer with nobody watching.
+- [x] Correct this item's blast-radius sentence: on the Oracle path the failure
       mode is a hard outage requiring manual recovery, not a failed deploy.
+- [x] **`/health` is the right probe precisely because it touches nothing.**
+      The boot check asks whether the service can START, which is what an
+      undeclared import breaks; whether Mongo is reachable is P2-4's question
+      and a different one. The container is given a `MONGODB_URI` it never
+      dials, which works because `db/client.ts` connects lazily — the same
+      property P2-4 files as a defect for deploy gating is what makes this
+      check need no database.
+- [ ] **Not pre-verified against a real build.** There is no docker daemon in
+      the environment this was written in, so the job's shell was executed
+      standalone and every `COPY` source in the Dockerfile checked to exist,
+      but the image itself has never been built here. The first CI run is the
+      first real test — which, for a gate whose whole point is that nothing
+      built this image, is the honest place for it to be.
 
 ## B-2 · The Dockerfile comment closes off an option it never evaluated — **P3**
 
