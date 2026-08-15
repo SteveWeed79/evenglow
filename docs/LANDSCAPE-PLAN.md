@@ -262,12 +262,43 @@ of open arches. Two open arches are two lamps, and UX-SPEC §3 gives the screen
 one. The tallies stay one-at-a-time; only the collapsed rows and the dues get
 room.
 
-**Which side is an open question.** M3 says primary left, and it matches reading
-order for the dues. Against it: the commit button is the single most-pressed
-control in the app, and a right-handed thumb is on the right edge. The commit
-spans the whole 600dp pane so both of its ends are in reach, which is probably
-enough — but this is a decision to make with the tablet in two hands, not from
-the arithmetic.
+### 5a.1 Which side the tally goes — settled
+
+**Rail, column, aside.** Tally in the 600dp column on the left, dues and weather
+in the right-hand sidebar. The mirror was drawn and rejected.
+
+The case for mirroring was real: the commit is the most-pressed control in the
+app and a right thumb is already on the right edge. What killed it is that the
+mirror does not move only the commit. **It moves the dues too**, so the right
+hand ends up doing everything on the screen and the left hand is reduced to
+holding the tablet. The chosen arrangement gives each hand a side and a job —
+left thumb logs, right thumb ticks off.
+
+The cost is named rather than denied: a right-hander reaches across for the
+commit. It is a 560dp target, the widest thing on the screen and the most
+forgiving thing on it to reach for.
+
+**Two details the reach study earned, and both are cheap:**
+
+- **The steps group inboard.** Four `TAP.min` targets with `TAP.gap` between
+  them need 260dp, not the pane's full 560. Grouped toward the rail edge, all
+  four clear a thumb's comfortable sweep **in the order they have always been
+  in**. Reversing the order to chase the thumb was the tempting fix and the
+  wrong one: the Tally is reused for every countable log so the muscle memory
+  transfers, and an order that flips with the window is not muscle memory.
+- **A due's tick moves to the trailing edge** in the aside. A checkbox on the
+  leading edge of a right-hand pane is the one part of that pane a right thumb
+  cannot comfortably reach.
+
+**How much of the reach arithmetic to believe.** A comfortable thumb sweep from
+a side grip is taken as ~50mm, which at 160dpi is ~315dp; the grip height is an
+estimate. Call the arcs ±40dp. **The ranking is not in doubt** — which end of
+the commit is reachable, and which stepper gets the good slot, hold under any
+plausible thumb. Same standard `landscape-fold.test.ts` sets for the fold:
+assert the sign and the order here, verify the millimetres on the device.
+
+There are mockups of all of this, drawn to scale in the app's own faces and
+palette, with plan views of both arrangements and the reach arcs over them.
 
 ### 5b. History — list-detail, and the pilot
 
@@ -409,6 +440,9 @@ against a stubbed react-native that does not lay out.
   left and right and the same trick works.
 - **Height** — the tally and its commit clear the fold at 800dp *and* at 600dp,
   with the rail's 88dp returned.
+- **The step order never changes.** Assert the steps render in the order
+  `STEPS[product][units]` gives them at every width. The grouping moves; the
+  sequence is muscle memory and must not be a function of the window.
 
 ---
 
@@ -426,18 +460,21 @@ against a stubbed react-native that does not lay out.
 5. `Screen` grows an optional `aside`; two panes at ≥ 992 usable.
 6. History as the list-detail pilot.
 7. Today: dues, weather row and exposure notice to the aside; alerts stay across
-   the top.
+   the top. The farm's name moves above both panes — it titles the screen, not
+   the tally pane.
+8. The two reach details from §5a.1: group the steps inboard, move a due's tick
+   to the trailing edge. Both are small and neither waits on anything.
 
 **C — navigation and the rest.**
 
-8. The rail at ≥ 840, with `TabDividers` and `TabMark` taught the other axis.
-9. Stock, Iron, Growing to list-detail via the prop-not-param refactor.
-10. Form context asides.
+9. The rail at ≥ 840, with `TabDividers` and `TabMark` taught the other axis.
+10. Stock, Iron, Growing to list-detail via the prop-not-param refactor.
+11. Form context asides.
 
 **D — write it down and prove it.**
 
-11. The R3 amendment into UX-SPEC.
-12. **On the tablet.** Every serious bug in this project so far has been one only
+12. The R3 amendment into UX-SPEC.
+13. **On the tablet.** Every serious bug in this project so far has been one only
     a device could show, and a layout change is the most device-shaped work there
     is. The rail's labels, the reachable zone, the cutout insets and the pane
     split are four things the bundler cannot judge.
