@@ -30,6 +30,16 @@ PORT="${PORT:-3001}"
 [ -f /etc/steading/deploy.env ] && . /etc/steading/deploy.env
 REF="${STEADING_REF:-release}"
 
+# ── Which app this box is allowed to serve ──────────────────────────────────
+#
+# The profile CI builds, and the application id `app.json` declares. Both are
+# passed to `eas build:list` below so that the newest *matching* build is
+# fetched rather than the newest build of anything — see the note there for
+# what that used to allow. Overridable in `deploy.env` for a box following a
+# branch that builds a different profile, and never in the ordinary case.
+APP_BUILD_PROFILE="${STEADING_APP_PROFILE:-preview-farm}"
+APP_ID="${STEADING_APP_ID:-com.steading.app}"
+
 say() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 note() { printf '   %s\n' "$*"; }
 die() { printf '\n\033[1;31mSTOPPED:\033[0m %s\n\n' "$*" >&2; exit 1; }
@@ -127,6 +137,9 @@ else
 fi
 
 NOW="$(git rev-parse --short HEAD)"
+# The full one as well, because EAS records builds against the full hash and
+# the APK query below asks for the build made from exactly this commit.
+NOW_FULL="$(git rev-parse HEAD)"
 
 # Only when the commit moved. A lockfile that has not changed installs the tree
 # that is already there, and the ownership fix has nothing to fix.
@@ -269,10 +282,39 @@ fi
 if [ -n "${EXPO_TOKEN:-}" ]; then
   say "The app"
 
+  # ── Which build, exactly (P2-2) ─────────────────────────────────────────
+  #
+  # **This used to ask for the newest finished Android build and take it.** No
+  # constraint on profile, on application id, or on where it came from — so any
+  # cloud build anybody happened to run became the APK served at `/app` on the
+  # next tick. `eas.json` defines a `development` profile precisely so a cloud
+  # dev-client build can be made, and the moment one is, it wins. The damage
+  # lands on whoever downloads the link next: an APK that demands Metro, or a
+  # preview one pointed at nothing.
+  #
+  # Three filters, all applied by EAS rather than checked after the download:
+  #
+  #   --build-profile   the profile CI builds, and no other
+  #   --app-identifier  this application, not a fork or a sibling project
+  #   --git-commit-hash the build made from the commit this box is serving
+  #
+  # The last is what "promote by build id captured from the CI run" was after,
+  # and it is better than a build id: it needs no channel between CI and this
+  # box, because the box already knows which commit it just deployed.
+  #
+  # A commit with no app build finds nothing and publishes nothing, which is
+  # correct — a server-only release leaves the shelf holding the APK it was
+  # already holding. A build still running finds nothing too, and the next tick
+  # picks it up, which is why this block runs before the no-change exit.
+  #
   # `|| true` throughout: Expo being unreachable, rate limited or mid-outage is
   # not a reason to fail a deploy that has already restarted the API.
   ARTIFACT="$(EXPO_TOKEN="$EXPO_TOKEN" pnpm --filter @steading/mobile exec eas build:list \
-    --platform android --status finished --limit 1 --json --non-interactive 2>/dev/null || true)"
+    --platform android --status finished \
+    --build-profile "$APP_BUILD_PROFILE" \
+    --app-identifier "$APP_ID" \
+    --git-commit-hash "$NOW_FULL" \
+    --limit 1 --json --non-interactive 2>/dev/null || true)"
 
   URL="$(printf '%s' "$ARTIFACT" | node -e '
     let raw = "";

@@ -37,6 +37,10 @@ DIST="${STEADING_DIST:-/var/lib/steading/dist}"
 STATE="$(dirname "$DIST")"
 SOURCE="${1:-}"
 
+# The application this box serves. `deploy.sh` passes the same value to EAS as a
+# query filter; this is the check on the file that actually arrived.
+EXPECT_APP_ID="${STEADING_APP_ID:-com.steading.app}"
+
 die() { printf '\n  %s\n\n' "$*" >&2; exit 1; }
 say() { printf '\n  %s\n' "$*"; }
 note() { printf '    %s\n' "$*"; }
@@ -98,6 +102,29 @@ MAGIC="$(head -c 4 "$SOURCE" | od -An -tx1 | tr -d ' \n')"
 if command -v unzip >/dev/null 2>&1; then
   unzip -l "$SOURCE" AndroidManifest.xml >/dev/null 2>&1 \
     || die "That zip has no AndroidManifest.xml, so it is not an APK. An app bundle or a source archive will look like this."
+
+  # ── Whose app is it? (P2-2) ───────────────────────────────────────────────
+  #
+  # An APK is an APK; that says nothing about which application it is. The
+  # deploy asks EAS for a build matching this application id, so this is the
+  # second belt — it checks the bytes that arrived rather than the query that
+  # asked for them, and it is the only check on the hand-run path, where there
+  # is no query at all.
+  #
+  # The manifest is binary XML and the box has no Android SDK by its own stated
+  # decision, so this reads the string pool rather than parsing. `tr -d '\0'`
+  # is what makes that work for both encodings AAPT2 emits: a UTF-16LE string
+  # is the same ASCII with a null after every byte, and stripping nulls leaves
+  # one form to match. Neither `unzip -p` nor `grep -a` cares that the rest of
+  # the file is not text.
+  #
+  # Refuses rather than warns. A timer-driven deploy has nobody reading its
+  # output, so a warning here is a warning nobody sees — and the cost of being
+  # wrong is bounded and loud: the shelf keeps the APK it has, the deploy notes
+  # that it could not publish, and the API is untouched.
+  if ! unzip -p "$SOURCE" AndroidManifest.xml 2>/dev/null | tr -d '\0' | grep -qa "$EXPECT_APP_ID"; then
+    die "That APK does not name ${EXPECT_APP_ID}. It is some other application — check which profile built it."
+  fi
 fi
 
 command -v aapt2 >/dev/null 2>&1 && AAPT=aapt2 || AAPT=""

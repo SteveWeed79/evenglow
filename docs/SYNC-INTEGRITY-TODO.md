@@ -1206,6 +1206,11 @@ actually hits.
 
 ## P2-2 · APK promotion is not bound to the released commit
 
+> **Fixed.** The build query is pinned to the profile CI builds, this
+> application id, and the commit the box is serving. The signing-certificate
+> bullet is deliberately **not** done; the reason is below and it is not
+> "later".
+
 **Trusted.** CI starts a `preview-farm` EAS build, but deployment asks for the
 newest finished Android build with no constraint on profile, branch, commit,
 build ID, or workflow run (`scripts/deploy/deploy.sh:238-270`). `eas.json:8-27`
@@ -1227,8 +1232,79 @@ dev-client APK that demands Metro, or a preview APK pointed at nothing.
 
 **To do**
 
-- [ ] Promote by build ID captured from the CI run that produced it.
-- [ ] Verify application ID and signing certificate before publishing.
+- [x] ~~Promote by build ID captured from the CI run that produced it.~~
+      **Promote by commit hash, which is better** — see below.
+- [x] Verify application ID before publishing.
+- [ ] ~~Verify signing certificate before publishing.~~ **Declined, with reasons.**
+
+### What it does, 15 August
+
+Three filters on `eas build:list`, all applied by EAS rather than checked after
+forty megabytes have been downloaded:
+
+```
+--build-profile   preview-farm      the profile CI builds, and no other
+--app-identifier  com.steading.app  this application, not a fork or a sibling
+--git-commit-hash <full sha>        the build made from the commit being served
+```
+
+**`--git-commit-hash` is better than the build id the remedy asked for**, and
+that is the one place this improves on the work list rather than agreeing with
+it. A build id has to be captured by CI and carried to the box somehow — a
+channel that does not exist and would have to be built and then kept working.
+The commit needs no channel at all: the box already knows which one it just
+deployed, and EAS already records every build against the commit it was made
+from. Same guarantee, nothing new to maintain.
+
+The behaviour that falls out is right in both edge cases. A server-only release
+matches no build and publishes nothing, so the shelf keeps the APK it had. A
+build still running matches nothing either, and the next tick picks it up —
+which is why this block runs *before* P2-1's no-change exit.
+
+`publish-apk.sh` also checks the file that arrived, not only the query that
+asked for it: the application id is matched against the manifest's string pool.
+That is the only check on the hand-run path, where there is no query.
+
+### Why the signing certificate is not checked
+
+**Not deferred — declined, and the reasoning belongs in the record.**
+
+Verifying a signature means verifying that the APK's *contents* are signed by a
+certificate, and that needs `apksigner` from the Android SDK. The box has none
+by a stated decision (`publish-apk.sh`: *"the box has no Android SDK and is not
+getting one"*). What is reachable without it is reading the certificate out of
+`META-INF/*.RSA` with openssl and comparing a fingerprint — which proves a
+certificate is *present in the archive* and nothing whatever about whether it
+signed anything. That is a check that looks like signature verification and is
+not, which is the exact class of defect this whole document keeps finding.
+
+And after the three filters it would have almost nothing left to catch. To reach
+the shelf a build must now be of this project, from this commit, on this
+profile, under this application id — and such a build is signed with this
+project's own EAS credentials. A signing check would defend only against
+somebody who had already changed those credentials inside the Expo project, and
+that person can publish through the front door.
+
+The threat the item actually names — *"a colleague running the wrong `eas build`
+line"* — is fully covered by the profile filter alone.
+
+### Verification
+
+The mechanism, not the deployment. `eas build:list`'s flags were confirmed
+against eas-cli 21.8.0's own source (`build/commands/build/list.js`) rather than
+from memory: `--build-profile`, `--app-identifier` and `--git-commit-hash` all
+exist and all reach the GraphQL filter.
+
+The manifest check was run against constructed fixtures — a UTF-8 string pool,
+a UTF-16LE one, and one naming a different application — through the real
+`publish-apk.sh`. Both encodings publish; the wrong application is refused with
+its own sentence. `tr -d '\0'` is what makes one grep cover both, since a
+UTF-16LE ASCII string is the same bytes with a null after each.
+
+**Not run against a real EAS build or a real APK**, because neither is
+obtainable here. The first deploy after this lands is the first real test, and
+its failure mode is bounded: the shelf keeps the APK it has, the deploy notes
+that it could not publish, and the API is untouched.
 
 ## P2-3 · Backups are designed but not operationally closed
 
