@@ -29,6 +29,7 @@ import {
   findUserByEmail,
   findUserById,
   insertUser,
+  isDuplicateKey,
   listMembers,
   normalizeEmail,
   setUserRole,
@@ -43,6 +44,7 @@ import {
   listPendingInvites,
   mintInviteToken,
   revokeInvite,
+  unacceptInvite,
 } from '../db/invites';
 import {
   findJoinCode,
@@ -51,9 +53,11 @@ import {
   mintJoinCode,
   redeemJoinCode,
   replaceJoinCode,
+  unredeemJoinCode,
 } from '../db/join-codes';
 import type { Env } from '../env';
 import { errorBody, HttpError } from '../http';
+import { inOrgOrder } from '../org-lane';
 
 /**
  * Getting a second person onto a farm.
@@ -161,20 +165,48 @@ export async function memberRoutes(app: FastifyInstance, env: Env): Promise<void
       }
 
       const userId = newId();
-      const accepted = await acceptInvite(hashInviteToken(token), userId, new Date());
+      const hashed = hashInviteToken(token);
+      const accepted = await acceptInvite(hashed, userId, new Date());
       // Lost the race with another acceptance of the same link. The filter is
       // the guard, so exactly one of the two gets here.
       if (!accepted) return reply.status(404).send(invalid);
 
-      await insertUser({
-        _id: userId,
-        email: normalizeEmail(email),
-        passwordHash: await hashPassword(password),
-        name: invite.name ?? name,
-        orgId: invite.orgId,
-        role: invite.role,
-        createdAt: new Date(),
-      });
+      /**
+       * Spent before the account exists, and given back if the account cannot
+       * be made (P1-7(c)).
+       *
+       * The order is deliberate and stays: a crash between the two must leave a
+       * link that no longer works rather than one that does. What it cost was
+       * the other half — the invitation burned with nothing to show for it, so
+       * somebody who did everything right is told their invitation is no longer
+       * valid and the farm has to issue a new link.
+       *
+       * `auth.ts` already had the pattern for this: signup takes the empty org
+       * back out when the user insert loses the email race. This is the same
+       * repair on the credential that was spent, and it covers more than an
+       * email race — any transient database error opens the same window, and
+       * on a single node that is far likelier.
+       */
+      try {
+        await insertUser({
+          _id: userId,
+          email: normalizeEmail(email),
+          passwordHash: await hashPassword(password),
+          name: invite.name ?? name,
+          orgId: invite.orgId,
+          role: invite.role,
+          createdAt: new Date(),
+        });
+      } catch (error) {
+        await unacceptInvite(hashed, userId).catch(() => undefined);
+
+        if (isDuplicateKey(error)) {
+          return reply.status(409).send({
+            error: 'That email already has a Steading account. Sign in with it instead.',
+          });
+        }
+        throw error;
+      }
 
       // Signed in immediately. Making someone accept an invite and then find a
       // sign-in screen is two chances to lose them for no security gained.
@@ -237,15 +269,29 @@ export async function memberRoutes(app: FastifyInstance, env: Env): Promise<void
         return reply.status(404).send(invalid);
       }
 
-      await insertUser({
-        _id: userId,
-        email: normalizeEmail(email),
-        passwordHash: await hashPassword(password),
-        name,
-        orgId: joinCode.orgId,
-        role: joinCode.role,
-        createdAt: now,
-      });
+      // And given back if the account cannot be made, for the reason
+      // `/invites/accept` sets out above (P1-7(c)). A code burned with nothing
+      // to show for it means an owner reading out six characters again.
+      try {
+        await insertUser({
+          _id: userId,
+          email: normalizeEmail(email),
+          passwordHash: await hashPassword(password),
+          name,
+          orgId: joinCode.orgId,
+          role: joinCode.role,
+          createdAt: now,
+        });
+      } catch (error) {
+        await unredeemJoinCode(joinCode._id, userId).catch(() => undefined);
+
+        if (isDuplicateKey(error)) {
+          return reply.status(409).send({
+            error: 'That email already has a Steading account. Sign in with it instead.',
+          });
+        }
+        throw error;
+      }
 
       const tokens = await startSession(
         { userId, orgId: joinCode.orgId, role: joinCode.role },
@@ -367,14 +413,28 @@ export async function memberRoutes(app: FastifyInstance, env: Env): Promise<void
       const now = new Date();
       const expiresAt = new Date(now.getTime() + JOIN_CODE_TTL_MINUTES * 60_000);
 
-      await replaceJoinCode({
-        _id: hashJoinCode(code),
-        orgId: claims.orgId,
-        role: parsed.data.role,
-        createdByUserId: claims.userId,
-        createdAt: now,
-        expiresAt,
-      });
+      /**
+       * One farm's mints, one at a time (P1-7(b)).
+       *
+       * `replaceJoinCode` is a delete and then an insert, and Mongo will not
+       * make those one operation without a replica set — so two mints landing
+       * together both delete and both insert, and the farm ends up with two
+       * live codes, one of them invisible to the screen that produced it.
+       *
+       * The screen's own re-entry guard (`useSaver.save`) stops one device
+       * double-firing, which is why this has never been seen; it says nothing
+       * about an owner on a phone and a tablet at the same moment.
+       */
+      await inOrgOrder(claims.orgId, () =>
+        replaceJoinCode({
+          _id: hashJoinCode(code),
+          orgId: claims.orgId,
+          role: parsed.data.role,
+          createdByUserId: claims.userId,
+          createdAt: now,
+          expiresAt,
+        }),
+      );
 
       return reply.status(201).send({ code, role: parsed.data.role, expiresAt: expiresAt.getTime() });
     } catch (error) {
@@ -481,19 +541,32 @@ export async function memberRoutes(app: FastifyInstance, env: Env): Promise<void
         throw new HttpError(404, 'No such member.');
       }
 
-      const refusal = refuseRoleChange(
-        {
-          actorId: claims.userId,
-          actorRole: claims.role,
-          targetId: target._id,
-          targetRole: target.role,
-          ownerCount: await countOwners(claims.orgId),
-        },
-        parsed.data.role,
-      );
-      if (refusal) throw new HttpError(403, refusalMessage(refusal));
+      /**
+       * The count and the demotion as one unit (P1-7(a)).
+       *
+       * Counting owners and then demoting one is a precheck and an act, and
+       * **two owners demoting each other in the same second each see two owners
+       * and leave the farm with none.** A unique index cannot express "at least
+       * one", and a transaction needs a replica set this deployment decided
+       * against — so the lane is what makes the pair atomic. See `org-lane.ts`
+       * for the assumption it rests on.
+       */
+      await inOrgOrder(claims.orgId, async () => {
+        const refusal = refuseRoleChange(
+          {
+            actorId: claims.userId,
+            actorRole: claims.role,
+            targetId: target._id,
+            targetRole: target.role,
+            ownerCount: await countOwners(claims.orgId),
+          },
+          parsed.data.role,
+        );
+        if (refusal) throw new HttpError(403, refusalMessage(refusal));
 
-      await setUserRole(claims.orgId, target._id, parsed.data.role);
+        await setUserRole(claims.orgId, target._id, parsed.data.role);
+      });
+
       return reply.send({ id: target._id, role: parsed.data.role });
     } catch (error) {
       const { status, body } = errorBody(error);
@@ -508,16 +581,21 @@ export async function memberRoutes(app: FastifyInstance, env: Env): Promise<void
       const target = await findUserById(request.params.id);
       if (!target || target.orgId !== claims.orgId) throw new HttpError(404, 'No such member.');
 
-      const refusal = refuseRemoval({
-        actorId: claims.userId,
-        actorRole: claims.role,
-        targetId: target._id,
-        targetRole: target.role,
-        ownerCount: await countOwners(claims.orgId),
-      });
-      if (refusal) throw new HttpError(403, refusalMessage(refusal));
+      // The same pair, and the same lane: counting owners and then removing one
+      // is the check-then-act that lets two owners remove each other (P1-7(a)).
+      await inOrgOrder(claims.orgId, async () => {
+        const refusal = refuseRemoval({
+          actorId: claims.userId,
+          actorRole: claims.role,
+          targetId: target._id,
+          targetRole: target.role,
+          ownerCount: await countOwners(claims.orgId),
+        });
+        if (refusal) throw new HttpError(403, refusalMessage(refusal));
 
-      await disableUser(claims.orgId, target._id, new Date());
+        await disableUser(claims.orgId, target._id, new Date());
+      });
+
       return reply.status(204).send();
     } catch (error) {
       const { status, body } = errorBody(error);

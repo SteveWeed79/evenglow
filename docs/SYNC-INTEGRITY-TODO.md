@@ -1007,6 +1007,10 @@ there.
 
 ## P1-7 · Membership invariants are check-then-act
 
+> **Fixed, (a) through (c).** A per-farm lane makes the count and the act one
+> unit; a spent credential is given back when the account it was spent on could
+> not be made. (d) was not a defect and its bullet is rewritten below.
+
 **Trusted.** Four places where a concurrent request defeats an application-level
 precheck:
 
@@ -1019,7 +1023,13 @@ precheck:
 - Invites and join credentials are marked spent before the slow Argon2 hash and
   the user insert. A crash or an email-uniqueness race **burns the invite without
   creating the account.**
-- Initial org claiming has the same shape around its memberless-org check.
+- ~~Initial org claiming has the same shape around its memberless-org check.~~
+  **Rewritten, 15 August: signup is the model, not another instance.**
+  `auth.ts:199-218` has both a genuine database constraint (the unique email
+  index) and a rollback — it takes the empty org back out when the insert loses
+  the race. That is the pattern (c) was missing and now copies. Nothing to fix
+  here; the bullet was reading a correct implementation as a fourth instance of
+  the bug.
 
 ### Verification (15 August) — (a) and (c) confirmed, (b) confirmed but low-harm, **(d) is wrong**.
 
@@ -1060,13 +1070,83 @@ Ranked by real likelihood on a single-node Mongo serving one small farm:
 
 **To do**
 
-- [ ] Enforce these in the database — unique partial indexes, or a transaction —
-      rather than in the handler. A precheck and an act are two statements and
-      something can always happen between them.
-- [ ] Make (c) copy the signup pattern at `auth.ts:212-218` — spend the credential
-      *after* the account exists, or roll it back if the insert fails.
-- [ ] Rewrite the (d) bullet: signup is the model, not another instance.
-- [ ] Reconcile the `join-codes.ts:87-88` comment with what `deleteMany` does.
+- [x] ~~Enforce these in the database — unique partial indexes, or a transaction —
+      rather than in the handler.~~ **Neither is available; a per-farm lane is.**
+- [x] Make (c) copy the signup pattern at `auth.ts:212-218` — roll the credential
+      back if the insert fails.
+- [x] Rewrite the (d) bullet: signup is the model, not another instance.
+- [x] Reconcile the `join-codes.ts:87-88` comment with what `deleteMany` does.
+
+### What it does, 15 August — and why not the database
+
+**The first remedy names two mechanisms and neither one works here.**
+
+A unique partial index expresses *at most one*. The rule in (a) is *at least
+one*, which no index can express — there is no constraint that refuses a delete
+for leaving a collection empty. And for (b), Mongo's `partialFilterExpression`
+does not accept `$exists: false`, so "the live code" is not directly indexable
+without adding a marker field and migrating every existing document to carry it.
+
+A multi-document transaction needs a replica set, and `setup-mongo.sh` and
+`DEPLOY-THE-SERVER.md` record a checked decision to run standalone *because
+nothing needed one*. Reaching for it here would be reversing an architectural
+decision to fix a race that a mutex fixes outright — the same argument P0-3
+already made about the counter document, and the same conclusion.
+
+**So: a lane per farm.** `org-lane.ts` holds the mutex that `sync/commit-order.ts`
+already ran on, lifted out and shared rather than duplicated — the two rest on
+exactly the same one-process assumption, and two mutexes over one farm would be
+two places to discover that assumption had changed. (a)'s count-and-act and
+(b)'s delete-and-insert each run inside it.
+
+Uncontended: a membership change is a rare deliberate act, and the sync path
+holds the lane per mutation rather than per batch.
+
+**(c) is not a race and the lane does not help it.** The credential is spent
+before the account is made — which is the right order and stays, because a crash
+between the two must leave a link that no longer works rather than one that
+does. What it cost was the other half: the invitation burned with nothing to
+show for it, so somebody who did everything right is told their invitation is no
+longer valid and the farm has to issue a new link. `unacceptInvite` and
+`unredeemJoinCode` give it back, **filtered on the id that spent it** — a
+rollback matching on the hash alone could take back the *successful* acceptance
+that beat it, which is worse than the fault being fixed.
+
+A duplicate-key failure answers 409; anything else propagates. The distinction
+is worth drawing because the alternative is telling somebody their email is
+taken when Mongo was briefly unavailable, which sends them to a sign-in screen
+for an account that does not exist. `isDuplicateKey` lives in `db/identity.ts`,
+because the number is the driver's and a route testing `error.code === 11000`
+would be a route that knows which database this is.
+
+**Also corrected:** `join-codes.ts` claimed *"expired and redeemed rows are left
+alone: they are the audit trail"*. The filter is `redeemedAt: {$exists: false}`
+only, so an expired-unredeemed code **is** deleted — and rightly, since nobody
+was let in by it. The code was right and the comment described an intent nothing
+implemented. `replaceJoinCode` now also says outright that it is not atomic on
+its own and that the guarantee comes from the caller's lane.
+
+### Verification
+
+`tests/isolation/membership-races.test.ts`, which is the coverage this item
+correctly reported as absent: nothing anywhere tested the *gap*.
+`membership.test.ts` covers the pure predicates with `ownerCount` passed in, and
+`claim.test.ts` and `invites.test.ts` cover **sequential** double-use — the case
+the conditional-update filters already handled.
+
+Seven cases: two owners removing each other and two demoting each other, both
+asserting exactly one owner survives and exactly one request is refused; a
+non-last removal, so the lane is shown to serialise rather than refuse; two
+simultaneous mints leaving one live code; the invitation and the join code each
+surviving an account that could not be made; and a rollback proving it cannot
+take back somebody else's acceptance.
+
+**These run in CI only.** No mongod is obtainable in the environment they were
+written in — `fastdl.mongodb.org` is blocked by the proxy, there is no docker
+daemon, and no distro package — so `startTestDb` skips them locally and CI's
+`STEADING_REQUIRE_DB=1` turns a skip into a failure there. Stated rather than
+implied: unlike every other fix on this branch, these were not watched to fail
+before they passed.
 
 ---
 

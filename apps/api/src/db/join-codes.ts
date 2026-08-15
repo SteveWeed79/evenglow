@@ -84,8 +84,23 @@ export function hashJoinCode(code: string): string {
  *
  * One code per farm at a time, so an owner who taps twice has one valid code
  * rather than two — and the one on screen is always the one that works.
- * Expired and redeemed rows are left alone: they are the audit trail of who
- * was let in and when.
+ * **Redeemed** rows are left alone: they are the audit trail of who was let in
+ * and when.
+ *
+ * **This comment used to say "expired and redeemed", and the filter says
+ * otherwise.** `redeemedAt: {$exists: false}` matches every unredeemed row
+ * whatever its expiry, so an expired-unredeemed code is deleted here — it is
+ * not part of the audit trail and never was, because nobody was let in by it.
+ * The code was right and the sentence was describing an intent nothing
+ * implemented.
+ *
+ * **Not atomic on its own**, and it cannot be: a delete and an insert are two
+ * operations, and Mongo will not make them one without a replica set. Two mints
+ * landing together could both delete and both insert, leaving the farm with two
+ * live codes and one of them invisible to the screen that minted it. The route
+ * runs this inside `inOrgOrder`, which is where the guarantee actually comes
+ * from; that is stated here so nobody calls this expecting the guarantee to be
+ * in the function.
  */
 export async function replaceJoinCode(doc: JoinCodeDoc): Promise<void> {
   const collection = await joinCodes();
@@ -112,6 +127,25 @@ export async function redeemJoinCode(
   const result = await (await joinCodes()).updateOne(
     { _id: hashed, redeemedAt: { $exists: false }, expiresAt: { $gt: now } },
     { $set: { redeemedAt: now, redeemedByUserId: userId } },
+  );
+  return result.modifiedCount === 1;
+}
+
+/**
+ * Gives a code back, when the account it was spent on was never made.
+ *
+ * The same repair `unacceptInvite` makes, for the same reason and with the same
+ * guard: spending before creating is the right order, and the cost of it was a
+ * code burned with nothing to show for it — an owner reading out a six-character
+ * code in a yard, and the person typing it told it is not valid.
+ *
+ * **Filtered on `redeemedByUserId`**, so this can only take back its own
+ * redemption and never the successful one of whoever won the race.
+ */
+export async function unredeemJoinCode(hashed: string, userId: string): Promise<boolean> {
+  const result = await (await joinCodes()).updateOne(
+    { _id: hashed, redeemedByUserId: userId },
+    { $unset: { redeemedAt: '', redeemedByUserId: '' } },
   );
   return result.modifiedCount === 1;
 }

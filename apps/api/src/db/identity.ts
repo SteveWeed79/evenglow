@@ -141,6 +141,27 @@ export async function insertUser(user: UserDoc): Promise<void> {
 }
 
 /**
+ * Whether a write failed because a unique index already held the value.
+ *
+ * Here rather than in a route because the number is the driver's, and a route
+ * testing `error.code === 11000` would be a route that knows which database
+ * this is. On `users` the only unique index that a caller can collide with is
+ * the email — `_id` is a freshly minted ULID — so this is a taken address in
+ * every practical case, and the routes say so.
+ *
+ * The distinction is worth drawing at all because the alternative is telling
+ * somebody their email is taken when in fact Mongo was briefly unavailable.
+ * That sends them to a sign-in screen for an account that does not exist.
+ */
+export function isDuplicateKey(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { code?: unknown }).code === 11000
+  );
+}
+
+/**
  * Replaces a password hash, by email.
  *
  * There is no reset flow in the product yet — D7 is single-farm-first and the

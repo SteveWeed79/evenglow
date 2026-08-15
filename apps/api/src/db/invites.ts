@@ -99,6 +99,30 @@ export async function acceptInvite(hash: string, userId: string, at: Date): Prom
   return result.modifiedCount === 1;
 }
 
+/**
+ * Gives an invitation back, when the account it was spent on was never made.
+ *
+ * Spending before creating is the right order and stays: a crash between the
+ * two must leave a link that no longer works rather than one that does. What it
+ * cost was the other half — an invite burned with nothing to show for it, so
+ * the farm has to issue a new link and the person is told their invitation is
+ * no longer valid having done everything right. The window is not only the
+ * email race the work list names; any transient database error opens it, and
+ * that is far likelier.
+ *
+ * **Filtered on `acceptedByUserId`, which is the whole safety of it.** A
+ * rollback that matched on the hash alone could take back somebody else's
+ * successful acceptance — the one failure worse than the one being fixed. This
+ * can only undo its own.
+ */
+export async function unacceptInvite(hash: string, userId: string): Promise<boolean> {
+  const result = await (await invites()).updateOne(
+    { _id: hash, acceptedByUserId: userId },
+    { $unset: { acceptedAt: '', acceptedByUserId: '' } },
+  );
+  return result.modifiedCount === 1;
+}
+
 /** Revoking. Scoped by orgId so one farm cannot revoke another's invite. */
 export async function revokeInvite(orgId: string, publicId: string, at: Date): Promise<boolean> {
   const result = await (await invites()).updateOne(
