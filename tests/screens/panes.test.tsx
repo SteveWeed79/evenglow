@@ -87,7 +87,7 @@ describe('a screen with an aside', () => {
     const [row] = rows(tablet.tree.toJSON());
 
     expect(row).toBeDefined();
-    expect(row?.children).toHaveLength(2);
+    expect(kids(row)).toHaveLength(2);
     tablet.unmount();
   });
 
@@ -98,7 +98,7 @@ describe('a screen with an aside', () => {
 
     // The pane's style is `[styles.pane, { width }]`, so it has to be merged
     // the way the layout engine would rather than read as one object.
-    const widths = (row?.children ?? []).map((c) => flat((c as Node).props?.style).width);
+    const widths = kids(row).map((c) => flat(c.props?.style).width);
 
     // The column is never anything but the measure, however much room there
     // is. Everything else the window offers goes to the aside or the margins.
@@ -166,6 +166,13 @@ describe('the tally steps', () => {
 interface Node {
   props?: Record<string, unknown>;
   children?: unknown;
+}
+
+/** A node's host children, typed. `children` off `toJSON()` is `unknown`. */
+function kids(node: Node | undefined): Node[] {
+  const children = node?.children;
+  if (!Array.isArray(children)) return [];
+  return children.filter((c): c is Node => typeof c === 'object' && c !== null);
 }
 
 /** One element's effective style, arrays flattened. */
