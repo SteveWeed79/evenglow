@@ -1,6 +1,7 @@
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import Fastify, { type FastifyInstance } from 'fastify';
+import { ping } from './db/client';
 import { type Env, readEnv } from './env';
 import { errorBody } from './http';
 import { authRoutes } from './routes/auth';
@@ -55,7 +56,38 @@ export async function buildServer(env: Env = readEnv()): Promise<FastifyInstance
     return reply.status(status).send(body);
   });
 
+  /**
+   * Liveness and readiness are different questions, and only one was asked.
+   *
+   * `/health` answers *is this process running*. It touches nothing, and it
+   * stays that way: `fly.toml` gates a machine restart on it, and restarting
+   * the process because Atlas is slow is the wrong cure for the wrong fault.
+   *
+   * `/ready` answers *can this process serve a request*, which needs the
+   * database — because Mongo connects lazily (`db/client.ts`). `env.ts`
+   * requires `MONGODB_URI` to be non-empty, so a *missing* one stops the boot,
+   * but a *wrong* one (unreachable host, rejected credentials) does not. The
+   * process comes up, `/health` returns `{ok:true}`, and every data route fails
+   * at a five-second server-selection timeout. `deploy.sh` polled `/health`
+   * after each restart and its own comment said the poll existed to catch "a
+   * bad `MONGODB_URI`" — which is the one thing it could not do.
+   */
   app.get('/health', async () => ({ ok: true }));
+
+  app.get('/ready', async (_request, reply) => {
+    try {
+      await ping();
+    } catch {
+      /**
+       * The reason goes to the journal, never to the caller. This is
+       * unauthenticated and reachable from the internet, and a Mongo
+       * connection error carries the hostname, the replica set name and
+       * sometimes the username.
+       */
+      return reply.status(503).send({ ok: false, database: 'unreachable' });
+    }
+    return { ok: true, database: 'reachable' };
+  });
 
   await authRoutes(app, env);
   await billingRoutes(app, env);

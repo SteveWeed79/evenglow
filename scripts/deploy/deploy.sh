@@ -244,6 +244,11 @@ fi
 # serving — and the two failures most likely here (a bad MONGODB_URI, a syntax
 # error in something that only loads at boot) both take a second or two to
 # surface. Without this check a deploy that killed the server reports success.
+#
+# **This paragraph was true of only one of the two for a long time.** The poll
+# asked `/health`, which opens no database connection, so a bad MONGODB_URI
+# passed it every time — the sentence above described a check the script did
+# not have. It asks `/ready` now; see the block near the end of this file.
 # ── The app, which the server half never touched ────────────────────────────
 #
 # **This is the gap that kept catching us.** `release` moving updates the API
@@ -366,18 +371,50 @@ if [ "$CHANGED" -eq 0 ]; then
 fi
 
 say "Checking it came back"
+# ── `/ready`, not `/health` ─────────────────────────────────────────────────
+#
+# The comment on this check (above, near the top) says it exists because "the
+# two failures most likely here — a bad MONGODB_URI, a syntax error in
+# something that only loads at boot — both take a second or two to surface".
+# `/health` catches the second and cannot catch the first: Mongo connects
+# lazily, so a wrong URI leaves the process up and cheerfully answering
+# `/health` while every data route fails. `/ready` opens the connection, so a
+# deploy that cannot reach the database fails here rather than at the first
+# farm to log an egg.
+#
+# Six seconds, not three: the driver's server-selection timeout is five
+# (`db/client.ts`), so a shorter deadline aborts the request before `/ready`
+# can answer and we lose the distinction the block below depends on.
 for attempt in 1 2 3 4 5 6 7 8 9 10; do
-  if curl -fsS --max-time 3 "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
-    note "answering on :${PORT} after ${attempt}s"
+  if curl -fsS --max-time 6 "http://127.0.0.1:${PORT}/ready" >/dev/null 2>&1; then
+    note "serving on :${PORT} after ${attempt}s"
     printf '\n\033[1mDeployed: %s\033[0m\n\n' "$NOW"
     exit 0
   fi
   sleep 1
 done
 
+# ── Which of the two it was ─────────────────────────────────────────────────
+#
+# `/health` touches nothing, so a process answering it while `/ready` fails is
+# running the new code perfectly well and cannot reach the database. That is a
+# different repair, and the rollback offered below would not perform it — it
+# would restore code that was never the problem and hide the setting that was.
+if curl -fsS --max-time 3 "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
+  printf '\n\033[1;31mThe service is up but cannot reach the database.\033[0m\n\n'
+  printf 'It is on %s, and the code is almost certainly fine —\n' "$NOW"
+  printf 'going back to %s will not fix this.\n\n' "$WAS"
+  printf 'Check MONGODB_URI and MONGODB_DB in /etc/steading/api.env, then:\n\n'
+  printf '    sudo systemctl restart steading-api\n\n'
+  printf 'What it says:\n\n'
+  journalctl -u steading-api -n 30 --no-pager
+  exit 1
+fi
+
 # Rolling back automatically would be worse than stopping: the new code may be
 # fine and the database unreachable, in which case reverting fixes nothing and
-# hides which of the two it was.
+# hides which of the two it was. The check above now tells them apart, and this
+# is the branch where the process itself never came back.
 printf '\n\033[1;31mThe service did not come back.\033[0m\n\n'
 printf 'It is on %s. The previous version was %s.\n\n' "$NOW" "$WAS"
 printf 'What it says:\n\n'

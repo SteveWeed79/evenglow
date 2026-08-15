@@ -95,3 +95,30 @@ export async function db(): Promise<Db> {
   const client = await connect();
   return client.db(databaseName());
 }
+
+/**
+ * One round trip to the database, for readiness (`/ready`).
+ *
+ * **What it proves and what it does not.** It opens the connection, which is
+ * where the driver performs the handshake and authenticates — so an
+ * unreachable host, a wrong replica set, and credentials the server rejects all
+ * surface here. The `ping` command itself needs no privilege, so this does
+ * *not* prove the app's role can read the collections it will read. That is a
+ * deliberate stop: readiness gets polled, and a check that costs a real query
+ * every thirty seconds is a check somebody eventually turns off.
+ *
+ * **No result caching, and none is needed.** `/ready` is unauthenticated and on
+ * the open internet, so the cost of a flood matters — but `connect()` above
+ * already caches the client promise, so concurrent callers share one connection
+ * attempt and one five-second server selection rather than each starting their
+ * own. What is left is a single pooled round trip per request. Caching the
+ * *answer* would be actively wrong: a poll a second after `systemctl restart`
+ * has to see this process's state, not the one the last process gave, and that
+ * poll is the whole reason this exists.
+ */
+export async function ping(): Promise<void> {
+  const client = await connect();
+  // Against the database `databaseName()` chose rather than `admin`, so the
+  // setting most likely to be wrong is the one exercised.
+  await client.db(databaseName()).command({ ping: 1 });
+}

@@ -1096,6 +1096,10 @@ P3 nicety at most, and it should not be listed beside the scheduling gap.
 
 ## P2-4 · `/health` does not check the database
 
+> **Fixed.** `/ready` opens the connection `/health` deliberately does not, and
+> `deploy.sh` polls it — so the script now does the first of the two things its
+> own comment has always claimed. Fly's liveness check stays on `/health`.
+
 **Trusted.** `apps/api/src/server.ts:53-58` reports process liveness only, and
 Mongo connects lazily — so deploy gates and Fly checks can read healthy while
 every data route is failing.
@@ -1129,9 +1133,72 @@ not gated on.
 
 **To do**
 
-- [ ] Split liveness from readiness; have readiness ping Mongo.
-- [ ] Point `deploy.sh:334` at `/ready` rather than `/health`, so the script does
+- [x] Split liveness from readiness; have readiness ping Mongo.
+- [x] Point `deploy.sh` at `/ready` rather than `/health`, so the script does
       what its own comment claims. Leave the Fly liveness check alone.
+
+### What it does, 15 August
+
+`ping()` in `db/client.ts` — the only module allowed to hold a `MongoClient` —
+opens the connection and issues `{ping:1}` against the database `databaseName()`
+chose. `server.ts` wraps it: 200 `{ok:true,database:'reachable'}`, or 503
+`{ok:false,database:'unreachable'}` and **nothing else**, because the endpoint
+needs no token and a Mongo connection error names the host, the replica set and
+often the user. The reason goes to the journal.
+
+**Honest about its reach.** The connection is where the driver handshakes and
+authenticates, so an unreachable host, a wrong replica set and rejected
+credentials all surface. `ping` itself needs no privilege, so this does *not*
+prove the app's role can read its collections — a deliberate stop, since
+readiness gets polled and a check costing a real query every thirty seconds is a
+check somebody eventually turns off.
+
+**No caching, including none that looked tempting.** A first draft made `ping()`
+single-flight against a flood on an unauthenticated endpoint; `connect()`
+already caches the client promise, so concurrent callers share one connection
+attempt and one five-second server selection, and what remained was a pooled
+round trip per request. It was removed rather than shipped with a comment
+overstating it. Caching the *answer* would be worse than useless: a poll a
+second after `systemctl restart` has to see this process's state.
+
+**The deploy script now distinguishes the two failures**, which the old
+paragraph beside it wanted to and could not. The poll asks `/ready` with a
+six-second deadline (the driver's own timeout is five, so three aborted the
+request before it could answer). When it never passes, one probe of `/health`
+decides the message: a process answering that but not `/ready` is running the
+new code perfectly well and cannot reach Mongo, so the script points at
+`/etc/steading/api.env` and **withholds the rollback** — reverting would restore
+code that was never the problem and hide the setting that was.
+
+**Fly stays on `/health`, and that is not an oversight.** Its check is wired to
+a machine restart every thirty seconds; pointing it at readiness would kill a
+healthy process because a managed database blinked, and restarting fixes nothing
+about a database. Liveness restarts, readiness reports.
+
+**Also corrected:** the comment above the poll in `deploy.sh` claimed the check
+caught "a bad `MONGODB_URI`". It never could. The claim is now annotated with
+what was true instead.
+
+### Verification
+
+`tests/unit/readiness.test.ts`. The unreachable half needs no database — the
+point being that the failure it covers is the one where there isn't one — and
+uses a URI that fails at the driver's scheme check so it costs no timeout.
+Three cases: `/health` still answers 200 (not a bug — that is what liveness
+means), `/ready` answers 503, and the body is asserted with `toEqual` against
+the exact object, so adding the driver's message to it fails the test. The
+reachable half runs against `startTestDb('steading_readiness')` — its own
+database name — and skips without a mongod, as every database-backed suite here
+does.
+
+Checked by breaking it: replacing `await ping()` with `await Promise.resolve()`
+fails two of the three.
+
+`.github/workflows/ci.yml` also asserts it end to end in the built image. That
+container is given a `MONGODB_URI` with nothing listening behind it, which is
+exactly the shape of a deployment with a wrong one, so `/health` must pass and
+`/ready` must return 503 — a `/ready` that quietly stopped dialling Mongo would
+look healthy there and wave through the deploy it exists to stop.
 
 ---
 

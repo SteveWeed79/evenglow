@@ -249,17 +249,44 @@ difference between "it did not work" and knowing which of five things to look
 at. `{"ok":true}` and you are done with the server.
 
 `/health` deliberately touches nothing — it opens no database connection — so a
-green health check means the process is up, and it is still worth doing one real
-request afterwards to prove the database is reachable.
+green health check means the process is up and nothing more than that.
 
 **What the reply tells you:**
 
 | | |
 |---|---|
-| `200` and `{"ok":true}` | Done |
+| `200` and `{"ok":true}` | The process is running |
 | Hangs, then times out | The Oracle ingress rule (step 2) |
 | `Connection refused` | The port is open, Caddy is not running |
 | A certificate error | `sudo journalctl -u caddy -n 50` — usually DNS was not ready when it asked |
+
+### Then ask whether it can actually serve
+
+```bash
+curl -i https://api.swbuild.dev/ready
+```
+
+`/ready` opens the database connection `/health` does not. That distinction is
+the whole point: Mongo connects lazily, so a wrong `MONGODB_URI` — an
+unreachable host, a rejected password, a cluster that was paused — leaves the
+process up and answering `/health` while every route that touches a record
+fails. The two endpoints together tell you which half is broken.
+
+| | |
+|---|---|
+| `200` and `{"ok":true,"database":"reachable"}` | Done with the server |
+| `503` and `{"ok":false,"database":"unreachable"}` | The process is fine; `MONGODB_URI` or `MONGODB_DB` in `/etc/steading/api.env` is not |
+| Takes about five seconds first | Normal — that is the driver's server-selection timeout on the first connection |
+
+The reply says `unreachable` and nothing else on purpose. This endpoint needs no
+token and is on the open internet, and a Mongo connection error names the host,
+the replica set and sometimes the user. The reason is in
+`sudo journalctl -u steading-api -n 50`.
+
+`deploy.sh` polls `/ready` after every restart, so a deploy that cannot reach
+the database fails at the deploy rather than at the first farm to log an egg.
+Fly's health check stays on `/health`, because it is wired to a machine restart
+and restarting a process fixes nothing about a database.
 | `502 Bad Gateway` | Caddy is up, the API is not. `sudo journalctl -u steading-api -n 50` |
 
 `502` is the likeliest one after a first run, because the service will not start
@@ -843,8 +870,15 @@ sudo /opt/steading/scripts/deploy/deploy.sh
 Pull, install, restart, and then **check that it actually came back** — a
 `systemctl restart` returns when the process is spawned, not when it is
 serving, so without the check a deploy that killed the server reports success.
-If it does not come back the script prints the last thirty log lines and the
-command to go back to the previous commit.
+The check asks `/ready` rather than `/health`, so "came back" means *reached the
+database*, not merely *started*.
+
+If it does not come back the script says which of the two failed. A process that
+answers `/health` but not `/ready` is running the new code fine and cannot reach
+Mongo, so it points at `/etc/steading/api.env` and does **not** offer the
+rollback — going back would restore code that was never the problem. Otherwise
+it prints the last thirty log lines and the command to return to the previous
+commit.
 
 It refuses to merge anything but a fast-forward, so a box somebody edited in
 place at 6am stops and says so rather than resolving it silently.
@@ -867,7 +901,7 @@ the free M0 tier has no automated backups either.
 |---|---|
 | `curl` hangs, no response at all | The Oracle ingress rule (step 2). Then the instance iptables: `sudo iptables -L INPUT -n --line-numbers` |
 | Certificate error, or Caddy will not start | DNS. `dig +short api.swbuild.dev` must return the box. Then `journalctl -u caddy -n 50` |
-| `{"ok":true}` but everything else fails | Atlas Network Access (step 3), or a wrong `MONGODB_URI`. On a local mongod: `systemctl status mongod` |
+| `{"ok":true}` but everything else fails | Ask `/ready`. A `503` there confirms it: Atlas Network Access (step 3), or a wrong `MONGODB_URI`. On a local mongod: `systemctl status mongod` |
 | Service will not start | `systemctl status steading-api` then `journalctl -u steading-api -n 50`. Usually an empty `AUTH_SECRET` |
 | Restarting in a loop | It stops itself after five in a minute. The reason is in `systemctl status` |
 | Connects fine, but the farm is empty | `MONGODB_DB`. The default is `steading`; a cluster holding records under another name serves an empty one without complaining (step 5) |
