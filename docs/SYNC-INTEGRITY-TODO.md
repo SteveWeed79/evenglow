@@ -1,12 +1,14 @@
 # Sync integrity — outstanding work
 
-**Written 14 August 2026, from a static audit of the tree at `4064c89`. No code
-has been changed.** This file is a work list, not a spec. Each item below was
+**Written 14 August 2026 and extended 15 August, from static audits of the tree
+at `4064c89`. No code has been changed.** This file is a work list, not a spec.
+Sync integrity is the bulk of it and gives it its name; the build and
+infrastructure section at the end came from a separate audit. Each item was
 either confirmed by reading the code named in it, or is carried on trust and
 labelled as such — the distinction is the point of the file and should survive
 any edit to it.
 
-The headline is one sentence, and the rest of this document is its consequences:
+The headline is one sentence, and P0 through P2 are its consequences:
 
 > **The server stores attempted commands, projects them conditionally, and
 > clients replay them as unconditional truth.**
@@ -426,6 +428,143 @@ Carried from the audit, all **trusted**, none independently walked:
 
 ---
 
+# Build, packaging and infrastructure
+
+A third audit, reviewed 15 August 2026, covered ground none of the above touches:
+the container, the workspace linker, the test topology, and the host config. It
+is kept as its own section rather than folded into P0–P3 because its scope is
+disjoint — nothing here is a sync defect, and nothing above is a build defect.
+
+Severity is noted per item against the same scale.
+
+## B-1 · CI never builds or boots the container — **P2**
+
+**Confirmed.** `.github/workflows/ci.yml` has no docker step of any kind. The
+image is therefore completely unexercised until Fly boots it.
+
+That matters because of what `.npmrc` gives up. `node-linker=hoisted` flattens
+the tree, and the file says so plainly: *"A flat tree means a package can
+`import` something it never declared — pnpm's strictness is the thing being
+given up, and it is a real guarantee."* That is a deliberate trade for being able
+to build the Android app on Windows at all, and it is the right trade. But the
+Docker build then runs `pnpm install --frozen-lockfile --filter "@steading/api..."`,
+so an undeclared import resolves everywhere a developer looks — local dev, `pnpm
+test`, CI — and is **absent only in the container**.
+
+There is no compile step to catch it, so the failure is `MODULE_NOT_FOUND` at
+boot. The `/health` check in `fly.toml` with its `grace_period` means a release
+that crashes this way fails rather than replacing a working machine, so the blast
+radius is a failed deploy, not an outage. It is still the only gate.
+
+**Do not fix this by unwinding the hoisting.** That re-breaks the Windows build
+for a problem CI can catch directly.
+
+**To do**
+
+- [ ] A CI step that builds `apps/api/Dockerfile` and boots the container against
+      `/health`. Turns an invisible runtime failure into a red check.
+
+## B-2 · The Dockerfile comment closes off an option it never evaluated — **P3**
+
+**Confirmed.** The image runs the TypeScript source through `tsx`
+(`CMD ["node", "node_modules/tsx/dist/cli.mjs", "src/server.ts"]`), which is why
+`tsx` sits in `dependencies` rather than `devDependencies`.
+
+The reasoning is documented at length and considers exactly two alternatives —
+Node's own type stripping and `tsc` output — rejecting both because extensionless
+imports under `moduleResolution: bundler` defeat them. It then concludes *"Either
+route means rewriting every import in the service."*
+
+**There is a third route, and it does not.** A bundler built for Node — `esbuild`,
+`tsup` — resolves extensionless specifiers as a matter of course, strips the
+types, and emits plain JavaScript. The conclusion is true of the two options
+examined and false in general.
+
+The comment is the correction here, independent of whether the runtime changes.
+In this repo comments are read as the architectural record, and one that forecloses
+an option it never tested is worse than silence — it stops the next person looking.
+
+Whether to *act* on it is a genuine preference call, and the Dockerfile's real
+argument deserves to be weighed rather than skipped: *"the deployed process and the
+local one are the same code path — worth more here than a build step, in a repo
+whose expensive failures have all been environment drift."* That is defensible.
+Re-decide it against a bundler; do not assume the answer changes.
+
+**To do**
+
+- [ ] Correct the comment so it names the bundler route and says why it was not
+      taken.
+- [ ] Optional, separately: evaluate `esbuild`/`tsup` against the same-code-path
+      argument. Image size is a weaker motive than it first appears — the image
+      already carries production dependencies only.
+
+## B-3 · The vitest parallelism comment contradicts itself — **P3**
+
+**Confirmed.** `vitest.config.ts:117` sets `fileParallelism: false`, explained as:
+*"Each file gets its own database harness, so let them run in isolation rather
+than racing for the same collections."*
+
+**Both halves cannot be true.** If every file genuinely had its own harness there
+would be nothing to race for. Something is shared — almost certainly the database
+name — and the comment hides which, so the constraint reads as inherent when it is
+incidental.
+
+**To do**
+
+- [ ] Correct the comment to name what is actually shared.
+- [ ] Optional: give each file a uniquely named database and tear it down after,
+      which removes the reason for the setting and returns the cores. Worth doing
+      only once the comment is honest about why it is there.
+
+## B-4 · `TRUSTED_PROXY_HOPS` is coupled to deployment topology — **P3, ops note**
+
+**Confirmed, and working as designed.** `fly.toml` sets `TRUSTED_PROXY_HOPS = "1"`
+for Fly's single forwarding hop, and explains exactly why a count rather than
+`true`. `tests/unit/guards.test.ts:268-291` refuses a non-count value at startup
+rather than at request time.
+
+The hazard is real but future: put Cloudflare or a load balancer in front and the
+hop count becomes two. Miss the update and `request.ip` collapses to the proxy for
+every caller, so **one failed sign-in throttles the whole farm** — every limiter in
+the service keys on that address.
+
+No code change. This belongs written down where somebody adding a proxy layer will
+see it.
+
+**To do**
+
+- [ ] Note the coupling in `DEPLOY-THE-SERVER.md` next to the proxy configuration.
+
+## Reviewed and rejected — the tenancy guard critique
+
+The same audit argued that lint-enforced tenancy scoping is brittle and that the
+Mongo driver should be moved out of the API's dependency tree into
+`packages/core`. **Rejected, for three reasons, recorded so it is not re-opened:**
+
+1. It is not regex matching. `eslint.config.mjs` uses `no-restricted-syntax` AST
+   selectors, which is a parsed match against the syntax tree.
+2. It does not fail silently. `tests/unit/guards.test.ts:241` asserts the rule
+   still bans raw collection access, so a parser or ESLint change that disarmed it
+   fails the suite. That is the config's own stated point: the tests are *"what
+   makes them guarantees rather than intentions."*
+3. **`packages/core` is the client package.** It ships inside the APK. Moving the
+   Mongo driver there aims a server dependency at the client bundle, against
+   invariant 12.
+
+And the decisive one: **the proposed fix is defeated by B-1.** Dependency-tree
+encapsulation enforces nothing under `node-linker=hoisted`, because a flat tree
+lets any file import anything regardless of what its manifest declares. A separate
+data-access package may still be worth having for clarity. It would buy no
+enforcement, and must not be mistaken for a security boundary.
+
+## Already covered above
+
+The audit's point about native mocks producing false confidence is real and is
+already logged in **P3 — "No device-level CI."** Cross-referenced rather than
+duplicated.
+
+---
+
 # Test gaps these expose
 
 `tests/sync/idempotency.test.ts:54-79` asserts log row count and immutability. It
@@ -447,7 +586,7 @@ Add, alongside the existing sync tests:
 
 ## Provenance
 
-Two audits were reviewed against this tree on 14 August 2026.
+Three audits have been reviewed against this tree, on 14 and 15 August 2026.
 
 The first was **not accurate** and is recorded here only so it is not acted on
 later by mistake: it reported queue head-of-line blocking (refuted by
@@ -457,9 +596,22 @@ later by mistake: it reported queue head-of-line blocking (refuted by
 `MIN_ACCEPTED_SCHEMA_VERSION` at `apply.ts:32`). It appears to have been written
 from `CLAUDE.md` rather than from the source.
 
-The second produced everything above. Six of its findings were tested against the
+The second produced P0-1 through P3. Six of its findings were tested against the
 code and six confirmed — all three P0s and P1-1, P1-2, P2-1. The unverified
 remainder is carried on that record and marked **Trusted** throughout. It was
 explicit about its own limits, and correct about them: it could not run `tsc`,
 ESLint, Vitest, or Metro, and guessed that the missing `pnpm-lock.yaml` was an
 artifact of its snapshot rather than a repository defect. It is.
+
+The third produced the build and infrastructure section, and sits between the two
+on accuracy. Every item in B-1 to B-4 was checked against the file it names and
+confirmed. Its tenancy argument is rejected above. Two smaller things are worth
+recording, because they are the shape of error to watch for in anything else from
+the same source: it labelled AST selectors as regex, and it asserted a specific
+development CPU that appears nowhere in this repository. **Invented supporting
+detail alongside correct findings is the hardest kind to catch** — the findings
+check out, so the details get read as though they were checked too.
+
+None of the three audits was able to run the test suite. Everything above is
+static reading, which is exactly why the test gaps below are the part most likely
+to be incomplete.
