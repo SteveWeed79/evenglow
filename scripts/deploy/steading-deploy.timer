@@ -5,8 +5,16 @@
 #
 # Five minutes is a compromise between "a fix I just merged is live" and "the
 # box is not hammering GitHub". A run that finds nothing new costs one `git
-# fetch` and exits before touching anything — `deploy.sh` compares the commit
-# before and after and says "already on <sha>".
+# fetch`, a Caddy config comparison and a question to Expo — `deploy.sh`
+# compares the commit before and after, says "already on <sha>", and skips both
+# the dependency install and the restart.
+#
+# **That last sentence was false for as long as this file has existed.** The
+# "nothing to deploy" branch printed its line and fell through to an
+# unconditional `pnpm install` and `systemctl restart`, so this timer bounced
+# the API about twelve times an hour on a box where nothing had changed. The
+# comment described the intention; nothing enforced it, and the log line looked
+# right the whole time.
 
 [Unit]
 Description=Check for a new Steading release

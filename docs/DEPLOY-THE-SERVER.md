@@ -442,6 +442,29 @@ document, sync idempotency is one `upsertOne` with `$setOnInsert`, and nothing
 tails an oplog. GridFS works standalone. So one `mongod` is the correct shape
 here, not a compromise — and one process to reason about instead of three.
 
+### One API process per farm, and that one IS load-bearing
+
+The standalone above is a free choice. This one is not, and it is written down
+here because nothing in the code can enforce it.
+
+Hydration pages on `(serverTs, _id)` and a device advances its watermark past
+everything it has read, so a row must never become visible carrying a value
+below a watermark already published. `apps/api/src/sync/commit-order.ts` gets
+that by serialising the stamp, the log write, the projection and the outcome
+into one unit per farm — **in process memory.** Two API instances have two
+locks and two clamps, and a mutation committed by one can land behind a cursor
+the other has already handed out. The symptom is a record that simply never
+reaches the second phone: no error anywhere, and only visible by noticing it is
+missing.
+
+The systemd unit runs one instance, and `deploy.sh` restarts rather than
+overlapping, so this holds today. If a second instance is ever wanted — a
+second box, a rolling deploy that overlaps, a process manager with more than one
+worker — **the fix is not more locking.** It is a single-node replica set with a
+transaction wrapping the number allocation and the insert, which is the one
+construct that makes them one visible unit. That also reverses the decision
+above, deliberately, and is the moment to do it.
+
 ### Two commands
 
 ```

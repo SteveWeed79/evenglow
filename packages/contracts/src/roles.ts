@@ -52,9 +52,46 @@ export function canMutate(role: Role, entity: Entity, op: Op): boolean {
    */
   if (isAppendOnly(entity)) return op === 'create' || op === 'delete';
   if (entity === 'task' && op === 'update') return true;
+  // The upload stamp is the other half of this — see isUploadStamp below.
   if (entity === 'photo' && op === 'create') return true;
   // Ownership is enforced by mayChangeNote at apply time — see above.
   if (entity === 'note') return true;
 
   return false;
+}
+
+/**
+ * The one photo update a hand may make: recording that the bytes arrived.
+ *
+ * **A hand could take a photo and never get it off the handset.** `photo:create`
+ * covers the metadata and `routes/photos.ts` already treats the first byte
+ * upload as completing that create — but the client then enqueues a
+ * `photo:update` stamping `uploadedAt`, and this matrix refused it. So the
+ * record synced, the bytes uploaded, and the field that tells every OTHER
+ * device the image exists was never set: `sync/photos.ts` only offers a photo
+ * for download once `uploadedAt` is present. The photo was on the server and
+ * invisible to the farm, and the hand collected a permanent inbox entry they
+ * could do nothing about.
+ *
+ * Kept OUT of `canMutate` deliberately, because that function is also what
+ * gates the byte PUT. Widening it to `photo:update` would let a hand REPLACE
+ * the image on an established photo, which that route refuses on purpose — the
+ * fix for an invisible photo must not become a way to overwrite somebody
+ * else's. So the exception is expressed on the mutation instead, and combined
+ * with the role failure at the one call site that should honour it
+ * (`sync/apply.ts`).
+ *
+ * Narrow on purpose: exactly the one field, nothing beside it. The applier
+ * completes the rule with the half that needs the document — a stamp may
+ * finish an upload, not re-stamp one that is already finished — the same
+ * division `mayChangeNote` uses.
+ */
+export function isUploadStamp(entity: Entity, op: Op, payload: unknown): boolean {
+  if (entity !== 'photo' || op !== 'update') return false;
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return false;
+
+  // Only the key set is read here; the value is validated by photoUpdateSchema
+  // immediately afterwards, like every other payload (invariant 11).
+  const keys = Object.keys(payload);
+  return keys.length === 1 && keys[0] === 'uploadedAt';
 }

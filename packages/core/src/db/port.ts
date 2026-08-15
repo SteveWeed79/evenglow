@@ -249,6 +249,27 @@ export interface LocalStore {
 
   pulledThrough(): Promise<SnapshotWatermark>;
 
+  /**
+   * The one-time projection repair (`PROJECTION_REPAIR`).
+   *
+   * Devices that synced before the server learned to withhold refused commands
+   * applied some of them as truth, and hydration replays the log — so a
+   * reinstall reproduced the wrong state rather than repairing it. Nothing an
+   * ordinary sync does reaches those rows, so the device replays the accepted
+   * log from zero once and then sweeps whatever the replay never touched.
+   *
+   * MUST be non-destructive until the replay completes. A device that is
+   * offline, or that never finishes, keeps every row it had: the sweep runs
+   * only after the feed has actually run out, because only then does "the
+   * replay never touched this" mean "the server has nothing for this".
+   *
+   * `start` MUST be idempotent on its own marker rather than on the watermark,
+   * or a device restarts the replay on every pull and never finishes it.
+   */
+  startProjectionRepair(): Promise<boolean>;
+  finishProjectionRepair(): Promise<number>;
+  projectionRepairDone(): Promise<boolean>;
+
   // ── Bookkeeping ───────────────────────────────────────────────────────────
 
   getLastSyncAt(): Promise<number | null>;

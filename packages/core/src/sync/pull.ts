@@ -2,10 +2,11 @@ import {
   type PullResponse,
   pullResponseSchema,
   type PulledMutation,
+  readableRows,
 } from '@steading/contracts';
-import { apiUrl, syncHeaders } from '../api';
+import { apiUrl, renewSession, syncHeaders } from '../api';
 import type { PullResult } from '../db/port';
-import { localStore } from '../db/store';
+import { localStore, storeGeneration } from '../db/store';
 
 /**
  * Hydration — the read half of sync.
@@ -24,6 +25,15 @@ export interface PullOutcome {
   through: number;
   more: boolean;
   deferred?: string;
+  /** Records swept by the one-time projection repair, when it completed here. */
+  repaired?: number;
+  /**
+   * Rows this build could not model, because the server is newer than the app.
+   *
+   * Counted rather than merely skipped: a device quietly missing a whole kind
+   * of record is the shape of failure this path already had once.
+   */
+  unmodelable: number;
 }
 
 export type PullTransport = (
@@ -51,11 +61,32 @@ export function pullOnce(transport: PullTransport = defaultTransport): Promise<P
 }
 
 async function runPull(transport: PullTransport): Promise<PullOutcome> {
+  /**
+   * The one-time repair, before the watermark is read rather than after.
+   *
+   * Winding back to zero is what replays the accepted log over the refused
+   * commands a device applied before the server withheld them. It happens here
+   * because this is the only loop that can also tell when the replay has
+   * finished — and the sweep at the end is safe only then.
+   */
+  // The farm this pass belongs to. Applying a page into a store that has since
+  // been swapped would write one farm's records into another's database, which
+  // is the worst version of this hazard and the one no server check can catch.
+  const tenant = storeGeneration();
+  const repairing = !(await localStore().projectionRepairDone());
+  if (repairing) await localStore().startProjectionRepair();
+
   const watermark = await localStore().pulledThrough();
   let since = watermark.through;
   let sinceId = watermark.throughId;
 
-  const outcome: PullOutcome = { applied: 0, skipped: 0, through: since, more: false };
+  const outcome: PullOutcome = {
+    applied: 0,
+    skipped: 0,
+    through: since,
+    more: false,
+    unmodelable: 0,
+  };
 
   for (let page = 0; page < MAX_PAGES_PER_PASS; page++) {
     let response: { status: number; body: unknown };
@@ -65,8 +96,28 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
       return { ...outcome, deferred: 'offline' };
     }
 
+    /**
+     * One renewal, one retry, for the same reason the flush does it: a token
+     * lasts fifteen minutes and nothing else in this loop can mint another, so
+     * a device left open simply stopped hydrating at the quarter hour.
+     *
+     * Once, not in a loop — a second 401 after a successful renewal is about
+     * this request rather than the session.
+     */
     if (response.status === 401 || response.status === 403) {
-      return { ...outcome, deferred: 'unauthenticated' };
+      if ((await renewSession()) !== 'renewed') {
+        return { ...outcome, deferred: 'unauthenticated' };
+      }
+
+      try {
+        response = await transport(since, sinceId);
+      } catch {
+        return { ...outcome, deferred: 'offline' };
+      }
+
+      if (response.status !== 200) {
+        return { ...outcome, deferred: `server-${response.status}` };
+      }
     }
     if (response.status !== 200) {
       return { ...outcome, deferred: `server-${response.status}` };
@@ -75,7 +126,26 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
     const parsed = pullResponseSchema.safeParse(response.body);
     if (!parsed.success) return { ...outcome, deferred: 'unreadable' };
 
-    const result = await applyPage(parsed.data);
+    /**
+     * Rows this build cannot model are dropped here, not at the page.
+     *
+     * The server ships a new entity to every device the moment it knows one,
+     * including the ones running last month's APK — so parsing the page as a
+     * unit against a strict enum meant one unmodelable row failed all of it and
+     * the watermark never moved. That install stopped receiving ANY of the
+     * farm's records, permanently, while reporting itself up to date.
+     *
+     * The cursor still comes from the server's `through`/`throughId`, which are
+     * taken from the last row READ rather than the last row kept — so skipping
+     * locally advances past what was skipped, exactly as the server's own
+     * unknown-entity skip does.
+     */
+    if (storeGeneration() !== tenant) return { ...outcome, deferred: 'farm-switched' };
+
+    const { known, unmodelable } = readableRows(parsed.data.mutations);
+    outcome.unmodelable += unmodelable;
+
+    const result = await applyPage(known, parsed.data);
     outcome.applied += result.applied;
     outcome.skipped += result.skipped;
     outcome.more = parsed.data.more;
@@ -107,15 +177,36 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
     if (!parsed.data.more) break;
   }
 
+  /**
+   * Caught up, so the replay has seen every accepted mutation this farm has.
+   *
+   * `more` false is the whole condition, and it has to be: a row that simply
+   * has not arrived yet is indistinguishable from an orphan, so sweeping before
+   * the feed runs out would delete records the server was about to send.
+   *
+   * The other two ways a pass can end are already excluded by getting here at
+   * all. Every deferral returns from inside the loop, and so does the pause at
+   * a record this device still owes — which would otherwise leave the tail of
+   * the log unread. A pass that hits `MAX_PAGES_PER_PASS` ends with `more`
+   * true, so the repair stays open and the device finishes it on a later pass,
+   * from where it got to.
+   */
+  if (repairing && !outcome.more) {
+    outcome.repaired = await localStore().finishProjectionRepair();
+  }
+
   return outcome;
 }
 
-async function applyPage(page: PullResponse): Promise<PullResult> {
+async function applyPage(
+  mutations: readonly PulledMutation[],
+  page: PullResponse,
+): Promise<PullResult> {
   // Pausing at a record with a pending local edit, and advancing BOTH halves of
   // the watermark in the same transaction as the records they cover, are the
   // store's guarantees now — stated in port.ts and asserted against every
   // implementation.
-  return localStore().applyPulled(inServerOrder(page.mutations), {
+  return localStore().applyPulled(inServerOrder(mutations), {
     through: page.through,
     throughId: page.throughId,
   });

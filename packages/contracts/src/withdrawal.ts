@@ -81,14 +81,35 @@ export function activeWithdrawals(
   const active: ActiveWithdrawal[] = [];
 
   for (const treatment of treatments) {
-    const subjectId = treatment.flockId ?? treatment.animalId;
-    if (subjectId === undefined || !wanted.has(subjectId)) continue;
+    /**
+     * EVERY subject the treatment names, not the first one it happens to have.
+     *
+     * This was `treatment.flockId ?? treatment.animalId`, which is correct for
+     * the record the create schema allows — exactly one of the two — and wrong
+     * for any other. A treatment carrying both held produce for the group and
+     * held NOTHING for the animal it also named, while `treatmentsFor` listed
+     * it against that animal: the screen showed a treatment and reported no
+     * withdrawal in force.
+     *
+     * `medicationUpdateSchema` is `.partial()`, which drops the create schema's
+     * refine, so such a record was reachable from any client. The applier now
+     * refuses to write one — but this reads records that already exist, and it
+     * must err long rather than trust that nothing ever wrote one. A false
+     * clear on milk or meat is a regulatory event, and `read/withdrawals.ts`
+     * says outright that it is the error this app is written never to make.
+     */
+    const subjects = [treatment.flockId, treatment.animalId].filter(
+      (subject): subject is string => subject !== undefined && wanted.has(subject),
+    );
+    if (subjects.length === 0) continue;
 
     const clearsAt = withdrawalClearsAt(treatment, kind);
     if (clearsAt === null) continue;
 
     // Strictly greater: at the instant it clears, it is clear.
-    if (clearsAt > now) {
+    if (clearsAt <= now) continue;
+
+    for (const subjectId of subjects) {
       active.push({
         kind,
         medicationId: treatment.id,

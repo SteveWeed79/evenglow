@@ -399,10 +399,28 @@ const medicationShape = {
   note: z.string().max(500).optional(),
 };
 
+/**
+ * Exactly one subject: the group, or the individual.
+ *
+ * Named and exported rather than written inline, because the invariant has to
+ * hold in two places and a second copy would be a second chance to disagree.
+ * A `.partial()` update schema cannot express it — half the fields are absent
+ * by design — so it is re-checked against the MERGED document at apply time.
+ * See `mergedUpdateProblem` in `entities/index.ts`.
+ *
+ * Takes `unknown` fields so the same predicate can read a parsed payload and a
+ * document off disk. Null counts as absent: a client that clears a field sends
+ * `undefined`, and the Mongo driver stores that as null.
+ */
+export function namesOneSubject(v: { flockId?: unknown; animalId?: unknown }): boolean {
+  const named = (value: unknown) => value !== undefined && value !== null;
+  return named(v.flockId) !== named(v.animalId);
+}
+
 export const medicationCreateSchema = z
   .object(medicationShape)
   .strict()
-  .refine((v) => (v.flockId === undefined) !== (v.animalId === undefined), {
+  .refine(namesOneSubject, {
     message: 'A treatment needs exactly one of flockId or animalId.',
   });
 

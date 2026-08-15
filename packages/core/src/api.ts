@@ -127,6 +127,54 @@ export function currentAccessToken(): string | null {
 }
 
 /**
+ * What happened when the platform was asked to renew a lapsed session.
+ *
+ * Three answers rather than a boolean, because the two failures need different
+ * words in front of a farmer. A refused refresh token means sign in again; a
+ * server that could not be reached means wait, and telling somebody to sign in
+ * when they already are is the copy defect this distinction exists to avoid.
+ */
+export type SessionRenewal = 'renewed' | 'signed-out' | 'unavailable';
+
+/**
+ * How the platform renews a session, told rather than detected.
+ *
+ * The same pattern as `setApiBase`, `setAccessToken` and `setOnline`, for the
+ * same reason: `packages/core` compiles for a server too and cannot import
+ * secure storage or the mobile session module.
+ *
+ * **Without it a lapsed session was permanent for as long as the app stayed
+ * open.** Access tokens last fifteen minutes; the sync loop treated 401 as a
+ * deferral and nothing in the loop could mint a new one, so an app left
+ * foregrounded and online simply stopped syncing at the quarter hour and stayed
+ * stopped until a lifecycle event happened to occur. Every enqueue then nudged
+ * the loop into one more immediate 401.
+ */
+type SessionRefresher = () => Promise<SessionRenewal>;
+
+let refresher: SessionRefresher | null = null;
+
+export function setSessionRefresher(next: SessionRefresher | null): void {
+  refresher = next;
+}
+
+/**
+ * Asks the platform for a new access token.
+ *
+ * Never throws: a renewal that fails is a deferral, not an error, and the work
+ * it was protecting is queued either way. `unavailable` when nothing has been
+ * told how to renew, which is the correct answer for a build with no session.
+ */
+export async function renewSession(): Promise<SessionRenewal> {
+  if (refresher === null) return 'unavailable';
+  try {
+    return await refresher();
+  } catch {
+    return 'unavailable';
+  }
+}
+
+/**
  * Headers every sync request carries.
  *
  * `x-steading-sync` is a custom header, so the request cannot be forged by a

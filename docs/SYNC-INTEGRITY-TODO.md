@@ -26,15 +26,16 @@ a clock step, or concurrency the one-box deployment does not produce — see the
 verification blocks under each. Single-device offline use is unaffected by all
 three.
 
-> **P0-2 and P0-1(a) have shipped, as one change.** The log now carries an
+> **P0-2, P0-1(a) and the repair have shipped.** The log now carries an
 > `outcome` — `pending` on insert, the projection's own decision after — the
 > feed withholds everything that did not change domain state, and a duplicate
 > projects the stored envelope instead of the request. They were not two items:
 > the same field and the same re-projection path solve both, and either alone
 > leaves the other worse. `apps/api/src/sync/outcome.ts` is new;
 > `apply.ts` and `snapshot.ts` changed; `tests/sync/outcome.test.ts` covers it.
-> **Devices that already pulled a refused row still hold it** — the repair
-> bullet under P0-2 is the outstanding half.
+> Devices that already pulled a refused row are repaired once, on their next
+> pull after upgrading: the watermark winds back to zero, the accepted log
+> replays over the damage, and records the replay cannot account for are swept.
 
 ---
 
@@ -360,21 +361,56 @@ everybody else.
       as "field absent" and need *opposite* treatment, and no ordering of a
       backfill fixes that, because new crashes keep manufacturing field-absent
       rows after it has run.
-- [ ] **Missing bullet — repair.** Filtering the feed stops future replication
+- [x] **Missing bullet — repair.** Filtering the feed stops future replication
       and repairs nothing. Every device that has already pulled a refused edit
       still holds it, including the undone archives. On the release that lands
-      this, devices must re-hydrate from zero. Replaying only accepted mutations
-      in `(serverTs, _id)` order reconstructs true state, because the accepted
-      `delete` is in the log and gets re-applied; `applyPulled` already pauses on
-      locally-pending targets so an offline device does not lose queued work
-      doing it. Cost is a full replay per device, bounded by the P3 history item —
-      **this is the moment that item stops being theoretical.**
+      this, devices must re-hydrate from zero.
+      ~~Replaying only accepted mutations in `(serverTs, _id)` order
+      reconstructs true state, because the accepted `delete` is in the log and
+      gets re-applied.~~
+      **Corrected: a replay is necessary and not sufficient.** It fixes every
+      record the server still has history for — a `create` replaces the value
+      whole, so a refused update's merged fields and an undone archive both go
+      back. It cannot fix a record the server has **nothing** for: a refused
+      create that replicated leaves a row no accepted mutation will ever
+      overwrite, and that is the phantom P0-2 was about. Shipping the replay
+      alone would have looked like a repair and left them. Checked rather than
+      reasoned: with the sweep removed, five of the eleven tests in
+      `tests/offline/projection-repair.test.ts` fail.
+      **Shipped:** `PROJECTION_REPAIR` in `db/schema.ts` is the generation;
+      `startProjectionRepair` winds the watermark to zero once; `applyPulled`
+      marks each row it writes in `record_gen`; `finishProjectionRepair` sweeps
+      records the replay never marked and that no outbox row vouches for, then
+      closes the repair.
+- [x] **Non-destructive until the replay completes**, which is what bounds the
+      risk. The sweep runs only when the feed has actually run out — a row that
+      has not arrived yet is indistinguishable from an orphan — so a device that
+      is offline, deferred, paused at a record it still owes, or capped at
+      `MAX_PAGES_PER_PASS` keeps every row it had and finishes on a later pass.
+      An app that empties itself in a barn is the one outcome worse than the bug.
+- [x] A record is legitimate exactly when the server has a mutation for it or
+      this device has an outbox row for it, because those are the only two
+      things that write `records` at all. So the sweep keeps anything with any
+      outbox row, `rejected` included — on the device that issued a refused
+      create the record stays visible until the user discards it, which is the
+      same rule N-1 follows. On every other device there is neither, and it goes.
+- [x] **Cost, unchanged from the original note:** a full replay per device,
+      bounded by the P3 history item — **this is the moment that item stops
+      being theoretical.** The `nextDelay` fast-path named there should land
+      before a farm with years of history upgrades into this. **It has**, in the
+      same push: hydration pages straight on rather than idling thirty seconds
+      between passes.
 
 **Cost note:** as originally proposed, apply goes to four strictly sequential
 round trips per mutation (log upsert, projection read, projection write, outcome
 write), up to 100 per batch.
 
 ## P0-3 · `(serverTs, _id)` is not a commit order
+
+> **Fixed, under one API process per farm.** The stamp, the log write, the
+> projection and the outcome are one serialised unit per org, the stamp is taken
+> immediately before the insert and clamped monotonically, and the assumption is
+> written into `DEPLOY-THE-SERVER.md` rather than left as folklore.
 
 **Confirmed in mechanism.** `apply.ts:115` stamps `serverTs: new Date()` while
 building the doc — **before** the `await` on the upsert at line 122, and before
@@ -440,7 +476,7 @@ farms are untouched.
       operation count: *no row may become visible carrying a cursor value below a
       watermark already published to a client.* That is satisfiable without a
       replica set and without replacing the cursor.
-- [ ] Serialize the critical section in-process, per org: an async mutex keyed on
+- [x] Serialize the critical section in-process, per org: an async mutex keyed on
       `orgId` held across stamp → log upsert → project → outcome stamp, for one
       mutation, with `serverTs` stamped immediately before the upsert instead of
       at doc-build time (`apply.ts:115`). Under one writer process, allocation,
@@ -449,23 +485,44 @@ farms are untouched.
       no sequence number can.** The lock is uncontended at farm write volume;
       batches are already sequential, so the only thing it serializes is two
       devices flushing the same farm at the same moment.
-- [ ] Clamp the stamp monotonically:
+      Shipped as `inCommitOrder` in `apps/api/src/sync/commit-order.ts`. Per
+      mutation rather than per batch, so a hundred-mutation flush cannot hold a
+      farm's lock for its whole duration, and the chain is resolved from a
+      `finally` so one throwing mutation cannot wedge every later one behind
+      it.
+- [x] Clamp the stamp monotonically:
       `serverTs = new Date(Math.max(Date.now(), lastIssued + 1))` per org, seeded
       on the first write after boot from one indexed read
       (`findMany({}, {limit: 1, sort: {serverTs: -1}})`, which the existing
       `{orgId, serverTs, _id}` index serves as a seek). This kills the clock
       rollback across restarts, which an in-memory clamp alone would not.
-- [ ] Hold back the horizon in the reader as defence in depth for the
+      **It does a second thing the item did not name.** The lock alone leaves two
+      mutations inside one millisecond sharing a `serverTs`, at which point the
+      cursor falls back to breaking the tie on the ULID — which is client-minted
+      and has no relationship to commit order, so a device that advanced past the
+      higher ULID would never be offered the lower one. The clamp is what stops
+      that, and it has its own test.
+- [ ] ~~Hold back the horizon in the reader as defence in depth for the
       two-process case: `readSnapshotPage` returns only rows with
-      `serverTs <= now - Δ`, Δ around five seconds. A stalled insert lands inside
-      the unstable window and is picked up when the window passes it. Cost is Δ
-      of second-device propagation delay, which nobody on a farm notices.
-- [ ] Write down that this is exact under **one API process per farm** and
-      Δ-bounded under more than one, next to the standalone-Mongo note rather
-      than left as folklore. If a second API instance is ever run, the correct
-      answer is a single-node replica set plus a transaction wrapping the
-      allocation and the insert — at which point the original counter proposal
-      becomes viable. That is the upgrade path.
+      `serverTs <= now - Δ`, Δ around five seconds.~~
+      **Deliberately not taken, and this is a change of mind from the line
+      above.** It costs every second device Δ of propagation delay to defend a
+      configuration that does not exist — and it collides with the one-time
+      projection repair that shipped since this was written: a mutation hidden
+      inside the horizon does not replay, so the record it belongs to goes
+      unmarked and the sweep treats it as an orphan. Self-healing on the next
+      pull, but a record that blinks out of existence is not a thing to
+      introduce on purpose. If a second process is ever wanted the answer is the
+      replica set below, not a window.
+- [x] Write down that this is exact under **one API process per farm** ~~and
+      Δ-bounded under more than one~~ — with no horizon it is exact under one
+      process and buys nothing across two, which is the sharper thing to say.
+      Written into `DEPLOY-THE-SERVER.md` beside the standalone-Mongo note,
+      including that nothing in the code can enforce it and what the symptom
+      looks like. If a second API instance is ever run, the correct answer is a
+      single-node replica set plus a transaction wrapping the allocation and the
+      insert — at which point the original counter proposal becomes viable. That
+      is the upgrade path.
 - [ ] **Interleaving 2 is not a cursor problem and no cursor change fixes it.**
       It happens because the log write and the projection write for two
       concurrent mutations can interleave in opposite orders — `apply.ts:122` and
@@ -477,15 +534,23 @@ farms are untouched.
       sequence number skips the farm's entire history; a new field to
       disambiguate wedges every old client per P1-1. Any cursor replacement is a
       coordinated client release with a compatibility story.
-- [ ] Tests: late insertion behind an advanced cursor, projection order reversed
+- [x] Tests: late insertion behind an advanced cursor, projection order reversed
       against log order, and a clock rollback. The mutex makes the first two
-      deterministic instead of timing-dependent.
+      deterministic instead of timing-dependent — `tests/unit/commit-order.test.ts`
+      stalls one request between its stamp and its insert and asserts the other
+      cannot start, so both interleavings are exercised without a mongod and
+      without a race.
 
 ---
 
 # P1 — before more farms, or more devices per farm
 
 ## P1-1 · Adding an entity breaks every older client
+
+> **Fixed.** A client reads rows one at a time and skips the ones it cannot
+> model, the way `readSnapshotPage` already does on the server. The watermark
+> still advances, so an old install misses the new entity and keeps everything
+> else — which is what "additive" was always supposed to mean.
 
 **Confirmed.** `packages/contracts/src/mutation.ts:15` says *"Widening this list
 is additive and does not bump MUTATION_SCHEMA_VERSION."* Additive on the server;
@@ -513,12 +578,36 @@ clients tolerate unknown rows.
 
 **To do**
 
-- [ ] Let the client skip unknown rows without failing the page, the way the
-      server already does — or negotiate a capability set at pull time.
-- [ ] Correct the comment at `mutation.ts:15` either way. It is currently load-
-      bearing and wrong, which is worse than absent.
+- [x] Let the client skip unknown rows without failing the page, the way the
+      server already does — ~~or negotiate a capability set at pull time~~.
+      **Negotiation was the wrong half of the fork:** it needs a server release
+      before it helps anybody, and the devices already wedged in the field would
+      stay wedged meanwhile. Tolerance on the read path fixes them the moment
+      they upgrade and asks nothing of the server.
+- [x] **Only `entity` was loosened, and that is the whole care of it.**
+      `pulledRowSchema` takes the entity as a string and leaves every other
+      field strict, so a newer server sending a new kind of record is skipped
+      and counted, while a malformed row — a short ULID, a missing `serverTs` —
+      still fails the page loudly. The two must not be confused: one is a server
+      doing what it is allowed to do, the other is a bug or a tampered response,
+      and dropping the second quietly would trade this item's silence for a
+      worse one.
+- [x] Count them rather than merely skipping. `PullOutcome.unmodelable` carries
+      the number, because "this app is older than the farm's server, so four
+      records were left out" is a fact somebody may need.
+- [x] Correct the comment at `mutation.ts:15` either way. It is currently load-
+      bearing and wrong, which is worse than absent. It now separates what a
+      client SENDS — where the original reasoning holds — from what it reads,
+      where it did not.
+- [ ] **Surface `unmodelable` somewhere a person can see it.** The count exists
+      and nothing displays it, so a device quietly missing a record type still
+      looks healthy. The diagnostics sheet is the obvious home.
 
 ## P1-2 · A Farm Hand cannot finish a photo
+
+> **Fixed.** A hand may now stamp `uploadedAt` on a photo still waiting for its
+> bytes, and nothing else. `canMutate` is unchanged, so the byte PUT goes on
+> refusing a hand replacing an established image.
 
 **Confirmed.** `packages/contracts/src/roles.ts:55` grants `photo:create` only.
 `photo` is not append-only, not `task`, not `note` — so
@@ -545,13 +634,44 @@ of pictures that never arrive. High frequency in any farm with a hand.
 
 **To do**
 
-- [ ] Either permit `photo:update` for a hand when it sets only `uploadedAt`, or
-      stamp `uploadedAt` server-side in `routes/photos.ts` and drop the client
-      mutation. The second is smaller and removes a mutation from the wire.
-- [ ] Add the cross-device hand workflow as one test: create, upload, and a
-      second device fetching the bytes.
+- [x] ~~Either permit `photo:update` for a hand when it sets only `uploadedAt`,
+      **or stamp `uploadedAt` server-side in `routes/photos.ts` and drop the
+      client mutation. The second is smaller and removes a mutation from the
+      wire.**~~
+      **Corrected: the second option does not work at all.** `/snapshot` ships
+      the mutation log, so a field the server sets directly on the projection is
+      invisible to hydration — no mutation, no replication. Dropping the client
+      mutation would leave every other device exactly as blind as before, which
+      is the bug. Synthesising a mutation server-side is not open either: a
+      mutation carries a client-minted id, a `deviceId` and a `clientSeq`, and
+      the server has none of them.
+      **Shipped: the first option, narrowed twice.** `isUploadStamp`
+      (`contracts/roles.ts`) recognises a `photo:update` carrying nothing but
+      `uploadedAt`; `sync/apply.ts` combines it with the role failure;
+      `decidePhoto` (`sync/projections.ts`) adds the half that needs the
+      document — a stamp may finish an upload, not re-stamp a finished one —
+      the same division `mayChangeNote` uses.
+- [x] **`canMutate` itself is deliberately unchanged**, and that is the whole
+      shape of the fix. It also gates the byte PUT at `routes/photos.ts:128`,
+      so granting `photo:update` there would let a hand **replace the image on
+      an established photo** — a refusal that route makes on purpose. The fix
+      for an invisible photo must not become a way to overwrite somebody
+      else's. `roles.test.ts` pins `canMutate('hand','photo','update') === false`
+      so the tempting one-line version cannot come back.
+- [x] Add the cross-device hand workflow as one test: create, upload, and a
+      second device fetching the bytes. `tests/sync/photo-upload-stamp.test.ts`
+      asserts it through the snapshot feed rather than the projection, because
+      a stamp the other devices never receive would fix nothing.
+      `tests/unit/photo-stamp-gate.test.ts` drives the applier against a fake
+      `Db` so the line combining the two halves is proven without a mongod.
 
 ## P1-3 · Session expiry is not recovered while the app is open
+
+> **Fixed.** A 401 now renews the session once and retries the same request, in
+> both the flush and the pull, so a lapsed token costs one round trip instead of
+> stalling until a lifecycle event. The `lastError` copy tells the two failures
+> apart. The cold-start suspicion in the third bullet was investigated and is
+> unfounded — see below.
 
 **Trusted.** Access tokens last fifteen minutes (`apps/api/src/auth/tokens.ts:20-43`).
 The mobile token-pair schema does not retain the expiry the server returns
@@ -597,13 +717,39 @@ the severity the Trusted label did not reach.
 
 **To do**
 
-- [ ] Keep `expiresAt` in the stored pair and refresh ahead of it — or simply
-      read `exp` from the claims already decoded by `parseClaims`.
-- [ ] One refresh-and-retry path on 401, shared by every authenticated call.
-- [ ] Fix the `lastError` copy. It instructs a signed-in user to sign in.
-- [ ] Check the cold-start ordering the audit flags at
+- [x] ~~Keep `expiresAt` in the stored pair and refresh ahead of it — or simply
+      read `exp` from the claims already decoded by `parseClaims`.~~
+      **Not needed once the retry exists, so deliberately not built.** A
+      proactive refresh saves one round trip per fifteen minutes; the reactive
+      path already costs nothing else, because a renewal that succeeds means no
+      deferral is recorded and therefore no backoff. Two mechanisms for the same
+      guarantee is two things to keep correct, and the second buys a round trip.
+- [x] One refresh-and-retry path on 401, shared by every authenticated call.
+      **Shared by every SYNC call**, which is where the stall lived:
+      `setSessionRefresher` in `packages/core/src/api.ts`, told rather than
+      detected like `setApiBase` and `setOnline`, because core compiles for a
+      server and cannot import secure storage. `apps/mobile/src/auth/call.ts`
+      already refreshes when the token is absent and is not on the stalling
+      path — its calls are user-initiated and report their failure to a screen.
+      Photo transfer is untouched: a 401 there leaves the bytes pending and the
+      next pass carries them, so it never stalls permanently.
+- [x] Fix the `lastError` copy. It instructs a signed-in user to sign in.
+      Now three-valued: `signed-out` says sign in, `unavailable` says the server
+      could not be reached, and both still open with "Nothing is lost" — which
+      is the half that came from a farm actually asking whether its morning was
+      about to be.
+- [x] ~~Check the cold-start ordering the audit flags at
       `apps/mobile/src/boot/start.ts:166-182` and `Boot.tsx:166-179` — the sync
-      loop appears to start before the lifecycle triggers are installed.
+      loop appears to start before the lifecycle triggers are installed.~~
+      **Checked, and it does not.** `start.ts:214-216` is
+      `triggers = startTriggers(); startSync();` — triggers first. `start()`
+      runs on every boot, signed in or not, because a device without an account
+      still opens its own farm through `ensureLocalOrgId`. The listeners are
+      process-global and survive a later sign-in, so `Boot.tsx`'s `onSignedIn`
+      calling `startSync()` alone is correct rather than a gap. The verification
+      note that the sign-in-after-boot path was "unrecoverable without an app
+      restart" followed from the same misreading and is withdrawn: resume and
+      network regain reach both paths.
 
 ## P1-4 · Refresh rotation leaves long-lived siblings
 
@@ -646,6 +792,10 @@ fires, a refresh token too. It pairs directly with P1-5(a).
 - [ ] Fence the client refresh against sign-out.
 
 ## P1-5 · Farm switching is not one transition
+
+> **Fixed.** Sign-out now reopens the device's own farm instead of leaving the
+> employer's on screen, and a store generation stops a flush or a pull that is
+> mid-round-trip from finishing against whichever farm replaced it.
 
 **Trusted.** Sign-out clears tokens but deliberately leaves the tenant database
 open, and `Boot.tsx:182-194` keeps rendering it with the sync engine running.
@@ -691,11 +841,36 @@ only the token half.
 
 **To do**
 
-- [ ] Make auth state, org selection, store handle, and engine state one
-      serialised transition with a generation number the engine checks before it
-      flushes.
-- [ ] Close or blank the outgoing store at sign-out rather than at next boot.
-- [ ] Cover the closed-handle window at `store.ts:83-104` with the same fence.
+- [x] ~~Make auth state, org selection, store handle, and engine state one
+      serialised transition~~ with a generation number the engine checks before
+      it flushes.
+      **Corrected: the generation alone, not a serialised transition.**
+      Serialising four pieces of state across the app would need every caller to
+      hold a lock it cannot forget, and the failure mode of forgetting is
+      silent. A generation bumped by `setLocalStore` and re-read after every
+      await **fails closed** — a stale value can only stop work, never
+      misdirect it — and it needs nothing from the callers at all. Checked in
+      three places: before the flush sends, before it writes the answers back,
+      and before a pulled page is applied.
+- [x] Close or blank the outgoing store at sign-out rather than at next boot.
+      Shipped as **reopening the device's own farm** rather than blanking:
+      `ensureLocalOrgId` already exists for exactly this and says so — *"signing
+      out again is the moment that reverses"* — it was simply only ever called
+      at the next boot. **Nothing is wiped.** The employer's database is a
+      separate file that stays where it is, unsent work included, and opens
+      again on the next sign-in; the queue is the only copy of work that never
+      reached the server, and discarding it to close a display bug would be the
+      worse trade.
+- [x] Cover the closed-handle window at `store.ts:83-104` with the same fence.
+      `openLocalStore` closes the outgoing handle and then installs the next,
+      and installing bumps the generation — so anything mid-flight for the old
+      farm stops rather than reaching a closed handle.
+- [ ] **Not covered: a screen already rendering when the swap happens.** The
+      fence protects sync, which is where the cross-tenant write lived. A hook
+      that read `localStore()` before the swap and awaits after it still holds
+      the old handle; `Boot` re-renders through `opening` on both paths, which
+      should unmount them, but that is reasoning about React rather than a
+      tested guarantee. It needs a device.
 
 ## P1-6 · An interrupted restore can leave an archived record live
 
@@ -796,6 +971,9 @@ Ranked by real likelihood on a single-node Mongo serving one small farm:
 
 ## P2-1 · The deploy timer restarts the API when nothing changed
 
+> **Fixed.** A no-change run now skips the dependency install and the restart,
+> and still runs the Caddy and APK reconciliation those were hiding behind.
+
 **Confirmed.** `scripts/deploy/deploy.sh:84` prints
 `already on $TARGET — nothing to deploy` inside an if/elif/else and **does not
 exit**. Execution falls straight through to `corepack pnpm install` at line 112
@@ -825,9 +1003,23 @@ actually hits.
 
 **To do**
 
-- [ ] `exit 0` after the nothing-to-deploy branch. One line.
-- [ ] Correct the comment in `steading-deploy.timer`, which currently asserts the
-      behaviour the missing `exit` prevents.
+- [x] ~~`exit 0` after the nothing-to-deploy branch. One line.~~
+      **Corrected: an `exit` there breaks two things meant to run every tick.**
+      The Caddy block reconciles a config that can drift on its own and
+      re-renders the install page whose version note, in its own words,
+      *"recovers on the next tick instead of staying blank"*; the app block asks
+      Expo for a build, which can appear with no server commit at all — that is
+      the whole point of the box pulling the APK the way it pulls the code.
+      Exiting early would have fixed the restart loop by silently retiring both.
+      **Shipped:** a `CHANGED` flag set in the three-case block, gating the two
+      things that only make sense when the commit moved — the dependency install
+      and the service restart — plus an early, honest exit before the came-back
+      check, whose failure text offers a rollback to the previous commit and
+      reads as nonsense on a box already sitting on it.
+- [x] Correct the comment in `steading-deploy.timer`, which currently asserts the
+      behaviour the missing `exit` prevents. It now says what a no-change run
+      actually costs, and records that the old sentence was false for as long as
+      the file existed.
 
 ## P2-2 · APK promotion is not bound to the released commit
 
@@ -992,7 +1184,11 @@ six spot-checked in the 15 August pass, which are annotated inline.**
   empty," which a farmer reads as the app being broken. **A one-line
   `nextDelay` fast-path on `more` cuts that to the time of N sequential
   requests — minutes, not half an hour, with no compaction at all.** Try that
-  before designing a snapshot format. P3 today; P2 the first time a farm crosses
+  before designing a snapshot format. **Done:** `TickResult` carries `pullMore`,
+  and `stillHydrating` gates it on the page having landed rows — the same
+  "progress earns the fast path" rule the outbox already follows, and what stops
+  a pull paused at a record this device still owes spinning at zero delay.
+  Ranked below the outbox rules on purpose, so a stuck queue still backs off. P3 today; P2 the first time a farm crosses
   ~3 years of daily use. Note this item is also the cost ceiling on P0-2's repair
   bullet.
 - **Backups load as whole JSON strings** with unbounded arrays — a large or
@@ -1027,12 +1223,16 @@ six spot-checked in the 15 August pass, which are annotated inline.**
   failure the provenance section warns about, and it was inside this document.**
 - **The local wipe skips the `tickets` table**, which can hold full record data.
   Sign-out does not currently call wipe, so this is latent rather than live.
-  → **Verified: confirmed, correctly filed.** Nobody is affected today. But if
-  sign-out wiping is ever restored on the shared-tablet argument — which P1-5(a)
-  argues for — a barn tablet handed to the next farm keeps the previous farm's
-  full record export in `tickets.records`, invisible because the wipe appears to
-  have run. Fix it as a one-line list addition now rather than scheduling it,
-  **and fix it before P1-5, not after.**
+  → **Verified, then fixed.** `tickets` is on the wipe list, added before P1-5
+  as its own note said it should be. It is the one table there holding a farm's
+  RECORDS rather than a cache of somebody else's data — `tickets.records` is the
+  opt-in export a support report carries (S2) — so a barn tablet handed to the
+  next farm would have kept the previous farm's export, invisible because the
+  wipe appeared to have run. Still latent in the sense that nothing calls
+  `wipe` even now: P1-5's sign-out swaps the store rather than clearing it, on
+  the grounds that the queue is the only copy of unsent work. `clearSession` in
+  `packages/core/src/sync/session.ts` remains written and uncalled, and is
+  correct for the day a farm genuinely wants a device emptied.
 - **Flush response parsing is loose** — it checks only that `results` is an array,
   unlike the strict pull boundary. Malformed entries read as rejections.
   → **Verified: confirmed, and P3 undersells it if P0-2 is scheduled.** Not
@@ -1139,6 +1339,9 @@ side, and it should be scheduled beside P0-2 for that reason.
 
 ## N-2 · One `undefined` from `expo-network` stops automatic sync for the life of the process — **P1**
 
+> **Fixed.** The listener now reports only what the OS actually said, so a
+> silent event leaves a working device alone.
+
 **Verified.** `apps/mobile/src/sync/triggers.ts:104` is:
 
 ```ts
@@ -1176,12 +1379,23 @@ so the translation from `NetworkStateEvent` to boolean is untested.
 
 **To do**
 
-- [ ] `if (event.isConnected !== undefined) setOnline(event.isConnected)` —
+- [x] `if (event.isConnected !== undefined) setOnline(event.isConnected)` —
       report only what the OS actually said. The `nudge` comment already argues
       for this; the listener never got the memo.
-- [ ] Test the translation, not just `setOnline`.
+- [x] Test the translation, not just `setOnline`.
+      `tests/unit/network-trigger.test.ts` drives the registered listener with a
+      mocked `expo-network` and asserts that a silent event says **nothing** to
+      the engine — the assertion that was missing, since both existing suites
+      call `setOnline` directly with booleans and never exercise the line that
+      chooses which boolean.
 
 ## N-3 · `medication:update` can produce a treatment the withdrawal engine ignores — **P1, latent**
+
+> **Fixed, and the audit the third bullet asked for found a second instance.**
+> `maintenance` drops `hasATrigger` the same way, leaving a schedule that
+> `serviceDue` cannot evaluate and therefore silently stops tracking. Both are
+> now re-checked against the merged document, the reader errs long, and a test
+> fails if a future refined create is added without an entry.
 
 **Verified, all three legs, with a throwaway contracts test.**
 
@@ -1225,13 +1439,42 @@ individual animals.
 
 **To do**
 
-- [ ] Make `withdrawal.ts:84` return **every** subject the treatment names rather
-      than the first one. This is the safer default because it errs long.
-- [ ] Re-apply the subject invariant on update. It cannot be expressed on a
-      partial, so it needs a check against the *merged* document — an
-      applier-level assertion in `projections.ts`.
-- [ ] Audit the other `.partial().strict()` update schemas for refines dropped
-      the same way.
+- [x] Make `withdrawal.ts:84` return **every** subject the treatment names rather
+      than the first one. This is the safer default because it errs long — and
+      it is the half that protects against records that already exist, since no
+      server change reaches a row that is already on a device.
+- [x] Re-apply the subject invariant on update. It cannot be expressed on a
+      partial, so it needs a check against the *merged* document — ~~an
+      applier-level assertion in `projections.ts`~~.
+      **Corrected: not in `projections.ts`.** `decideProjection` takes
+      `ExistingDoc`, which is deliberately minimal and must not grow a field per
+      entity-specific rule — this needs the whole stored document. It lives in
+      `project()` in `apply.ts`, gated on the projection having decided the
+      write really is an update, so a conflict against an archived record still
+      reports the conflict rather than a validation message about a write that
+      was never going to happen.
+- [x] Audit the other `.partial().strict()` update schemas for refines dropped
+      the same way. **It found one: `maintenance`.** `maintenanceCreateSchema`
+      refines on `hasATrigger`, `maintenanceUpdateSchema` does not, and a
+      schedule left with neither interval is one `serviceDue` refuses to
+      evaluate — so it produces nothing, and the machine silently stops being
+      tracked while the farm believes it is. Lower stakes than a false clear on
+      milk, identical shape.
+      The other refined creates are all append-only (`eggLog`,
+      `productionLog`, `weight`, `shearing`, `careLog`, `harvest`), so they have
+      no update schema and their refines cannot be bypassed.
+- [x] **The table is guarded rather than trusted.** `tests/unit/merged-invariants.test.ts`
+      walks every mutable entity, detects whether its create schema carries a
+      refinement, and fails if one is missing from `MERGED_INVARIANTS`. That
+      test is the actual fix — the two entries are only the two instances that
+      existed when it was written, and without something that fails the next
+      refined create inherits the same silent hole. It reaches into Zod's
+      `_def.checks`, which is private and could move on an upgrade; acceptable
+      in a test, where a break is visible.
+- [x] The predicates are exported from the entity modules and used by **both**
+      the create refine and the merged check, so the two cannot drift. Null
+      counts as absent in both, because clearing a field arrives as `undefined`
+      and the driver stores it as null.
 
 ## Checked and found sound
 
@@ -1266,6 +1509,11 @@ disjoint — nothing here is a sync defect, and nothing above is a build defect.
 Severity is noted per item against the same scale.
 
 ## B-1 · CI never builds or boots the container — **P2**
+
+> **Fixed.** A `container` job builds `apps/api/Dockerfile` and boots it against
+> `/health`, and `release` now needs it as well as `verify` — a promotion that
+> skipped it would move the branch the box follows to a commit whose image
+> cannot start.
 
 **Confirmed.** `.github/workflows/ci.yml` has no docker step of any kind. The
 image is therefore completely unexercised until Fly boots it.
@@ -1313,11 +1561,32 @@ for a problem CI can catch directly.
 
 **To do**
 
-- [ ] A CI step that builds `apps/api/Dockerfile` and boots the container against
+- [x] A CI step that builds `apps/api/Dockerfile` and boots the container against
       `/health`. Turns an invisible runtime failure into a red check, and also
       catches the devDependency class the box does not have.
-- [ ] Correct this item's blast-radius sentence: on the Oracle path the failure
+      **Shipped as its own job rather than a step in `verify`:** it needs none
+      of that job's setup, it runs alongside rather than after, and "the image
+      does not boot" is a sentence worth reading on its own rather than at the
+      bottom of a long log.
+- [x] **Gate `release` on it too.** `needs: [verify, container]`. A promotion
+      that skipped it would move the branch the box follows to a commit whose
+      image cannot start — and the box would find that out on a five-minute
+      timer with nobody watching.
+- [x] Correct this item's blast-radius sentence: on the Oracle path the failure
       mode is a hard outage requiring manual recovery, not a failed deploy.
+- [x] **`/health` is the right probe precisely because it touches nothing.**
+      The boot check asks whether the service can START, which is what an
+      undeclared import breaks; whether Mongo is reachable is P2-4's question
+      and a different one. The container is given a `MONGODB_URI` it never
+      dials, which works because `db/client.ts` connects lazily — the same
+      property P2-4 files as a defect for deploy gating is what makes this
+      check need no database.
+- [ ] **Not pre-verified against a real build.** There is no docker daemon in
+      the environment this was written in, so the job's shell was executed
+      standalone and every `COPY` source in the Dockerfile checked to exist,
+      but the image itself has never been built here. The first CI run is the
+      first real test — which, for a gate whose whole point is that nothing
+      built this image, is the honest place for it to be.
 
 ## B-2 · The Dockerfile comment closes off an option it never evaluated — **P3**
 
@@ -1563,7 +1832,9 @@ Add, alongside the existing sync tests:
 
 From the verification pass, with the dependencies that force it:
 
-1. **P0-2 merged with P0-1's stored-envelope fix, as one server-only change.**
+1. ~~**P0-2 merged with P0-1's stored-envelope fix, as one server-only change.**~~
+   **Done**, along with the client-side repair it needed — which turned out not
+   to be server-only after all.
    They are not two items: the same `outcome` field and the same re-projection
    path solve both, and shipping either alone leaves the other worse —
    skip-projection without the outcome field loses records, and the outcome field
@@ -1575,14 +1846,22 @@ From the verification pass, with the dependencies that force it:
 2. ~~**N-1**, beside it. Same confusion, opposite direction, and no server change
    fixes it.~~ **Done for the create case**; the `update`/`delete` residue and
    the `checkIntegrity` phantom detection remain.
-3. **P1-2** and **N-2**. Both cheap, both high-frequency, both invisible to the
-   person affected.
-4. **P1-1**, which unblocks ever putting a new field on the wire — including
+3. ~~**P1-2** and **N-2**. Both cheap, both high-frequency, both invisible to the
+   person affected.~~ **Both done.**
+4. ~~**P1-1**, which unblocks ever putting a new field on the wire — including
    P0-2's optional outcome — and is a prerequisite for the P3 flush-parsing fix
-   shipping in the right order.
-5. **P0-3**, after the outcome work has settled underneath it, since the mutex
-   wraps the same critical section.
-6. **P1-5(a)** with the `tickets` wipe fix ahead of it, then P1-3, P1-4(c).
+   shipping in the right order.~~ **Done for unknown ENTITIES.** Note what it
+   does *not* unblock: `pullResponseSchema` is still `.strict()`, so adding a new
+   FIELD to the page or to a row would still fail every deployed client.
+   Carrying P0-2's outcome on the wire stays blocked until that is loosened too
+   — and it should be loosened the same way, named fields tolerated
+   deliberately rather than a blanket passthrough.
+5. ~~**P0-3**, after the outcome work has settled underneath it, since the mutex
+   wraps the same critical section.~~ **Done**, and the ordering turned out to
+   matter: the mutex wraps the outcome stamp, which did not exist when this was
+   written.
+6. **P1-5(a)** with the `tickets` wipe fix ahead of it, then ~~P1-3~~, P1-4(c).
+   P1-3 is done.
 7. **P0-1's fresh-ULID work**, with the correction editor it exists to support.
 
 ---

@@ -19,6 +19,22 @@ export const MAX_BATCH_SIZE = 100;
  * client that emits a new value, since an old server answers 400 for an
  * entity it does not know — which is the correct, visible failure rather than
  * a silent drop.
+ *
+ * **That was true of what a client SENDS and false of what it reads, and the
+ * gap bricked hydration.** Additive on the server means the feed starts
+ * carrying the new entity immediately, to every device including the ones that
+ * have not been upgraded. `pullResponseSchema` parsed the page as a unit
+ * against the strict enum, so one unmodelable row failed the whole page,
+ * `pull.ts` returned `deferred: 'unreadable'`, and the watermark never moved:
+ * that install stopped receiving ANY of the farm's records — not just the new
+ * kind — permanently, silently, behind a chip that said it was up to date. The
+ * sentence above said this was fine.
+ *
+ * A client now reads rows one at a time and skips the ones it cannot model,
+ * the way `readSnapshotPage` already does on the server. So the constraint
+ * stands as written for sends, and for reads the answer is that an old client
+ * misses the new entity and keeps everything else — which is what "additive"
+ * was always supposed to mean.
  */
 export const ENTITIES = [
   'flock',
@@ -216,9 +232,50 @@ export type PulledMutation = z.infer<typeof pulledMutationSchema>;
  * `_id` is a ULID, so it sorts lexicographically and breaks the tie with a
  * total order the server can seek into.
  */
+/**
+ * A pulled row before this build has decided whether it can model it.
+ *
+ * The entity is a string here rather than the enum, and that one loosening is
+ * the whole of the forward-compatibility fix. Everything else stays strict, so
+ * a row that is genuinely malformed — a short ULID, a missing `serverTs` — is
+ * still a parse failure and still loud. The two cases must not be confused: one
+ * is a newer server doing exactly what it is allowed to do, the other is a bug
+ * or a tampered response, and silently dropping the second is how a real defect
+ * becomes invisible.
+ */
+export const pulledRowSchema = pulledMutationSchema.extend({
+  entity: z.string().min(1).max(60),
+});
+
+export type PulledRow = z.infer<typeof pulledRowSchema>;
+
+/**
+ * The rows this build can model, and a count of the ones it cannot.
+ *
+ * Counted rather than merely dropped. "We skipped four records because this app
+ * is older than the farm's server" is a fact somebody may need, and a silent
+ * skip is the failure mode this whole item is about — one silence traded for
+ * another would be no fix at all.
+ */
+export function readableRows(rows: readonly PulledRow[]): {
+  known: PulledMutation[];
+  unmodelable: number;
+} {
+  const known: PulledMutation[] = [];
+  let unmodelable = 0;
+
+  for (const row of rows) {
+    const entity = entitySchema.safeParse(row.entity);
+    if (entity.success) known.push({ ...row, entity: entity.data });
+    else unmodelable += 1;
+  }
+
+  return { known, unmodelable };
+}
+
 export const pullResponseSchema = z
   .object({
-    mutations: z.array(pulledMutationSchema),
+    mutations: z.array(pulledRowSchema),
     /** Send this back as `since` next time. */
     through: z.number().int(),
     /** Send this back as `sinceId`. Null only before the first row is ever read. */

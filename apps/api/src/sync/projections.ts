@@ -1,5 +1,12 @@
 import type { CollectionName } from '../db/scoped';
-import { type Entity, isAppendOnly, mayChangeNote, type Op, type Role } from '@steading/contracts';
+import {
+  canMutate,
+  type Entity,
+  isAppendOnly,
+  mayChangeNote,
+  type Op,
+  type Role,
+} from '@steading/contracts';
 
 /**
  * Projection decisions, as pure functions.
@@ -48,6 +55,11 @@ export interface ExistingDoc {
   _id: string;
   archivedAt?: Date | null;
   /**
+   * Set once the bytes have landed. Only consulted for photos, where it is
+   * what separates completing an upload from changing a finished one.
+   */
+  uploadedAt?: number;
+  /**
    * Who created it, stamped from the verified token at insert.
    *
    * Only consulted for notes, and never taken from a payload — a client that
@@ -93,6 +105,44 @@ export function decideProjection(
   if (entity === 'note') {
     return decideNote(op, context);
   }
+  if (entity === 'photo') {
+    return decidePhoto(op, context);
+  }
+  return decideMutable(op, context);
+}
+
+/**
+ * A photo, with the half of the upload-stamp rule that needs the document.
+ *
+ * `isUploadStamp` lets a hand past the role gate when a `photo:update` carries
+ * nothing but `uploadedAt`, because otherwise a photo they took is on the
+ * server and invisible to the farm. That says what the mutation is. Whether
+ * they may make it depends on the photo: **completing an upload is theirs to
+ * finish; a photo that already has bytes is not theirs to touch.**
+ *
+ * Keyed on the record's `uploadedAt` for the same reason `routes/photos.ts` is
+ * — a client whose upload succeeded but whose answer was lost has not stamped
+ * anything yet, so its retry is still the same completion and must not 403.
+ *
+ * Refused rather than conflicted: this is one person doing something they are
+ * not allowed to do, not two people racing, so it belongs in their inbox
+ * saying so.
+ */
+function decidePhoto(op: Op, context: ProjectionContext): ProjectionDecision {
+  const { existing, actor } = context;
+
+  if (
+    op === 'update' &&
+    actor !== undefined &&
+    !canMutate(actor.role, 'photo', 'update') &&
+    existing?.uploadedAt !== undefined
+  ) {
+    return {
+      kind: 'rejected',
+      reason: 'That photo has already been uploaded. Only an owner or admin can change it.',
+    };
+  }
+
   return decideMutable(op, context);
 }
 

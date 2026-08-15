@@ -181,3 +181,63 @@ describe('mutable projection', () => {
     }
   });
 });
+
+/**
+ * A hand finishing a photo, which is the half of the upload-stamp rule that
+ * needs the document.
+ *
+ * `isUploadStamp` gets the mutation past the role gate; this decides whether
+ * THIS photo is still waiting for it. Completing an upload is a hand's to
+ * finish, a photo that already has bytes is not theirs to touch, and the two
+ * answers have to come apart here because `canMutate` cannot see the record.
+ */
+describe('the photo upload stamp', () => {
+  const HAND = { userId: 'user-1', role: 'hand' as const };
+  const OWNER = { userId: 'user-2', role: 'owner' as const };
+
+  const waiting: { existing: ExistingDoc } = { existing: { _id: 'photo-1' } };
+  const finished: { existing: ExistingDoc } = {
+    existing: { _id: 'photo-1', uploadedAt: 1_700_000_000_000 },
+  };
+
+  it('lets a hand stamp a photo that is still waiting for its bytes', () => {
+    expect(
+      decideProjection('photo', 'update', { uploadedAt: 1 }, { ...waiting, actor: HAND }),
+    ).toEqual({ kind: 'update' });
+  });
+
+  /**
+   * The retry has to stay honest for the same reason routes/photos.ts keys on
+   * the record rather than on whether bytes are present: an upload whose answer
+   * was lost has not stamped anything yet, and a retry that is refused is an
+   * upload that can never finish.
+   */
+  it('refuses a hand re-stamping a photo that is already uploaded', () => {
+    const decision = decideProjection(
+      'photo',
+      'update',
+      { uploadedAt: 2 },
+      { ...finished, actor: HAND },
+    );
+
+    expect(decision.kind).toBe('rejected');
+  });
+
+  it('leaves an owner free to change a photo at any point', () => {
+    expect(
+      decideProjection('photo', 'update', { caption: 'south gate' }, { ...finished, actor: OWNER }),
+    ).toEqual({ kind: 'update' });
+  });
+
+  it('still refuses an update against a photo that is not there', () => {
+    expect(
+      decideProjection('photo', 'update', { uploadedAt: 1 }, { existing: null, actor: HAND }).kind,
+    ).toBe('conflict');
+  });
+
+  it('still archives rather than deleting', () => {
+    expect(decideProjection('photo', 'delete', {}, { ...waiting, actor: OWNER })).toEqual({
+      kind: 'archive',
+    });
+  });
+});

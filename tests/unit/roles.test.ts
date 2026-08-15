@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { canMutate, ENTITIES, isAppendOnly, isRole, OPS, ROLES } from '@steading/contracts';
+import {
+  canMutate,
+  ENTITIES,
+  isAppendOnly,
+  isRole,
+  isUploadStamp,
+  OPS,
+  ROLES,
+} from '@steading/contracts';
 
 describe('role matrix', () => {
   it('recognises exactly the three roles', () => {
@@ -60,5 +68,39 @@ describe('role matrix', () => {
       expect(canMutate('hand', 'photo', 'update')).toBe(false);
       expect(canMutate('hand', 'photo', 'delete')).toBe(false);
     });
+  });
+});
+
+/**
+ * The exception that lets a hand finish a photo.
+ *
+ * `photo:update` stays refused above, and that is deliberate: `canMutate` also
+ * gates the byte PUT, so granting it there would let a hand replace the image
+ * on an established photo. The stamp is expressed on the mutation instead.
+ */
+describe('the photo upload stamp', () => {
+  it('is a photo update carrying nothing but uploadedAt', () => {
+    expect(isUploadStamp('photo', 'update', { uploadedAt: 1 })).toBe(true);
+  });
+
+  it('is not a stamp once anything travels beside it', () => {
+    // The whole point of the narrowing: a hand must not smuggle a caption or a
+    // re-linked subject through on the back of an upload.
+    expect(isUploadStamp('photo', 'update', { uploadedAt: 1, caption: 'mine now' })).toBe(false);
+    expect(isUploadStamp('photo', 'update', { caption: 'mine now' })).toBe(false);
+    expect(isUploadStamp('photo', 'update', { uploadedAt: 1, subjectId: 'x' })).toBe(false);
+    expect(isUploadStamp('photo', 'update', {})).toBe(false);
+  });
+
+  it('is not a stamp on another entity or another op', () => {
+    expect(isUploadStamp('flock', 'update', { uploadedAt: 1 })).toBe(false);
+    expect(isUploadStamp('photo', 'create', { uploadedAt: 1 })).toBe(false);
+    expect(isUploadStamp('photo', 'delete', { uploadedAt: 1 })).toBe(false);
+  });
+
+  it('refuses anything that is not a plain object', () => {
+    for (const payload of [null, undefined, 'uploadedAt', 7, ['uploadedAt']]) {
+      expect(isUploadStamp('photo', 'update', payload)).toBe(false);
+    }
   });
 });

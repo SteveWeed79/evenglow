@@ -2,9 +2,11 @@ import { MongoServerError } from 'mongodb';
 import {
   canMutate,
   entitySchema,
+  isUploadStamp,
   opSchema,
   roleRefusal,
   MUTATION_SCHEMA_VERSION,
+  mergedUpdateProblem,
   payloadSchemaFor,
   type Entity,
   type Mutation,
@@ -13,6 +15,7 @@ import {
 } from '@steading/contracts';
 import type { SessionClaims } from '../auth/claims';
 import type { Scoped, Tenanted } from '../db/scoped';
+import { inCommitOrder, nextServerTs } from './commit-order';
 import { DECIDED_OUTCOMES, PENDING, type StoredOutcome } from './outcome';
 import {
   decideProjection,
@@ -117,8 +120,17 @@ async function applyMutation(
     return rejected(id, `This app version cannot read that record (v${mutation.schemaVersion}).`);
   }
 
-  // Role is re-derived server-side, never read from the payload (invariant 5).
-  if (!canMutate(claims.role, entity, op)) {
+  /**
+   * Role is re-derived server-side, never read from the payload (invariant 5).
+   *
+   * The one exception is a hand stamping `uploadedAt` on a photo whose bytes
+   * they have just uploaded — without it the photo is on the server and
+   * invisible to every other device. `isUploadStamp` says what the mutation is;
+   * `decideProjection` says whether this photo is still waiting for it. Both
+   * halves are needed, and neither belongs in `canMutate`, which also gates the
+   * byte PUT and must go on refusing a hand replacing an established image.
+   */
+  if (!canMutate(claims.role, entity, op) && !isUploadStamp(entity, op, mutation.payload)) {
     return rejected(id, roleRefusal(op, entity));
   }
 
@@ -143,86 +155,104 @@ async function applyMutation(
     return rejected(id, `That ${entity} is not a valid record.`);
   }
 
-  // No _id and no orgId here: Mongo derives _id from the upsert filter's
-  // equality term, and scoped() stamps orgId. Both are rejected by
-  // assertSafeUpdate if a caller passes them, which is the point.
-  const doc: Omit<MutationDoc, 'orgId' | '_id'> = {
-    targetId: mutation.targetId,
-    entity,
-    op,
-    payload: parsed.data,
-    deviceId: mutation.deviceId,
-    clientSeq: mutation.clientSeq,
-    clientTs: mutation.clientTs,
-    schemaVersion: mutation.schemaVersion,
-    userId: claims.userId,
-    serverTs: new Date(),
-    outcome: PENDING,
-  };
-
-  let firstTime: boolean;
-  try {
-    // Idempotency (A3): $setOnInsert means a replayed batch writes nothing the
-    // second time, and upsertedCount is what distinguishes the two cases.
-    const res = await scope
-      .col<MutationDoc>('mutations')
-      .upsertOne({ _id: id }, { $setOnInsert: doc });
-    firstTime = res.upsertedCount > 0;
-  } catch (error) {
-    // _id is unique collection-wide, so a mutation id already used by another
-    // tenant fails the insert rather than matching the org-guarded filter.
-    // Surfacing it as 'duplicate' would tell the caller a foreign id exists.
-    if (error instanceof MongoServerError && error.code === 11000) {
-      return rejected(id, 'That record id is already in use. The app will mint a new one.');
-    }
-    throw error;
-  }
-
   /**
-   * A first attempt inserted the row we just built, so the request and the
-   * stored envelope are the same thing and there is nothing to read back.
+   * Everything from here is one serialised unit per org, and the stamp is taken
+   * inside it.
+   *
+   * `serverTs` used to be assigned while the document was being built, before
+   * the `await` on the upsert — so a request that stamped early and committed
+   * late landed behind a watermark a device had already advanced past, and was
+   * never pulled. Holding the stamp, the log write, the projection and the
+   * outcome together also stops two concurrent mutations projecting in the
+   * opposite order to the one they logged in, which is the failure no cursor
+   * change can reach. `commit-order.ts` has the rest of the argument, including
+   * why a counter document does not do this.
+   *
+   * Validation stays outside. It touches no shared state, and refusing early
+   * holds the farm's lock for as little time as possible.
    */
-  let command: Command = {
-    entity,
-    op,
-    targetId: mutation.targetId,
-    deviceId: mutation.deviceId,
-    userId: claims.userId,
-    payload,
-  };
+  return inCommitOrder(scope.orgId, async () => {
+    // No _id and no orgId here: Mongo derives _id from the upsert filter's
+    // equality term, and scoped() stamps orgId. Both are rejected by
+    // assertSafeUpdate if a caller passes them, which is the point.
+    const doc: Omit<MutationDoc, 'orgId' | '_id'> = {
+      targetId: mutation.targetId,
+      entity,
+      op,
+      payload: parsed.data,
+      deviceId: mutation.deviceId,
+      clientSeq: mutation.clientSeq,
+      clientTs: mutation.clientTs,
+      schemaVersion: mutation.schemaVersion,
+      userId: claims.userId,
+        serverTs: await nextServerTs(scope),
+      outcome: PENDING,
+    };
 
-  if (!firstTime) {
-    const replay = await replayFromLog(scope, id);
-
-    // Already decided. Returning the stored answer is what makes a replay free
-    // of side effects — and it is the only thing that keeps the caller's inbox
-    // agreeing with the log about a refusal it has already been told about.
-    if (replay.kind === 'decided') return replay.result;
+    let firstTime: boolean;
+    try {
+      // Idempotency (A3): $setOnInsert means a replayed batch writes nothing the
+      // second time, and upsertedCount is what distinguishes the two cases.
+      const res = await scope
+        .col<MutationDoc>('mutations')
+        .upsertOne({ _id: id }, { $setOnInsert: doc });
+      firstTime = res.upsertedCount > 0;
+    } catch (error) {
+      // _id is unique collection-wide, so a mutation id already used by another
+      // tenant fails the insert rather than matching the org-guarded filter.
+      // Surfacing it as 'duplicate' would tell the caller a foreign id exists.
+      if (error instanceof MongoServerError && error.code === 11000) {
+        return rejected(id, 'That record id is already in use. The app will mint a new one.');
+      }
+      throw error;
+    }
 
     /**
-     * The row exists but this build cannot read it back — a payload written by
-     * a newer schema, or a corrupt document.
-     *
-     * Reported as `duplicate` and not projected. A row we cannot parse is a row
-     * we cannot safely replay, and guessing at it is how a bad envelope becomes
-     * bad domain state.
+     * A first attempt inserted the row we just built, so the request and the
+     * stored envelope are the same thing and there is nothing to read back.
      */
-    if (replay.kind === 'unreadable') return { id, status: 'duplicate' };
+    let command: Command = {
+      entity,
+      op,
+      targetId: mutation.targetId,
+      deviceId: mutation.deviceId,
+      userId: claims.userId,
+      payload,
+    };
 
-    command = replay.command;
-  }
+    if (!firstTime) {
+      const replay = await replayFromLog(scope, id);
 
-  const projection = await project(scope, claims, command);
-  await stampOutcome(scope, id, projection);
+      // Already decided. Returning the stored answer is what makes a replay free
+      // of side effects — and it is the only thing that keeps the caller's inbox
+      // agreeing with the log about a refusal it has already been told about.
+      if (replay.kind === 'decided') return replay.result;
 
-  if (projection.kind === 'conflict') {
-    return { id, status: 'conflict', reason: projection.reason };
-  }
-  if (projection.kind === 'rejected') {
-    return rejected(id, projection.reason);
-  }
+      /**
+       * The row exists but this build cannot read it back — a payload written by
+       * a newer schema, or a corrupt document.
+       *
+       * Reported as `duplicate` and not projected. A row we cannot parse is a row
+       * we cannot safely replay, and guessing at it is how a bad envelope becomes
+       * bad domain state.
+       */
+      if (replay.kind === 'unreadable') return { id, status: 'duplicate' };
 
-  return { id, status: firstTime ? 'applied' : 'duplicate' };
+      command = replay.command;
+    }
+
+    const projection = await project(scope, claims, command);
+    await stampOutcome(scope, id, projection);
+
+    if (projection.kind === 'conflict') {
+      return { id, status: 'conflict', reason: projection.reason };
+    }
+    if (projection.kind === 'rejected') {
+      return rejected(id, projection.reason);
+    }
+
+    return { id, status: firstTime ? 'applied' : 'duplicate' };
+  });
 }
 
 type Replay =
@@ -361,6 +391,31 @@ async function project(
     actor: { userId: claims.userId, role: claims.role },
     ...(entity === 'hourReading' ? { lastHours: await highestHours(scope, payload) } : {}),
   });
+
+  /**
+   * The invariant a `.partial()` update schema could not carry.
+   *
+   * A create schema's `.refine()` is dropped by `.partial()`, so a rule that
+   * reads two fields together — exactly one subject on a treatment, at least
+   * one trigger on a schedule — was enforced on create and on nothing else. It
+   * is a property of the RESULTING document, so it can only be checked once the
+   * update is merged onto what is stored.
+   *
+   * Checked only when the projection has decided this really is an update, so a
+   * conflict against an archived record still reports the conflict rather than
+   * a validation message about a write that was never going to happen.
+   *
+   * Not in `decideProjection`: that takes `ExistingDoc`, which is deliberately
+   * minimal and must not grow a field per entity-specific rule. This needs the
+   * whole stored document.
+   */
+  if (decision.kind === 'update' && existing !== null) {
+    const problem = mergedUpdateProblem(entity, {
+      ...(existing as Record<string, unknown>),
+      ...payload,
+    });
+    if (problem !== null) return { kind: 'rejected', reason: problem };
+  }
 
   /**
    * Attribution comes from the command, which names who ISSUED it.

@@ -27,6 +27,7 @@ import {
   type LocalRecord,
   META,
   parseMeta,
+  PROJECTION_REPAIR,
   type QueuedMutation,
   type Quarantined,
   quarantinedSchema,
@@ -272,6 +273,14 @@ export async function openSqliteStore(
     op: 'create' | 'update' | 'delete',
     payload: unknown,
     updatedAt: number,
+    /**
+     * The repair generation to stamp, when this write came from the server.
+     *
+     * Left undefined by enqueue, and that is the distinction the sweep needs:
+     * a row this device wrote optimistically has an outbox row vouching for it,
+     * so it does not need a stamp and must not get one it has not earned.
+     */
+    gen?: number,
   ): Promise<void> {
     const key = recordKey(entity, targetId);
 
@@ -298,6 +307,27 @@ export async function openSqliteStore(
         op === 'delete' ? 1 : 0,
       ],
     );
+
+    // Marked in the same transaction as the row it vouches for, or a crash
+    // between the two leaves a repaired record looking like an orphan.
+    if (gen !== undefined) {
+      await db.run(
+        `INSERT INTO record_gen (key, gen) VALUES (?, ?)
+         ON CONFLICT(key) DO UPDATE SET gen = excluded.gen`,
+        [key, gen],
+      );
+    }
+  }
+
+  /**
+   * Whether this device still owes the projection repair `PROJECTION_REPAIR`
+   * describes. Read inside the caller's transaction, never cached — the answer
+   * changes exactly once and a stale `true` would replay a farm's history for
+   * nothing.
+   */
+  async function repairInProgress(db: SqlOps): Promise<boolean> {
+    const done = parseMeta('repairDone', await readMeta(db, 'repairDone')) ?? 0;
+    return done < PROJECTION_REPAIR;
   }
 
   /**
@@ -751,6 +781,8 @@ export async function openSqliteStore(
         );
         const pending = new Set(pendingRows.map((r) => r.targetId));
 
+        const repairing = await repairInProgress(tx);
+
         let applied = 0;
         let paused = false;
         /** The last row actually written, which is how far it is safe to claim. */
@@ -779,6 +811,9 @@ export async function openSqliteStore(
             mutation.op,
             mutation.payload,
             mutation.serverTs,
+            // Stamped only while a repair is outstanding, so the sweep can tell
+            // a row the server vouched for from one nothing did.
+            repairing ? PROJECTION_REPAIR : undefined,
           );
           applied += 1;
           committed = { through: mutation.serverTs, throughId: mutation.id };
@@ -803,6 +838,79 @@ export async function openSqliteStore(
         through: parseMeta('pulledThrough', await readMeta(driver, 'pulledThrough')) ?? 0,
         throughId: parseMeta('pulledThroughId', await readMeta(driver, 'pulledThroughId')) ?? null,
       };
+    },
+
+    /**
+     * Winds the watermark back to zero, once, so the next pull replays the
+     * accepted log over whatever a refused command left behind.
+     *
+     * Idempotent by the `started` marker rather than by the watermark, because
+     * the watermark moves the moment the replay begins — checking it would
+     * restart the replay on every pull and the device would never finish.
+     *
+     * The outbox is deliberately untouched. Nothing unsent is at risk here: the
+     * queue is the only copy of work that has not reached the server, and this
+     * rebuilds the projection, which is derived by definition.
+     */
+    async startProjectionRepair(): Promise<boolean> {
+      return driver.transaction(async (tx) => {
+        const started = parseMeta('repairStarted', await readMeta(tx, 'repairStarted')) ?? 0;
+        if (started >= PROJECTION_REPAIR) return false;
+
+        await writeMeta(tx, META.repairStarted, PROJECTION_REPAIR);
+        await writeMeta(tx, META.pulledThrough, 0);
+        await tx.run('DELETE FROM meta WHERE key = ?', [META.pulledThroughId]);
+
+        // Marks are only meaningful within one run. Left over from an earlier
+        // one they would vouch for rows this replay never reaches, and the
+        // sweep would spare exactly the orphans it exists to find.
+        await tx.run('DELETE FROM record_gen');
+        return true;
+      });
+    },
+
+    /**
+     * Sweeps what the replay never accounted for, and closes the repair.
+     *
+     * **Only called once the feed has actually run out**, which is what makes
+     * the deletion safe: a row still carrying an older stamp after the device
+     * has read every accepted mutation is a row the server has nothing for.
+     *
+     * A record is legitimate exactly when the server has a mutation for it or
+     * this device has an outbox row for it — those are the only two things that
+     * write `records` at all. So the sweep keeps anything with any outbox row,
+     * `rejected` included: on the device that issued a refused create the
+     * record stays visible until the user discards it from the inbox, which is
+     * the same call `discardRejected` makes. On every OTHER device there is no
+     * outbox row and nothing on the server, and the row goes.
+     */
+    async finishProjectionRepair(): Promise<number> {
+      return driver.transaction(async (tx) => {
+        const done = parseMeta('repairDone', await readMeta(tx, 'repairDone')) ?? 0;
+        if (done >= PROJECTION_REPAIR) return 0;
+
+        const orphans = await tx.all<{ key: string }>(
+          `SELECT key FROM records
+             WHERE key NOT IN (SELECT key FROM record_gen WHERE gen >= ?)
+               AND targetId NOT IN (SELECT targetId FROM outbox)`,
+          [PROJECTION_REPAIR],
+        );
+
+        for (const row of orphans) {
+          await tx.run('DELETE FROM records WHERE key = ?', [row.key]);
+        }
+
+        // The marks have done their job, and the next generation clears them
+        // again on the way in — so nothing is kept and the table does not grow
+        // a row per record for ever.
+        await tx.run('DELETE FROM record_gen');
+        await writeMeta(tx, META.repairDone, PROJECTION_REPAIR);
+        return orphans.length;
+      });
+    },
+
+    async projectionRepairDone(): Promise<boolean> {
+      return !(await repairInProgress(driver));
     },
 
     async getLastSyncAt(): Promise<number | null> {
@@ -1058,6 +1166,21 @@ export async function openSqliteStore(
           'outbox',
           'records',
           'meta',
+          // Added to this list in the same change that created it, which is the
+          // whole lesson of the comment above.
+          'record_gen',
+          /**
+           * **`tickets` was missed for the same reason the weather tables
+           * were**, and it is the one on this list that holds a farm's records
+           * rather than a cache of somebody else's data: `tickets.records` is
+           * the opt-in export a support report carries (S2). A barn tablet
+           * handed to the next farm would keep the previous one's export,
+           * invisibly, because the wipe appears to have run.
+           *
+           * Latent until now — nothing called `clearSession` — which is
+           * precisely why it had to be fixed before sign-out started using it.
+           */
+          'tickets',
           'quarantine',
           'forecast',
           'observation',

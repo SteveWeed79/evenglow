@@ -237,6 +237,41 @@ export const MIGRATIONS: readonly Migration[] = [
       `CREATE INDEX IF NOT EXISTS tickets_unsent ON tickets (sentAt, at)`,
     ],
   },
+  {
+    version: 6,
+    statements: [
+      /**
+       * Which hydration pass last wrote this record.
+       *
+       * Every device that synced before the server learned to withhold refused
+       * commands applied some of them: an archive undone, a note somebody was
+       * not allowed to edit, a meter reading the server refused. Filtering the
+       * feed stops that happening again and repairs nothing already on disk, so
+       * those devices replay the accepted log from zero once.
+       *
+       * A replay fixes every record the server still has a mutation for,
+       * because a `create` replaces the value whole and the accepted history
+       * lands on top. **It cannot fix a record the server has nothing for** —
+       * a refused create that replicated leaves a row nothing will ever
+       * overwrite. This column is what finds those: the repair stamps each row
+       * it writes, and a row still carrying an older stamp when the replay
+       * reaches the head of the feed has no server provenance.
+       *
+       * **A table rather than a column on `records`, and not only for taste.**
+       * Every statement in this ladder is `IF NOT EXISTS`, because two starts
+       * can race into `migrate` together and both read the old version before
+       * either bumps it — `sqlite-schema.test.ts` pins that. SQLite has no
+       * `ADD COLUMN IF NOT EXISTS`, so an `ALTER` here fails the second caller
+       * with `duplicate column name`. Keeping the marker beside `records`
+       * rather than inside it also means the table holding a farm's data is
+       * never altered to fix a defect in something else.
+       */
+      `CREATE TABLE IF NOT EXISTS record_gen (
+         key TEXT PRIMARY KEY NOT NULL,
+         gen INTEGER NOT NULL
+       )`,
+    ],
+  },
 ];
 
 /** The version a fresh database is brought to. */

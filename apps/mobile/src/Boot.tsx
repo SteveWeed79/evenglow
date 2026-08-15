@@ -5,6 +5,7 @@ import { startSync } from '@steading/core/sync/engine';
 import { setStorageBacking } from '@steading/core/sync/storage';
 import { setEngineReporter } from '@steading/core/sync/report';
 import { reportTrouble } from './hooks/useTrouble';
+import { ensureLocalOrgId } from './auth/local-org';
 import { start, type Started } from './boot/start';
 import { openLocalStore } from './db/store';
 import { useAppFonts } from './theme/fonts';
@@ -184,14 +185,49 @@ export function Boot({
    *
    * The farm's records are on this device and the app still works — that is
    * the whole premise, and it is now true after a sign-out as well as before a
-   * sign-in. The tokens are gone, so the engine will defer every batch as
-   * unauthenticated, which is the state it already handles.
+   * sign-in.
    *
-   * The engine is left running deliberately: the queue is per farm and still
-   * on disk, so stopping it would only delay the next flush without protecting
-   * anything.
+   * ## But they must be THIS device's records, and they were not
+   *
+   * This used to be `setState({ kind: 'ready' })` and nothing else, so the
+   * store handle went on pointing at the farm that had just signed out. **A
+   * hand signing out of a shared barn tablet at the end of a shift left the
+   * employer's animals, treatments and mortalities on screen for whoever
+   * picked it up next**, until another farm was opened or the app was
+   * restarted. A plain tenant-isolation failure, on the device rather than the
+   * server, and invisible because everything looked exactly as it should.
+   *
+   * `ensureLocalOrgId` already answers this: signing in to somebody else's
+   * farm moves this device's own id aside, and its own comment says signing
+   * out again "is the moment that reverses". It was only ever called at the
+   * next boot, which is what made the gap a whole session long.
+   *
+   * Nothing is wiped. The employer's database is a separate file that stays
+   * exactly where it is, unsent work included, and opens again on the next
+   * sign-in — the queue is the only copy of work that never reached the
+   * server, and discarding it to close a display bug would be the worse trade.
+   *
+   * `openLocalStore` closes the outgoing handle and installs the next one,
+   * which bumps the store generation — so a flush or a pull that is mid-round
+   * trip for the old farm stops rather than finishing against the new one.
    */
-  const onSignedOut = useCallback(() => setState({ kind: 'ready' }), []);
+  const onSignedOut = useCallback(() => {
+    setState({ kind: 'opening' });
+    ensureLocalOrgId()
+      .then((orgId) => openLocalStore(orgId))
+      .then(
+        () => {
+          setStorageBacking('device');
+          startSync();
+          setState({ kind: 'ready' });
+        },
+        (error: unknown) =>
+          setState({
+            kind: 'failed',
+            message: error instanceof Error ? error.message : String(error),
+          }),
+      );
+  }, []);
 
   /**
    * The splash comes down when this file can draw the same thing itself.

@@ -5,8 +5,8 @@ import {
   type SyncRefusal,
   type SyncResponse,
 } from '@steading/contracts';
-import { apiUrl, syncHeaders } from '../api';
-import { localStore } from '../db/store';
+import { apiUrl, renewSession, type SessionRenewal, syncHeaders } from '../api';
+import { localStore, storeGeneration } from '../db/store';
 import type { QueuedMutation } from '../db/records';
 
 /**
@@ -76,6 +76,11 @@ const defaultTransport: SyncTransport = async (mutations) => {
   return { status: res.status, body };
 };
 
+/** A session the server no longer accepts, as opposed to work it refuses. */
+function isLapsed(status: number): boolean {
+  return status === 401 || status === 403;
+}
+
 let inFlight: Promise<FlushOutcome> | null = null;
 
 /**
@@ -100,15 +105,49 @@ function isSyncResponse(body: unknown): body is SyncResponse {
 }
 
 async function runFlush(transport: SyncTransport): Promise<FlushOutcome> {
+  /**
+   * Which farm this pass belongs to, captured before the first await.
+   *
+   * A device holds one farm's database at a time, and every step below spans a
+   * round trip. A farm switch landing inside that gap would send THIS farm's
+   * queued work under the NEXT farm's token, and write the answers back into
+   * the wrong outbox — neither of which `scoped()` can see, because the server
+   * is doing exactly what the token it was given says.
+   */
+  const tenant = storeGeneration();
   const all = await localStore().readOutboxBySeq();
   const batch = all.filter((m) => m.status === 'queued').slice(0, MAX_BATCH_SIZE);
 
   const outcome: FlushOutcome = { attempted: batch.length, applied: 0, duplicate: 0, rejected: 0 };
   if (batch.length === 0) return outcome;
 
+  // Nothing is sent under a token that belongs to a different farm. Not a
+  // deferral to back off from: the switch has already started the next farm's
+  // sync, and this pass simply has nothing left to do.
+  if (storeGeneration() !== tenant) return { ...outcome, deferred: 'farm-switched' };
+
   let response: { status: number; body: unknown };
+  let renewal: SessionRenewal = 'renewed';
   try {
     response = await transport(batch.map(toEnvelope));
+
+    /**
+     * One renewal, one retry, and only for a lapsed session.
+     *
+     * Access tokens last fifteen minutes and nothing in this loop could mint a
+     * new one, so an app left open and online stopped syncing at the quarter
+     * hour and stayed stopped until a lifecycle event happened to occur —
+     * behind a chip that said work was waiting and an error that told a
+     * signed-in farmer to sign in.
+     *
+     * Once, not in a loop: a second 401 after a successful renewal is a
+     * refusal about this request rather than about the session, and retrying
+     * that would spin.
+     */
+    if (isLapsed(response.status)) {
+      renewal = await renewSession();
+      if (renewal === 'renewed') response = await transport(batch.map(toEnvelope));
+    }
   } catch (error) {
     // Network failure: keep everything queued and count the attempt (A1).
     await recordAttempt(batch, error instanceof Error ? error.message : 'Network error');
@@ -136,8 +175,18 @@ async function runFlush(transport: SyncTransport): Promise<FlushOutcome> {
    * A farmer who believes their morning is about to be lost stops using the
    * app, and no amount of it being untrue afterwards gets that back.
    */
-  if (response.status === 401 || response.status === 403) {
-    await setLastError('Nothing is lost — sign in again to send the work waiting here.');
+  if (isLapsed(response.status)) {
+    /**
+     * Reached only when a renewal was tried and did not produce a token, so the
+     * two answers are genuinely different actions. Telling somebody to sign in
+     * when they already are, and the server simply could not be reached, is the
+     * same class of defect as the sentence this one replaced.
+     */
+    await setLastError(
+      renewal === 'signed-out'
+        ? 'Nothing is lost — sign in again to send the work waiting here.'
+        : 'Nothing is lost — this session needs renewing and the farm server could not be reached.',
+    );
     return { ...outcome, deferred: 'unauthenticated' };
   }
 
@@ -173,6 +222,16 @@ async function runFlush(transport: SyncTransport): Promise<FlushOutcome> {
     await rejectExhausted(batch, `The server could not read that batch (${response.status}).`);
     return { ...outcome, deferred: `unreadable-${response.status}` };
   }
+
+  /**
+   * And the answers go back to the farm that asked, or nowhere.
+   *
+   * Checked again rather than once: a switch can land during the round trip as
+   * easily as before it, and writing these results into another farm's outbox
+   * would match no rows while still moving its cleared counter — which
+   * `checkIntegrity` would later read as that farm having lost work.
+   */
+  if (storeGeneration() !== tenant) return { ...outcome, deferred: 'farm-switched' };
 
   return applyResults(batch, response.body.results, outcome);
 }

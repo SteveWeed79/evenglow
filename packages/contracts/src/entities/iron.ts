@@ -71,8 +71,20 @@ const maintenanceShape = {
   note: z.string().max(500).optional(),
 };
 
-const hasATrigger = (v: { intervalHours?: number | undefined; intervalDays?: number | undefined }) =>
-  v.intervalHours !== undefined || v.intervalDays !== undefined;
+/**
+ * A schedule with no trigger is one `serviceDue` cannot evaluate, so it
+ * produces nothing — the machine silently stops being tracked while the farm
+ * believes it is.
+ *
+ * Exported for the same reason as `namesOneSubject`: a `.partial()` update
+ * cannot carry this, so it is re-checked against the merged document at apply
+ * time (`mergedUpdateProblem`). Null counts as absent, because clearing a field
+ * arrives as undefined and is stored as null.
+ */
+export function hasATrigger(v: { intervalHours?: unknown; intervalDays?: unknown }): boolean {
+  const set = (value: unknown) => value !== undefined && value !== null;
+  return set(v.intervalHours) || set(v.intervalDays);
+}
 
 export const maintenanceCreateSchema = z
   .object(maintenanceShape)
