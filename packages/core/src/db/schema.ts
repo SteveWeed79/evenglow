@@ -103,6 +103,8 @@ export const META = {
   pendingPhoto: 'pendingPhoto',
   repairStarted: 'repairStarted',
   repairDone: 'repairDone',
+  unmodelableRows: 'unmodelableRows',
+  repairedRecords: 'repairedRecords',
 } as const;
 
 /**
@@ -150,6 +152,20 @@ export const metaSchemas = {
    */
   repairStarted: z.number().int().nonnegative(),
   repairDone: z.number().int().nonnegative(),
+  /**
+   * Records this build could not model, because the server is newer than the
+   * app (P1-1). Counted rather than merely skipped: a device quietly missing a
+   * whole kind of record is the shape of failure that path already had once,
+   * and a count nobody can see is barely better than no count.
+   *
+   * A running total, cleared at the start of a projection repair — the replay
+   * winds the watermark to zero and reads every row again, so a total that
+   * survived it would double. The same reasoning `record_gen` gets: marks are
+   * only meaningful within one run.
+   */
+  unmodelableRows: z.number().int().nonnegative(),
+  /** What the one-time projection repair swept, kept so the sheet can say so. */
+  repairedRecords: z.number().int().nonnegative(),
   /**
    * Why the server is not taking this farm's work, when it is not (D13).
    *

@@ -599,9 +599,17 @@ clients tolerate unknown rows.
       bearing and wrong, which is worse than absent. It now separates what a
       client SENDS — where the original reasoning holds — from what it reads,
       where it did not.
-- [ ] **Surface `unmodelable` somewhere a person can see it.** The count exists
-      and nothing displays it, so a device quietly missing a record type still
-      looks healthy. The diagnostics sheet is the obvious home.
+- [x] **Surface `unmodelable` somewhere a person can see it.** Done — and it
+      needed storing before it could be shown. The count lived only in
+      `PullOutcome`, and the pass that discovers it is never the moment somebody
+      is looking at a screen, so `noteUnmodelable` keeps a running total.
+      Cleared when a projection repair starts, because that winds the watermark
+      to zero and reads every row again — a total that survived it would double,
+      the same reasoning `record_gen` gets.
+
+      The panel is phrased as news rather than as a fault: nothing is wrong with
+      the phone and nothing is lost on the server, and the action is an app
+      update. Saying that is most of the value.
 
 ## P1-2 · A Farm Hand cannot finish a photo
 
@@ -908,12 +916,23 @@ only the token half.
       `openLocalStore` closes the outgoing handle and then installs the next,
       and installing bumps the generation — so anything mid-flight for the old
       farm stops rather than reaching a closed handle.
-- [ ] **Not covered: a screen already rendering when the swap happens.** The
-      fence protects sync, which is where the cross-tenant write lived. A hook
-      that read `localStore()` before the swap and awaits after it still holds
-      the old handle; `Boot` re-renders through `opening` on both paths, which
-      should unmount them, but that is reasoning about React rather than a
-      tested guarantee. It needs a device.
+- [x] ~~**Not covered: a screen already rendering when the swap happens.**~~
+      **Half of it did not need a device after all.** The claim was *"`Boot`
+      re-renders through `opening` on both paths, which should unmount them,
+      but that is reasoning about React rather than a tested guarantee"* — and
+      that is a claim about one component, which mounts perfectly well in the
+      screen harness. `tests/screens/farm-swap-unmount.test.tsx` holds
+      `openLocalStore` open and asserts that during **both** transitions the app
+      tree is gone and the boot mark is up, then that it comes back — so the
+      unmount is an unmount rather than a hang. Removing either
+      `setState({kind:'opening'})` fails both cases.
+
+      A screen cannot hold a stale handle across an await it is no longer alive
+      to return from, so the hazard is unreachable rather than merely unlikely.
+
+      **What still needs a handset** is the narrower question the test renderer
+      cannot answer: whether a native module holds a reference across the swap.
+      That is on the device list with everything else on this branch.
 
 ## P1-6 · An interrupted restore can leave an archived record live
 
@@ -1727,19 +1746,60 @@ side, and it should be scheduled beside P0-2 for that reason.
       here — so it is the one that can be taken back without a base value.
       Guarded on no `applied` row for the same target, so a record the server
       accepted after all is never removed.
-- [ ] **The residue, which is now the open half.** A refused `update` leaves its
-      merged fields in place, and a refused `delete` leaves the record hidden;
-      neither is repaired by a later pull, because the server has no mutation
-      for a command it refused. `delete` is exactly revertible (only the
-      `deleted` flag moved, `nextRecordValue` keeps the value) but needs
-      guarding against a second, accepted delete. `update` needs a stored
-      last-server-confirmed value per record — a second column, and the only
-      thing that would make the revert exact. Asserted as-is in
-      `refused-create.test.ts` so the limit is visible rather than assumed.
-- [ ] Make `checkIntegrity` able to see this: a record with no server-side
+- [x] ~~**The residue, which is now the open half.**~~ **Done, 15 August.** A
+      refused `update` left its merged fields in place and a refused `delete`
+      left the record hidden; neither is repaired by a later pull, because the
+      server has no mutation for a command it refused.
+      **Not the remedy this bullet proposed.** It asked for "a stored
+      last-server-confirmed value per record", which is a value maintained on
+      the *pull* path — one extra write per hydrated row, for a farm's whole
+      history, to serve the rare case of a refusal. A **pre-image per mutation**
+      costs one write per local edit instead, is exact for `update` and `delete`
+      alike, and needs no separate guard for a second accepted delete: the guard
+      falls out of the design. See below.
+- [x] ~~Make `checkIntegrity` able to see this: a record with no server-side
       provenance and no queued mutation is a phantom, and the counter arithmetic
-      cannot tell. **Still open** — the revert stops new phantoms, but a device
-      that already has one gets no help, and nothing reports it.
+      cannot tell.~~ **The premise is out of date, and no new code was the right
+      answer.** The one-time projection repair (P0-2) already sweeps exactly
+      this set — `finishProjectionRepair` deletes every record the accepted-log
+      replay did not vouch for — and it is already pinned by *"sweeps a record
+      the server has nothing for"* in `projection-repair.test.ts`. So a device
+      that already has a phantom **does** get help, once, automatically. What
+      was true is that **nothing reported it**, and that half is now done: the
+      count is persisted and the diagnostics sheet says what was taken away.
+      No ongoing detector is needed, because with the create revert and the
+      residue fix nothing can produce a new one — and a counter that cannot
+      distinguish a pulled record from a phantom would be a detector that
+      guesses.
+### How the residue is taken back, 15 August
+
+A **pre-image per mutation**, in `record_undo`, written in the same transaction
+as the optimistic projection and only for `update` and `delete` — a `create` is
+taken back by deleting the row, because the target owes its whole local
+existence to this device.
+
+**Not a replay, for the reason N-1 already gives**: replaying this device's
+outbox history reconstructs a record from local mutations alone and drops
+everything that arrived by pull. A pre-image has no such flaw — it *is* the
+record, whatever produced it.
+
+**`after` is what makes restoring safe**, and it removes the extra guard the
+bullet asked for. It holds the `updatedAt` this device's optimistic write
+produced, and the restore only happens when the record still carries it.
+Anything else — a pull delivering the server's version, a later edit, somebody
+else's accepted delete — is newer than the command being discarded, and newer
+wins. That covers "a second, accepted delete" without a delete-specific rule,
+and it covers the case the bullet did not think to name: a refusal can sit in
+the inbox for days, and the farm moves on.
+
+The pre-image leaves when the mutation does, in both directions: `resolveBatch`
+forgets it when the server accepts, `discardRejected` consumes it, and a
+**rejected** row keeps its own because `retryRejected` may put it back on the
+wire and it can be refused again. A table that only grew would keep a copy of
+every value a farm ever edited past, on a device whose whole storage argument is
+that it holds one farm's records and no more. It is on the `wipe()` list for the
+same reason.
+
 - [x] Test: hand creates a group, server rejects, hand discards → the record is
       gone. Then the same with `retryRejected` → the record survives. Both in
       `tests/offline/refused-create.test.ts`, along with the pull-does-not-bring-

@@ -171,6 +171,27 @@ export interface LocalStore {
   enqueueAll(requests: readonly EnqueueRequest[]): Promise<QueuedMutation[]>;
 
   /**
+   * Adds to the running total of rows this build could not model.
+   *
+   * A device quietly missing a whole kind of record — because the server is
+   * newer than the app — is the shape of failure the pull path already had
+   * once, so the rows are counted rather than merely skipped. A count nobody
+   * can see is barely an improvement, which is why this is stored rather than
+   * only returned: the pass that discovers it is not the moment anybody is
+   * looking.
+   *
+   * Cleared when a projection repair starts, since the replay reads every row
+   * again and a total that survived it would double.
+   */
+  noteUnmodelable(rows: number): Promise<void>;
+
+  /** The running total, for the diagnostics sheet. */
+  unmodelableRows(): Promise<number>;
+
+  /** What the one-time projection repair swept, if it has run. */
+  repairedRecords(): Promise<number>;
+
+  /**
    * Applies a batch's server results as one unit: applied and duplicate are
    * removed and counted as cleared, anything else is marked rejected with its
    * reason and KEPT.

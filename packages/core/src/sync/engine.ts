@@ -498,6 +498,24 @@ export interface Diagnostics {
   pulledThrough: number;
   /** Rows that could not be read back and were set aside rather than dropped. */
   quarantined: number;
+  /**
+   * Records the farm's server holds that this build cannot model, because the
+   * app is older than the server (P1-1).
+   *
+   * Not a fault to fix on the device — the row was skipped deliberately so one
+   * unreadable kind could not stop hydration altogether — but a device quietly
+   * missing a whole kind of record must not look identical to one that has
+   * everything. This is the number that tells them apart.
+   */
+  unmodelable: number;
+  /**
+   * Records the one-time projection repair removed, if it has run.
+   *
+   * They were refused commands that had been written as though accepted, so
+   * removing them was right — and a record disappearing off a farm's screens
+   * still deserves a sentence somewhere rather than being noticed by accident.
+   */
+  repaired: number;
   integrity: Awaited<ReturnType<typeof checkIntegrity>>;
 }
 
@@ -522,16 +540,27 @@ export async function diagnostics(): Promise<Diagnostics> {
    */
   const store = localStore();
 
-  const [deviceId, lastSyncAt, lastError, counts, integrity, through, quarantined] =
-    await Promise.all([
-      store.getDeviceId(),
-      store.getLastSyncAt(),
-      store.getLastError(),
-      store.counts(),
-      checkIntegrity(),
-      pulledThrough(),
-      store.quarantineCount(),
-    ]);
+  const [
+    deviceId,
+    lastSyncAt,
+    lastError,
+    counts,
+    integrity,
+    through,
+    quarantined,
+    unmodelable,
+    repaired,
+  ] = await Promise.all([
+    store.getDeviceId(),
+    store.getLastSyncAt(),
+    store.getLastError(),
+    store.counts(),
+    checkIntegrity(),
+    pulledThrough(),
+    store.quarantineCount(),
+    store.unmodelableRows(),
+    store.repairedRecords(),
+  ]);
 
   return {
     deviceId,
@@ -543,6 +572,8 @@ export async function diagnostics(): Promise<Diagnostics> {
     lastError,
     pulledThrough: through,
     quarantined,
+    unmodelable,
+    repaired,
     integrity,
   };
 }

@@ -144,6 +144,11 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
 
     const { known, unmodelable } = readableRows(parsed.data.mutations);
     outcome.unmodelable += unmodelable;
+    // Recorded as well as returned. The pass that discovers a record type this
+    // build cannot read is not the moment anybody is looking at a screen, and
+    // a count that lives only in this function's return value is a count the
+    // diagnostics sheet cannot show.
+    await localStore().noteUnmodelable(unmodelable);
 
     const result = await applyPage(known, parsed.data);
     outcome.applied += result.applied;

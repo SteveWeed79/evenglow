@@ -69,6 +69,7 @@ describe('migration ladder', () => {
       'outbox',
       'quarantine',
       'record_gen',
+      'record_undo',
       'records',
       'tickets',
     ]);
@@ -90,7 +91,7 @@ describe('migration ladder', () => {
     await Promise.all([migrate(db), migrate(db)]);
 
     expect(await currentVersion(db)).toBe(SCHEMA_VERSION);
-    expect(await tableNames(db)).toHaveLength(9);
+    expect(await tableNames(db)).toHaveLength(10);
   });
 
   /**

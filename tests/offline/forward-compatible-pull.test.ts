@@ -2,7 +2,12 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { newId, readableRows, type PulledRow } from '@steading/contracts';
 import { pullOnce } from '@steading/core/sync/pull';
 import { localStore } from '@steading/core/db/store';
-import { freshStore, readRecordsByEntity } from '../support/store';
+import {
+  deleteMetaKey,
+  freshStore,
+  readRecordsByEntity,
+  simulateRestart,
+} from '../support/store';
 
 /**
  * A client older than the farm's server.
@@ -128,6 +133,60 @@ describe('a page carrying an entity this build does not know', () => {
     expect(outcome.applied).toBe(0);
     expect(outcome.deferred).toBeUndefined();
     expect((await localStore().pulledThrough()).through).toBe(20);
+  });
+
+  /**
+   * The count has to outlive the pass that found it.
+   *
+   * Skipping the row is right — one unreadable kind must not stop hydration
+   * altogether — but a device quietly missing a whole kind of record must not
+   * look identical to one that has everything, and the pull that discovers it
+   * is never the moment somebody is looking at a screen. So it is stored, and
+   * the diagnostics sheet reads it.
+   */
+  it('remembers how many, across passes and across restarts', async () => {
+    // Each pass serves whatever sits after the watermark, the way the real
+    // feed does — `page()` above answers only the first ask, which is exactly
+    // what a running total must not depend on.
+    const later = (rows: Row[]) => (since: number) =>
+      Promise.resolve({
+        status: 200,
+        body: {
+          mutations: rows.filter((r) => r.serverTs > since).map(row),
+          through: rows[rows.length - 1]?.serverTs ?? since,
+          throughId: `${'0'.repeat(20)}${String(rows.length - 1).padStart(6, '0')}`,
+          more: false,
+        },
+      });
+
+    await pullOnce(later([{ entity: 'beehive', serverTs: 10 }]));
+    expect(await localStore().unmodelableRows()).toBe(1);
+
+    await pullOnce(later([{ entity: 'apiary', serverTs: 20 }]));
+    expect(await localStore().unmodelableRows()).toBe(2);
+
+    await simulateRestart();
+    expect(await localStore().unmodelableRows()).toBe(2);
+  });
+
+  /**
+   * And it resets when the projection repair starts, because that winds the
+   * watermark to zero and reads every row again — a total that survived it
+   * would double. The same reasoning `record_gen` gets: marks are only
+   * meaningful within one run.
+   */
+  it('starts again when a repair replays the feed', async () => {
+    await pullOnce(page([{ entity: 'beehive', serverTs: 10 }]));
+    expect(await localStore().unmodelableRows()).toBe(1);
+
+    // That first pull already ran the one repair this device owes, so the
+    // markers are cleared to put it back where a device that has not.
+    await deleteMetaKey('repairStarted');
+    await deleteMetaKey('repairDone');
+    await simulateRestart();
+
+    expect(await localStore().startProjectionRepair()).toBe(true);
+    expect(await localStore().unmodelableRows()).toBe(0);
   });
 
   /**

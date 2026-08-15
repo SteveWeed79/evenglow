@@ -5,7 +5,12 @@ import { flushOnce, type SyncTransport } from '@steading/core/sync/flush';
 import { checkIntegrity, enqueue } from '@steading/core/sync/queue';
 import { pullOnce } from '@steading/core/sync/pull';
 import { localStore } from '@steading/core/db/store';
-import { freshStore, readAllRecords, readRecordsByEntity } from '../support/store';
+import {
+  currentDriver,
+  freshStore,
+  readAllRecords,
+  readRecordsByEntity,
+} from '../support/store';
 
 /**
  * Taking back a record the server refused.
@@ -64,7 +69,13 @@ async function groupNames(): Promise<string[]> {
 }
 
 describe('a create the server refused', () => {
-  beforeEach(freshStore);
+  /** Straight at the table, because nothing public counts it. */
+async function undoRows(): Promise<number> {
+  const row = await currentDriver().get<{ n: number }>('SELECT COUNT(*) AS n FROM record_undo');
+  return row?.n ?? 0;
+}
+
+beforeEach(freshStore);
 
   /**
    * The reported shape, end to end: a Farm Hand adds a group, the role check
@@ -158,12 +169,143 @@ describe('a create the server refused', () => {
   });
 
   /**
-   * Scoped on purpose. An update lands on a record that may have arrived from
-   * another device, and reverting it needs a base value the projection does not
-   * keep — so it is left alone rather than guessed at. Asserted so the limit is
-   * visible rather than assumed; see N-1 in docs/SYNC-INTEGRITY-TODO.md.
+   * The residue, which used to be the open half of N-1.
+   *
+   * An update lands on a record that may have arrived from another device, so
+   * reverting it needs a base value — and this test used to assert the opposite
+   * of what it asserts now, pinning the limit *"still the optimistic value,
+   * which is the residue this fix does not cover"*. The base value is kept
+   * now: a pre-image written in the same transaction as the optimistic
+   * projection (`record_undo`), which is the record itself rather than a
+   * replay of local history.
    */
-  it('does not touch a record when a refused update is discarded', async () => {
+  it('puts a record back when a refused update is discarded', async () => {
+    const targetId = newId();
+    await enqueue(flock(targetId));
+    await flushOnce(respondAll('applied'));
+
+    await enqueue({ entity: 'flock', op: 'update', targetId, payload: { name: 'Edited' } });
+    await flushOnce(respondAll('rejected', 'no'));
+    expect(await groupNames()).toEqual(['Edited']);
+
+    const [refused] = await listRejected();
+    await discardRejected(refused!.id);
+
+    expect(await groupNames()).toEqual(['Alpha']);
+  });
+
+  /** And the same for a delete, which left the record hidden for ever. */
+  it('un-hides a record when a refused delete is discarded', async () => {
+    const targetId = newId();
+    await enqueue(flock(targetId));
+    await flushOnce(respondAll('applied'));
+
+    await enqueue({ entity: 'flock', op: 'delete', targetId, payload: {} });
+    await flushOnce(respondAll('rejected', 'no'));
+    expect((await readRecordsByEntity('flock'))[0]?.deleted).toBe(true);
+
+    const [refused] = await listRejected();
+    await discardRejected(refused!.id);
+
+    const after = await readRecordsByEntity('flock');
+    expect(after[0]?.deleted).toBe(false);
+    expect(after[0]?.value).toMatchObject({ name: 'Alpha' });
+  });
+
+  /**
+   * **Newer wins, and this is the case that makes the pre-image safe to keep.**
+   *
+   * A refused edit is not the last word on a record: a pull can deliver the
+   * server's version while the refusal sits in the inbox, and the person may
+   * not decide for days. Restoring over that would resurrect a value the farm
+   * has moved past — a worse fault than the residue being cleared.
+   *
+   * The guard is the `updatedAt` the optimistic write produced. A record still
+   * carrying it is a record nothing has touched since; anything else is newer.
+   */
+  it('leaves the record alone when something has touched it since', async () => {
+    const targetId = newId();
+    await enqueue(flock(targetId));
+    await flushOnce(respondAll('applied'));
+
+    await enqueue({ entity: 'flock', op: 'update', targetId, payload: { name: 'Edited' } });
+    await flushOnce(respondAll('rejected', 'no'));
+
+    // The server's own version arrives while the refusal waits in the inbox.
+    await pullOnce(() =>
+      Promise.resolve({
+        status: 200,
+        body: {
+          mutations: [
+            {
+              schemaVersion: 1,
+              id: `${'0'.repeat(20)}000001`,
+              targetId,
+              entity: 'flock',
+              op: 'update',
+              payload: { name: 'From the farm' },
+              deviceId: '00000000-0000-4000-8000-0000000000ff',
+              clientSeq: 0,
+              clientTs: 1,
+              serverTs: 50,
+            },
+          ],
+          through: 50,
+          throughId: `${'0'.repeat(20)}000001`,
+          more: false,
+        },
+      }),
+    );
+    expect(await groupNames()).toEqual(['From the farm']);
+
+    const [refused] = await listRejected();
+    await discardRejected(refused!.id);
+
+    expect(await groupNames()).toEqual(['From the farm']);
+  });
+
+  /**
+   * A retry keeps its pre-image, because a rejected mutation is a decision
+   * nobody has made yet — it may be refused a second time, and the revert has
+   * to still be possible then.
+   */
+  it('can still put the record back after a retry is refused again', async () => {
+    const targetId = newId();
+    await enqueue(flock(targetId));
+    await flushOnce(respondAll('applied'));
+
+    await enqueue({ entity: 'flock', op: 'update', targetId, payload: { name: 'Edited' } });
+    await flushOnce(respondAll('rejected', 'no'));
+
+    const [first] = await listRejected();
+    await retryRejected(first!.id);
+    await flushOnce(respondAll('rejected', 'still no'));
+
+    const [again] = await listRejected();
+    await discardRejected(again!.id);
+
+    expect(await groupNames()).toEqual(['Alpha']);
+  });
+
+  /**
+   * The pre-image is a row per outstanding local edit, so it has to leave when
+   * the edit does — in **both** directions. A table that only ever grew would
+   * keep a copy of every value a farm had ever edited past, on a device whose
+   * whole storage argument is that it holds one farm's records and no more.
+   */
+  it('keeps no pre-image for an edit the server accepted', async () => {
+    const targetId = newId();
+    await enqueue(flock(targetId));
+    await flushOnce(respondAll('applied'));
+
+    await enqueue({ entity: 'flock', op: 'update', targetId, payload: { name: 'Edited' } });
+    expect(await undoRows()).toBe(1);
+
+    await flushOnce(respondAll('applied'));
+    expect(await undoRows()).toBe(0);
+  });
+
+  it('keeps none for a refused edit once it is discarded', async () => {
     const targetId = newId();
     await enqueue(flock(targetId));
     await flushOnce(respondAll('applied'));
@@ -174,8 +316,14 @@ describe('a create the server refused', () => {
     const [refused] = await listRejected();
     await discardRejected(refused!.id);
 
-    // Still the optimistic value, which is the residue this fix does not cover.
-    expect(await groupNames()).toEqual(['Edited']);
+    expect(await undoRows()).toBe(0);
+  });
+
+  /** A create needs none: `dropRefusedCreate` takes the whole row back. */
+  it('records no pre-image for a create', async () => {
+    await enqueue(flock());
+
+    expect(await undoRows()).toBe(0);
   });
 
   it('still counts the discard as cleared', async () => {
