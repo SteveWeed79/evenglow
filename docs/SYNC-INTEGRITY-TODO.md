@@ -26,15 +26,16 @@ a clock step, or concurrency the one-box deployment does not produce — see the
 verification blocks under each. Single-device offline use is unaffected by all
 three.
 
-> **P0-2 and P0-1(a) have shipped, as one change.** The log now carries an
+> **P0-2, P0-1(a) and the repair have shipped.** The log now carries an
 > `outcome` — `pending` on insert, the projection's own decision after — the
 > feed withholds everything that did not change domain state, and a duplicate
 > projects the stored envelope instead of the request. They were not two items:
 > the same field and the same re-projection path solve both, and either alone
 > leaves the other worse. `apps/api/src/sync/outcome.ts` is new;
 > `apply.ts` and `snapshot.ts` changed; `tests/sync/outcome.test.ts` covers it.
-> **Devices that already pulled a refused row still hold it** — the repair
-> bullet under P0-2 is the outstanding half.
+> Devices that already pulled a refused row are repaired once, on their next
+> pull after upgrading: the watermark winds back to zero, the accepted log
+> replays over the damage, and records the replay cannot account for are swept.
 
 ---
 
@@ -360,15 +361,43 @@ everybody else.
       as "field absent" and need *opposite* treatment, and no ordering of a
       backfill fixes that, because new crashes keep manufacturing field-absent
       rows after it has run.
-- [ ] **Missing bullet — repair.** Filtering the feed stops future replication
+- [x] **Missing bullet — repair.** Filtering the feed stops future replication
       and repairs nothing. Every device that has already pulled a refused edit
       still holds it, including the undone archives. On the release that lands
-      this, devices must re-hydrate from zero. Replaying only accepted mutations
-      in `(serverTs, _id)` order reconstructs true state, because the accepted
-      `delete` is in the log and gets re-applied; `applyPulled` already pauses on
-      locally-pending targets so an offline device does not lose queued work
-      doing it. Cost is a full replay per device, bounded by the P3 history item —
-      **this is the moment that item stops being theoretical.**
+      this, devices must re-hydrate from zero.
+      ~~Replaying only accepted mutations in `(serverTs, _id)` order
+      reconstructs true state, because the accepted `delete` is in the log and
+      gets re-applied.~~
+      **Corrected: a replay is necessary and not sufficient.** It fixes every
+      record the server still has history for — a `create` replaces the value
+      whole, so a refused update's merged fields and an undone archive both go
+      back. It cannot fix a record the server has **nothing** for: a refused
+      create that replicated leaves a row no accepted mutation will ever
+      overwrite, and that is the phantom P0-2 was about. Shipping the replay
+      alone would have looked like a repair and left them. Checked rather than
+      reasoned: with the sweep removed, five of the eleven tests in
+      `tests/offline/projection-repair.test.ts` fail.
+      **Shipped:** `PROJECTION_REPAIR` in `db/schema.ts` is the generation;
+      `startProjectionRepair` winds the watermark to zero once; `applyPulled`
+      marks each row it writes in `record_gen`; `finishProjectionRepair` sweeps
+      records the replay never marked and that no outbox row vouches for, then
+      closes the repair.
+- [x] **Non-destructive until the replay completes**, which is what bounds the
+      risk. The sweep runs only when the feed has actually run out — a row that
+      has not arrived yet is indistinguishable from an orphan — so a device that
+      is offline, deferred, paused at a record it still owes, or capped at
+      `MAX_PAGES_PER_PASS` keeps every row it had and finishes on a later pass.
+      An app that empties itself in a barn is the one outcome worse than the bug.
+- [x] A record is legitimate exactly when the server has a mutation for it or
+      this device has an outbox row for it, because those are the only two
+      things that write `records` at all. So the sweep keeps anything with any
+      outbox row, `rejected` included — on the device that issued a refused
+      create the record stays visible until the user discards it, which is the
+      same rule N-1 follows. On every other device there is neither, and it goes.
+- [ ] **Cost, unchanged from the original note:** a full replay per device,
+      bounded by the P3 history item — **this is the moment that item stops
+      being theoretical.** The `nextDelay` fast-path named there should land
+      before a farm with years of history upgrades into this.
 
 **Cost note:** as originally proposed, apply goes to four strictly sequential
 round trips per mutation (log upsert, projection read, projection write, outcome
@@ -1600,7 +1629,9 @@ Add, alongside the existing sync tests:
 
 From the verification pass, with the dependencies that force it:
 
-1. **P0-2 merged with P0-1's stored-envelope fix, as one server-only change.**
+1. ~~**P0-2 merged with P0-1's stored-envelope fix, as one server-only change.**~~
+   **Done**, along with the client-side repair it needed — which turned out not
+   to be server-only after all.
    They are not two items: the same `outcome` field and the same re-projection
    path solve both, and shipping either alone leaves the other worse —
    skip-projection without the outcome field loses records, and the outcome field

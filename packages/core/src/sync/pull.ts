@@ -24,6 +24,8 @@ export interface PullOutcome {
   through: number;
   more: boolean;
   deferred?: string;
+  /** Records swept by the one-time projection repair, when it completed here. */
+  repaired?: number;
 }
 
 export type PullTransport = (
@@ -51,6 +53,17 @@ export function pullOnce(transport: PullTransport = defaultTransport): Promise<P
 }
 
 async function runPull(transport: PullTransport): Promise<PullOutcome> {
+  /**
+   * The one-time repair, before the watermark is read rather than after.
+   *
+   * Winding back to zero is what replays the accepted log over the refused
+   * commands a device applied before the server withheld them. It happens here
+   * because this is the only loop that can also tell when the replay has
+   * finished — and the sweep at the end is safe only then.
+   */
+  const repairing = !(await localStore().projectionRepairDone());
+  if (repairing) await localStore().startProjectionRepair();
+
   const watermark = await localStore().pulledThrough();
   let since = watermark.through;
   let sinceId = watermark.throughId;
@@ -105,6 +118,24 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
     sinceId = parsed.data.throughId;
 
     if (!parsed.data.more) break;
+  }
+
+  /**
+   * Caught up, so the replay has seen every accepted mutation this farm has.
+   *
+   * `more` false is the whole condition, and it has to be: a row that simply
+   * has not arrived yet is indistinguishable from an orphan, so sweeping before
+   * the feed runs out would delete records the server was about to send.
+   *
+   * The other two ways a pass can end are already excluded by getting here at
+   * all. Every deferral returns from inside the loop, and so does the pause at
+   * a record this device still owes — which would otherwise leave the tail of
+   * the log unread. A pass that hits `MAX_PAGES_PER_PASS` ends with `more`
+   * true, so the repair stays open and the device finishes it on a later pass,
+   * from where it got to.
+   */
+  if (repairing && !outcome.more) {
+    outcome.repaired = await localStore().finishProjectionRepair();
   }
 
   return outcome;

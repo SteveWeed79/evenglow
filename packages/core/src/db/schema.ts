@@ -101,7 +101,29 @@ export const META = {
   readAlerts: 'readAlerts',
   sessionEnd: 'sessionEnd',
   pendingPhoto: 'pendingPhoto',
+  repairStarted: 'repairStarted',
+  repairDone: 'repairDone',
 } as const;
+
+/**
+ * The projection repair this build requires, as a generation number.
+ *
+ * Bumped when a defect has left wrong rows on devices that no ordinary sync
+ * will correct. A device whose `repairDone` is below this replays the accepted
+ * log from zero once and then sweeps whatever the replay never touched.
+ *
+ * **1 — refused commands that replicated as accepted state.** Until the server
+ * learned to withhold them, `/snapshot` shipped every logged row: an update the
+ * server refused on the note-ownership rule, an archive undone by a conflicted
+ * update, a meter reading below the last one. Every device except the one that
+ * issued them applied them as truth, and because hydration replays the log a
+ * reinstall reproduced the wrong state rather than repairing it.
+ *
+ * Raising this is a real cost — a full replay per device, paced by the pull
+ * loop — so it is for defects that leave state nothing else can reach, not for
+ * ordinary bugs.
+ */
+export const PROJECTION_REPAIR = 1;
 
 export const metaSchemas = {
   deviceId: z.uuid(),
@@ -116,6 +138,18 @@ export const metaSchemas = {
   pulledThroughId: z.string().length(26),
   lastError: z.string(),
   persistGranted: z.boolean(),
+  /**
+   * The repair generation this device has begun, and the one it has finished.
+   *
+   * Two keys rather than one because the two facts are genuinely different and
+   * the gap between them is where the device spends the whole replay. `started`
+   * is what stops every pull resetting the watermark and beginning again;
+   * `done` is what stops the sweep running on a device that has not caught up.
+   * A device that never gets online keeps `done` behind and is simply never
+   * swept, which is the safe direction.
+   */
+  repairStarted: z.number().int().nonnegative(),
+  repairDone: z.number().int().nonnegative(),
   /**
    * Why the server is not taking this farm's work, when it is not (D13).
    *
