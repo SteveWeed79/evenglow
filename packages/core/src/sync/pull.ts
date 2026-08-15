@@ -2,6 +2,7 @@ import {
   type PullResponse,
   pullResponseSchema,
   type PulledMutation,
+  readableRows,
 } from '@steading/contracts';
 import { apiUrl, syncHeaders } from '../api';
 import type { PullResult } from '../db/port';
@@ -26,6 +27,13 @@ export interface PullOutcome {
   deferred?: string;
   /** Records swept by the one-time projection repair, when it completed here. */
   repaired?: number;
+  /**
+   * Rows this build could not model, because the server is newer than the app.
+   *
+   * Counted rather than merely skipped: a device quietly missing a whole kind
+   * of record is the shape of failure this path already had once.
+   */
+  unmodelable: number;
 }
 
 export type PullTransport = (
@@ -68,7 +76,13 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
   let since = watermark.through;
   let sinceId = watermark.throughId;
 
-  const outcome: PullOutcome = { applied: 0, skipped: 0, through: since, more: false };
+  const outcome: PullOutcome = {
+    applied: 0,
+    skipped: 0,
+    through: since,
+    more: false,
+    unmodelable: 0,
+  };
 
   for (let page = 0; page < MAX_PAGES_PER_PASS; page++) {
     let response: { status: number; body: unknown };
@@ -88,7 +102,24 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
     const parsed = pullResponseSchema.safeParse(response.body);
     if (!parsed.success) return { ...outcome, deferred: 'unreadable' };
 
-    const result = await applyPage(parsed.data);
+    /**
+     * Rows this build cannot model are dropped here, not at the page.
+     *
+     * The server ships a new entity to every device the moment it knows one,
+     * including the ones running last month's APK — so parsing the page as a
+     * unit against a strict enum meant one unmodelable row failed all of it and
+     * the watermark never moved. That install stopped receiving ANY of the
+     * farm's records, permanently, while reporting itself up to date.
+     *
+     * The cursor still comes from the server's `through`/`throughId`, which are
+     * taken from the last row READ rather than the last row kept — so skipping
+     * locally advances past what was skipped, exactly as the server's own
+     * unknown-entity skip does.
+     */
+    const { known, unmodelable } = readableRows(parsed.data.mutations);
+    outcome.unmodelable += unmodelable;
+
+    const result = await applyPage(known, parsed.data);
     outcome.applied += result.applied;
     outcome.skipped += result.skipped;
     outcome.more = parsed.data.more;
@@ -141,12 +172,15 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
   return outcome;
 }
 
-async function applyPage(page: PullResponse): Promise<PullResult> {
+async function applyPage(
+  mutations: readonly PulledMutation[],
+  page: PullResponse,
+): Promise<PullResult> {
   // Pausing at a record with a pending local edit, and advancing BOTH halves of
   // the watermark in the same transaction as the records they cover, are the
   // store's guarantees now — stated in port.ts and asserted against every
   // implementation.
-  return localStore().applyPulled(inServerOrder(page.mutations), {
+  return localStore().applyPulled(inServerOrder(mutations), {
     through: page.through,
     throughId: page.throughId,
   });

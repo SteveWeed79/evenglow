@@ -518,6 +518,11 @@ farms are untouched.
 
 ## P1-1 · Adding an entity breaks every older client
 
+> **Fixed.** A client reads rows one at a time and skips the ones it cannot
+> model, the way `readSnapshotPage` already does on the server. The watermark
+> still advances, so an old install misses the new entity and keeps everything
+> else — which is what "additive" was always supposed to mean.
+
 **Confirmed.** `packages/contracts/src/mutation.ts:15` says *"Widening this list
 is additive and does not bump MUTATION_SCHEMA_VERSION."* Additive on the server;
 breaking on the client.
@@ -544,10 +549,30 @@ clients tolerate unknown rows.
 
 **To do**
 
-- [ ] Let the client skip unknown rows without failing the page, the way the
-      server already does — or negotiate a capability set at pull time.
-- [ ] Correct the comment at `mutation.ts:15` either way. It is currently load-
-      bearing and wrong, which is worse than absent.
+- [x] Let the client skip unknown rows without failing the page, the way the
+      server already does — ~~or negotiate a capability set at pull time~~.
+      **Negotiation was the wrong half of the fork:** it needs a server release
+      before it helps anybody, and the devices already wedged in the field would
+      stay wedged meanwhile. Tolerance on the read path fixes them the moment
+      they upgrade and asks nothing of the server.
+- [x] **Only `entity` was loosened, and that is the whole care of it.**
+      `pulledRowSchema` takes the entity as a string and leaves every other
+      field strict, so a newer server sending a new kind of record is skipped
+      and counted, while a malformed row — a short ULID, a missing `serverTs` —
+      still fails the page loudly. The two must not be confused: one is a server
+      doing what it is allowed to do, the other is a bug or a tampered response,
+      and dropping the second quietly would trade this item's silence for a
+      worse one.
+- [x] Count them rather than merely skipping. `PullOutcome.unmodelable` carries
+      the number, because "this app is older than the farm's server, so four
+      records were left out" is a fact somebody may need.
+- [x] Correct the comment at `mutation.ts:15` either way. It is currently load-
+      bearing and wrong, which is worse than absent. It now separates what a
+      client SENDS — where the original reasoning holds — from what it reads,
+      where it did not.
+- [ ] **Surface `unmodelable` somewhere a person can see it.** The count exists
+      and nothing displays it, so a device quietly missing a record type still
+      looks healthy. The diagnostics sheet is the obvious home.
 
 ## P1-2 · A Farm Hand cannot finish a photo
 
@@ -1668,9 +1693,14 @@ From the verification pass, with the dependencies that force it:
    the `checkIntegrity` phantom detection remain.
 3. ~~**P1-2** and **N-2**. Both cheap, both high-frequency, both invisible to the
    person affected.~~ **Both done.**
-4. **P1-1**, which unblocks ever putting a new field on the wire — including
+4. ~~**P1-1**, which unblocks ever putting a new field on the wire — including
    P0-2's optional outcome — and is a prerequisite for the P3 flush-parsing fix
-   shipping in the right order.
+   shipping in the right order.~~ **Done for unknown ENTITIES.** Note what it
+   does *not* unblock: `pullResponseSchema` is still `.strict()`, so adding a new
+   FIELD to the page or to a row would still fail every deployed client.
+   Carrying P0-2's outcome on the wire stays blocked until that is loosened too
+   — and it should be loosened the same way, named fields tolerated
+   deliberately rather than a blanket passthrough.
 5. **P0-3**, after the outcome work has settled underneath it, since the mutex
    wraps the same critical section.
 6. **P1-5(a)** with the `tickets` wipe fix ahead of it, then P1-3, P1-4(c).

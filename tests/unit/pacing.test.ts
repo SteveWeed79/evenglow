@@ -140,6 +140,7 @@ describe('whether a pull earned the fast path', () => {
     skipped: 0,
     through: 0,
     more: false,
+    unmodelable: 0,
     ...over,
   });
 
