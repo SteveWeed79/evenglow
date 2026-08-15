@@ -13,6 +13,12 @@ import { MongoClient, type Db } from 'mongodb';
  * by a suite that silently did not run.
  */
 
+/**
+ * The name a caller gets by not choosing one — and it is the production
+ * database name, which is why `stop()` refuses to drop it.
+ */
+const DEFAULT_DB_NAME = 'steading';
+
 export interface TestDb {
   db: Db;
   client: MongoClient;
@@ -22,11 +28,30 @@ export interface TestDb {
 
 async function connect(uri: string, dbName: string, onStop: () => Promise<void>): Promise<TestDb> {
   const client = await new MongoClient(uri).connect();
+  const db = client.db(dbName);
+
   return {
     client,
     uri,
-    db: client.db(dbName),
+    db,
     stop: async () => {
+      /**
+       * Taken away rather than left behind.
+       *
+       * Under `MONGODB_TEST_URI` the server outlives the run, so without this
+       * every suite leaves a database on it for ever and a rerun starts on top
+       * of whatever the last one left. The memory-server path does not need it
+       * and is not harmed by it.
+       *
+       * **Guarded on the name**, and the guard is the whole reason this is safe
+       * to do at all: `startTestDb`'s default is `steading`, which is the
+       * *production* database name, so a call site that forgot to name its own
+       * would otherwise drop the real one the moment somebody pointed
+       * `MONGODB_TEST_URI` at a server that had it.
+       */
+      if (dbName !== DEFAULT_DB_NAME) {
+        await db.dropDatabase().catch(() => undefined);
+      }
       await client.close();
       await onStop();
     },
@@ -38,8 +63,15 @@ async function connect(uri: string, dbName: string, onStop: () => Promise<void>)
  * holds — never an environment. Nothing here is called test, dev, staging, or
  * prod: those labels drift from reality the moment someone points a staging
  * app at a production cluster, and then the name is actively misleading.
+ *
+ * **Every call site passes its own**, and that is a requirement rather than a
+ * convention. Under `MONGODB_TEST_URI` all files share one mongod and pick a
+ * database by name, and these suites wipe collections in `beforeEach` — so two
+ * files on one name wipe each other's fixtures mid-test. Five of them shared
+ * `steading_isolation` until B-3, which is what `vitest.config.ts`'s
+ * `fileParallelism: false` was quietly holding together.
  */
-export async function startTestDb(dbName = 'steading'): Promise<TestDb | null> {
+export async function startTestDb(dbName = DEFAULT_DB_NAME): Promise<TestDb | null> {
   const explicit = process.env.MONGODB_TEST_URI;
   if (explicit) {
     return connect(explicit, dbName, async () => {});

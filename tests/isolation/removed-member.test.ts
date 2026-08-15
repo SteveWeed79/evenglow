@@ -25,11 +25,11 @@ import { startTestDb } from '../support/mongo';
  * anybody who signed up that way exactly as stuck as before.
  */
 
-const harness = await startTestDb('steading_isolation');
+const harness = await startTestDb('steading_removed_member');
 
 if (harness) {
   process.env.MONGODB_URI = harness.uri;
-  process.env.MONGODB_DB = 'steading_isolation';
+  process.env.MONGODB_DB = 'steading_removed_member';
 }
 
 const SECRET = 'a-test-secret-long-enough-for-hs256-abcdef';
@@ -50,7 +50,7 @@ async function server() {
     readEnv({
       AUTH_SECRET: SECRET,
       MONGODB_URI: harness!.uri,
-      MONGODB_DB: 'steading_isolation',
+      MONGODB_DB: 'steading_removed_member',
       CORS_ORIGINS: 'https://app.test',
     }),
   );

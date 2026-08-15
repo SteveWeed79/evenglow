@@ -12,11 +12,11 @@ import { startTestDb } from '../support/mongo';
  * start-and-poll.
  */
 
-const harness = await startTestDb('steading_isolation');
+const harness = await startTestDb('steading_auth_routes');
 
 if (harness) {
   process.env.MONGODB_URI = harness.uri;
-  process.env.MONGODB_DB = 'steading_isolation';
+  process.env.MONGODB_DB = 'steading_auth_routes';
 }
 
 const SECRET = 'a-test-secret-long-enough-for-hs256-abcdef';
@@ -34,7 +34,7 @@ async function server() {
     readEnv({
       AUTH_SECRET: SECRET,
       MONGODB_URI: harness!.uri,
-      MONGODB_DB: 'steading_isolation',
+      MONGODB_DB: 'steading_auth_routes',
       CORS_ORIGINS: 'https://app.test',
     }),
   );

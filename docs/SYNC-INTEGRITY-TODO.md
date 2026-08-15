@@ -2008,6 +2008,24 @@ local one are the same code path — worth more here than a build step, in a rep
 whose expensive failures have all been environment drift."* That is defensible.
 Re-decide it against a bundler; do not assume the answer changes.
 
+### Done, 15 August — the comment, not the runtime
+
+The paragraph now says that the two routes it examined require rewriting every
+import, that a Node bundler does not, and that nobody has run one against this
+tree either — so the next reader gets an open question rather than a closed one.
+It also states the trade if anyone reopens it: a bundler puts a transform
+between the deployed process and the local one, and hands back startup time and
+image size.
+
+**The runtime is unchanged**, deliberately. The decision stands on its own
+argument once the false dichotomy is removed from underneath it, and swapping a
+working `tsx` for an unevaluated build step to satisfy a comment correction
+would be the tail wagging the dog.
+
+- [x] Correct the comment.
+- [ ] ~~Move to a bundler.~~ Not taken, and not a to-do: a preference call, now
+      recorded as one.
+
 ### Verification (15 August) — fair characterisation, zero operational impact.
 
 Nothing breaks and nothing is at risk. This is a documentation-completeness
@@ -2030,8 +2048,9 @@ to say it should be re-weighed rather than assumed to lose.
 *"Each file gets its own database harness, so let them run in isolation rather
 than racing for the same collections."*
 
-**Both halves cannot be true.** If every file genuinely had its own harness there
-would be nothing to race for. Something is shared — almost certainly the database
+~~**Both halves cannot be true.** If every file genuinely had its own harness there
+would be nothing to race for.~~ **They can, and they were — see below.**
+Something is shared — almost certainly the database
 name — and the comment hides which, so the constraint reads as inherent when it is
 incidental.
 
@@ -2066,14 +2085,51 @@ the original item missed it: all twelve files mutate `process.env.MONGODB_URI`.
 
 **To do**
 
-- [ ] Correct the comment to say the harness is per-file but the database name is
+- [x] Correct the comment to say the harness is per-file but the database name is
       not always, and that it bites only when `MONGODB_TEST_URI` points several
       files at one server. Name the `process.env` sharing too.
-- [ ] Give the five `steading_isolation` files distinct names and tear them down,
+- [x] Give the five `steading_isolation` files distinct names and tear them down,
       which removes the collection race. Note it does **not** remove the reason
       for `fileParallelism: false` on its own, because of the `process.env`
       mutation.
-- [ ] Correct this item: "both halves cannot be true" is false.
+- [x] Correct this item: "both halves cannot be true" is false — struck through
+      in the heading of the verification above, and the reasoning kept, because
+      how it went wrong is the useful part.
+
+### What it does, 15 August
+
+The five files now name their own databases — `steading_removed_member`,
+`steading_sign_in`, `steading_refresh`, `steading_sync_tenancy`,
+`steading_auth_routes` — so the collection race is gone.
+
+`stop()` drops the database it made, so a shared mongod does not accumulate one
+per suite for ever and a rerun does not start on top of what the last one left.
+**Guarded on the name**, and the guard is why dropping is safe to do at all:
+`startTestDb`'s default is `steading`, which is the *production* database name,
+so a call site that forgot to name its own would otherwise drop the real one the
+moment somebody pointed `MONGODB_TEST_URI` at a server holding it.
+
+`vitest.config.ts` now says the true thing, which is a different sentence from
+the one the item asked for: **serial because the suites share a process
+environment, not because they share a database.** Every database-backed file
+assigns `process.env.MONGODB_URI`, because `db/client.ts` reads it from the
+environment rather than taking it as an argument — so the collection fix does
+not on its own let `fileParallelism` come back.
+
+### Verification
+
+`tests/unit/test-db-names.test.ts` reads every suite's source and fails when two
+claim one name, or when any claims the production name. Reads rather than
+imports, because importing a database-backed suite runs it — and it asserts it
+found more than five call sites first, so it cannot pass by matching nothing.
+
+A test rather than a convention, because the failure is invisible in the
+ordinary case: it needs a shared server *and* concurrency, so it is green
+locally, green in CI today, and waits for whoever turns file parallelism back
+on.
+
+Checked by breaking it: pointing `refresh.test.ts` at `steading_sign_in` fails
+with both filenames in the message.
 
 ## B-4 · `TRUSTED_PROXY_HOPS` is coupled to deployment topology — **P3, ops note**
 
@@ -2100,8 +2156,29 @@ more dangerous of the two.
 
 **To do**
 
-- [ ] Note the coupling in `DEPLOY-THE-SERVER.md` next to the proxy configuration,
+- [x] Note the coupling in `DEPLOY-THE-SERVER.md` next to the proxy configuration,
       naming both the too-few and too-many failure directions.
+
+### What it says, 15 August
+
+A block beside `TRUSTED_PROXY_HOPS=1` in step 5, and two rows in the
+troubleshooting table. It states the number as a fact about topology, says what
+makes it change (Cloudflare, an Oracle load balancer, a second reverse proxy),
+and names both directions:
+
+- **Too few** — `request.ip` collapses to the proxy and one stranger's failed
+  sign-in throttles the whole farm. The failure this variable exists to prevent,
+  reached from the other side.
+- **Too many** — a header segment the *client* wrote is read as the address, so
+  a caller presents a new one per request and the auth limiter never fires.
+  Authorization failing open (invariant 10), and the more dangerous by a
+  distance because nothing about it is visible: the service looks healthy while
+  the password limiter is off.
+
+The troubleshooting table needed both rows for the same reason. "Everybody is
+rate limited at once" sends somebody looking; "password guessing is never
+throttled" is a symptom nobody observes, so the row exists to be found by
+someone reading the table for another reason entirely.
 
 ## Reviewed and rejected — the tenancy guard critique
 

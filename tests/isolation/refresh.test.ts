@@ -12,11 +12,11 @@ import { startTestDb } from '../support/mongo';
  * like.
  */
 
-const harness = await startTestDb('steading_isolation');
+const harness = await startTestDb('steading_refresh');
 
 if (harness) {
   process.env.MONGODB_URI = harness.uri;
-  process.env.MONGODB_DB = 'steading_isolation';
+  process.env.MONGODB_DB = 'steading_refresh';
 }
 
 const SECRET = 'a-test-secret-long-enough-for-hs256-abcdef';

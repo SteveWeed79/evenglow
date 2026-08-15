@@ -181,6 +181,33 @@ Two more are already in the file and should stay:
   internet as one caller and lock a farm out over a stranger's failed sign-in.
   A number rather than `true`, so a caller cannot forge past it by sending the
   header themselves.
+
+  > **This number is a fact about your topology, and it is wrong in a different
+  > way in each direction. Change it whenever you change what sits in front of
+  > the service.**
+  >
+  > It is `1` because exactly one proxy — Caddy on this box — appends to
+  > `X-Forwarded-For`. Put Cloudflare, an Oracle load balancer, or a second
+  > reverse proxy in front and it becomes `2`. `fly.toml` sets `1` for Fly's own
+  > single forwarding hop, for the same reason.
+  >
+  > **Too few, and the farm throttles itself.** Fastify takes the address that
+  > many hops from the right, so with a real proxy in front and a count that is
+  > short, `request.ip` collapses to the proxy for every caller. One stranger's
+  > failed sign-in then rate-limits everybody — the exact failure this variable
+  > exists to prevent, arrived at from the other side.
+  >
+  > **Too many, and a caller chooses their own address.** Counting past the
+  > proxies you actually run means reading a header segment the client wrote, so
+  > anyone can present a new `request.ip` per request and the auth limiter never
+  > fires at all. That is the more dangerous direction by a distance: it is
+  > authorization failing open (invariant 10), and unlike the throttling case
+  > nothing about it is visible — the service looks perfectly healthy while the
+  > password limiter has been switched off.
+  >
+  > Neither can be inferred from inside the process, which is why this is
+  > configuration and why the default is `0`: trusting nothing is the answer
+  > that fails closed for a service reachable directly.
 - **`PORT=3001`** — what Caddy proxies to. Change both or neither.
 
 Everything else in `apps/api/src/env.ts` has a default, and each feature it
@@ -1013,4 +1040,6 @@ backups it silently ruined are all of them.
 | Sync refused with a 402 | Billing, and only possible once `GOOGLE_PLAY_SERVICE_ACCOUNT` is set. With no Play config `access.ts` returns `syncing: true` for every farm, so a 402 here means something else |
 | Deploy timer runs, nothing ever deploys | `journalctl -u steading-deploy -n 30`. Either the box is ahead of `release` — never `git pull` there — or git is refusing the checkout's ownership |
 | `systemctl --failed` lists `steading-backup-check` | No backup for over 36 hours. `journalctl -u steading-backup -n 50` — usually `/etc/steading/backup.env` is missing a variable, or the IAM user cannot write the prefix |
+| Everybody is rate limited at once, or one stranger locks the farm out | `TRUSTED_PROXY_HOPS` is lower than the number of proxies actually in front (step 5). `request.ip` has collapsed to the proxy |
+| Password guessing is never throttled | `TRUSTED_PROXY_HOPS` is *higher* than the proxies you run, so callers are choosing their own `request.ip`. Nothing looks wrong; check the number against the topology |
 | One farm sees another's records | Stop and report it. That is the invariant everything else is built on |

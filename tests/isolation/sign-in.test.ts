@@ -12,11 +12,11 @@ import { startTestDb } from '../support/mongo';
  * real user — and it is the one path nobody can avoid.
  */
 
-const harness = await startTestDb('steading_isolation');
+const harness = await startTestDb('steading_sign_in');
 
 if (harness) {
   process.env.MONGODB_URI = harness.uri;
-  process.env.MONGODB_DB = 'steading_isolation';
+  process.env.MONGODB_DB = 'steading_sign_in';
   process.env.AUTH_SECRET ??= 'sign-in-suite-secret-value-not-used-elsewhere';
 }
 
