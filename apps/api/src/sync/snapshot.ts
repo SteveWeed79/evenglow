@@ -7,6 +7,7 @@ import {
 } from '@steading/contracts';
 import type { Scoped, Tenanted } from '../db/scoped';
 import { HttpError } from '../http';
+import { shouldReplicate } from './outcome';
 
 /**
  * Hydration, as a function of a scope and a cursor.
@@ -28,6 +29,11 @@ interface MutationDoc extends Tenanted {
   clientTs: number;
   schemaVersion: number;
   serverTs: Date;
+  /**
+   * What the applier decided. `unknown` on purpose — this is a database read,
+   * and `shouldReplicate` is the only thing allowed to interpret it.
+   */
+  outcome?: unknown;
 }
 
 export interface SnapshotCursor {
@@ -96,6 +102,23 @@ export async function readSnapshotPage(
 
   const mutations: PulledMutation[] = [];
   for (const doc of page) {
+    /**
+     * The log records every command that was ATTEMPTED. The feed carries only
+     * the ones that changed something.
+     *
+     * Without this, a refusal the server issued on purpose — a hand editing
+     * somebody else's note, an hour reading below the meter — is written into
+     * every other device on the farm as though it had been accepted, and the
+     * one device that knows it was refused is the one that sent it.
+     *
+     * Filtered here rather than in the query so the watermark still advances
+     * past what it skips, exactly as the unknown-entity skip below does. A
+     * query filter would leave the cursor parked before a run of refused rows
+     * and rescan them on every pull; `more` stays honest either way, because it
+     * is measured on rows READ.
+     */
+    if (!shouldReplicate(doc.outcome)) continue;
+
     // Rows written by a newer deploy may carry an entity this build does not
     // know. Skipping them is right: a client that cannot model a record should
     // not guess at it, and the watermark still advances past it.
