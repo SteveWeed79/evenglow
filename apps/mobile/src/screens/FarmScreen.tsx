@@ -1,5 +1,6 @@
 import { type Enterprise } from '@steading/contracts';
 import { Row } from '../components/Form';
+import { Grid } from '../components/Grid';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useEnterprises } from '../hooks/useEnterprises';
@@ -87,7 +88,29 @@ export function FarmScreen(): React.ReactElement {
   const places = PLACES.filter((place) => enterprises.includes(place.key));
 
   return (
-    <Screen title="The farm">
+    /**
+     * `wide`, because this is the one screen in the app that is purely a list
+     * of equivalent doors.
+     *
+     * Eight rows in a 600dp column with 600dp of nothing beside them is the
+     * complaint in `docs/LANDSCAPE-PLAN.md` at its most literal. A hub is not
+     * prose — the 600dp measure protects a line of body text, and there is no
+     * line of body text here — so this takes the feed layout instead and
+     * `<Grid>` keeps every cell above the width a `Row`'s detail line needs.
+     *
+     * Below the threshold it is exactly the column it always was.
+     */
+    <Screen title="The farm" wide>
+      {places.length === 0 ? (
+        <Panel label="Nothing switched on yet">
+          <Body>
+            Say what you run below and the parts of the app you need appear here. Nothing you
+            have already logged has gone anywhere.
+          </Body>
+        </Panel>
+      ) : null}
+
+      <Grid testID="farm-grid">
       {places.map((place) => (
         <Row
           key={place.key}
@@ -97,15 +120,6 @@ export function FarmScreen(): React.ReactElement {
           onPress={() => nav.navigate(place.route)}
         />
       ))}
-
-      {places.length === 0 ? (
-        <Panel label="Nothing switched on yet">
-          <Body>
-            Say what you run below and the parts of the app you need appear here. Nothing you
-            have already logged has gone anywhere.
-          </Body>
-        </Panel>
-      ) : null}
 
       {/**
         * The shelf, and it belongs here rather than only under Iron.
@@ -184,6 +198,7 @@ export function FarmScreen(): React.ReactElement {
         testID="farm-my-farm"
         onPress={() => nav.navigate('MyFarm')}
       />
+      </Grid>
     </Screen>
   );
 }

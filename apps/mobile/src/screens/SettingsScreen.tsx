@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { readExposure } from '@steading/core/backup/exposure';
 import { readSite } from '@steading/core/read/growing';
 import { Choice, Row } from '../components/Form';
+import { Grid } from '../components/Grid';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { Touch } from '../components/Touch';
@@ -130,8 +131,16 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
   }, [armed, onSignedOut]);
 
   return (
-    <Screen title="Settings" back>
-      <View style={styles.rows}>
+    /**
+     * `wide`, for the block of doors at the top and nothing else.
+     *
+     * The rest of this screen is a form — a look to choose, a currency, a
+     * device to read about — and a form stays one column whatever the window
+     * does. `<Grid>` is scoped to the rows for that reason: the two halves of
+     * this screen are different kinds of thing and only one of them is a hub.
+     */
+    <Screen title="Settings" back wide>
+      <Grid testID="settings-rows">
         {/* First, because it decides what the rest of the app even shows.
 
             The title is the farm's own name once there is one. This row is the
@@ -271,7 +280,7 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
           testID="go-licences"
           onPress={() => nav.navigate('Licences')}
         />
-      </View>
+      </Grid>
 
       {/* ## The third theme had no way in
           `sun` has existed since the tokens were written and `setTheme` had no
@@ -345,7 +354,6 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
 }
 
 const styles = StyleSheet.create({
-  rows: { gap: SPACE.sm },
   signOut: {
     minHeight: TAP.primary,
     borderRadius: RADII.softHead,

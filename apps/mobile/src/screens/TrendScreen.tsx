@@ -136,7 +136,7 @@ export function TrendScreen({ route }: ScreenProps<'Trend'>): React.ReactElement
   if (group === null) return <Missing title="Numbers" what="That group" />;
 
   return (
-    <Screen title={group.name} back>
+    <Screen title={group.name} back wide>
       <Choice
         options={['week', 'month'] as const}
         value={grain}

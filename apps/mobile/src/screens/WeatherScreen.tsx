@@ -81,7 +81,7 @@ export function WeatherScreen(): React.ReactElement {
     useWeather();
 
   return (
-    <Screen title="Weather" back>
+    <Screen title="Weather" back wide>
       {loading ? null : at === null ? (
         <WhereIsTheFarm />
       ) : (

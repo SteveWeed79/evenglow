@@ -11,6 +11,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ContentWidthProvider } from './Grid';
 import { Icon } from './Icon';
 import { LampToggle } from './LampToggle';
 import { Plaster } from './Plaster';
@@ -18,6 +19,7 @@ import { RevealProvider, scrollToClear, type Measurable, type Reveal } from './r
 import { SyncChip } from './SyncChip';
 import { Touch } from './Touch';
 import { useTrouble } from '../hooks/useTrouble';
+import { useWindow } from '../hooks/useWindow';
 import type { RootParamList } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, LAYOUT, SPACE, TAP, TYPE } from '../theme/tokens';
@@ -39,6 +41,7 @@ export function Screen({
   children,
   contentStyle,
   back = false,
+  wide = false,
 }: {
   title: string;
   /**
@@ -54,9 +57,44 @@ export function Screen({
   contentStyle?: ViewStyle;
   /** Shows a back chevron instead of the date. Pushed screens only. */
   back?: boolean;
+  /**
+   * Lets this screen out of the reading column, as far as `LAYOUT.wide`.
+   *
+   * **Only for screens whose content is not prose.** The 600dp cap is a
+   * measure — 70–80 characters of body text — and widening it for a screen
+   * made of sentences and rows is the "metre of plaster" failure `tokens.ts`
+   * describes, arriving by invitation instead of by accident.
+   *
+   * Two kinds of screen have earned it. A **chart** has no line length to
+   * ruin, and width there is literally more information: a season's
+   * production at 1000dp shows more days than at 600. A **hub** is a grid of
+   * equivalent things rather than a column of prose — the canonical feed
+   * layout — and `<Grid>` puts a floor under how narrow a cell may get, so the
+   * rows inside it never stretch past their own measure however wide the
+   * screen is.
+   *
+   * `LAYOUT.wide` rather than "the whole window" on purpose: it is the same
+   * 1104 a two-pane screen will assemble to, so moving between a hub and Today
+   * does not shift the content sideways under somebody's eye.
+   */
+  wide?: boolean;
 }): React.ReactElement {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const { usable } = useWindow();
+
+  const cap = wide ? LAYOUT.wide : LAYOUT.column;
+
+  /**
+   * What `<Grid>` divides up: the column, less its own padding.
+   *
+   * Handed down rather than measured, because `onLayout` reports nothing in a
+   * suite with no layout engine — a grid that waited for it would render zero
+   * columns in every test. This is the same arithmetic the layout engine will
+   * do, from the same tokens, which is the method `landscape-fold.test.ts`
+   * already established for this codebase.
+   */
+  const content = Math.min(usable, cap) - SPACE.lg * 2;
   const navigation = useNavigation<NativeStackNavigationProp<RootParamList>>();
   const trouble = useTrouble();
 
@@ -132,12 +170,33 @@ export function Screen({
 
   return (
    <RevealProvider value={reveal}>
+   <ContentWidthProvider value={content}>
     <View style={[styles.ground, { backgroundColor: colors.ground, paddingTop: insets.top }]}>
       {/* Behind everything, never over it. The grain is a shipped tile because
           feTurbulence blended at soft-light has no RN form — see Plaster.tsx. */}
       <Plaster />
 
-      <View style={styles.status}>
+      {/**
+        * The horizontal insets go on the children, never on the ground.
+        *
+        * They were read nowhere in this app until now. `paddingTop` and the
+        * bottom inset cover a phone completely, because in portrait the
+        * cutout and the gesture bar are both on the short edges — but the app
+        * turns on a tablet, and in landscape they move to the left or right
+        * edge where nothing was reserving for them. It has gone unreported
+        * because the content sat 340dp from either edge; `wide` is what closes
+        * that gap, so this has to land in the same pass.
+        *
+        * On the children rather than the ground because `<Plaster />` is an
+        * `absoluteFill` inside the ground, and padding there would inset the
+        * wall as well — letterboxing the app in bare background, which is the
+        * failure `reading-column.test.tsx` already stands guard over.
+        */}
+      <View style={[styles.status, {
+        maxWidth: cap,
+        paddingLeft: SPACE.lg + insets.left,
+        paddingRight: SPACE.lg + insets.right,
+      }]}>
         {back ? (
           <Touch affordance="chevron"
             onPress={() => navigation.goBack()}
@@ -211,7 +270,14 @@ export function Screen({
           inside it is ordinary flexbox and cannot be anything else. */}
       <ScrollView
         ref={scroll}
-        contentContainerStyle={styles.scroll}
+        // The insets pad the scroll's CONTAINER, so the column is centred
+        // inside the safe area rather than inside the window. The scroll
+        // surface itself stays full-bleed — a thumb can still drag anywhere on
+        // a tablet, which is what the comment above is about.
+        contentContainerStyle={[
+          styles.scroll,
+          { paddingLeft: insets.left, paddingRight: insets.right },
+        ]}
         // Tapping a field then reaching for a stepper should not need the
         // keyboard dismissed first.
         keyboardShouldPersistTaps="handled"
@@ -245,6 +311,7 @@ export function Screen({
        <View
         style={[
           styles.content,
+          { maxWidth: cap },
           /**
            * Only where nothing else is already standing in that space.
            *
@@ -310,6 +377,7 @@ export function Screen({
        </View>
       </ScrollView>
     </View>
+   </ContentWidthProvider>
    </RevealProvider>
   );
 }
@@ -331,15 +399,18 @@ const styles = StyleSheet.create({
    * Capped here as well as on the content, and the pairing is the point: the
    * lamp and the settings gear left at the far edge of a 1280dp screen would
    * be pointing at a column in the middle of it.
+   *
+   * The cap itself is applied inline, because a `wide` screen moves both this
+   * and the content out to `LAYOUT.wide` together. Moving only one of them
+   * would put the gear inside the content on a hub, which is the same mistake
+   * the paragraph above is about, mirrored.
    */
   status: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: SPACE.lg,
     minHeight: TAP.min / 2,
     width: '100%',
-    maxWidth: LAYOUT.column,
     alignSelf: 'center',
   },
   controls: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
@@ -361,7 +432,6 @@ const styles = StyleSheet.create({
     gap: SPACE.md,
     paddingBottom: SPACE.xl,
     width: '100%',
-    maxWidth: LAYOUT.column,
   },
   // Carries the margin the hero used to, so a screen with no subtitle sits
   // exactly where it did before.

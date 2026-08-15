@@ -3,6 +3,7 @@ import { formatRange, libraryBreed, SPECIES_TRAITS } from '@steading/contracts';
 import type { Group } from '@steading/core/read/groups';
 import { groupPhrase } from '@steading/core/voice';
 import { Primary } from '../components/Form';
+import { Grid } from '../components/Grid';
 import { Icon } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
@@ -11,7 +12,7 @@ import { growOutWindow, layOnsetWindow } from '../hooks/useDues';
 import { useGroups } from '../hooks/useGroups';
 import { useTheme } from '../theme/ThemeProvider';
 import { useNav } from '../hooks/useNav';
-import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
+import { FONTS, LAYOUT, RADII, SPACE, TYPE } from '../theme/tokens';
 
 /**
  * Stock — the animals you keep.
@@ -30,7 +31,7 @@ export function StockScreen(): React.ReactElement {
   if (loading) return <Screen title="Stock" back>{null}</Screen>;
 
   return (
-    <Screen title="Stock" back>
+    <Screen title="Stock" back wide>
       {groups.length === 0 ? (
         <Panel label="Nothing here yet">
           {/* Empty screens invite (UX-SPEC §6). */}
@@ -40,13 +41,15 @@ export function StockScreen(): React.ReactElement {
           </Body>
         </Panel>
       ) : (
-        groups.map((group) => (
-          <GroupCard
-            key={group.id}
-            group={group}
-            onPress={() => nav.navigate('Group', { groupId: group.id })}
-          />
-        ))
+        <Grid cell={LAYOUT.column / 2} testID="stock-grid">
+          {groups.map((group) => (
+            <GroupCard
+              key={group.id}
+              group={group}
+              onPress={() => nav.navigate('Group', { groupId: group.id })}
+            />
+          ))}
+        </Grid>
       )}
 
       <Primary

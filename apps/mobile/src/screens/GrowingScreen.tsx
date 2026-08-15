@@ -3,6 +3,7 @@ import { expectedHarvestAt, growingSeasonDays, plantingWords } from '@steading/c
 import { type Bed, occupants, type Planting } from '@steading/core/read/growing';
 import { listVarieties } from '@steading/core/read/growing';
 import { Primary } from '../components/Form';
+import { Grid } from '../components/Grid';
 import { Icon } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
@@ -11,7 +12,7 @@ import { useGrowing } from '../hooks/useGrowing';
 import { useLive } from '../hooks/useLive';
 import { useNav } from '../hooks/useNav';
 import { useTheme } from '../theme/ThemeProvider';
-import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
+import { FONTS, LAYOUT, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
 
 /**
  * Growing — beds, and what is in them.
@@ -62,7 +63,7 @@ export function GrowingScreen(): React.ReactElement {
   );
 
   return (
-    <Screen title="Growing" back>
+    <Screen title="Growing" back wide>
       <View style={[styles.season, { backgroundColor: colors.raised, borderColor: colors.border }]}>
         <Text style={[styles.seasonWords, { color: colors.ink }]}>
           {/* The number that decides whether a 120-day melon is possible at all. */}
@@ -79,17 +80,19 @@ export function GrowingScreen(): React.ReactElement {
           </Body>
         </Panel>
       ) : (
-        beds.map((bed) => (
-          <BedCard
-            key={bed.id}
-            bed={bed}
-            plantings={occupants(plantings, bed.id)}
-            names={varietyNames}
-            maturity={maturity}
-            onPlant={() => nav.navigate('PickVariety', { bedId: bed.id })}
-            onOpen={(plantingId) => nav.navigate('Planting', { plantingId })}
-          />
-        ))
+        <Grid cell={LAYOUT.column / 2} testID="growing-grid">
+          {beds.map((bed) => (
+            <BedCard
+              key={bed.id}
+              bed={bed}
+              plantings={occupants(plantings, bed.id)}
+              names={varietyNames}
+              maturity={maturity}
+              onPlant={() => nav.navigate('PickVariety', { bedId: bed.id })}
+              onOpen={(plantingId) => nav.navigate('Planting', { plantingId })}
+            />
+          ))}
+        </Grid>
       )}
 
       <Primary

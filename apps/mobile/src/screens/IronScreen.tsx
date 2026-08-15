@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { listInventory, listMachines, type Machine, runningLow } from '@steading/core/read/iron';
 import { Primary, Row } from '../components/Form';
+import { Grid } from '../components/Grid';
 import { Icon } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
@@ -8,7 +9,7 @@ import { Touch } from '../components/Touch';
 import { useLive } from '../hooks/useLive';
 import { useTheme } from '../theme/ThemeProvider';
 import { useNav } from '../hooks/useNav';
-import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
+import { FONTS, LAYOUT, RADII, SPACE, TYPE } from '../theme/tokens';
 
 /**
  * Iron — equipment and machines.
@@ -36,20 +37,22 @@ export function IronScreen(): React.ReactElement {
   const low = runningLow(inventory ?? []);
 
   return (
-    <Screen title="Iron" back>
+    <Screen title="Iron" back wide>
       {machines.length === 0 ? (
         <Panel label="No equipment yet">
           {/* Empty screens invite (UX-SPEC §6). */}
           <Body>Add your tractor and its service schedule comes with it.</Body>
         </Panel>
       ) : (
-        machines.map((machine) => (
-          <MachineCard
-            key={machine.id}
-            machine={machine}
-            onPress={() => nav.navigate('Machine', { machineId: machine.id })}
-          />
-        ))
+        <Grid cell={LAYOUT.column / 2} testID="iron-grid">
+          {machines.map((machine) => (
+            <MachineCard
+              key={machine.id}
+              machine={machine}
+              onPress={() => nav.navigate('Machine', { machineId: machine.id })}
+            />
+          ))}
+        </Grid>
       )}
 
       <Primary
