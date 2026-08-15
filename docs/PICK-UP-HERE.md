@@ -119,12 +119,23 @@ Told to do, never confirmed done — worth checking rather than assuming:
 
 Known and deliberately deferred:
 
-- **No backups.** Atlas M0 shows `Backups: Inactive`, so the farm's 3.8 MB
-  exists in one place. `ACCESS-AND-BILLING.md` §4.1a-i calls a tested restore a
-  condition of the first real farm rather than a nicety.
-  `scripts/backup-mongo.sh` is written and waiting on an S3 bucket and an `age`
-  keypair — the public half goes on the box, the private half in a password
-  manager.
+- **No backups *yet*, and now only for want of a bucket.** Atlas M0 shows
+  `Backups: Inactive`, so the farm's 3.8 MB exists in one place.
+  `ACCESS-AND-BILLING.md` §4.1a-i calls a tested restore a condition of the
+  first real farm rather than a nicety.
+
+  `scripts/backup-mongo.sh` is written and **now scheduled** —
+  `steading-backup.timer` nightly, `steading-backup-check.timer` failing a unit
+  when the last one is over thirty-six hours old. What remains is genuinely
+  configuration: an S3 bucket and an `age` keypair, public half on the box in
+  `/etc/steading/backup.env`, private half in a password manager. Until those
+  exist the timer runs and the script stops on the variable it needs, which is
+  a state that reports itself.
+
+  **`ROADMAP.md:477` used to say this was done.** Two documents disagreeing
+  about whether a farm has backups is worse than either answer, and the roadmap
+  was the one that was wrong — a script with no timer is not a backup. Both now
+  say the same thing.
 - **Photos share the 512 MB M0 cap, and nothing warns in time.** Photo bytes
   live in GridFS in this same database (`blobsFor(orgId)`, bucket `photoBytes`),
   so they count against the tier's total. At the 200–400 KB the app resizes to,

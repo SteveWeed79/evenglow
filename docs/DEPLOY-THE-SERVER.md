@@ -582,6 +582,11 @@ can write backups it cannot read, upload; `restore` is a subcommand of the same
 script. §4.1a-i calls this a condition of the first real farm rather than a
 nicety, and it was already true on M0, which has no automated backups either.
 
+Enable `steading-backup.timer` **and** `steading-backup-check.timer` together —
+"Before a farm that is not yours depends on this", below, has the settings and
+the restore drill. The second timer is not optional decoration: without it a
+backup that quietly stops is indistinguishable from one that is working.
+
 **Photos stay in GridFS**, and that was re-argued rather than assumed once the
 database moved — §4A.3 has the three reasons the box's own filesystem is not an
 improvement, and the one clock this starts.
@@ -906,6 +911,91 @@ subcommand of the same script, and a tested restore is a rehearsed migration.
 rather than a nicety, and that is still right even with Atlas holding the data:
 the free M0 tier has no automated backups either.
 
+**The script existed for months with nothing running it**, which is the state
+this section is really about: a backup that depends on somebody remembering to
+type a command is not a control, it is an intention. Two timers close it.
+
+#### Turning it on
+
+Put the settings in their own file — not `api.env`, because the bucket
+credentials have no business beside the auth secret and vice versa:
+
+```bash
+sudo install -m 0600 /dev/null /etc/steading/backup.env
+sudo nano /etc/steading/backup.env
+```
+
+```
+MONGODB_URI=…                    the same value api.env has
+STEADING_BACKUP_BUCKET=s3://your-bucket/steading
+STEADING_BACKUP_RECIPIENT=age1…  the PUBLIC half
+AWS_ACCESS_KEY_ID=…              an IAM user that can only PutObject on the prefix
+AWS_SECRET_ACCESS_KEY=…
+AWS_DEFAULT_REGION=…
+```
+
+**No `STEADING_BACKUP_IDENTITY`.** The private half of the age key must never
+be on this machine — that is the entire argument for encrypting to a public
+key, and it is why a restore is a deliberate act performed somewhere else. Put
+it in a password manager. You need it once, on the worst day.
+
+```bash
+sudo cp /opt/steading/scripts/deploy/steading-backup.{service,timer} /etc/systemd/system/
+sudo cp /opt/steading/scripts/deploy/steading-backup-check.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now steading-backup.timer steading-backup-check.timer
+sudo systemctl start steading-backup      # don't wait until 02:00 to find out
+```
+
+#### How you find out it stopped
+
+`steading-backup-check` runs at 09:00 and **exits non-zero when the last
+successful backup is more than thirty-six hours old**, which puts the box into
+`systemctl --failed`. That is deliberate: there is no mail sender here and no
+monitoring agent, so systemd's own state is the one channel an operator already
+reads and any monitoring added later already watches.
+
+```bash
+systemctl --failed                          # a stale backup shows up here
+systemctl status steading-backup-check
+journalctl -u steading-backup -n 50
+```
+
+Thirty-six hours rather than twenty-four, so a run that started late — a
+reboot, a slow dump, the timer's own randomised delay — is not reported as a
+failure. A check that cries wolf is a check somebody disables.
+
+The marker it reads is written **only after the script has read the uploaded
+object back out of S3**. `aws s3 cp` exiting zero means the request succeeded,
+which is not the same claim as the object being in the bucket at the size it
+should be.
+
+#### The restore drill, which stays manual
+
+**Twice a year, and it is not automated on purpose.** A real restore test needs
+the age identity, and the whole design is that the private half never exists on
+this box — so nothing running here can perform one. That is a property to keep,
+not a gap to close.
+
+On a machine that is not this one, with the identity to hand:
+
+```bash
+export STEADING_BACKUP_IDENTITY=/path/to/age-identity
+export STEADING_BACKUP_BUCKET=s3://your-bucket/steading
+./scripts/backup-mongo.sh list
+./scripts/backup-mongo.sh restore steading-2026-08-05T02-00-00Z.age
+```
+
+Restore into a **fresh** database and point a scratch API at it. The script
+does not pass `--drop`, so a restore over live data cannot overwrite a current
+record — but it can resurrect archived ones, and there is no reason to find
+that out on the day you need the backup.
+
+What the drill proves that the nightly job cannot: that the identity in the
+password manager is the one that matches the recipient on the box. An `age`
+keypair mismatch is invisible until somebody tries to decrypt, and by then the
+backups it silently ruined are all of them.
+
 ---
 
 ## When something is wrong
@@ -922,4 +1012,5 @@ the free M0 tier has no automated backups either.
 | App says **Not set up** | The APK was built without an origin — that is `preview`, not `preview-farm` |
 | Sync refused with a 402 | Billing, and only possible once `GOOGLE_PLAY_SERVICE_ACCOUNT` is set. With no Play config `access.ts` returns `syncing: true` for every farm, so a 402 here means something else |
 | Deploy timer runs, nothing ever deploys | `journalctl -u steading-deploy -n 30`. Either the box is ahead of `release` — never `git pull` there — or git is refusing the checkout's ownership |
+| `systemctl --failed` lists `steading-backup-check` | No backup for over 36 hours. `journalctl -u steading-backup -n 50` — usually `/etc/steading/backup.env` is missing a variable, or the IAM user cannot write the prefix |
 | One farm sees another's records | Stop and report it. That is the invariant everything else is built on |

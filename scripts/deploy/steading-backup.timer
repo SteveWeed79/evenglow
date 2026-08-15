@@ -1,0 +1,30 @@
+# Back the database up once a night.
+#
+#   sudo systemctl enable --now steading-backup.timer
+#   systemctl list-timers steading-backup      # when it last ran and next will
+#
+# 02:00 UTC because it is the quietest hour for a farm in either hemisphere and
+# because the dump holds a lock for its duration. `--oplog` makes the snapshot
+# internally consistent, so a log written mid-dump is not lost — but a sync
+# flush waiting on a busy mongod is still a phone showing a spinner in a yard,
+# and there is no reason for that to be at milking time.
+
+[Unit]
+Description=Nightly Steading backup
+Documentation=https://github.com/SteveWeed79/steading/blob/main/docs/DEPLOY-THE-SERVER.md
+
+[Timer]
+OnCalendar=*-*-* 02:00:00 UTC
+
+# Up to fifteen minutes late, so a fleet does not arrive at S3 on the same
+# second — and so the hour itself is not a fact anybody can rely on, which is
+# one less thing an observer of the bucket learns.
+RandomizedDelaySec=900
+
+# Survives the box being off. A machine that was down at 02:00 backs up on the
+# way back rather than skipping a night in silence — which is precisely the
+# silence this whole item is about.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,59 @@
+# One nightly backup. Started by steading-backup.timer, not by hand — though
+# `sudo systemctl start steading-backup` is the right way to force one.
+#
+#   sudo cp scripts/deploy/steading-backup.{service,timer} /etc/systemd/system/
+#   sudo cp scripts/deploy/steading-backup-check.{service,timer} /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now steading-backup.timer steading-backup-check.timer
+#
+# ## Why this file exists at all
+#
+# `scripts/backup-mongo.sh` has been in the tree, complete and unscheduled, for
+# long enough that one document recorded it as done. It was not: a farm's only
+# off-box copy depended on somebody remembering to type a command.
+# `ACCESS-AND-BILLING.md` §4.1a-i calls an automated backup a condition of the
+# first real farm, and that condition was not met by a script nobody was running.
+#
+# ## Where the settings come from
+#
+# `/etc/steading/backup.env`, its own file rather than `api.env`, because the
+# two hold different secrets for different jobs — the API's database password
+# and auth secret have no business in a unit that talks to S3, and the bucket
+# credentials have no business in the API. `EnvironmentFile` with a leading `-`
+# so a box that has not configured backups yet fails with the script's own
+# sentence naming the variable, rather than systemd refusing to start the unit.
+#
+#   MONGODB_URI                  the same value api.env has
+#   STEADING_BACKUP_BUCKET       s3://bucket/prefix
+#   STEADING_BACKUP_RECIPIENT    the age PUBLIC key, age1...
+#   AWS_ACCESS_KEY_ID            an IAM user that can only PutObject on the prefix
+#   AWS_SECRET_ACCESS_KEY
+#   AWS_DEFAULT_REGION
+#
+# **No STEADING_BACKUP_IDENTITY.** The private half of the age key must never be
+# on this machine — that is the whole argument for encrypting to a public key,
+# and it is why a restore is a deliberate act somewhere else.
+
+[Unit]
+Description=Encrypted off-box backup of the Steading database
+Documentation=https://github.com/SteveWeed79/steading/blob/main/docs/DEPLOY-THE-SERVER.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+
+# Root, to read /etc/steading and write the marker under /var/lib/steading. It
+# is a scheduled job with no listening socket, so it has no attack surface of
+# its own beyond the bucket it writes to.
+User=root
+EnvironmentFile=-/etc/steading/backup.env
+ExecStart=/opt/steading/scripts/backup-mongo.sh backup
+
+# A dump of a farm's records over a home connection, with room for a slow one.
+# It must not still be running when tomorrow's starts underneath it.
+TimeoutStartSec=3600
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=steading-backup

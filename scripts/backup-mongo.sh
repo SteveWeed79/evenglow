@@ -53,6 +53,15 @@ umask 077
 
 readonly ARCHIVE_FLOOR_BYTES=4096
 
+# When the last backup was known to be in the bucket. A timestamp rather than a
+# flag, because the question worth asking is not "has one ever run" but "how
+# long has it been" — which is the failure this project actually had: a script
+# nobody was going to notice had stopped being typed.
+#
+# Beside the deploy's own markers, in the state directory one level above what
+# Caddy serves, so it is a note to the machine rather than a published file.
+MARKER="${STEADING_BACKUP_MARKER:-/var/lib/steading/.last-backup}"
+
 die() {
   printf '%s\n' "$*" >&2
   exit 1
@@ -114,7 +123,36 @@ backup() {
 
   aws s3 cp "$sealed" "${STEADING_BACKUP_BUCKET%/}/$name.age" --only-show-errors
 
-  printf 'Backed up %s (%s bytes plaintext, encrypted on the way out)\n' "$name" "$size"
+  # ── Did it land? ──────────────────────────────────────────────────────────
+  #
+  # `aws s3 cp` returning zero means the request succeeded, which is not the
+  # same claim as the object being in the bucket at the size it should be — a
+  # truncated body, a lifecycle rule that immediately expires the prefix, or a
+  # copy to a path nobody will ever list all exit zero.
+  #
+  # This reads it back. It is the only verification that can be done here: a
+  # real restore test needs the age identity, and the whole point of the design
+  # is that the private half never exists on this machine.
+  local landed
+  landed="$(aws s3 ls "${STEADING_BACKUP_BUCKET%/}/$name.age" 2>/dev/null | awk '{print $3}')"
+  [[ -n "$landed" ]] || die "Uploaded $name.age but it is not in the bucket. Check the prefix and the bucket policy."
+  (( landed >= ARCHIVE_FLOOR_BYTES )) || die "$name.age is only ${landed} bytes in the bucket. Refusing to call that a backup."
+
+  # ── The marker the absence check reads ────────────────────────────────────
+  #
+  # Written only here, after the object has been read back, so its presence
+  # means a backup exists off this box rather than that something ran. See
+  # `scripts/deploy/check-backup.sh`, which fails a systemd unit when this
+  # stops moving.
+  #
+  # Best effort, and deliberately last: a box where the state directory cannot
+  # be written still has its backup in S3, and failing the run over a note
+  # about it would turn a success into an alert.
+  if mkdir -p "$(dirname "$MARKER")" 2>/dev/null; then
+    date -u +%s > "$MARKER" 2>/dev/null || true
+  fi
+
+  printf 'Backed up %s (%s bytes plaintext, %s bytes in the bucket)\n' "$name" "$size" "$landed"
 }
 
 list() {

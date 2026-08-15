@@ -1,0 +1,25 @@
+# Ask once a day whether there is a recent backup.
+#
+#   sudo systemctl enable --now steading-backup-check.timer
+#   systemctl --failed          # where a stale backup shows up
+#
+# 09:00 UTC — seven hours after the backup window, so a run that started late,
+# took an hour, or was retried on a reboot has finished long before this looks.
+# Morning rather than night on purpose: the point of this unit is that somebody
+# sees it, and a failure that appears at 03:00 has all day to be scrolled past.
+
+[Unit]
+Description=Daily check that the Steading backup is not stale
+Documentation=https://github.com/SteveWeed79/steading/blob/main/docs/DEPLOY-THE-SERVER.md
+
+[Timer]
+OnCalendar=*-*-* 09:00:00 UTC
+RandomizedDelaySec=600
+
+# Survives the box being off, like the backup itself. A machine that has been
+# down for two days should be told its backup is two days old the moment it is
+# back, not at the next 09:00.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

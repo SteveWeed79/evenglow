@@ -1308,6 +1308,10 @@ that it could not publish, and the API is untouched.
 
 ## P2-3 · Backups are designed but not operationally closed
 
+> **Fixed.** A nightly timer, a service, and a second timer whose whole job is
+> to fail when the backup stops. The two documents that disagreed now say the
+> same thing, and the one that was wrong is the one that said "Done".
+
 **Trusted.** `scripts/backup-mongo.sh` is good work — strict shell settings,
 tight permissions, `age` encryption, offsite upload, oplog-aware consistency. But
 the tree carries **no timer, no service, no monitored schedule, and no alert for a
@@ -1343,15 +1347,79 @@ P3 nicety at most, and it should not be listed beside the scheduling gap.
 
 **To do**
 
-- [ ] A timer, a service, and an alert on absence — a backup nobody is told about
+- [x] A timer, a service, and an alert on absence — a backup nobody is told about
       is not a backup.
-- [ ] Reconcile `ROADMAP.md:478` with `PICK-UP-HERE.md:125`. One of them is
+- [x] Reconcile `ROADMAP.md:478` with `PICK-UP-HERE.md:125`. One of them is
       telling the next reader the job is finished.
 - [ ] ~~Refuse a restore into a non-empty database unless explicitly forced.~~
-      Optional. It contradicts a documented decision and the harm is bounded to
-      un-archiving; if it is done, do it as a confirmation prompt rather than a
-      refusal.
-- [ ] Restore-test on a schedule. Untested backups are a belief, not a control.
+      Optional, and not taken. It contradicts a documented decision and the harm
+      is bounded to un-archiving.
+- [x] ~~Restore-test on a schedule.~~ **Documented as a manual drill, and it
+      cannot be automated here** — see below.
+
+### What it does, 15 August
+
+`steading-backup.service` and `.timer` — nightly at 02:00 UTC, `Persistent=true`
+so a box that was off backs up on the way back rather than skipping a night in
+silence, which is precisely the silence this item is about. Settings come from
+`/etc/steading/backup.env`, its own file: the bucket credentials have no
+business beside the auth secret, and the reverse.
+
+**The alert is the harder half and it needed its own unit.** A backup that did
+not run produces no output from a service that did not start, so the thing that
+notices has to be something else on its own schedule.
+`steading-backup-check.service` runs `check-backup.sh` at 09:00 and **exits
+non-zero when the last successful backup is over thirty-six hours old**.
+
+There is no mail sender on this box and no monitoring agent, so a failing
+oneshot *is* the channel: it puts the machine into `systemctl --failed`, which
+is where an operator already looks and what any monitoring added later already
+watches. That is a genuinely different level of visibility from a line in a
+journal nobody opens, which is what a `note` in `deploy.sh` would have been.
+
+Thirty-six hours rather than twenty-four: a run that started late — a reboot, a
+slow dump, the timer's own randomised delay — must not be reported as a failure,
+because a check that cries wolf is a check somebody disables.
+
+**The marker it reads is written only after the object has been read back out
+of S3.** `aws s3 cp` exiting zero means the request succeeded, not that the
+object is in the bucket at the size it should be — a truncated body, a lifecycle
+rule expiring the prefix, or a copy to a path nobody lists all exit zero. So
+`backup-mongo.sh` now lists the key it just wrote and checks its size against
+the same floor the dump is checked against, and only then records the time.
+
+### Why the restore test is not scheduled
+
+**Not a gap — a property.** A real restore needs the age identity, and the whole
+design is that the private half never exists on this machine. Nothing running
+here can decrypt a backup, which is the point of encrypting to a public key: a
+box compromise does not become a history compromise.
+
+So the drill is manual, twice a year, on a machine that is not this one, and
+`DEPLOY-THE-SERVER.md` now carries the procedure. What it proves is the thing
+the nightly job cannot: **that the identity in the password manager matches the
+recipient on the box.** An `age` keypair mismatch is invisible until somebody
+tries to decrypt, and by then the backups it silently ruined are all of them.
+
+### The documents that disagreed
+
+`ROADMAP.md` said *"Done — `scripts/backup-mongo.sh`"* for a script nothing ran.
+`PICK-UP-HERE.md` said it was waiting on a bucket and a keypair. Both are
+rewritten, and both now say what changed and which was wrong — a roadmap reading
+"Done" is how an unscheduled backup stays unscheduled, and that is worth leaving
+on the record rather than quietly correcting.
+
+### Verification
+
+`check-backup.sh` was run against six states with a scratch marker: no marker
+(exit 1), a fresh one (0), forty hours (1), thirty hours (0), a marker that is
+not a timestamp (1), and a fresh one under a one-hour limit (0). Every unit file
+and both scripts parse.
+
+**Not run against a real bucket**, because there is none here — the S3 read-back
+and the marker write are exercised only by the code path's own shape. The first
+real backup is the first real test, and its failure mode is the one this item
+asked for: the check unit goes red.
 
 ## P2-4 · `/health` does not check the database
 
