@@ -407,6 +407,11 @@ write), up to 100 per batch.
 
 ## P0-3 · `(serverTs, _id)` is not a commit order
 
+> **Fixed, under one API process per farm.** The stamp, the log write, the
+> projection and the outcome are one serialised unit per org, the stamp is taken
+> immediately before the insert and clamped monotonically, and the assumption is
+> written into `DEPLOY-THE-SERVER.md` rather than left as folklore.
+
 **Confirmed in mechanism.** `apply.ts:115` stamps `serverTs: new Date()` while
 building the doc — **before** the `await` on the upsert at line 122, and before
 projection at 139. `snapshot.ts:84-92` sorts and seeks on `(serverTs, _id)`,
@@ -471,7 +476,7 @@ farms are untouched.
       operation count: *no row may become visible carrying a cursor value below a
       watermark already published to a client.* That is satisfiable without a
       replica set and without replacing the cursor.
-- [ ] Serialize the critical section in-process, per org: an async mutex keyed on
+- [x] Serialize the critical section in-process, per org: an async mutex keyed on
       `orgId` held across stamp → log upsert → project → outcome stamp, for one
       mutation, with `serverTs` stamped immediately before the upsert instead of
       at doc-build time (`apply.ts:115`). Under one writer process, allocation,
@@ -480,23 +485,44 @@ farms are untouched.
       no sequence number can.** The lock is uncontended at farm write volume;
       batches are already sequential, so the only thing it serializes is two
       devices flushing the same farm at the same moment.
-- [ ] Clamp the stamp monotonically:
+      Shipped as `inCommitOrder` in `apps/api/src/sync/commit-order.ts`. Per
+      mutation rather than per batch, so a hundred-mutation flush cannot hold a
+      farm's lock for its whole duration, and the chain is resolved from a
+      `finally` so one throwing mutation cannot wedge every later one behind
+      it.
+- [x] Clamp the stamp monotonically:
       `serverTs = new Date(Math.max(Date.now(), lastIssued + 1))` per org, seeded
       on the first write after boot from one indexed read
       (`findMany({}, {limit: 1, sort: {serverTs: -1}})`, which the existing
       `{orgId, serverTs, _id}` index serves as a seek). This kills the clock
       rollback across restarts, which an in-memory clamp alone would not.
-- [ ] Hold back the horizon in the reader as defence in depth for the
+      **It does a second thing the item did not name.** The lock alone leaves two
+      mutations inside one millisecond sharing a `serverTs`, at which point the
+      cursor falls back to breaking the tie on the ULID — which is client-minted
+      and has no relationship to commit order, so a device that advanced past the
+      higher ULID would never be offered the lower one. The clamp is what stops
+      that, and it has its own test.
+- [ ] ~~Hold back the horizon in the reader as defence in depth for the
       two-process case: `readSnapshotPage` returns only rows with
-      `serverTs <= now - Δ`, Δ around five seconds. A stalled insert lands inside
-      the unstable window and is picked up when the window passes it. Cost is Δ
-      of second-device propagation delay, which nobody on a farm notices.
-- [ ] Write down that this is exact under **one API process per farm** and
-      Δ-bounded under more than one, next to the standalone-Mongo note rather
-      than left as folklore. If a second API instance is ever run, the correct
-      answer is a single-node replica set plus a transaction wrapping the
-      allocation and the insert — at which point the original counter proposal
-      becomes viable. That is the upgrade path.
+      `serverTs <= now - Δ`, Δ around five seconds.~~
+      **Deliberately not taken, and this is a change of mind from the line
+      above.** It costs every second device Δ of propagation delay to defend a
+      configuration that does not exist — and it collides with the one-time
+      projection repair that shipped since this was written: a mutation hidden
+      inside the horizon does not replay, so the record it belongs to goes
+      unmarked and the sweep treats it as an orphan. Self-healing on the next
+      pull, but a record that blinks out of existence is not a thing to
+      introduce on purpose. If a second process is ever wanted the answer is the
+      replica set below, not a window.
+- [x] Write down that this is exact under **one API process per farm** ~~and
+      Δ-bounded under more than one~~ — with no horizon it is exact under one
+      process and buys nothing across two, which is the sharper thing to say.
+      Written into `DEPLOY-THE-SERVER.md` beside the standalone-Mongo note,
+      including that nothing in the code can enforce it and what the symptom
+      looks like. If a second API instance is ever run, the correct answer is a
+      single-node replica set plus a transaction wrapping the allocation and the
+      insert — at which point the original counter proposal becomes viable. That
+      is the upgrade path.
 - [ ] **Interleaving 2 is not a cursor problem and no cursor change fixes it.**
       It happens because the log write and the projection write for two
       concurrent mutations can interleave in opposite orders — `apply.ts:122` and
@@ -508,9 +534,12 @@ farms are untouched.
       sequence number skips the farm's entire history; a new field to
       disambiguate wedges every old client per P1-1. Any cursor replacement is a
       coordinated client release with a compatibility story.
-- [ ] Tests: late insertion behind an advanced cursor, projection order reversed
+- [x] Tests: late insertion behind an advanced cursor, projection order reversed
       against log order, and a clock rollback. The mutex makes the first two
-      deterministic instead of timing-dependent.
+      deterministic instead of timing-dependent — `tests/unit/commit-order.test.ts`
+      stalls one request between its stamp and its insert and asserts the other
+      cannot start, so both interleavings are exercised without a mongod and
+      without a race.
 
 ---
 
@@ -1701,8 +1730,10 @@ From the verification pass, with the dependencies that force it:
    Carrying P0-2's outcome on the wire stays blocked until that is loosened too
    — and it should be loosened the same way, named fields tolerated
    deliberately rather than a blanket passthrough.
-5. **P0-3**, after the outcome work has settled underneath it, since the mutex
-   wraps the same critical section.
+5. ~~**P0-3**, after the outcome work has settled underneath it, since the mutex
+   wraps the same critical section.~~ **Done**, and the ordering turned out to
+   matter: the mutex wraps the outcome stamp, which did not exist when this was
+   written.
 6. **P1-5(a)** with the `tickets` wipe fix ahead of it, then P1-3, P1-4(c).
 7. **P0-1's fresh-ULID work**, with the correction editor it exists to support.
 
