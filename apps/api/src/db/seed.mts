@@ -20,7 +20,7 @@
 import { ulid } from 'ulid';
 import { hashPassword } from '../auth/password.ts';
 import { db } from './client.ts';
-import { findUserByEmail, insertOrg, insertUser, normalizeEmail } from './identity.ts';
+import { findUserByEmail, insertOrg, insertUser, normalizeEmail, setSyncGrant } from './identity.ts';
 import { applyIndexes } from './indexes.ts';
 
 const [argOrg, argEmail, argPassword] = process.argv.slice(2);
@@ -65,6 +65,21 @@ await insertUser({
   createdAt: new Date(),
 });
 
+/**
+ * The first farm syncs to its own server, which is the only reason this is here.
+ *
+ * `syncAccess` refuses a farm with no grant on a box that takes no payments,
+ * and that default is deliberate — an install page on the open internet must
+ * not hand a stranger unlimited storage. But the farm THIS script just made is
+ * not a stranger: somebody with a shell on the server typed its name.
+ *
+ * Without this, the first thing a self-hoster does after standing a box up is
+ * discover their own farm cannot reach it, which is a bad first five minutes
+ * and the sort of thing that gets fixed by opening the door for everybody.
+ */
+await setSyncGrant(orgId, { at: new Date(), note: 'the first farm on this server' });
+
 console.log(`Created org "${orgName}" (${orgId})`);
 console.log(`Created owner ${normalizeEmail(email)} (${userId})`);
+console.log('Granted sync — this farm syncs to this server; others need a code.');
 process.exit(0);

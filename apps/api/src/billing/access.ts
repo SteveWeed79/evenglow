@@ -49,19 +49,22 @@ export function syncAccess(env: Env, org: OrgDoc | null): Entitlement {
    * the one where a subscription state is meaningless — nobody could have
    * bought anything.
    *
-   * **Unless it has been told to ask anyway.** A box whose install page is on
-   * the open internet is the case this default gets wrong: the app is free and
-   * meant to be, but a stranger's records landing in somebody else's database
-   * is not the free part. `SYNC_REQUIRES_GRANT` makes the two comps above and a
-   * redeemed promotion code the only ways through, which is what D13 says the
-   * shape is — sync is the thing sold — arriving before Play does rather than
-   * after.
+   * **Only when it has been told to be open.** A box whose install page is on
+   * the open internet is the case the old default got wrong: the app is free
+   * and meant to be, but a stranger's records landing in somebody else's
+   * database is not the free part. So the two comps above and a redeemed
+   * promotion code are the ways through, which is what D13 says the shape is —
+   * sync is the thing sold — arriving before Play does rather than after.
+   *
+   * This was a flag that had to be turned ON to close the hole, and a hole
+   * stays open when closing it is a step somebody has to remember. Inverted, so
+   * the safe state is the one you get by doing nothing.
    *
    * A refused farm is told *"Kept on this phone. Everything works; nothing is
    * sent anywhere."* — which is true, mentions no store it could not reach, and
    * sits directly above the field where a code goes.
    */
-  if (env.playConfig === null && !env.SYNC_REQUIRES_GRANT) {
+  if (env.playConfig === null && env.SYNC_OPEN_TO_ALL) {
     return { syncing: true, refusal: null };
   }
 
