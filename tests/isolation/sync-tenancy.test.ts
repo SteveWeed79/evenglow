@@ -107,6 +107,18 @@ async function buildApp() {
       MONGODB_URI: harness!.uri,
       MONGODB_DB: 'steading_isolation',
       CORS_ORIGINS: 'https://app.test',
+      /**
+       * Open deliberately, because none of this file is about entitlement.
+       *
+       * `syncAccess` refuses an ungranted farm on a server with no Play
+       * configuration, which is the right default and the wrong fixture here:
+       * every test below is about tenancy, idempotency, role refusal and
+       * ordering, and a 402 in front of them would test the gate seven times
+       * instead. The gate has its own file — `unit/sync-access.test.ts` — and
+       * the granted and refused paths through this route are covered in
+       * `claim.test.ts`.
+       */
+      SYNC_OPEN_TO_ALL: '1',
     }),
   );
 }

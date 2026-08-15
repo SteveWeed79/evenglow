@@ -38,7 +38,7 @@ const HAND_A = ulid();
 
 const describeDb = harness ? describe : describe.skip;
 
-async function server() {
+async function server(over: Record<string, string> = {}) {
   const { buildServer } = await import('@steading/api/server');
   const { readEnv } = await import('@steading/api/env');
   return buildServer(
@@ -47,6 +47,7 @@ async function server() {
       MONGODB_URI: harness!.uri,
       MONGODB_DB: 'steading_claim',
       CORS_ORIGINS: 'https://app.test',
+      ...over,
     }),
   );
 }
@@ -459,34 +460,95 @@ describeDb('join codes', () => {
 });
 
 /**
- * Who the gate applies to (D13).
+ * What a server without a payment rail charges for — which is no longer
+ * "nothing", and the reasoning that used to say otherwise was right.
  *
- * CI found this rather than review did, and it was a real flaw rather than a
- * broken fixture: **a self-hosted Steading has no Play Console, so no farm on
- * it can ever subscribe** — and a gate that ignored that would refuse every
- * flush on somebody's own box, forever, with no way out. The whole of
- * `ACCESS-AND-BILLING.md` is built around exactly that box.
+ * The note here used to read: **a self-hosted Steading has no Play Console, so
+ * no farm on it can ever subscribe** — and a gate that ignored that would
+ * refuse every flush on somebody's own box, forever, with no way out. That is
+ * still the danger, and it is why the rail was open by default for as long as
+ * it was.
  *
- * It is also the honest reading of D13: the subscription pays for *this
+ * What changed is the box this project actually runs on. Its install page is
+ * public — it has to be, for a tester to reach it — and the hostname is in
+ * Certificate Transparency logs from the moment a certificate is issued, so a
+ * stranger finding it is a matter of when. Open-by-default meant they got an
+ * account and unlimited storage on somebody else's disk. Reported from that
+ * box: *"people using the app is good, people filling my db for free is bad."*
+ *
+ * So the default closed, and the "no way out" half was answered rather than
+ * ignored. There are three ways through and one of them needs no shell at all:
+ * `FREE_SYNC_ORGS`, `pnpm farm:grant`, and a promotion code the farm redeems
+ * itself. `pnpm db:seed` grants the farm it creates, so standing up a box for
+ * your own farm still works on the first try.
+ *
+ * D13 is unchanged and is what this rests on: the subscription pays for *this
  * project* to hold a farm's records. A farm holding its own records on its own
- * hardware owes nobody anything.
+ * hardware owes nobody anything — and gets a grant for free, from the person
+ * with the shell.
  */
 describeDb('what a server without a payment rail charges for', () => {
-  it('charges for nothing, so a self-hosted farm can sync', async () => {
+  /**
+   * The protection, stated as the first case because it is the new default and
+   * the reason any of this moved.
+   *
+   * A real mutation rather than an empty batch: an empty one is refused as
+   * malformed, which would make this pass for the wrong reason.
+   */
+  it('refuses a farm nobody granted anything', async () => {
     const app = await server();
-    const payload = claim();
-
-    const created = await app.inject({ method: 'POST', url: '/auth/signup', payload });
+    const created = await app.inject({ method: 'POST', url: '/auth/signup', payload: claim() });
     expect(created.statusCode).toBe(201);
 
-    /**
-     * A brand-new farm with no subscription at all, on a server with no Play
-     * credentials — which is every server this repo can build today.
-     *
-     * A real mutation rather than an empty batch: an empty one is refused as
-     * malformed, which would make this pass for the wrong reason on the day
-     * the gate came back.
-     */
+    const flush = await app.inject({
+      method: 'POST',
+      url: '/sync',
+      headers: { authorization: `Bearer ${created.json().accessToken}` },
+      payload: { mutations: [makeMutation()] },
+    });
+
+    expect(flush.statusCode).toBe(402);
+    expect(flush.json().refusal).toBe('unsubscribed');
+    await app.close();
+  });
+
+  /** The way out, which is the half the old note said did not exist. */
+  it('syncs once somebody with a shell grants it', async () => {
+    const { setSyncGrant } = await import('@steading/api/db/identity');
+    const app = await server();
+    // Named before the payload is built, so the grant below needs no cast off
+    // a `Record<string, unknown>` spread.
+    const orgId = ulid();
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/auth/signup',
+      payload: claim({ orgId }),
+    });
+    expect(created.statusCode).toBe(201);
+
+    await setSyncGrant(orgId, { at: new Date(), note: 'this farm, on this box' });
+
+    const flush = await app.inject({
+      method: 'POST',
+      url: '/sync',
+      headers: { authorization: `Bearer ${created.json().accessToken}` },
+      payload: { mutations: [makeMutation()] },
+    });
+
+    expect(flush.statusCode).toBe(200);
+    expect(flush.json().results[0].status).toBe('applied');
+    await app.close();
+  });
+
+  /**
+   * And a box deliberately left open still behaves the way every self-hosted
+   * server did before the default moved — one variable, said out loud.
+   */
+  it('charges for nothing when told to be open', async () => {
+    const app = await server({ SYNC_OPEN_TO_ALL: '1' });
+    const created = await app.inject({ method: 'POST', url: '/auth/signup', payload: claim() });
+
     const flush = await app.inject({
       method: 'POST',
       url: '/sync',
