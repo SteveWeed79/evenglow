@@ -11,7 +11,7 @@ import {
 } from '@steading/contracts';
 import { groupPhrase } from '@steading/core/voice';
 import { latestWeightBySubject, listWeights } from '@steading/core/read/breeding';
-import { lastFedByGroup, listGroups, lossesByGroup, produceToday } from '@steading/core/read/groups';
+import { type Group, lastFedByGroup, listGroups, lossesByGroup, produceToday } from '@steading/core/read/groups';
 import { withdrawalsBySubject } from '@steading/core/read/withdrawals';
 import { Row } from '../components/Form';
 import { Icon } from '../components/Icon';
@@ -45,14 +45,40 @@ import { FONTS, SPACE, TYPE } from '../theme/tokens';
  */
 export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement {
   const { groupId } = route.params;
-  const nav = useNav();
-  const { colors } = useTheme();
-  const units = useUnits();
 
   const groups = useLive(listGroups);
   const group = groups?.find((g) => g.id === groupId) ?? null;
 
-  // Above the guards below: hooks cannot sit behind an early return.
+  if (groups === null) return <Loading title="Stock" />;
+  if (group === null) return <Missing title="Stock" what="That group" />;
+
+  return (
+    <Screen title={group.name} back>
+      <GroupBody group={group} />
+    </Screen>
+  );
+}
+
+/**
+ * One group, without a screen around it.
+ *
+ * Split out so the Stock hub can render it in a supporting pane beside the
+ * list — the list-detail arrangement in `docs/LANDSCAPE-PLAN.md` — and split
+ * by **taking the wrapper off** rather than by writing a second version. There
+ * is one group hub in this app and it is this; a pane and a pushed screen that
+ * were two components would be two places for a withdrawal banner to be
+ * forgotten.
+ *
+ * Takes the record, not an id: both callers have already loaded the list it
+ * came from, and it is what keeps the not-found guard on the screen, where it
+ * can answer with a whole `Missing` rather than a panel inside half a layout.
+ */
+export function GroupBody({ group }: { group: Group }): React.ReactElement {
+  const groupId = group.id;
+  const nav = useNav();
+  const { colors } = useTheme();
+  const units = useUnits();
+
   const [more, setMore] = useState(false);
 
   const withdrawals = useLive(
@@ -62,9 +88,6 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
   const losses = useLive(lossesByGroup);
   const lastFed = useLive(lastFedByGroup);
   const weights = useLive(listWeights);
-
-  if (groups === null) return <Loading title="Stock" />;
-  if (group === null) return <Missing title="Stock" what="That group" />;
 
   const traits = SPECIES_TRAITS[group.species];
 
@@ -85,7 +108,7 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
   const shorn = produce?.get(`${groupId}:fibre`);
 
   return (
-    <Screen title={group.name} back>
+    <>
       {/* ## Said, not printed
           This line had the species' own word in it all along — herd, drove,
           gaggle — and rendered it as `CHICKENS · FLOCK · 10 HEAD ·
@@ -334,7 +357,7 @@ export function GroupScreen({ route }: ScreenProps<'Group'>): React.ReactElement
           />
         </View>
       ) : null}
-    </Screen>
+    </>
   );
 }
 

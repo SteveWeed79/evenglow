@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { Text } from 'react-native';
 import { newId } from '@steading/contracts';
-import { LAYOUT } from '../../apps/mobile/src/theme/tokens';
+import { LAYOUT, SPACE } from '../../apps/mobile/src/theme/tokens';
 import { Screen } from '../../apps/mobile/src/components/Screen';
 import { freshStore } from '../support/store';
 import { mount } from '../support/screen';
-import { seedSecureStore } from '../support/native/modules';
+import { seedInsets, seedSecureStore } from '../support/native/modules';
 
 /**
  * The width the app is allowed to become.
@@ -23,19 +23,38 @@ import { seedSecureStore } from '../support/native/modules';
  * 1280dp. This is the cap that stops it, and it is asserted rather than
  * commented because a `maxWidth` with no visible effect on any phone is
  * exactly the line a future reader deletes as dead.
+ *
+ * ## What `wide` added, and why it does not undo any of the above
+ *
+ * Two kinds of screen have since been let out to `LAYOUT.wide` — the charts,
+ * which have no line length to ruin, and the hub grids, which are equivalent
+ * things rather than prose. The cap is not gone for them; it is a different
+ * cap, and it is still a cap. Both are asserted below, because "the column
+ * grew a way to be opted out of" is precisely the change that would let it
+ * quietly become no column at all.
  */
 
 const ORG = newId();
 
 beforeEach(async () => {
   await freshStore();
+  // Upright unless a test says otherwise. Reset here rather than inside
+  // `mount`, which runs after a test has already seeded and would undo it.
+  seedInsets();
   seedSecureStore({
     'steading.claims': JSON.stringify({ userId: 'u1', orgId: ORG, role: 'owner' }),
   });
 });
 
 /**
- * Every style object in the tree, flattened — arrays and nesting included.
+ * Every element's *effective* style, arrays and nesting flattened per element.
+ *
+ * One object per element rather than one per fragment, which is the correction
+ * this helper needed when the cap moved inline: `[styles.content, { maxWidth }]`
+ * is one element's style in two pieces, and a helper that pushed the pieces
+ * separately reported an element that was capped *and* full-width as two
+ * elements that were each only one of those. The layout engine merges them, so
+ * this does too.
  *
  * `contentContainerStyle` as well as `style`, because the content cap lives on
  * the ScrollView's *container* rather than on the scroll surface, and a helper
@@ -52,12 +71,20 @@ function styles(node: unknown, out: Record<string, unknown>[] = []): Record<stri
     props?: { style?: unknown; contentContainerStyle?: unknown };
     children?: unknown;
   };
-  const flatten = (s: unknown): void => {
-    if (Array.isArray(s)) return void s.forEach(flatten);
-    if (typeof s === 'object' && s !== null) out.push(s as Record<string, unknown>);
-  };
-  if (n.props?.style !== undefined) flatten(n.props.style);
-  if (n.props?.contentContainerStyle !== undefined) flatten(n.props.contentContainerStyle);
+
+  for (const key of ['style', 'contentContainerStyle'] as const) {
+    const value = n.props?.[key];
+    if (value === undefined) continue;
+
+    const merged: Record<string, unknown> = {};
+    const flatten = (s: unknown): void => {
+      if (Array.isArray(s)) return void s.forEach(flatten);
+      if (typeof s === 'object' && s !== null) Object.assign(merged, s);
+    };
+    flatten(value);
+    if (Object.keys(merged).length > 0) out.push(merged);
+  }
+
   if (n.children !== undefined) styles(n.children, out);
   return out;
 }
@@ -70,9 +97,7 @@ describe('the reading column', () => {
       </Screen>,
     );
 
-    const capped = styles(screen.tree.toJSON()).filter(
-      (s) => s.maxWidth === LAYOUT.column,
-    );
+    const capped = styles(screen.tree.toJSON()).filter((s) => s.maxWidth === LAYOUT.column);
 
     /**
      * Both, and the pairing is the point: capping only the content would leave
@@ -128,5 +153,124 @@ describe('the reading column', () => {
     // fills anything below it and stops growing at exactly the point the
     // platform stops guaranteeing portrait.
     expect(LAYOUT.column).toBe(600);
+  });
+});
+
+describe('a wide screen', () => {
+  /**
+   * `wide` moves the cap; it does not remove it.
+   *
+   * And it moves *both* caps together. A hub whose content reached 1104 while
+   * its status row stayed at 600 would put the settings gear in the middle of
+   * its own content — the same mistake the column comment warns about,
+   * mirrored, and the one this pairing exists to prevent in both directions.
+   */
+  it('moves both caps out to LAYOUT.wide, together', async () => {
+    const screen = await mount(
+      <Screen title="The farm" wide>
+        <Text>a row</Text>
+      </Screen>,
+    );
+
+    const all = styles(screen.tree.toJSON());
+    const capped = all.filter((s) => s.maxWidth === LAYOUT.wide);
+
+    expect(capped.length).toBeGreaterThanOrEqual(2);
+    for (const s of capped) expect(s.width).toBe('100%');
+
+    // And nothing is left behind at the narrow cap, which is what a change
+    // that widened only one of the two would look like.
+    expect(all.some((s) => s.maxWidth === LAYOUT.column)).toBe(false);
+    screen.unmount();
+  });
+
+  it('is still a cap, and still the one the panes will use', () => {
+    expect(LAYOUT.wide).toBe(LAYOUT.column + LAYOUT.spacer + LAYOUT.aside.max);
+    expect(LAYOUT.wide).toBeGreaterThan(LAYOUT.column);
+  });
+});
+
+/**
+ * The gap the wasted space was hiding.
+ *
+ * `insets.left` and `insets.right` were read nowhere in this app. Top and
+ * bottom cover a phone completely, because in portrait the cutout and the
+ * gesture bar are both on the short edges — but the app turns on a tablet, and
+ * in landscape they move to a side edge where nothing was reserving for them.
+ *
+ * It survived because the content sat 340dp from either edge with nothing in
+ * between. `wide` is what spends that margin, so this had to land in the same
+ * pass rather than after somebody found it on a device.
+ */
+describe('a landscape cutout', () => {
+  const CUT = { left: 48, right: 24 };
+
+  it('keeps the content out from under it', async () => {
+    seedInsets(CUT);
+    const screen = await mount(
+      <Screen title="The farm" wide>
+        <Text>a row</Text>
+      </Screen>,
+    );
+
+    const all = styles(screen.tree.toJSON());
+
+    // On the scroll's container, so the column centres inside the safe area
+    // rather than inside the window.
+    expect(
+      all.some((s) => s.paddingLeft === CUT.left && s.paddingRight === CUT.right),
+    ).toBe(true);
+
+    // And on the status row, added to its own padding rather than replacing
+    // it — the gear must clear the cutout AND keep its margin.
+    expect(
+      all.some(
+        (s) =>
+          s.paddingLeft === SPACE.lg + CUT.left && s.paddingRight === SPACE.lg + CUT.right,
+      ),
+    ).toBe(true);
+
+    screen.unmount();
+  });
+
+  /**
+   * And the wall still reaches the edge.
+   *
+   * The tempting fix is `paddingHorizontal` on the ground, which is one line
+   * shorter and wrong: `<Plaster />` is an `absoluteFill` inside it, so the
+   * padding would inset the texture too and letterbox the app in bare
+   * background. That is the same thing the ground test above guards, arriving
+   * from a different direction.
+   */
+  it('does not inset the wall', async () => {
+    seedInsets(CUT);
+    const screen = await mount(
+      <Screen title="The farm" wide>
+        <Text>a row</Text>
+      </Screen>,
+    );
+
+    const root = screen.tree.toJSON();
+    const ground = styles(Array.isArray(root) ? root[0] : root)[0];
+
+    expect(ground?.flex).toBe(1);
+    expect(ground?.paddingLeft).toBeUndefined();
+    expect(ground?.paddingRight).toBeUndefined();
+    expect(ground?.paddingHorizontal).toBeUndefined();
+    screen.unmount();
+  });
+
+  it('reserves nothing on a phone, which is every device that does not turn', async () => {
+    const screen = await mount(
+      <Screen title="Today">
+        <Text>a row</Text>
+      </Screen>,
+    );
+
+    // The default stub is a portrait handset: left and right are zero, so this
+    // whole change is a no-op on the shipping case and cannot regress it.
+    const all = styles(screen.tree.toJSON());
+    expect(all.some((s) => s.paddingLeft === SPACE.lg && s.paddingRight === SPACE.lg)).toBe(true);
+    screen.unmount();
   });
 });

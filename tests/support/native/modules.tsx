@@ -71,8 +71,32 @@ export default Svg;
 
 // ── react-native-safe-area-context ───────────────────────────────────────────
 
+/**
+ * A portrait handset's safe area, which is the default because it is the
+ * overwhelming majority of what this app runs in.
+ *
+ * `left` and `right` are zero there and non-zero on a tablet in landscape,
+ * where a display cutout and the gesture bar move to a side edge. That case is
+ * the reason `Screen` reserves for them at all, so it has to be reachable —
+ * see {@link seedInsets}.
+ */
+const PORTRAIT = { top: 24, bottom: 16, left: 0, right: 0 };
+
+let insets = { ...PORTRAIT };
+
 export function useSafeAreaInsets(): { top: number; bottom: number; left: number; right: number } {
-  return { top: 24, bottom: 16, left: 0, right: 0 };
+  return insets;
+}
+
+/**
+ * Puts the device on its side, or back upright.
+ *
+ * Called with no arguments it restores the portrait handset, which is what
+ * `tests/support/screen.tsx` does between mounts so one landscape test cannot
+ * leak into the next.
+ */
+export function seedInsets(next: Partial<typeof PORTRAIT> = {}): void {
+  insets = { ...PORTRAIT, ...next };
 }
 
 export const SafeAreaProvider = host('SafeAreaProvider');

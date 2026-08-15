@@ -309,8 +309,77 @@ export const SPACE = { xs: 4, sm: 8, md: 12, lg: 20, xl: 32 } as const;
  * Applied to the status bar as well as the content, and that pairing is the
  * point: capping only the content would leave the lamp and the settings gear
  * out at the far edge of a 1280dp screen, pointing at a column in the middle.
+ *
+ * ## What the column is not
+ *
+ * It is a **measure**, not a container. 600dp of 17dp body text is 70–80
+ * characters, which is the top of the range a line can be read at — so the
+ * answer to a window wider than this is never a wider column. It is more
+ * columns, and the rest of the numbers below are what makes that sayable.
+ *
+ * See `theme/window.ts` for the sizes the app is allowed to notice, and
+ * `docs/LANDSCAPE-PLAN.md` for the arrangement they are for.
  */
-export const LAYOUT = { column: 600 } as const;
+export const LAYOUT = {
+  /** The measure. Never widen it; add a pane instead. */
+  column: 600,
+  /**
+   * Between two panes, and outside the pair.
+   *
+   * One number for both because they are the same gap seen from either side —
+   * and 24 is `SPACE.lg + 4` rather than a sixth space token, since the scale
+   * has no 24 and this is the only place that wants one.
+   */
+  spacer: 24,
+  margin: 24,
+  /**
+   * The supporting pane.
+   *
+   * The floor is what a due row plus its "2 days late" needs before it starts
+   * wrapping every line. The ceiling is the same argument as the column's: an
+   * unbounded aside on a 1600dp screen is the metre of plaster again, just in
+   * a second column.
+   */
+  aside: { min: 320, max: 480 },
+  /**
+   * The widest the app's content ever gets — column, spacer and a full aside.
+   *
+   * Used by screens with no aside that still want the room: the hub grids and
+   * the charts. Sharing the number is the point. A hub laid out to 1104 and a
+   * two-pane screen laid out to 1104 do not jump about relative to each other
+   * when you move between them, which they would if each picked its own width.
+   */
+  wide: 600 + 24 + 480,
+  /**
+   * The narrowest a grid cell may be before the grid drops a column.
+   *
+   * Sized for a `Row` — a title and a sentence of detail under it — rather
+   * than for a card, because Row is what the hubs are made of and it is the
+   * one that reads badly narrow. At `wide` this yields two columns and keeps
+   * yielding two however large the display gets, which is deliberate: three
+   * columns of hub rows is a directory, not a hub.
+   */
+  cell: 400,
+  /**
+   * The navigation rail.
+   *
+   * **Chrome that eats width**, which is why it is a token the pane arithmetic
+   * can see rather than a number invented at the point of use.
+   *
+   * 96 rather than Material's 80, and the reason is that this bar has no
+   * icons. A rail is 80 wide because it holds a 24dp glyph with a short word
+   * under it; ours holds the word alone, and `tab-marks.ts` caps a name at
+   * eight characters — 8 × IBM Plex Mono at `TYPE.label` plus its tracking is
+   * about 70dp, which does not fit inside 80 less padding. `TabMark`'s comment
+   * records this bar clipping its labels twice already, both times because a
+   * word was put in a box measured for something else. Not a third time.
+   *
+   * The trade still favours the rail: 96dp of width for the 88dp of height the
+   * bottom bar was spending, on a landscape tablet that is *medium* height and
+   * *large* width.
+   */
+  rail: 96,
+} as const;
 
 /**
  * The arch's geometry — used by `<Arch>`, which draws it. NOT a border radius.

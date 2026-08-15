@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import {
   formatMass,
   gramsToUg,
@@ -279,8 +279,54 @@ export function WeighScreen({ route }: ScreenProps<'Weigh'>): React.ReactElement
   const subject = animalId ?? groupId;
   const previous = weights === null ? undefined : latestWeightBySubject(weights).get(subject);
 
+  /**
+   * The form keeps its column; the pane carries what you would otherwise have
+   * to remember.
+   *
+   * **A form is never two columns.** The eye zigzags, focus order stops
+   * matching reading order, and a failed save becomes ambiguous about which
+   * side it belongs to. That rule is in `docs/LANDSCAPE-PLAN.md` and it is not
+   * bent here — every field stays in the 600dp column exactly where it is on a
+   * phone.
+   *
+   * What the second column is for is *context for the thing being logged*.
+   * Weighing an animal beside the last three weighings is a better form than
+   * weighing it alone: it is the difference between typing a number and
+   * knowing whether the number is plausible. On a narrow window it restacks
+   * underneath, which is where a person would have had to scroll for it
+   * anyway — nothing is lost, it is just further away.
+   */
+  const history = (weights ?? [])
+    .filter((entry) => (entry.animalId ?? entry.flockId) === subject)
+    .sort((a, b) => b.occurredAt - a.occurredAt)
+    .slice(0, 3);
+
   return (
-    <Screen title="Weigh" back>
+    <Screen
+      title="Weigh"
+      back
+      {...(history.length === 0
+        ? {}
+        : {
+            aside: (
+              <Panel label="Last three">
+                {history.map((entry) => (
+                  <View key={entry.id} style={styles.past}>
+                    <Text style={[styles.label, { color: colors.muted }]}>
+                      {new Date(entry.occurredAt).toLocaleDateString(undefined, {
+                        day: 'numeric',
+                        month: 'short',
+                      })}
+                    </Text>
+                    <Text style={[styles.pastMass, { color: colors.ink }]}>
+                      {formatMass(entry.massUg, units)}
+                    </Text>
+                  </View>
+                ))}
+              </Panel>
+            ),
+          })}
+    >
       <Text style={[styles.label, { color: colors.muted }]}>{group.name}</Text>
 
       {named.length > 0 ? (
@@ -544,6 +590,15 @@ function describeChange(before: number, now: number, units: UnitSystem): string 
 }
 
 const styles = StyleSheet.create({
+  /**
+   * A past weighing: the date quiet, the mass loud.
+   *
+   * A row rather than a stack, because three of these are read as a column of
+   * numbers with dates beside them — the shape a person scans for "is it going
+   * up" — not as three little cards.
+   */
+  past: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  pastMass: { fontFamily: FONTS.display, fontSize: TYPE.title, fontVariant: ['tabular-nums'] },
   label: {
     fontFamily: FONTS.data,
     fontSize: TYPE.label,

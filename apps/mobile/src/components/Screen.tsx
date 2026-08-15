@@ -11,6 +11,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ContentWidthProvider } from './Grid';
 import { Icon } from './Icon';
 import { LampToggle } from './LampToggle';
 import { Plaster } from './Plaster';
@@ -18,6 +19,8 @@ import { RevealProvider, scrollToClear, type Measurable, type Reveal } from './r
 import { SyncChip } from './SyncChip';
 import { Touch } from './Touch';
 import { useTrouble } from '../hooks/useTrouble';
+import { useWindow } from '../hooks/useWindow';
+import { asideWidth } from '../theme/window';
 import type { RootParamList } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, LAYOUT, SPACE, TAP, TYPE } from '../theme/tokens';
@@ -39,6 +42,9 @@ export function Screen({
   children,
   contentStyle,
   back = false,
+  wide = false,
+  above,
+  aside,
 }: {
   title: string;
   /**
@@ -54,9 +60,98 @@ export function Screen({
   contentStyle?: ViewStyle;
   /** Shows a back chevron instead of the date. Pushed screens only. */
   back?: boolean;
+  /**
+   * Lets this screen out of the reading column, as far as `LAYOUT.wide`.
+   *
+   * **Only for screens whose content is not prose.** The 600dp cap is a
+   * measure — 70–80 characters of body text — and widening it for a screen
+   * made of sentences and rows is the "metre of plaster" failure `tokens.ts`
+   * describes, arriving by invitation instead of by accident.
+   *
+   * Two kinds of screen have earned it. A **chart** has no line length to
+   * ruin, and width there is literally more information: a season's
+   * production at 1000dp shows more days than at 600. A **hub** is a grid of
+   * equivalent things rather than a column of prose — the canonical feed
+   * layout — and `<Grid>` puts a floor under how narrow a cell may get, so the
+   * rows inside it never stretch past their own measure however wide the
+   * screen is.
+   *
+   * `LAYOUT.wide` rather than "the whole window" on purpose: it is the same
+   * 1104 a two-pane screen will assemble to, so moving between a hub and Today
+   * does not shift the content sideways under somebody's eye.
+   */
+  wide?: boolean;
+  /**
+   * Content that spans both panes, under the hero and above everything else.
+   *
+   * For the things that **outrank the pane they would otherwise sit in**. On
+   * Today that is the weather alerts: `TodayScreen` argues its ordering at
+   * length — a farm reading top to bottom must not meet "your hens are warm"
+   * before a meteorologist saying a tornado is on the ground — and a safety
+   * banner parked in a side column is a banner nobody reads.
+   *
+   * At one pane this is simply the first thing under the hero, which is where
+   * those banners already are. So a screen that moves them here reads
+   * identically on a phone and correctly on a tablet.
+   */
+  above?: React.ReactNode;
+  /**
+   * The supporting pane, when there is room for one.
+   *
+   * Beside the column at `TWO_PANE_AT` and up; **below it** otherwise, which
+   * is Material's own answer for a compact window and the only one compatible
+   * with invariant 13. Nothing may be lost by being narrow, so this is never
+   * dropped — only restacked.
+   *
+   * Which means the order matters and is fixed: hero, `above`, `children`,
+   * `aside`. A screen has to be readable top to bottom in that order on a
+   * phone, because on a phone that is exactly what it is.
+   */
+  aside?: React.ReactNode;
 }): React.ReactElement {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  /**
+   * `!back` is "this is a tab screen", which is the same signal the bottom
+   * inset below already reads and for the same underlying fact: a pushed
+   * screen has no tab bar under it, and above the expanded boundary that bar
+   * is a rail taking width off the side.
+   */
+  const { usable, panes } = useWindow({ bar: !back });
+
+  const cap = wide ? LAYOUT.wide : LAYOUT.column;
+
+  /**
+   * Two panes only when there is both room and something to put in the second.
+   *
+   * A screen with no `aside` keeps the centred column it has always had,
+   * however wide the window is — the room is not a reason to invent a second
+   * column, and `wide` is the separate, deliberate opt-out for the screens
+   * that want the width without a pane.
+   */
+  const split = panes === 2 && aside !== undefined;
+  const asidePane = asideWidth(usable);
+
+  /**
+   * The margin is `LAYOUT.margin` when split and `SPACE.lg` when not, and that
+   * is not an inconsistency — it is the same number `asideWidth` already
+   * subtracted. The aside is sized as "whatever is left after the column, the
+   * spacer and two margins", so the frame has to actually spend those margins
+   * or the arithmetic and the layout disagree by 8dp.
+   */
+  const gutter = split ? LAYOUT.margin : SPACE.lg;
+  const frame = split ? LAYOUT.column + LAYOUT.spacer + asidePane + gutter * 2 : cap;
+
+  /**
+   * What `<Grid>` divides up: the column, less its own padding.
+   *
+   * Handed down rather than measured, because `onLayout` reports nothing in a
+   * suite with no layout engine — a grid that waited for it would render zero
+   * columns in every test. This is the same arithmetic the layout engine will
+   * do, from the same tokens, which is the method `landscape-fold.test.ts`
+   * already established for this codebase.
+   */
+  const content = split ? LAYOUT.column : Math.min(usable, cap) - SPACE.lg * 2;
   const navigation = useNavigation<NativeStackNavigationProp<RootParamList>>();
   const trouble = useTrouble();
 
@@ -132,12 +227,33 @@ export function Screen({
 
   return (
    <RevealProvider value={reveal}>
+   <ContentWidthProvider value={content}>
     <View style={[styles.ground, { backgroundColor: colors.ground, paddingTop: insets.top }]}>
       {/* Behind everything, never over it. The grain is a shipped tile because
           feTurbulence blended at soft-light has no RN form — see Plaster.tsx. */}
       <Plaster />
 
-      <View style={styles.status}>
+      {/**
+        * The horizontal insets go on the children, never on the ground.
+        *
+        * They were read nowhere in this app until now. `paddingTop` and the
+        * bottom inset cover a phone completely, because in portrait the
+        * cutout and the gesture bar are both on the short edges — but the app
+        * turns on a tablet, and in landscape they move to the left or right
+        * edge where nothing was reserving for them. It has gone unreported
+        * because the content sat 340dp from either edge; `wide` is what closes
+        * that gap, so this has to land in the same pass.
+        *
+        * On the children rather than the ground because `<Plaster />` is an
+        * `absoluteFill` inside the ground, and padding there would inset the
+        * wall as well — letterboxing the app in bare background, which is the
+        * failure `reading-column.test.tsx` already stands guard over.
+        */}
+      <View style={[styles.status, {
+        maxWidth: cap,
+        paddingLeft: SPACE.lg + insets.left,
+        paddingRight: SPACE.lg + insets.right,
+      }]}>
         {back ? (
           <Touch affordance="chevron"
             onPress={() => navigation.goBack()}
@@ -211,7 +327,14 @@ export function Screen({
           inside it is ordinary flexbox and cannot be anything else. */}
       <ScrollView
         ref={scroll}
-        contentContainerStyle={styles.scroll}
+        // The insets pad the scroll's CONTAINER, so the column is centred
+        // inside the safe area rather than inside the window. The scroll
+        // surface itself stays full-bleed — a thumb can still drag anywhere on
+        // a tablet, which is what the comment above is about.
+        contentContainerStyle={[
+          styles.scroll,
+          { paddingLeft: insets.left, paddingRight: insets.right },
+        ]}
         // Tapping a field then reaching for a stepper should not need the
         // keyboard dismissed first.
         keyboardShouldPersistTaps="handled"
@@ -245,6 +368,7 @@ export function Screen({
        <View
         style={[
           styles.content,
+          { maxWidth: frame, paddingHorizontal: gutter },
           /**
            * Only where nothing else is already standing in that space.
            *
@@ -306,12 +430,57 @@ export function Screen({
             )}
           </View>
         )}
-        {children}
+
+        {/* Spans both panes, because it outranks either of them. See `above`. */}
+        {above}
+
+        {/**
+          * Two panes, or one column with the aside restacked under it.
+          *
+          * The narrow branch is deliberately a bare fragment rather than a
+          * one-column version of the row: `styles.content` already supplies
+          * the gap between children, and wrapping them in a second flex
+          * container would add a box that changes nothing and can only
+          * introduce a difference between the two paths. A phone renders
+          * exactly the tree it rendered before this prop existed.
+          */}
+        {split ? (
+          <View style={styles.panes}>
+            <View style={[styles.pane, { width: LAYOUT.column }]}>{children}</View>
+            {/* `flex-start`, on the row rather than here: the two panes are
+                different lengths and a short aside must not stretch to match
+                a long column, or its last card grows a foot of empty card. */}
+            <View style={[styles.pane, { width: asidePane }]}>{aside}</View>
+          </View>
+        ) : (
+          <>
+            {children}
+            {aside}
+          </>
+        )}
        </View>
       </ScrollView>
     </View>
+   </ContentWidthProvider>
    </RevealProvider>
   );
+}
+
+/**
+ * The hero of a supporting pane.
+ *
+ * A pane has no `Screen` of its own, so nothing gives its contents a name —
+ * and the row that selected them is one of many in the other column and may
+ * well have been scrolled past. A pane that opened with "1.9 kg, 27 Jul" and
+ * no heading would be a list of numbers about nothing.
+ *
+ * The same face and size as the screen hero, deliberately: it is the title of
+ * what you are looking at, and a smaller one would rank the pane below the
+ * list rather than beside it.
+ */
+export function PaneTitle({ children }: { children: React.ReactNode }): React.ReactElement {
+  const { colors } = useTheme();
+  return <Text style={[styles.hero, { color: colors.ink }]}>{children}</Text>;
 }
 
 const styles = StyleSheet.create({
@@ -331,15 +500,18 @@ const styles = StyleSheet.create({
    * Capped here as well as on the content, and the pairing is the point: the
    * lamp and the settings gear left at the far edge of a 1280dp screen would
    * be pointing at a column in the middle of it.
+   *
+   * The cap itself is applied inline, because a `wide` screen moves both this
+   * and the content out to `LAYOUT.wide` together. Moving only one of them
+   * would put the gear inside the content on a hub, which is the same mistake
+   * the paragraph above is about, mirrored.
    */
   status: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: SPACE.lg,
     minHeight: TAP.min / 2,
     width: '100%',
-    maxWidth: LAYOUT.column,
     alignSelf: 'center',
   },
   controls: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
@@ -357,12 +529,23 @@ const styles = StyleSheet.create({
    */
   scroll: { flexGrow: 1, alignItems: 'center' },
   content: {
-    padding: SPACE.lg,
+    paddingTop: SPACE.lg,
     gap: SPACE.md,
     paddingBottom: SPACE.xl,
     width: '100%',
-    maxWidth: LAYOUT.column,
   },
+  /**
+   * The two panes.
+   *
+   * One scroll surface for both, not one each. Independent scrolling is what
+   * a desktop mail client does and it is wrong here: these panes are short,
+   * the app is operated with a thumb rather than a pointer, and two scroll
+   * regions on a touch screen means a drag that does something different
+   * depending on which half of the glass it started on.
+   */
+  panes: { flexDirection: 'row', gap: LAYOUT.spacer, alignItems: 'flex-start' },
+  /** Repeats the content gap, which the row's own `gap` is spending sideways. */
+  pane: { gap: SPACE.md },
   // Carries the margin the hero used to, so a screen with no subtitle sits
   // exactly where it did before.
   heading: { gap: 2, marginBottom: SPACE.xs },

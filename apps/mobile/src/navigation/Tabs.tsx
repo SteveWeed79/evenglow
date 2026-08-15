@@ -6,8 +6,10 @@ import { tabs } from './tab-marks';
 import { FarmScreen } from '../screens/FarmScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
 import { TodayScreen } from '../screens/TodayScreen';
+import { useWindow } from '../hooks/useWindow';
 import { useTheme } from '../theme/ThemeProvider';
-import { FONTS, TAP, TYPE } from '../theme/tokens';
+import { hasRail } from '../theme/window';
+import { FONTS, LAYOUT, SPACE, TAP, TYPE } from '../theme/tokens';
 
 /**
  * The tabs (UX-SPEC §4). Four, five where a farm runs everything — not six,
@@ -49,6 +51,7 @@ const Tab = createBottomTabNavigator<TabParamList>();
 export function Tabs(): React.ReactElement {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const { width } = useWindow();
 
   /**
    * The same three for every farm. What a farm runs still decides what it
@@ -57,10 +60,38 @@ export function Tabs(): React.ReactElement {
    */
   const TABS = tabs();
 
+  /**
+   * A bar on a phone, a rail on a tablet.
+   *
+   * ## What it buys
+   *
+   * 88dp of height back, on the axis a landscape tablet is short of — it is a
+   * *large*-width, *medium*-height window, and the bottom bar was spending its
+   * scarcer axis stretching three words across a metre. And it puts the three
+   * destinations at the edge a hand is already holding, instead of in the
+   * centre-bottom dead spot two thumbs cannot reach.
+   *
+   * ## Why this needs no new dependency
+   *
+   * `tabBarPosition: 'left'` with `tabBarVariant: 'material'` is
+   * react-navigation's own answer, and the material variant exists *only* for
+   * the left and right positions. `@react-navigation/bottom-tabs` is already
+   * here because the navigator requires it.
+   *
+   * ## Not yet seen on a handset
+   *
+   * The suite has no layout engine and every phone falls on the bar side of
+   * this branch, so nothing below has been looked at on a device. The label
+   * width is the specific worry — see `LAYOUT.rail`, and `TabMark` for the two
+   * times this bar has clipped a word already.
+   */
+  const rail = hasRail(width);
+
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
+        ...(rail ? { tabBarPosition: 'left', tabBarVariant: 'material' } : {}),
         /**
          * The word goes in the LABEL slot, which is the correction.
          *
@@ -98,14 +129,41 @@ export function Tabs(): React.ReactElement {
          * grows by the inset and the padding holds the content above it, so
          * what the marks sit in is the same size it always was.
          */
-        tabBarStyle: {
-          backgroundColor: colors.raised,
-          borderTopColor: colors.border,
-          borderTopWidth: StyleSheet.hairlineWidth * 2,
-          height: TAP.primary + 24 + insets.bottom,
-          paddingTop: 6,
-          paddingBottom: insets.bottom,
-        },
+        tabBarStyle: rail
+          ? {
+              backgroundColor: colors.raised,
+              /**
+               * The edge moves with the bar. A rail is divided from the
+               * content by its trailing edge, not by a top border — leaving
+               * `borderTopWidth` on would draw a hairline across the top of
+               * the rail, which is a line to nothing.
+               */
+              borderRightColor: colors.border,
+              borderRightWidth: StyleSheet.hairlineWidth * 2,
+              width: LAYOUT.rail + insets.left,
+              /**
+               * The left inset is the rail's problem now, exactly as the
+               * bottom inset was the bar's.
+               *
+               * In landscape the cutout and the gesture bar move to a side
+               * edge — the same insets `Screen` started reserving for — and
+               * the rail is the thing that actually meets that edge. It grows
+               * by the inset and pads its items past it, so the words sit
+               * where they always did relative to the rail rather than
+               * shifting when a device happens to have a cutout.
+               */
+              paddingLeft: insets.left,
+              paddingTop: SPACE.lg,
+              paddingBottom: insets.bottom,
+            }
+          : {
+              backgroundColor: colors.raised,
+              borderTopColor: colors.border,
+              borderTopWidth: StyleSheet.hairlineWidth * 2,
+              height: TAP.primary + 24 + insets.bottom,
+              paddingTop: 6,
+              paddingBottom: insets.bottom,
+            },
         // A tab is one of the two things tapped through a glove. It gets the
         // full primary target even though the icon is 26px.
         tabBarItemStyle: { minHeight: TAP.primary },
@@ -114,8 +172,15 @@ export function Tabs(): React.ReactElement {
          * background and under the items — which is the whole reason this
          * option exists and why the dividers do not need the background moved
          * out of `tabBarStyle` to be visible.
+         *
+         * **Omitted entirely on a rail, rather than turned sideways.** The
+         * dividers exist because three words in a row across a metre of bar
+         * need something saying where one tab ends and the next begins.
+         * Stacked in a 96dp rail they are already obviously three things, and
+         * two horizontal hairlines would be furniture — the same argument
+         * `Icon.tsx` records for cutting sixty-four marks to sixteen.
          */
-        tabBarBackground: () => <TabDividers count={TABS.length} />,
+        ...(rail ? {} : { tabBarBackground: () => <TabDividers count={TABS.length} /> }),
       }}
     >
       {TABS.map(({ name }) => (

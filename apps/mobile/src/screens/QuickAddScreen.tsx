@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { SPECIES_TRAITS } from '@steading/contracts';
 import { Row } from '../components/Form';
+import { Grid } from '../components/Grid';
 import { Loading } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
@@ -140,32 +141,39 @@ export function QuickAddScreen(): React.ReactElement {
 
   if (act === null) {
     return (
-      <Screen title="Log something" back>
-        {ACTS.map((option) => (
-          <Row
-            key={option.key}
-            title={option.title}
-            detail={option.detail}
-            testID={`quick-${option.key}`}
-            onPress={() => choose(option)}
-          />
-        ))}
+      /* Verb first: four equivalent doors, which is a grid the moment there
+         is room for one. This is the screen R1's tap budget is measured on,
+         so halving the distance to the bottom two is the point. */
+      <Screen title="Log something" back wide>
+        <Grid testID="quick-acts">
+          {ACTS.map((option) => (
+            <Row
+              key={option.key}
+              title={option.title}
+              detail={option.detail}
+              testID={`quick-${option.key}`}
+              onPress={() => choose(option)}
+            />
+          ))}
+        </Grid>
       </Screen>
     );
   }
 
   return (
-    <Screen title={act.title} back>
+    <Screen title={act.title} back wide>
       {/* The act is already chosen, so this asks one thing and says which. */}
-      {groups.map((group) => (
-        <Row
-          key={group.id}
-          title={group.name}
-          detail={`${group.count} ${SPECIES_TRAITS[group.species].label.toLowerCase()}`}
-          testID={`quick-group-${group.id}`}
-          onPress={() => open(act, group.id)}
-        />
-      ))}
+      <Grid testID="quick-groups">
+        {groups.map((group) => (
+          <Row
+            key={group.id}
+            title={group.name}
+            detail={`${group.count} ${SPECIES_TRAITS[group.species].label.toLowerCase()}`}
+            testID={`quick-group-${group.id}`}
+            onPress={() => open(act, group.id)}
+          />
+        ))}
+      </Grid>
     </Screen>
   );
 }

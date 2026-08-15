@@ -105,7 +105,7 @@ export function NumbersScreen(): React.ReactElement {
     value > 0 ? `${Math.round(value).toLocaleString()} h` : '—';
 
   return (
-    <Screen title="The numbers" subtitle={String(now.year)} back>
+    <Screen title="The numbers" subtitle={String(now.year)} back wide>
       {/* What a farm runs decides what it sees (§4). A section with nothing in
           it is a question mark rather than an answer, so each of these appears
           only once there is something to put in it — and each stays once there

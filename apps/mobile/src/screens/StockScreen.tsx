@@ -1,17 +1,21 @@
+import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { formatRange, libraryBreed, SPECIES_TRAITS } from '@steading/contracts';
 import type { Group } from '@steading/core/read/groups';
 import { groupPhrase } from '@steading/core/voice';
 import { Primary } from '../components/Form';
+import { Grid } from '../components/Grid';
 import { Icon } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
-import { Screen } from '../components/Screen';
+import { PaneTitle, Screen } from '../components/Screen';
 import { Touch } from '../components/Touch';
 import { growOutWindow, layOnsetWindow } from '../hooks/useDues';
 import { useGroups } from '../hooks/useGroups';
 import { useTheme } from '../theme/ThemeProvider';
 import { useNav } from '../hooks/useNav';
-import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
+import { useWindow } from '../hooks/useWindow';
+import { GroupBody } from './GroupScreen';
+import { FONTS, LAYOUT, RADII, SPACE, TYPE } from '../theme/tokens';
 
 /**
  * Stock — the animals you keep.
@@ -26,11 +30,42 @@ import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
 export function StockScreen(): React.ReactElement {
   const { groups, loading } = useGroups();
   const nav = useNav();
+  const { panes } = useWindow();
+  const [chosen, setChosen] = useState<string | null>(null);
 
   if (loading) return <Screen title="Stock" back>{null}</Screen>;
 
+  /**
+   * List-detail, on the same terms as Iron and History.
+   *
+   * The group hub opens beside the list rather than over it, and the pushed
+   * route is untouched — a phone navigates exactly as it did. `GroupScreen`
+   * was split by taking its `<Screen>` wrapper off, so the pane and the pushed
+   * screen are one component: there is no second group hub to keep in step,
+   * and no second place for a withdrawal banner to go missing.
+   *
+   * The first group selects itself, because a detail pane that opens empty is
+   * half a screen of nothing.
+   */
+  const split = panes === 2 && groups.length > 0;
+  const open = split ? (groups.find((g) => g.id === chosen) ?? groups[0] ?? null) : null;
+
   return (
-    <Screen title="Stock" back>
+    <Screen
+      title="Stock"
+      back
+      wide
+      {...(open === null
+        ? {}
+        : {
+            aside: (
+              <>
+                <PaneTitle>{open.name}</PaneTitle>
+                <GroupBody group={open} />
+              </>
+            ),
+          })}
+    >
       {groups.length === 0 ? (
         <Panel label="Nothing here yet">
           {/* Empty screens invite (UX-SPEC §6). */}
@@ -40,13 +75,18 @@ export function StockScreen(): React.ReactElement {
           </Body>
         </Panel>
       ) : (
-        groups.map((group) => (
-          <GroupCard
-            key={group.id}
-            group={group}
-            onPress={() => nav.navigate('Group', { groupId: group.id })}
-          />
-        ))
+        <Grid cell={LAYOUT.column / 2} testID="stock-grid">
+          {groups.map((group) => (
+            <GroupCard
+              key={group.id}
+              group={group}
+              // Beside a pane a card selects; without one it navigates.
+              onPress={() =>
+                split ? setChosen(group.id) : nav.navigate('Group', { groupId: group.id })
+              }
+            />
+          ))}
+        </Grid>
       )}
 
       <Primary

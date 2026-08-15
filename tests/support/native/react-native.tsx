@@ -60,9 +60,34 @@ export const StyleSheet = {
   absoluteFillObject: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
 };
 
-/** A phone-shaped viewport, so the Tally's fraction-of-short-edge maths runs. */
+/**
+ * A phone-shaped viewport, so the Tally's fraction-of-short-edge maths runs.
+ *
+ * It is also what makes every other screen test an assertion about the phone
+ * case: a hub grid asked to lay out 350dp of content reports one column, so
+ * the whole suite is standing guard over "below the threshold, this renders
+ * exactly what shipped before". The tablet case has to be asked for — see
+ * {@link seedWindow}.
+ */
+const PHONE = { width: 390, height: 844 };
+
+let viewport = { ...PHONE };
+
 export function useWindowDimensions(): { width: number; height: number } {
-  return { width: 390, height: 844 };
+  return viewport;
+}
+
+/**
+ * Puts the app in a different window, or back in the phone.
+ *
+ * Called with no arguments it restores the handset. Note this does NOT move
+ * `Dimensions.get('screen')` below, and that is deliberate rather than an
+ * oversight: the screen is the display and the window is what the app
+ * occupies, they are genuinely different numbers under a split, and
+ * `theme/rotation.ts` and `theme/window.ts` read one each.
+ */
+export function seedWindow(next: Partial<typeof PHONE> = {}): void {
+  viewport = { ...PHONE, ...next };
 }
 
 export function useColorScheme(): 'light' | 'dark' {

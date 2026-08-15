@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { listInventory, listMachines, listServices } from '@steading/core/read/iron';
+import { listInventory, listMachines, listServices, type Machine } from '@steading/core/read/iron';
 import { partsNote } from '@steading/contracts';
 import { Primary, Row } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
@@ -25,23 +25,49 @@ import { FONTS, SPACE, TYPE } from '../theme/tokens';
  */
 export function MachineScreen({ route }: ScreenProps<'Machine'>): React.ReactElement {
   const { machineId } = route.params;
-  const nav = useNav();
-  const { colors } = useTheme();
 
   const machines = useLive(listMachines);
-  const services = useLive(listServices);
-  const inventory = useLive(listInventory);
   const machine = machines?.find((m) => m.id === machineId) ?? null;
 
   if (machines === null) return <Loading title="Iron" />;
   if (machine === null) return <Missing title="Iron" what="That machine" />;
+
+  return (
+    <Screen title={machine.name} back>
+      <MachineBody machine={machine} />
+    </Screen>
+  );
+}
+
+/**
+ * Everything about one machine, without a screen around it.
+ *
+ * Split out so the Iron hub can render it in a supporting pane beside the
+ * list, which is the list-detail arrangement `docs/LANDSCAPE-PLAN.md` asks for
+ * — and split by **taking the wrapper off** rather than by writing a second
+ * version, so the pane and the pushed screen cannot drift. There is one
+ * machine detail in this app and it is here.
+ *
+ * It takes the record rather than an id. The hub has already loaded the list
+ * it selected from and the screen has already loaded it to title itself with,
+ * so asking for it again would be a second subscription to the same rows for
+ * no gain — and it is what lets the guards above stay where the screen can
+ * answer them with a whole `Missing` rather than a panel in half a layout.
+ */
+export function MachineBody({ machine }: { machine: Machine }): React.ReactElement {
+  const machineId = machine.id;
+  const nav = useNav();
+  const { colors } = useTheme();
+
+  const services = useLive(listServices);
+  const inventory = useLive(listInventory);
 
   const mine = (services ?? []).filter((s) => s.equipmentId === machineId);
   const description = [machine.make, machine.model].filter(Boolean).join(' ');
   const partsById = new Map((inventory ?? []).map((item) => [item.id, item]));
 
   return (
-    <Screen title={machine.name} back>
+    <>
       {description ? (
         <Text style={[styles.label, { color: colors.muted }]}>{description}</Text>
       ) : null}
@@ -122,7 +148,7 @@ export function MachineScreen({ route }: ScreenProps<'Machine'>): React.ReactEle
         onPress={() => nav.navigate('AddService', { machineId })}
         testID="add-service"
       />
-    </Screen>
+    </>
   );
 }
 

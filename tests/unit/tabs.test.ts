@@ -4,6 +4,8 @@ import {
   TAB_DIVIDER,
   TAB_MARKS as TABS,
 } from '../../apps/mobile/src/navigation/tab-marks';
+import { LAYOUT, SPACE, TAP, TYPE } from '../../apps/mobile/src/theme/tokens';
+import { hasRail } from '../../apps/mobile/src/theme/window';
 
 /**
  * The bottom bar, held to a width it can actually draw.
@@ -91,5 +93,62 @@ describe('the lines between them', () => {
     expect(dividerLength()).toBeLessThan(0.6);
     // Centred: equal clearance top and bottom falls out of using one inset.
     expect(TAB_DIVIDER.inset * 2 + dividerLength()).toBeCloseTo(1, 10);
+  });
+});
+
+/**
+ * The rail, and the one thing it must not change.
+ *
+ * At expanded width the bar moves to the leading edge — 88dp of height back on
+ * the axis a landscape tablet is short of, and the destinations put under a
+ * thumb instead of in the centre-bottom dead spot.
+ *
+ * **UX-SPEC §4 is untouched by that.** The rule is about how many destinations
+ * a person chooses between at 6am, not which edge they sit on, so a rail is
+ * the same three tabs somewhere else. The budget below therefore still binds,
+ * and the assertions above still apply to it.
+ */
+describe('the rail', () => {
+  it('starts where the platform says a window is expanded', () => {
+    expect(hasRail('compact')).toBe(false);
+    expect(hasRail('medium')).toBe(false);
+    expect(hasRail('expanded')).toBe(true);
+    expect(hasRail('large')).toBe(true);
+  });
+
+  /**
+   * A word, not a glyph, which is why the rail is wider than Material's.
+   *
+   * `TabMark` records this bar clipping its labels twice, both times because a
+   * word was put in a box measured for something else. A rail is 80dp because
+   * it holds a 24dp icon with a short label under it; this one holds the label
+   * alone, and the budget above allows eight characters.
+   *
+   * The estimate is IBM Plex Mono's 0.6em advance at `TYPE.label`, plus the
+   * tracking `TabMark` applies, plus the padding either side. It is an
+   * estimate and the device is the judge — but it must not be *obviously*
+   * short, which is what it was at 80.
+   */
+  it('is wide enough for the longest name the budget allows', () => {
+    const glyph = TYPE.label * 0.6;
+    const tracking = 1;
+    const longest = LONGEST_NAME * (glyph + tracking);
+
+    expect(longest).toBeLessThanOrEqual(LAYOUT.rail - SPACE.md * 2);
+    // And the 80 it was: short of the same word, which is why it moved.
+    expect(longest).toBeGreaterThan(80 - SPACE.md * 2);
+  });
+
+  /**
+   * It costs less width than the bar cost height, on the axis that is scarce.
+   *
+   * A landscape tablet is large-width and medium-height. Spending 96dp of the
+   * plentiful axis to recover 88dp of the scarce one is the whole trade, and
+   * if a future change inverts it the rail has stopped being worth having.
+   */
+  it('trades the scarce axis for the plentiful one', () => {
+    const bar = TAP.primary + 24;
+    expect(bar).toBe(88);
+    expect(LAYOUT.rail).toBeGreaterThan(bar - 24);
   });
 });
