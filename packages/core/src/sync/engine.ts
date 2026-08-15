@@ -4,7 +4,7 @@ import { reportEngineError } from './report';
 import { backoffDelay, flushOnce, type SyncTransport } from './flush';
 import { SYNC_LOCK, withSyncLock } from './lock';
 import { transferPhotos } from './photos';
-import { pullOnce, pulledThrough } from './pull';
+import { pullOnce, type PullOutcome, pulledThrough } from './pull';
 import { checkIntegrity, queueDepth, rejectedCount } from './queue';
 
 /**
@@ -166,7 +166,7 @@ async function tick(transport?: SyncTransport): Promise<void> {
   // already on the server when the log comes back, so it returns as a record
   // this device recognises rather than as a surprise.
   if ((await queueDepth()) === 0) {
-    await pull();
+    const pulled = await pull();
 
     /**
      * Photo bytes move here, and — since the per-photo gate landed — on a
@@ -184,7 +184,7 @@ async function tick(transport?: SyncTransport): Promise<void> {
      * them with it. See `sync/photos.ts`.
      */
     await movePhotos();
-    schedule(IDLE_MS, transport);
+    schedule(stillHydrating(pulled) ? 0 : IDLE_MS, transport);
     await publish();
     return;
   }
@@ -257,8 +257,9 @@ async function tick(transport?: SyncTransport): Promise<void> {
    * After the flush and after the pull, never inside them, for the reason
    * above the idle call. `PER_PASS` bounds a tick.
    */
+  let pulled: PullOutcome | undefined;
   if (consecutiveFailures === 0) {
-    await pull();
+    pulled = await pull();
     await movePhotos();
   }
 
@@ -266,6 +267,7 @@ async function tick(transport?: SyncTransport): Promise<void> {
     consecutiveFailures,
     remaining: await queueDepth(),
     resolved,
+    pullMore: stillHydrating(pulled),
   });
 
   // A fruitless round trip is a failure for pacing even though nothing threw,
@@ -281,6 +283,8 @@ export interface TickResult {
   remaining: number;
   /** Rows this tick actually cleared or rejected — how much the queue moved. */
   resolved: number;
+  /** Pages of history still waiting, when the last one landed rows. */
+  pullMore?: boolean;
 }
 
 /**
@@ -313,6 +317,22 @@ export function nextDelay(result: TickResult): { delay: number; consecutiveFailu
     return { delay: backoffDelay(failures + 1), consecutiveFailures: failures + 1 };
   }
 
+  /**
+   * Nothing left to send, and more history to read.
+   *
+   * Below the outbox rules on purpose. A queue that will not move must back off
+   * whatever hydration is doing, or a farm on a bad connection spends its tick
+   * budget re-reading the log instead of waiting out the failure that is
+   * actually blocking it.
+   *
+   * Above `IDLE_MS`, which is what this is for: a device rebuilding its history
+   * reads `MAX_PAGES_PER_PASS` pages and then waited thirty seconds for the
+   * next lot. On a farm with years of records that is the difference between a
+   * new phone filling in over minutes and over half an hour, and the half hour
+   * looks exactly like an app that does not work.
+   */
+  if (result.pullMore === true) return { delay: 0, consecutiveFailures: 0 };
+
   return { delay: IDLE_MS, consecutiveFailures: 0 };
 }
 
@@ -329,13 +349,36 @@ async function movePhotos(): Promise<void> {
   }
 }
 
-/** Hydration never fails the loop — a device with stale reads still logs fine. */
-async function pull(): Promise<void> {
+/**
+ * Hydration never fails the loop — a device with stale reads still logs fine.
+ *
+ * The outcome is handed back so the pacing can see it. A pull that says `more`
+ * is the same fact as a queue with batches left, and it was the one the loop
+ * could not read: a device rebuilding its history sat at `IDLE_MS` between
+ * pages whatever it was told.
+ */
+async function pull(): Promise<PullOutcome | undefined> {
   try {
-    await withSyncLock(SYNC_LOCK, () => pullOnce());
+    return (await withSyncLock(SYNC_LOCK, () => pullOnce())) ?? undefined;
   } catch (error) {
     reportEngineError('fetching changes', error);
+    return undefined;
   }
+}
+
+/**
+ * More to hydrate, and the last page landed rows.
+ *
+ * The second half is the whole safety of it, and it is the same rule the outbox
+ * already follows: **progress earns the fast path.** A pull that returns `more`
+ * having applied nothing is either paused at a record this device still owes —
+ * which only a flush can clear — or reading a page it cannot use, and going
+ * again immediately would spin against either.
+ *
+ * Exported for tests. Pure, so the guard can be asserted without a server.
+ */
+export function stillHydrating(outcome: PullOutcome | undefined): boolean {
+  return outcome !== undefined && outcome.more && outcome.applied > 0;
 }
 
 function schedule(delay: number, transport?: SyncTransport): void {

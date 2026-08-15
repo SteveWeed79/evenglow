@@ -394,10 +394,12 @@ everybody else.
       outbox row, `rejected` included — on the device that issued a refused
       create the record stays visible until the user discards it, which is the
       same rule N-1 follows. On every other device there is neither, and it goes.
-- [ ] **Cost, unchanged from the original note:** a full replay per device,
+- [x] **Cost, unchanged from the original note:** a full replay per device,
       bounded by the P3 history item — **this is the moment that item stops
       being theoretical.** The `nextDelay` fast-path named there should land
-      before a farm with years of history upgrades into this.
+      before a farm with years of history upgrades into this. **It has**, in the
+      same push: hydration pages straight on rather than idling thirty seconds
+      between passes.
 
 **Cost note:** as originally proposed, apply goes to four strictly sequential
 round trips per mutation (log upsert, projection read, projection write, outcome
@@ -854,6 +856,9 @@ Ranked by real likelihood on a single-node Mongo serving one small farm:
 
 ## P2-1 · The deploy timer restarts the API when nothing changed
 
+> **Fixed.** A no-change run now skips the dependency install and the restart,
+> and still runs the Caddy and APK reconciliation those were hiding behind.
+
 **Confirmed.** `scripts/deploy/deploy.sh:84` prints
 `already on $TARGET — nothing to deploy` inside an if/elif/else and **does not
 exit**. Execution falls straight through to `corepack pnpm install` at line 112
@@ -883,9 +888,23 @@ actually hits.
 
 **To do**
 
-- [ ] `exit 0` after the nothing-to-deploy branch. One line.
-- [ ] Correct the comment in `steading-deploy.timer`, which currently asserts the
-      behaviour the missing `exit` prevents.
+- [x] ~~`exit 0` after the nothing-to-deploy branch. One line.~~
+      **Corrected: an `exit` there breaks two things meant to run every tick.**
+      The Caddy block reconciles a config that can drift on its own and
+      re-renders the install page whose version note, in its own words,
+      *"recovers on the next tick instead of staying blank"*; the app block asks
+      Expo for a build, which can appear with no server commit at all — that is
+      the whole point of the box pulling the APK the way it pulls the code.
+      Exiting early would have fixed the restart loop by silently retiring both.
+      **Shipped:** a `CHANGED` flag set in the three-case block, gating the two
+      things that only make sense when the commit moved — the dependency install
+      and the service restart — plus an early, honest exit before the came-back
+      check, whose failure text offers a rollback to the previous commit and
+      reads as nonsense on a box already sitting on it.
+- [x] Correct the comment in `steading-deploy.timer`, which currently asserts the
+      behaviour the missing `exit` prevents. It now says what a no-change run
+      actually costs, and records that the old sentence was false for as long as
+      the file existed.
 
 ## P2-2 · APK promotion is not bound to the released commit
 
@@ -1050,7 +1069,11 @@ six spot-checked in the 15 August pass, which are annotated inline.**
   empty," which a farmer reads as the app being broken. **A one-line
   `nextDelay` fast-path on `more` cuts that to the time of N sequential
   requests — minutes, not half an hour, with no compaction at all.** Try that
-  before designing a snapshot format. P3 today; P2 the first time a farm crosses
+  before designing a snapshot format. **Done:** `TickResult` carries `pullMore`,
+  and `stillHydrating` gates it on the page having landed rows — the same
+  "progress earns the fast path" rule the outbox already follows, and what stops
+  a pull paused at a record this device still owes spinning at zero delay.
+  Ranked below the outbox rules on purpose, so a stuck queue still backs off. P3 today; P2 the first time a farm crosses
   ~3 years of daily use. Note this item is also the cost ceiling on P0-2's repair
   bullet.
 - **Backups load as whole JSON strings** with unbounded arrays — a large or

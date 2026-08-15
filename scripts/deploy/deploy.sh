@@ -80,8 +80,28 @@ TARGET="$(git rev-parse --short FETCH_HEAD)"
 #
 # Reproduced before this was written: main two commits ahead of release, a box
 # on main, `merge --ff-only` exit 0 and "Already up to date".
+#
+# ── And "nothing to deploy" has to mean it ──────────────────────────────────
+#
+# **This branch said so and then deployed anyway.** It printed the line and
+# fell straight through to `pnpm install` and `systemctl restart`, both
+# unconditional, so an unchanged production box reinstalled its dependencies
+# and bounced the API about twelve times an hour, for ever. The timer's own
+# comment claims a run that finds nothing new "exits before touching
+# anything" — it described the intention and nothing enforced it, which is why
+# this went unnoticed: the log line was right, the behaviour was not.
+#
+# A flag rather than an `exit`, because not everything below is about the
+# commit. The Caddy block reconciles a config that can drift on its own and
+# re-renders an install page whose version note "recovers on the next tick";
+# the app block asks Expo for a build that can appear with no server commit at
+# all. Both are per-tick self-healing by design and both say so. What must not
+# run is the work that only makes sense when the code changed: reinstalling
+# dependencies, and restarting the service.
+CHANGED=1
 if [ "$WAS" = "$TARGET" ]; then
   note "already on $TARGET — nothing to deploy"
+  CHANGED=0
 elif git merge-base --is-ancestor HEAD FETCH_HEAD; then
   # The ordinary case: release has moved forward and this is a fast-forward.
   git merge --ff-only FETCH_HEAD --quiet \
@@ -108,9 +128,13 @@ fi
 
 NOW="$(git rev-parse --short HEAD)"
 
-say "Dependencies"
-corepack pnpm install --frozen-lockfile --filter "@steading/api..."
-chown -R "$SERVICE_USER:$SERVICE_USER" "$REPO_DIR"
+# Only when the commit moved. A lockfile that has not changed installs the tree
+# that is already there, and the ownership fix has nothing to fix.
+if [ "$CHANGED" -eq 1 ]; then
+  say "Dependencies"
+  corepack pnpm install --frozen-lockfile --filter "@steading/api..."
+  chown -R "$SERVICE_USER:$SERVICE_USER" "$REPO_DIR"
+fi
 
 # ── Caddy, which nothing was deploying ──────────────────────────────────────
 #
@@ -209,8 +233,10 @@ if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
   "${REPO_DIR}/scripts/deploy/render-install-page.sh" /var/lib/steading/dist "$STAMP" || true
 fi
 
-say "Restarting"
-systemctl restart steading-api
+if [ "$CHANGED" -eq 1 ]; then
+  say "Restarting"
+  systemctl restart steading-api
+fi
 
 # ── the part that is not optional ───────────────────────────────────────────
 #
@@ -328,6 +354,15 @@ if [ -n "${EXPO_TOKEN:-}" ]; then
       note "could not publish it — the API is unaffected"
     fi
   fi
+fi
+
+# Nothing was restarted, so there is nothing to have come back. The check below
+# exists to catch a deploy that killed the server, and its failure text offers a
+# rollback to the previous commit — advice that reads as nonsense on a box that
+# is already on the commit it would roll back to.
+if [ "$CHANGED" -eq 0 ]; then
+  printf '\n\033[1mUp to date: %s\033[0m\n\n' "$NOW"
+  exit 0
 fi
 
 say "Checking it came back"
