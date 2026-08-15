@@ -917,6 +917,10 @@ only the token half.
 
 ## P1-6 · An interrupted restore can leave an archived record live
 
+> **Fixed.** An entry's `create` and its archiving `delete` go into one SQLite
+> transaction, so the pair is inseparable. The work list's own remedy — making
+> an archived entry one mutation — was the wrong one; see below.
+
 **Trusted.** `packages/core/src/backup/restore.ts:282-313` recreates an archived
 entry as two queued mutations — `create`, then `delete`. A crash, a full disk, or
 a failed second transaction between them leaves the record **live**. On resume the
@@ -943,7 +947,63 @@ removes the window.
 **To do**
 
 - [ ] ~~Compare archive state, not just key presence, when resuming.~~ Secondary.
-- [ ] Make an archived entry **one mutation** rather than two. This is the fix.
+- [x] ~~Make an archived entry **one mutation** rather than two. This is the fix.~~
+      **Wrong remedy — one *transaction*, not one mutation.**
+
+### The correction, 15 August
+
+Both remedies as filed are wrong, and the second is wrong in an expensive way.
+
+"One mutation" means an archive flag on the create — and `restore.ts` already
+had the argument against it, written down beside the code: *"archived is not a
+field any create schema has. It is the outcome of a delete, and the delete is
+what produces it."* Doing it would mean an `archivedAt` in fourteen create
+schemas, a matching server applier, a client able to mint an arbitrary archive
+date, and P13's model inverted — all to close a window that atomicity closes
+outright.
+
+**The window is the defect, not the pair.** Two mutations is the right shape;
+two *transactions* is the bug. `enqueueAll` on the port puts every mutation of
+one entry in one transaction — all of them in order, or none — and nothing
+about the wire contract, the schemas or P13 moves.
+
+Sequence numbers come out consecutive and in argument order, and each mutation
+is projected before the next is built, because the `delete` archives the record
+its own `create` has just made.
+
+**`enqueue` is now `enqueueAll` with a list of one**, not the other way round.
+The other way round is one transaction per mutation, which is the defect.
+
+**Validation happens for every payload before any of them is stored.** A refusal
+is far likelier than a crash or a full disk, and validating as it went would let
+the first mutation reach the queue and the second be turned away — the same
+split state, arrived at by the ordinary route.
+
+**Also corrected:** `restore.ts`'s header said *"a batch write would need a new
+port method whose whole purpose was to weaken the guarantee above"*. It was
+reasoning about batching for speed and foreclosed the case that actually turned
+up. The rule is one transaction per *entry*; an entry is not always one
+mutation. The paragraph now says so.
+
+### Verification
+
+`tests/offline/restore-atomicity.test.ts`. The interruption is injected at the
+driver — a wrapper that throws on the outbox insert whose op is `delete`, so a
+transaction is cut in half from outside without the store knowing, and the
+wrapping is on the handle the body writes through rather than the outer driver.
+After it: nothing written, nothing queued, no record, and the entry back in the
+next `planRestore`'s `toWrite`. That last assertion is what "never repaired"
+meant — a half-written entry looked complete.
+
+Two more: the refused-payload route to the same split state, which needs no
+fault injection; and the ordinary case, asserting `['create','delete']` with
+consecutive `clientSeq` and a projection that agrees — invariant 5 across the
+pair rather than across each half.
+
+Checked by breaking it: splitting the call back into two `enqueueAll`s fails
+the first test. The existing `backup.test.ts` stays green, including its
+interruption case — which stops between entries, and is why this was never seen
+there.
 
 ## P1-7 · Membership invariants are check-then-act
 

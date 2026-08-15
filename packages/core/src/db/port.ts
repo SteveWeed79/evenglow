@@ -150,6 +150,27 @@ export interface LocalStore {
   enqueue(request: EnqueueRequest): Promise<QueuedMutation>;
 
   /**
+   * The same guarantee across SEVERAL mutations: all of them, in the order
+   * given, or none of them.
+   *
+   * For the case where one thing a farmer did is more than one mutation, and
+   * the half-done state is wrong. A restore puts an archived record back as a
+   * `create` followed by a `delete` — "archived" is not a field any create
+   * schema has, it is the outcome of a delete — and two separate `enqueue`
+   * calls meant a crash or a full disk between them left the record **live**.
+   * A retired flock reappears on every screen on the morning somebody sets the
+   * new phone up, and the resume pass does not repair it because the record is
+   * present and that is all it checks.
+   *
+   * Sequence numbers are consecutive and in argument order, so the server
+   * applies them in the order they were meant. Implementations MUST project
+   * each one before building the next, or a mutation that depends on its
+   * predecessor's projection — which is exactly the `delete` above — sees a
+   * record that is not there yet.
+   */
+  enqueueAll(requests: readonly EnqueueRequest[]): Promise<QueuedMutation[]>;
+
+  /**
    * Applies a batch's server results as one unit: applied and duplicate are
    * removed and counted as cleared, anything else is marked rejected with its
    * reason and KEPT.

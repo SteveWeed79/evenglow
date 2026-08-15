@@ -30,32 +30,57 @@ export interface EnqueueInput {
  * what lets the same suite prove IndexedDB and SQLite alike.
  */
 export async function enqueue(input: EnqueueInput): Promise<QueuedMutation> {
-  const targetId = input.targetId ?? newId();
+  const [only] = await enqueueAll([input]);
+  // One in, one out. Checked rather than asserted, for the same reason the
+  // store checks it: a mutation going quietly is the failure this file exists
+  // to prevent.
+  if (only === undefined) throw new InvalidMutationError('That could not be queued.');
+  return only;
+}
 
-  // Refuse locally what the server would refuse anyway, so an impossible
-  // mutation never occupies the queue or the rejected inbox.
-  const schema = payloadSchemaFor(input.entity, input.op);
-  if (!schema) {
-    throw new InvalidMutationError(`A ${input.entity} cannot be ${input.op}d.`);
-  }
+/**
+ * Several mutations as one unit — all of them, in order, or none.
+ *
+ * For when one thing somebody did is more than one mutation and the half-done
+ * state is wrong. A restore puts an archived record back as a `create` and
+ * then a `delete`, because "archived" is not a field any create schema has: it
+ * is the outcome of a delete, and the delete is what produces it. As two
+ * separate calls, a crash or a full disk between them left the record **live**,
+ * and the resume pass did not repair it because the record was present and
+ * that is all it checked.
+ *
+ * **Every payload is validated before any of them is stored.** Validating as
+ * it goes would let the first mutation reach the queue and the second be
+ * refused, which is the split state this exists to rule out — and a refusal is
+ * far likelier than a crash.
+ */
+export async function enqueueAll(inputs: readonly EnqueueInput[]): Promise<QueuedMutation[]> {
+  const requests = inputs.map((input) => {
+    // Refuse locally what the server would refuse anyway, so an impossible
+    // mutation never occupies the queue or the rejected inbox.
+    const schema = payloadSchemaFor(input.entity, input.op);
+    if (!schema) {
+      throw new InvalidMutationError(`A ${input.entity} cannot be ${input.op}d.`);
+    }
 
-  const payload = schema.safeParse(input.payload);
-  if (!payload.success) {
-    throw new InvalidMutationError(
-      payload.error.issues[0]?.message ?? `That ${input.entity} has a bad value.`,
-    );
-  }
+    const payload = schema.safeParse(input.payload);
+    if (!payload.success) {
+      throw new InvalidMutationError(
+        payload.error.issues[0]?.message ?? `That ${input.entity} has a bad value.`,
+      );
+    }
+
+    return {
+      entity: input.entity,
+      op: input.op,
+      targetId: input.targetId ?? newId(),
+      payload: payload.data,
+    };
+  });
 
   // Storage is the store's job from here. Everything above is contract
   // validation, which is the same whatever is underneath.
-  const queued = await localStore().enqueue({
-    entity: input.entity,
-    op: input.op,
-    targetId,
-    payload: payload.data,
-  });
-
-  return queued;
+  return localStore().enqueueAll(requests);
 }
 
 export async function queueDepth(): Promise<number> {

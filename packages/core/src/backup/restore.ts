@@ -9,7 +9,7 @@ import {
 import { StorageFullError } from '../db/errors';
 import { recordKey } from '../db/records';
 import { localStore } from '../db/store';
-import { enqueue } from '../sync/queue';
+import { enqueueAll } from '../sync/queue';
 
 /**
  * Putting a backup back, and the rules that make it safe.
@@ -36,11 +36,11 @@ import { enqueue } from '../sync/queue';
  * disagree with the records — which is the drift the due engine refuses a
  * completion flag over. The records answer the question by themselves.
  *
- * ## Through `enqueue`, never around it
+ * ## Through the queue, never around it
  *
  * Every entry becomes a real mutation. That is invariant 5 for free — the
- * projection write and the outbox row land in one transaction, per record —
- * and it is invariant 11 for free too, because `enqueue` parses each payload
+ * projection write and the outbox row land in one transaction, per entry — and
+ * it is invariant 11 for free too, because the queue parses each payload
  * against the same schema the server will use.
  *
  * It also means a restored farm that later signs up flushes with the original
@@ -50,10 +50,18 @@ import { enqueue } from '../sync/queue';
  * that restores a backup of records the server already holds does not double
  * them.
  *
- * The cost is one SQLite transaction per record. A restore is a deliberate,
+ * The cost is one SQLite transaction per entry. A restore is a deliberate,
  * once-in-the-life-of-a-handset act with a count on screen, so paying it is
- * right — a batch write would need a new port method whose whole purpose was
- * to weaken the guarantee above.
+ * right.
+ *
+ * **This paragraph used to end "a batch write would need a new port method
+ * whose whole purpose was to weaken the guarantee above", and there is now a
+ * new port method — `enqueueAll` — whose whole purpose is the opposite.** The
+ * sentence was reasoning about batching for *speed*, where the temptation
+ * really is to write many rows and project them loosely. It foreclosed the
+ * case that turned up instead: an entry that is genuinely two mutations, where
+ * one transaction is what makes the pair inseparable. One transaction per
+ * *entry* is the rule; an entry is not always one mutation.
  */
 
 export type RestorePlan =
@@ -281,15 +289,9 @@ export async function runRestore(
 
   for (const [index, entry] of plan.toWrite.entries()) {
     try {
-      await enqueue({
-        entity: entry.entity,
-        op: 'create',
-        targetId: entry.targetId,
-        payload: entry.payload,
-      });
-
       /**
-       * An archived record comes back archived.
+       * An archived record comes back archived, and it comes back **in one
+       * transaction**.
        *
        * Records are archived and never deleted (P13), so a retired group is
        * still history and its logs still name it. A restore that brought it
@@ -299,18 +301,43 @@ export async function runRestore(
        * Two mutations rather than a flag on the create, because "archived" is
        * not a field any create schema has. It is the outcome of a delete, and
        * the delete is what produces it.
+       *
+       * **They were also two `enqueue` calls, and that was the defect (P1-6).**
+       * A crash, a full disk, or a refusal between them left the record live,
+       * and the resume pass never repaired it: `planRestore` treats the key's
+       * presence as sufficient and skips the entry without comparing archive
+       * state. The interruption tests stopped between entries, which is why
+       * they never saw it — the window is inside one.
+       *
+       * `enqueueAll` is the whole fix. The alternative the work list proposed
+       * — making an archived entry one mutation — would mean an `archivedAt`
+       * in fourteen create schemas, a client able to mint one, and the P13
+       * model inverted, to close a window that atomicity closes outright.
        */
-      if (entry.archived === true && isOpAllowed(entry.entity, 'delete')) {
-        await enqueue({
+      const archiveToo = entry.archived === true && isOpAllowed(entry.entity, 'delete');
+
+      await enqueueAll([
+        {
           entity: entry.entity,
-          op: 'delete',
+          op: 'create',
           targetId: entry.targetId,
-          // No reason: the original one is not in the projection to carry
-          // (`db/project.ts` keeps the record's value, not the delete's), and
-          // inventing one would put words in somebody's mouth.
-          payload: {},
-        });
-      }
+          payload: entry.payload,
+        },
+        ...(archiveToo
+          ? [
+              {
+                entity: entry.entity,
+                op: 'delete' as const,
+                targetId: entry.targetId,
+                // No reason: the original one is not in the projection to
+                // carry (`db/project.ts` keeps the record's value, not the
+                // delete's), and inventing one would put words in somebody's
+                // mouth.
+                payload: {},
+              },
+            ]
+          : []),
+      ]);
 
       written += 1;
     } catch (error) {

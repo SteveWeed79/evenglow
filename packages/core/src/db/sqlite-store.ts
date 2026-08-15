@@ -368,46 +368,48 @@ export async function openSqliteStore(
     await db.run('DELETE FROM records WHERE key = ?', [recordKey(entity, targetId)]);
   }
 
-  return {
-    /**
-     * ONE transaction: mint the sequence number, write the outbox row, advance
-     * the counter, update the projection (invariant 5).
-     *
-     * Assigning clientSeq outside the transaction is the classic way to end up
-     * with two mutations holding the same sequence number after a crash
-     * mid-write, at which point ordering is quietly broken and nothing reports
-     * it.
-     */
-    async enqueue(request: EnqueueRequest): Promise<QueuedMutation> {
-      const targetId = request.targetId;
+  /**
+   * Every mutation in `requests`, in one transaction, or none of them.
+   *
+   * `enqueue` is this with a list of one. Written the other way round —
+   * `enqueueAll` looping over `enqueue` — it would be one transaction per
+   * mutation, which is the defect rather than the fix.
+   */
+  async function enqueueTransactionally(
+    requests: readonly EnqueueRequest[],
+  ): Promise<QueuedMutation[]> {
+    if (requests.length === 0) return [];
 
-      try {
-        return await driver.transaction(async (tx) => {
-          // A corrupt or missing deviceId is safe to replace: it only groups a
-          // device's own mutations for ordering.
-          let deviceId = parseMeta('deviceId', await readMeta(tx, 'deviceId'));
-          if (deviceId === undefined) {
-            deviceId = deps.randomUUID();
-            await writeMeta(tx, META.deviceId, deviceId);
-          }
+    try {
+      return await driver.transaction(async (tx) => {
+        // A corrupt or missing deviceId is safe to replace: it only groups a
+        // device's own mutations for ordering.
+        let deviceId = parseMeta('deviceId', await readMeta(tx, 'deviceId'));
+        if (deviceId === undefined) {
+          deviceId = deps.randomUUID();
+          await writeMeta(tx, META.deviceId, deviceId);
+        }
 
-          /**
-           * A corrupt or missing counter is NOT safe to replace with zero —
-           * that reuses sequence numbers and silently breaks ordering. Take
-           * the highest seq still in the outbox as a floor, so monotonicity
-           * survives losing the counter as long as the queue did.
-           */
-          const stored = parseMeta('nextClientSeq', await readMeta(tx, 'nextClientSeq')) ?? 0;
-          const highest = await tx.get<{ seq: number | null }>(
-            'SELECT MAX(clientSeq) AS seq FROM outbox',
-          );
-          const floor = highest?.seq === null || highest?.seq === undefined ? 0 : highest.seq + 1;
-          const clientSeq = Math.max(stored, floor);
+        /**
+         * A corrupt or missing counter is NOT safe to replace with zero —
+         * that reuses sequence numbers and silently breaks ordering. Take the
+         * highest seq still in the outbox as a floor, so monotonicity survives
+         * losing the counter as long as the queue did.
+         */
+        const stored = parseMeta('nextClientSeq', await readMeta(tx, 'nextClientSeq')) ?? 0;
+        const highest = await tx.get<{ seq: number | null }>(
+          'SELECT MAX(clientSeq) AS seq FROM outbox',
+        );
+        const floor = highest?.seq === null || highest?.seq === undefined ? 0 : highest.seq + 1;
+        let clientSeq = Math.max(stored, floor);
 
+        const written: QueuedMutation[] = [];
+
+        for (const request of requests) {
           const envelope = {
             schemaVersion: MUTATION_SCHEMA_VERSION,
             id: newId(),
-            targetId,
+            targetId: request.targetId,
             entity: request.entity,
             op: request.op,
             payload: request.payload,
@@ -451,26 +453,58 @@ export async function openSqliteStore(
             ],
           );
 
-          await writeMeta(tx, META.nextClientSeq, clientSeq + 1);
-
+          /**
+           * Projected inside the loop, not after it, because a later request
+           * may depend on an earlier one's projection — a restore's `delete`
+           * archives the record its own `create` has just made. Writing all
+           * the rows first and projecting afterwards would work today and
+           * break the first time somebody relied on the order.
+           */
           await projectOne(
             tx,
             request.entity,
-            targetId,
+            request.targetId,
             request.op,
             request.payload,
             Date.now(),
           );
 
-          return queued;
-        });
-      } catch (error) {
-        // The transaction aborts as a unit, so no sequence number is consumed
-        // and nothing partial is left behind.
-        if (isFullError(error)) throw new StorageFullError();
-        throw error;
-      }
+          written.push(queued);
+          clientSeq += 1;
+        }
+
+        await writeMeta(tx, META.nextClientSeq, clientSeq);
+
+        return written;
+      });
+    } catch (error) {
+      // The transaction aborts as a unit, so no sequence number is consumed
+      // and nothing partial is left behind — for one mutation or for five.
+      if (isFullError(error)) throw new StorageFullError();
+      throw error;
+    }
+  }
+
+  return {
+    /**
+     * ONE transaction: mint the sequence number, write the outbox row, advance
+     * the counter, update the projection (invariant 5).
+     *
+     * Assigning clientSeq outside the transaction is the classic way to end up
+     * with two mutations holding the same sequence number after a crash
+     * mid-write, at which point ordering is quietly broken and nothing reports
+     * it.
+     */
+    async enqueue(request: EnqueueRequest): Promise<QueuedMutation> {
+      const [only] = await enqueueTransactionally([request]);
+      // One request in, one mutation out. Checked rather than asserted with
+      // `!`: an empty result would mean the mutation had gone quietly, which
+      // is the one outcome this whole file exists to make impossible.
+      if (only === undefined) throw new InvalidMutationError('Could not build a valid mutation.');
+      return only;
     },
+
+    enqueueAll: enqueueTransactionally,
 
     /**
      * Applied and duplicate leave the outbox and count as cleared; anything
