@@ -1547,6 +1547,21 @@ six spot-checked in the 15 August pass, which are annotated inline.**
   collection scan on every Google sign-in, and its absence is exactly the
   structural guarantee that `indexes.ts:160-176` argues for at length one
   collection over — *"a check in a route is a thing somebody can refactor past."*
+  → **Index done, 15 August.** `{googleSub: 1}`, unique, partial on
+  `$type: 'string'`. Partial for two reasons and the second is easy to miss:
+  most accounts are password-only, *and* `disableUser` `$unset`s the field on
+  removal so a removed person's Google account can sign up again — a plain
+  `unique: true` would admit one row with the field missing and refuse every
+  other, which is every password-only signup and every removal after the first.
+  Asserted in `tests/unit/indexes.test.ts` rather than only in a database-backed
+  suite, for the reason that file already gives about the purchase token: an
+  index checked only where a mongod is needed is exactly the thing D15 calls
+  *"a thing somebody can forget to create"*. Checked by breaking it — removing
+  the declaration fails three cases. **Note for an existing deployment:**
+  `pnpm db:indexes` will refuse if two live accounts already share a
+  `googleSub`, which is the state the index exists to prevent; that refusal is
+  the finding, not a fault in the migration. **The binding itself is still
+  open** — it is the P3 item this was split out of.
 - **Referential integrity is schema-shaped, not enforced.** Parent IDs are
   accepted without checking the referent exists, so out-of-order sync or a
   crafted client creates permanent orphans.

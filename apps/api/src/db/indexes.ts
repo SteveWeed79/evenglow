@@ -137,7 +137,39 @@ export const INDEXES: Record<CollectionName, IndexDescription[]> = {
 
 /** Identity collections are not tenant-scoped; they need their own uniqueness rules. */
 const IDENTITY_INDEXES: Record<string, IndexDescription[]> = {
-  users: [{ key: { email: 1 }, unique: true }, { key: { orgId: 1, role: 1 } }],
+  users: [
+    { key: { email: 1 }, unique: true },
+    { key: { orgId: 1, role: 1 } },
+    /**
+     * The other way a person is identified (A2.4).
+     *
+     * `findUserByGoogleSub` is the **first** query every Google sign-in makes,
+     * and it had no index at all — a collection scan on the hot path of one of
+     * two ways into the app.
+     *
+     * Unique, and that is the half that matters more than the speed. A Google
+     * subject id is one Google account, and `linkGoogleSub` binds one to an
+     * existing user with nothing stopping the same subject being bound to a
+     * second — at which point `findOne` returns whichever row the scan reached
+     * first and the same Google identity signs into two different farms
+     * depending on the wind. The route means to prevent that; this makes it
+     * true. Exactly the argument the `playPurchaseToken` index makes below:
+     * *a check in a route is a thing somebody can refactor past.*
+     *
+     * **Partial, not merely sparse**, for the same reason as that one. Most
+     * accounts are password-only and have no `googleSub`; a plain unique index
+     * would let one of them hold the missing value and refuse every other
+     * signup. `disableUser` also moves the field to `formerGoogleSub` on
+     * removal, so a removed person's Google account is free to sign up
+     * again — the filter is what keeps that true, since the vacated field is
+     * `$unset` rather than nulled.
+     */
+    {
+      key: { googleSub: 1 },
+      unique: true,
+      partialFilterExpression: { googleSub: { $type: 'string' } },
+    },
+  ],
   orgs: [
     { key: { _id: 1 } },
     /**
