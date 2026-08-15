@@ -1326,6 +1326,12 @@ so the translation from `NetworkStateEvent` to boolean is untested.
 
 ## N-3 · `medication:update` can produce a treatment the withdrawal engine ignores — **P1, latent**
 
+> **Fixed, and the audit the third bullet asked for found a second instance.**
+> `maintenance` drops `hasATrigger` the same way, leaving a schedule that
+> `serviceDue` cannot evaluate and therefore silently stops tracking. Both are
+> now re-checked against the merged document, the reader errs long, and a test
+> fails if a future refined create is added without an entry.
+
 **Verified, all three legs, with a throwaway contracts test.**
 
 `packages/contracts/src/entities/livestock.ts:402-406` enforces the subject
@@ -1368,13 +1374,42 @@ individual animals.
 
 **To do**
 
-- [ ] Make `withdrawal.ts:84` return **every** subject the treatment names rather
-      than the first one. This is the safer default because it errs long.
-- [ ] Re-apply the subject invariant on update. It cannot be expressed on a
-      partial, so it needs a check against the *merged* document — an
-      applier-level assertion in `projections.ts`.
-- [ ] Audit the other `.partial().strict()` update schemas for refines dropped
-      the same way.
+- [x] Make `withdrawal.ts:84` return **every** subject the treatment names rather
+      than the first one. This is the safer default because it errs long — and
+      it is the half that protects against records that already exist, since no
+      server change reaches a row that is already on a device.
+- [x] Re-apply the subject invariant on update. It cannot be expressed on a
+      partial, so it needs a check against the *merged* document — ~~an
+      applier-level assertion in `projections.ts`~~.
+      **Corrected: not in `projections.ts`.** `decideProjection` takes
+      `ExistingDoc`, which is deliberately minimal and must not grow a field per
+      entity-specific rule — this needs the whole stored document. It lives in
+      `project()` in `apply.ts`, gated on the projection having decided the
+      write really is an update, so a conflict against an archived record still
+      reports the conflict rather than a validation message about a write that
+      was never going to happen.
+- [x] Audit the other `.partial().strict()` update schemas for refines dropped
+      the same way. **It found one: `maintenance`.** `maintenanceCreateSchema`
+      refines on `hasATrigger`, `maintenanceUpdateSchema` does not, and a
+      schedule left with neither interval is one `serviceDue` refuses to
+      evaluate — so it produces nothing, and the machine silently stops being
+      tracked while the farm believes it is. Lower stakes than a false clear on
+      milk, identical shape.
+      The other refined creates are all append-only (`eggLog`,
+      `productionLog`, `weight`, `shearing`, `careLog`, `harvest`), so they have
+      no update schema and their refines cannot be bypassed.
+- [x] **The table is guarded rather than trusted.** `tests/unit/merged-invariants.test.ts`
+      walks every mutable entity, detects whether its create schema carries a
+      refinement, and fails if one is missing from `MERGED_INVARIANTS`. That
+      test is the actual fix — the two entries are only the two instances that
+      existed when it was written, and without something that fails the next
+      refined create inherits the same silent hole. It reaches into Zod's
+      `_def.checks`, which is private and could move on an upgrade; acceptable
+      in a test, where a break is visible.
+- [x] The predicates are exported from the entity modules and used by **both**
+      the create refine and the merged check, so the two cannot drift. Null
+      counts as absent in both, because clearing a field arrives as `undefined`
+      and the driver stores it as null.
 
 ## Checked and found sound
 

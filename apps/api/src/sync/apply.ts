@@ -6,6 +6,7 @@ import {
   opSchema,
   roleRefusal,
   MUTATION_SCHEMA_VERSION,
+  mergedUpdateProblem,
   payloadSchemaFor,
   type Entity,
   type Mutation,
@@ -390,6 +391,31 @@ async function project(
     actor: { userId: claims.userId, role: claims.role },
     ...(entity === 'hourReading' ? { lastHours: await highestHours(scope, payload) } : {}),
   });
+
+  /**
+   * The invariant a `.partial()` update schema could not carry.
+   *
+   * A create schema's `.refine()` is dropped by `.partial()`, so a rule that
+   * reads two fields together — exactly one subject on a treatment, at least
+   * one trigger on a schedule — was enforced on create and on nothing else. It
+   * is a property of the RESULTING document, so it can only be checked once the
+   * update is merged onto what is stored.
+   *
+   * Checked only when the projection has decided this really is an update, so a
+   * conflict against an archived record still reports the conflict rather than
+   * a validation message about a write that was never going to happen.
+   *
+   * Not in `decideProjection`: that takes `ExistingDoc`, which is deliberately
+   * minimal and must not grow a field per entity-specific rule. This needs the
+   * whole stored document.
+   */
+  if (decision.kind === 'update' && existing !== null) {
+    const problem = mergedUpdateProblem(entity, {
+      ...(existing as Record<string, unknown>),
+      ...payload,
+    });
+    if (problem !== null) return { kind: 'rejected', reason: problem };
+  }
 
   /**
    * Attribution comes from the command, which names who ISSUED it.

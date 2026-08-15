@@ -9,6 +9,7 @@ import {
   flockUpdateSchema,
   medicationCreateSchema,
   medicationUpdateSchema,
+  namesOneSubject,
   mortalityCreateSchema,
   predatorCreateSchema,
   productionLogCreateSchema,
@@ -17,6 +18,7 @@ import {
   equipmentCreateSchema,
   equipmentUpdateSchema,
   hourReadingCreateSchema,
+  hasATrigger,
   maintenanceCreateSchema,
   maintenanceUpdateSchema,
 } from './iron';
@@ -196,6 +198,63 @@ export function payloadSchemaFor(entity: Entity, op: Op): z.ZodType | undefined 
  */
 export function isOpAllowed(entity: Entity, op: Op): boolean {
   return payloadSchemaFor(entity, op) !== undefined;
+}
+
+/**
+ * The half of a create-time invariant that a `.partial()` update cannot carry.
+ *
+ * **A create schema's `.refine()` is silently dropped by `.partial()`, and the
+ * update schemas are all `z.object(shape).partial().strict()`.** So an
+ * invariant enforced on the way in — exactly one subject on a treatment, at
+ * least one trigger on a schedule — is enforced on create and on nothing else.
+ * The field-level rules survive; the ones that read two fields together do not,
+ * because half the fields are absent by design in a partial.
+ *
+ * It cannot be expressed on the update schema either, and that is why this is a
+ * separate function rather than a fixed refine: the invariant is a property of
+ * the RESULTING document, and a partial payload is only half of it. So the
+ * applier merges the update onto the stored record and asks here.
+ *
+ * The predicates are the same ones the create schemas refine on, imported
+ * rather than restated — a second copy would be a second chance to disagree,
+ * and the two are meant to say the same thing for ever.
+ *
+ * `null` counts as absent throughout, because a client clearing a field sends
+ * `undefined` and the driver stores that as null.
+ */
+interface MergedInvariant {
+  holds: (merged: Record<string, unknown>) => boolean;
+  message: string;
+}
+
+const MERGED_INVARIANTS: Partial<Record<Entity, MergedInvariant>> = {
+  medication: {
+    holds: namesOneSubject,
+    message: 'A treatment needs exactly one of a group or an animal.',
+  },
+  maintenance: {
+    holds: hasATrigger,
+    message: 'A schedule needs an hour interval, a day interval, or both.',
+  },
+};
+
+/** The reason an updated document would be invalid, or null when it is fine. */
+export function mergedUpdateProblem(entity: Entity, merged: Record<string, unknown>): string | null {
+  const invariant = MERGED_INVARIANTS[entity];
+  if (invariant === undefined) return null;
+  return invariant.holds(merged) ? null : invariant.message;
+}
+
+/**
+ * Whether an entity carries one of these at all.
+ *
+ * Exported for the test that keeps the table honest: every mutable entity whose
+ * create schema is refined MUST appear above, or the next one added inherits
+ * this bug in silence. That test is the actual fix — the two entries are only
+ * the two instances that existed when it was written.
+ */
+export function hasMergedInvariant(entity: Entity): boolean {
+  return MERGED_INVARIANTS[entity] !== undefined;
 }
 
 /**
