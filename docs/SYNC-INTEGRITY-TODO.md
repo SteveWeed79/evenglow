@@ -520,6 +520,10 @@ clients tolerate unknown rows.
 
 ## P1-2 · A Farm Hand cannot finish a photo
 
+> **Fixed.** A hand may now stamp `uploadedAt` on a photo still waiting for its
+> bytes, and nothing else. `canMutate` is unchanged, so the byte PUT goes on
+> refusing a hand replacing an established image.
+
 **Confirmed.** `packages/contracts/src/roles.ts:55` grants `photo:create` only.
 `photo` is not append-only, not `task`, not `note` — so
 `canMutate('hand', 'photo', 'update')` falls through to `return false`.
@@ -545,11 +549,36 @@ of pictures that never arrive. High frequency in any farm with a hand.
 
 **To do**
 
-- [ ] Either permit `photo:update` for a hand when it sets only `uploadedAt`, or
-      stamp `uploadedAt` server-side in `routes/photos.ts` and drop the client
-      mutation. The second is smaller and removes a mutation from the wire.
-- [ ] Add the cross-device hand workflow as one test: create, upload, and a
-      second device fetching the bytes.
+- [x] ~~Either permit `photo:update` for a hand when it sets only `uploadedAt`,
+      **or stamp `uploadedAt` server-side in `routes/photos.ts` and drop the
+      client mutation. The second is smaller and removes a mutation from the
+      wire.**~~
+      **Corrected: the second option does not work at all.** `/snapshot` ships
+      the mutation log, so a field the server sets directly on the projection is
+      invisible to hydration — no mutation, no replication. Dropping the client
+      mutation would leave every other device exactly as blind as before, which
+      is the bug. Synthesising a mutation server-side is not open either: a
+      mutation carries a client-minted id, a `deviceId` and a `clientSeq`, and
+      the server has none of them.
+      **Shipped: the first option, narrowed twice.** `isUploadStamp`
+      (`contracts/roles.ts`) recognises a `photo:update` carrying nothing but
+      `uploadedAt`; `sync/apply.ts` combines it with the role failure;
+      `decidePhoto` (`sync/projections.ts`) adds the half that needs the
+      document — a stamp may finish an upload, not re-stamp a finished one —
+      the same division `mayChangeNote` uses.
+- [x] **`canMutate` itself is deliberately unchanged**, and that is the whole
+      shape of the fix. It also gates the byte PUT at `routes/photos.ts:128`,
+      so granting `photo:update` there would let a hand **replace the image on
+      an established photo** — a refusal that route makes on purpose. The fix
+      for an invisible photo must not become a way to overwrite somebody
+      else's. `roles.test.ts` pins `canMutate('hand','photo','update') === false`
+      so the tempting one-line version cannot come back.
+- [x] Add the cross-device hand workflow as one test: create, upload, and a
+      second device fetching the bytes. `tests/sync/photo-upload-stamp.test.ts`
+      asserts it through the snapshot feed rather than the projection, because
+      a stamp the other devices never receive would fix nothing.
+      `tests/unit/photo-stamp-gate.test.ts` drives the applier against a fake
+      `Db` so the line combining the two halves is proven without a mongod.
 
 ## P1-3 · Session expiry is not recovered while the app is open
 
@@ -1139,6 +1168,9 @@ side, and it should be scheduled beside P0-2 for that reason.
 
 ## N-2 · One `undefined` from `expo-network` stops automatic sync for the life of the process — **P1**
 
+> **Fixed.** The listener now reports only what the OS actually said, so a
+> silent event leaves a working device alone.
+
 **Verified.** `apps/mobile/src/sync/triggers.ts:104` is:
 
 ```ts
@@ -1176,10 +1208,15 @@ so the translation from `NetworkStateEvent` to boolean is untested.
 
 **To do**
 
-- [ ] `if (event.isConnected !== undefined) setOnline(event.isConnected)` —
+- [x] `if (event.isConnected !== undefined) setOnline(event.isConnected)` —
       report only what the OS actually said. The `nudge` comment already argues
       for this; the listener never got the memo.
-- [ ] Test the translation, not just `setOnline`.
+- [x] Test the translation, not just `setOnline`.
+      `tests/unit/network-trigger.test.ts` drives the registered listener with a
+      mocked `expo-network` and asserts that a silent event says **nothing** to
+      the engine — the assertion that was missing, since both existing suites
+      call `setOnline` directly with booleans and never exercise the line that
+      chooses which boolean.
 
 ## N-3 · `medication:update` can produce a treatment the withdrawal engine ignores — **P1, latent**
 
@@ -1575,8 +1612,8 @@ From the verification pass, with the dependencies that force it:
 2. ~~**N-1**, beside it. Same confusion, opposite direction, and no server change
    fixes it.~~ **Done for the create case**; the `update`/`delete` residue and
    the `checkIntegrity` phantom detection remain.
-3. **P1-2** and **N-2**. Both cheap, both high-frequency, both invisible to the
-   person affected.
+3. ~~**P1-2** and **N-2**. Both cheap, both high-frequency, both invisible to the
+   person affected.~~ **Both done.**
 4. **P1-1**, which unblocks ever putting a new field on the wire — including
    P0-2's optional outcome — and is a prerequisite for the P3 flush-parsing fix
    shipping in the right order.

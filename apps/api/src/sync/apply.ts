@@ -2,6 +2,7 @@ import { MongoServerError } from 'mongodb';
 import {
   canMutate,
   entitySchema,
+  isUploadStamp,
   opSchema,
   roleRefusal,
   MUTATION_SCHEMA_VERSION,
@@ -117,8 +118,17 @@ async function applyMutation(
     return rejected(id, `This app version cannot read that record (v${mutation.schemaVersion}).`);
   }
 
-  // Role is re-derived server-side, never read from the payload (invariant 5).
-  if (!canMutate(claims.role, entity, op)) {
+  /**
+   * Role is re-derived server-side, never read from the payload (invariant 5).
+   *
+   * The one exception is a hand stamping `uploadedAt` on a photo whose bytes
+   * they have just uploaded — without it the photo is on the server and
+   * invisible to every other device. `isUploadStamp` says what the mutation is;
+   * `decideProjection` says whether this photo is still waiting for it. Both
+   * halves are needed, and neither belongs in `canMutate`, which also gates the
+   * byte PUT and must go on refusing a hand replacing an established image.
+   */
+  if (!canMutate(claims.role, entity, op) && !isUploadStamp(entity, op, mutation.payload)) {
     return rejected(id, roleRefusal(op, entity));
   }
 

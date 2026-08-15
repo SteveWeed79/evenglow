@@ -100,8 +100,26 @@ export function startTriggers(): TriggerHandles {
        * this is the only thing that can tell it. Losing the network matters as
        * much as regaining it: without the `false` the engine spends a flush
        * and a backoff discovering what the OS already knew.
+       *
+       * **Only what the OS actually said.** This was
+       * `setOnline(event.isConnected === true)`, which collapses "no" and
+       * "did not say" into the same answer — and they are not the same answer.
+       * `isConnected` is optional and `addNetworkStateListener` leaves it
+       * `undefined` on some configurations, so on those devices the first
+       * event reported offline on a phone showing four bars. `tick` then takes
+       * the offline branch, schedules another tick, and returns without
+       * flushing or pulling; nothing sets it back, because the only thing that
+       * could is another event from the listener that never says anything.
+       * `wake()` on resume calls `nudge()` without `force`, so it schedules a
+       * tick that immediately takes the same branch again. Sync stopped for
+       * the life of the process, behind a chip that looked healthy — and the
+       * manual "Try sending now" button worked, which is exactly why it
+       * survived testing.
+       *
+       * The engine's own `nudge` documentation already named this hazard
+       * verbatim. The listener never got the memo.
        */
-      setOnline(event.isConnected === true);
+      if (event.isConnected !== undefined) setOnline(event.isConnected);
       if (event.isConnected === true) void wake();
     });
 
