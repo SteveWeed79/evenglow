@@ -2111,11 +2111,14 @@ to say it should be re-weighed rather than assumed to lose.
 
 **To do**
 
-- [ ] Correct the comment so it names the bundler route and says why it was not
+- [x] Correct the comment so it names the bundler route and says why it was not
       taken.
 - [ ] Optional, separately: evaluate `esbuild`/`tsup` against the same-code-path
       argument. Image size is a weaker motive than it first appears — the image
-      already carries production dependencies only.
+      already carries production dependencies only. **Left open deliberately:**
+      it is a preference call, and swapping a working runtime for an unevaluated
+      build step to satisfy a comment correction would be the tail wagging the
+      dog.
 
 ## B-3 · The vitest parallelism comment contradicts itself — **P3**
 
@@ -2363,14 +2366,20 @@ Add, alongside the existing sync tests:
 - [ ] Crash between log write and projection → repaired, not duplicated. **Needs
       a seam that does not exist**: `applyMutation` takes no clock and no hook.
 - [ ] Farm Hand photo, end to end, across two devices.
-- [ ] N-1: hand creates a group, server rejects, hand discards → record gone.
-- [ ] N-2: a `NetworkStateEvent` with `isConnected: undefined` → the engine does
-      not go offline.
-- [ ] N-3: `medication:update` carrying both `flockId` and `animalId` → refused,
-      or the withdrawal holds for both subjects.
-- [ ] Concurrency tests for P1-7 (a), (b) and (c). None exist; the codebase
-      already does concurrency correctly elsewhere and tests it with
-      `Promise.all`, so the pattern is there to copy.
+- [x] N-1: hand creates a group, server rejects, hand discards → record gone.
+      `tests/offline/refused-create.test.ts`, which also covers the residue now:
+      a refused `update` and a refused `delete` are both put back, and are
+      **not** put back when something has touched the record since.
+- [x] N-2: a `NetworkStateEvent` with `isConnected: undefined` → the engine does
+      not go offline. `tests/unit/network-trigger.test.ts`.
+- [x] N-3: `medication:update` carrying both `flockId` and `animalId` → refused,
+      or the withdrawal holds for both subjects. `tests/unit/merged-invariants.test.ts`
+      — refused, and the audit step found `maintenanceUpdateSchema` dropping its
+      refine the same way, which the item had not noticed.
+- [x] Concurrency tests for P1-7 (a), (b) and (c).
+      `tests/isolation/membership-races.test.ts`. **CI only** — no mongod is
+      obtainable in the environment they were written in, so unlike everything
+      else here they were not watched to fail before they passed.
 
 ---
 
@@ -2391,7 +2400,9 @@ From the verification pass, with the dependencies that force it:
    what turns the crash window into something a farm hits.
 2. ~~**N-1**, beside it. Same confusion, opposite direction, and no server change
    fixes it.~~ **Done for the create case**; the `update`/`delete` residue and
-   the `checkIntegrity` phantom detection remain.
+   the `checkIntegrity` phantom detection remain.~~ **All three done now** — and
+   the phantom half by finding it was already closed, since the P0-2 repair
+   sweeps exactly that set.
 3. ~~**P1-2** and **N-2**. Both cheap, both high-frequency, both invisible to the
    person affected.~~ **Both done.**
 4. ~~**P1-1**, which unblocks ever putting a new field on the wire — including
@@ -2406,9 +2417,38 @@ From the verification pass, with the dependencies that force it:
    wraps the same critical section.~~ **Done**, and the ordering turned out to
    matter: the mutex wraps the outcome stamp, which did not exist when this was
    written.
-6. **P1-5(a)** with the `tickets` wipe fix ahead of it, then ~~P1-3~~, P1-4(c).
-   P1-3 is done.
+6. ~~**P1-5(a)** with the `tickets` wipe fix ahead of it, then ~~P1-3~~,
+   P1-4(c).~~ **All done**, including P1-5's last uncovered case, which turned
+   out to need the screen harness rather than a handset.
 7. **P0-1's fresh-ULID work**, with the correction editor it exists to support.
+   **The only substantial thing left in this document.** It is a feature —
+   correcting a refused mutation and sending it as a new one — rather than a
+   defect, which is why it has stayed at the bottom of every pass.
+
+---
+
+# Where this stands, 15 August
+
+Everything in P0, P1, P2, B-1 to B-4 and the two P3 items split out for being
+cheap is now either **done** or **declined with a reason written down**. The
+declines are worth listing, because a decline that is not recorded reads as an
+omission:
+
+| | Why not |
+|---|---|
+| P2-2's signing-certificate check | Real verification needs `apksigner`, which the box has by decision no Android SDK for. Reading a certificate out of `META-INF` proves one is present and nothing about what it signed — a check that looks like verification and is not. After the profile, application-id and commit filters it would have almost nothing left to catch. |
+| P2-3's restore-into-non-empty refusal | Contradicts a documented decision, and the harm is bounded to un-archiving. |
+| P2-3's scheduled restore test | Cannot be automated *here*: a restore needs the age identity, and the design is that the private half never exists on the box. Documented as a twice-yearly drill performed elsewhere. |
+| B-2's move to a bundler | The comment was the defect and is corrected. Swapping a working runtime for an unevaluated build step to satisfy a comment correction would be the tail wagging the dog. |
+| P0-1's fresh-ULID work | A feature, not a defect. Still open, deliberately. |
+| P1-4 (a) and (b) | Server-side, and unreachable without a refresh token already extracted from a device keystore. Still open. |
+
+**And the thing no amount of this substitutes for.** Several of these changes are
+in the mobile client — the sign-out fence, the pre-image revert, the diagnostics
+panels, the farm-swap unmount — and **none of them has run on a handset.**
+`CLAUDE.md` is explicit: *"Verify on a real device before calling any storage,
+camera, haptics, or sync task done."* Green CI is not that, and this document
+should not be read as though it were.
 
 ---
 
