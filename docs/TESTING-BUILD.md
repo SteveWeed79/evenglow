@@ -499,52 +499,70 @@ server, and those are not the same risk at all.
 ### Building it ourselves, when EAS will not
 
 The free tier caps Android builds per month, and hitting that cap is not a
-gentle failure: issue #153 is the promote that shipped the server, was refused
-a build, and skipped the step that would have said so.
+gentle failure: #153 is the promote that shipped the server, was refused a
+build, and skipped the step that would have said so.
 
 `.github/workflows/apk.yml` is the way round it — **Actions → APK → Run
-workflow**, with a `versionCode` higher than the last one shipped. It runs
-`expo prebuild` and Gradle on a GitHub runner, signs with our own keystore,
-and attaches the APK to a Release. No Expo account is involved at any point;
-`expo prebuild` is local and the queue is not in the path.
+workflow**, and leave the inputs alone. It runs `expo prebuild` and Gradle on a
+GitHub runner, signs with our own keystore, checks the result, and attaches it
+to a Release. No Expo account is involved at any point; `expo prebuild` is
+local, so the queue and the quota are not in the path.
 
-**It is a runner and not the box, and the reasons above still stand.** The
-keystore argument in §8 is the same wherever the machine is — except that a
-repository secret is materialised for the length of one job, while a box holds
-what it holds all the time, next to a public web server. There is also a
-practical blocker the section above predates: the box is aarch64 and Google
-ships the Android build-tools as x86_64 binaries only, so `aapt2` and
-`zipalign` there would come from emulation or a community rebuild.
+**A runner and not the box, and §7's reasons above still stand.** The keystore
+argument is the same wherever the machine is — except that a repository secret
+is materialised for the length of one job, while a box holds what it holds all
+the time, next to a public web server. There is also a practical blocker that
+section predates: the box is aarch64 and Google ships the Android build-tools
+as x86_64 binaries only, so `aapt2` and `zipalign` there would come from
+emulation or a community rebuild.
 
-**Four secrets, and the job refuses to start without them:**
+**Five secrets, and the job refuses to start without them:**
 
-| Secret | What |
+| Secret | Where it comes from |
 |---|---|
 | `ANDROID_KEYSTORE_BASE64` | `base64 -w0 steading.jks` |
-| `ANDROID_KEYSTORE_PASSWORD` | keystore password |
-| `ANDROID_KEY_ALIAS` | alias inside it |
-| `ANDROID_KEY_PASSWORD` | key password |
+| `ANDROID_KEYSTORE_PASSWORD` | the §8 export |
+| `ANDROID_KEY_ALIAS` | the §8 export |
+| `ANDROID_KEY_PASSWORD` | the §8 export |
 | `ANDROID_CERT_SHA256` | `keytool -list -v -keystore steading.jks -alias <alias> \| grep SHA256:` |
 
-All of them come out of the export in §8.
+#### The `versionCode` is derived, not typed
 
-**The last one is the guard, not bookkeeping.** Everything else can succeed and
-still produce an APK signed by the wrong key — the wrong account's keystore,
-the wrong alias inside the right one, a secret pasted with a line break — and
-none of those look like errors. The job verifies the certificate it actually
-signed with against that fingerprint and fails if they differ, because the
-alternative is finding out on a tablet, where the fix is an uninstall and an
-uninstall takes the records with it (§3, last row).
+It is one past the highest already released — read off the `v<version>+<code>`
+tags — and never at or below **17**, which is what EAS reached before the
+quota. `scripts/lib/apk.mjs` holds that rule and `tests/unit/apk.test.ts` holds
+that file.
 
-And it **never falls back to a debug key**. `expo prebuild` points the release
-build type at the debug signingConfig, so the natural failure mode here is a
-perfectly normal-looking APK that Android treats as a different app. A missing
-secret stops the job instead.
+The input exists only to force a code *higher* than the derived one, and it is
+rejected if it is not. This matters more than it sounds: the first draft made
+it a required free-text box with the right answer written in the description,
+and a description is not a guard. A typo there produces an APK that every
+device refuses, where the only way past is an uninstall — and an uninstall
+takes the farm's records with it (§3, last row).
 
-**It does not put the APK on the box.** Nothing above opens an upload route.
-Download the artefact and `publish-apk.sh <path>` — the local-file form the
-script has always had — or teach the box to pull the Release, which is #153's
-remaining half.
+#### Three checks, and each one catches something that succeeds silently
+
+`scripts/apk-check.mjs` runs before anything is published, and fails closed —
+anything it cannot positively confirm is a failure, including its own inputs
+being missing.
+
+- **The APK is the app.** `aapt2 dump badging` has to say `com.steading.app`
+  with the version and code we intended. A build that read a stale `app.json`
+  produces a perfectly ordinary APK with the wrong number in it.
+- **The signature is ours.** The certificate's SHA-256 is compared against
+  `ANDROID_CERT_SHA256`. A keystore exported from the wrong account, the wrong
+  alias inside the right keystore, or a secret pasted with a line break all
+  succeed at signing, and none of them look like errors.
+- **It never falls back to a debug key.** `expo prebuild` points the release
+  build type at the debug signingConfig, so a missing secret's natural outcome
+  is a normal-looking APK that Android treats as a different app. The job stops
+  before the checkout instead.
+
+#### It does not put the APK on the box
+
+Nothing above opens an upload route. Download the artefact and run
+`publish-apk.sh <path>` — the local-file form the script has always had — or
+teach the box to pull the Release, which is #153's remaining half.
 
 ### A GitHub Release is for the archive
 
