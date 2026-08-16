@@ -13,15 +13,22 @@ and doing nothing wrong. `UNCONSIDERED.md` catalogued account deletion `[4]`
 and never thought to ask about recovery; the August product assessment caught
 it.
 
-**The concern that was raised and overruled, recorded because that is how a
-decision stays legible.** An email sender adds infrastructure, a secret on the
-box, and a third-party processor that has to be named in the privacy policy
-`[1]` and the Data Safety declaration `[3]` — to an app whose thesis is that it
-needs no server to function. The counter-argument won on the merits: a solo
-owner is the common case, they have nobody to mediate a reset, and a recovery
-code shown once at signup is a thing people lose. Email is the route a farm
-already expects and the only one that works for somebody who has lost
-everything except their inbox.
+**Email is the route, and it is an ordinary addition to a server that already
+exists.** `api.swbuild.dev` runs Fastify on the Oracle box and already
+authenticates, syncs, serves the APK, takes support tickets and talks to Play.
+Sending one message is a route beside those, not a new dependency.
+
+Worth stating because an earlier draft of this document got it wrong: it
+described email as a departure from an app "that needs no server to function".
+That conflates two different things. **Offline-first is a promise about the
+handset** — every record is written to local SQLite, the app opens and works
+with the radio off, and sync is what happens afterwards. It has never been a
+claim that the project has no server, and the two have been distinct since D10.
+
+The two real costs are small and are already on the list: a secret on the box
+alongside the ones there now, and a processor to name in the privacy policy
+`[1]` and the Data Safety declaration `[3]` — the same paragraph that has to
+name Atlas, S3, GitHub and Google.
 
 ---
 
@@ -218,13 +225,16 @@ The list, so it is not assembled from memory at the end:
 
 - **No security questions.** They are a weaker password nobody chose.
 - **No "reset link expires when you click it" web page.** §2.
-- **No recovery codes at signup**, which was the alternative considered: it
-  works offline and for a solo owner, and it is a thing people lose in the
-  drawer with the manual. It remains the obvious second factor if this app ever
-  grows one, and the token machinery here would serve it unchanged.
-- **No owner-mediated reset** for now. It is a natural companion for a farm
-  with more than one person, it reuses every part of this, and it is a smaller
-  piece of work once this exists.
+- **No recovery codes at signup**, which was one alternative considered: it
+  works for a solo owner without any email at all, and it is a thing people
+  lose in the drawer with the manual. It remains the obvious second factor if
+  this app ever grows one, and the token machinery here would serve it
+  unchanged.
+- **No owner-mediated reset** for now — another farm member minting a reset
+  code the way they mint a join code. It is a natural companion for a farm with
+  more than one person, it reuses every part of this, and it is a smaller piece
+  of work once this exists. It is not a substitute: most farms are one person,
+  and that person has nobody to ask.
 
 ---
 

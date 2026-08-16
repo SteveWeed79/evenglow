@@ -66,9 +66,11 @@ on the exact failure they then permit.
       [`PASSWORD-RECOVERY.md`](PASSWORD-RECOVERY.md)
       None exists; `AccountScreen` says so in a comment. Recovery currently
       needs a shell on the server, and a lockout hits farms who are paying and
-      doing nothing wrong. **The delivery channel is decided: Steading gains an
-      email sender**, which adds a processor to name in `[1]` and `[3]`. The
-      design is researched and written; the build is the next piece.
+      doing nothing wrong. **The delivery channel is decided: Steading sends
+      email**, which is a route on the Fastify service that already
+      authenticates, syncs and serves the APK — plus a secret on the box and a
+      processor to name in `[1]` and `[3]`. The design is researched and
+      written; the build is the next piece.
 - [x] **Verify units on Harvest and reporting.** **GA**
       *Confirmed true and fixed.* `HarvestScreen` offered pounds to everybody
       and converted with `poundsToUg` whatever the farm had set. The entry
@@ -170,12 +172,12 @@ period rather than a task.
 - [ ] **Opt-in local notifications.** **GA**
       Treatment doses, withdrawal clearance, birth and hatch, succession sowing,
       harvest windows, service due, recurring chores. **This corrects
-      `DOMAIN-SCOPE.md` §8.2**, which parks notifications as needing a server —
-      true of push, false of local scheduled ones, which are an OS API that
-      works with the radio off and are the natural output of a due engine that
-      already recomputes locally. Today stays usable without them. Ship
-      inventory reorder alerts last, if at all — an alert nobody can act on from
-      a barn trains people to dismiss the ones they can.
+      `DOMAIN-SCOPE.md` §8.2 twice over** — local scheduled notifications are an
+      OS API that fires with the radio off, *and* the "server dependency" that
+      parked them was never a real constraint, because there is a server. Today
+      stays usable without them. Ship inventory reorder alerts last, if at all —
+      an alert nobody can act on from a barn trains people to dismiss the ones
+      they can.
 - [ ] **Targeted CSV import, bounded to an empty farm.** **GA-c**
       Current animals, equipment, varieties, plantings, inventory. The refusal
       in `COMPETITIVE-ANALYSIS.md` §2.1 rests on three hazards that are all

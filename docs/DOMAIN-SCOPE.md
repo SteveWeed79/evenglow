@@ -280,10 +280,25 @@ keyed to a date rather than a meter — which is why the due engine takes either
 
 **Reminders that reach a person.** The `task` entity exists and nothing
 schedules it. With the due engine, it does not need to: a reminder is a due row
-surfacing on Today. Push notifications are a separate question and a later one —
-they need a server, which is exactly the dependency this app is built to avoid,
-so they are a convenience layered on top of a system that already works without
-them.
+surfacing on Today.
+
+Notifications are a later question, and the reason given here used to be wrong.
+It said push "needs a server, which is exactly the dependency this app is built
+to avoid" — and there is a server. `api.swbuild.dev` has authenticated, synced
+and served the APK since before this paragraph was written. **Offline-first is
+a promise about the handset**, not a claim that the project has no back end;
+D10 has described a separate Fastify service all along.
+
+So the honest ordering is by what each thing costs, not by whether a server is
+involved:
+
+- **Local scheduled notifications need nothing new.** They are an OS API, they
+  fire with the radio off, and the due engine already recomputes locally —
+  which makes them the natural output of a system that is finished. This is the
+  one to build.
+- **Push needs a server *push* path** — device tokens, a scheduler, FCM — which
+  is real work, and it earns nothing a local notification does not until
+  something has to reach a farm that has not opened the app.
 
 **Parts and consumables — built.** The schemas already carried the link:
 `maintenance.partIds` names what a service consumes and `inventory.equipmentId`
@@ -453,9 +468,13 @@ Within the domains, the order that gets a farm the most soonest:
    no longer sits inside. Joining a second farm needs a membership model this
    schema does not have, and inventing one to make an error message go away
    would be the wrong place to decide it.
-2. **Push notifications.** A due row on Today is useful when the app is opened.
-   Is "the app tells you" wanted badly enough to take a server dependency, or is
-   opening the app in the morning the expected behaviour?
+2. ~~**Push notifications.**~~ **Reframed — the question was wrong.** It asked
+   whether "the app tells you" was wanted badly enough "to take a server
+   dependency", and there is a server; that was never the trade. §3.2 has the
+   corrected version. What remains open is narrower and worth answering: local
+   scheduled notifications are cheap and should be built, and *push* only earns
+   its keep for something that has to reach a farm which has not opened the app
+   in days. Is there such a thing here?
 3. **Units.** Imperial or metric, per farm or per field? Pounds and kilos both
    appear in the reference data, and guessing wrong on a medication dose is not
    a cosmetic error.

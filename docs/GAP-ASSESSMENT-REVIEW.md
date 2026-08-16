@@ -180,13 +180,29 @@ polygon. It also gives `[94]` movement records somewhere to point.
 **Append-only completion events.** Adopt, as above.
 
 **Local notifications, opt-in.** Adopt, and note that it corrects a framing
-error of ours. `DOMAIN-SCOPE.md` §8.2 files push notifications as an open
-question because they "need a server, which is exactly the dependency this app
-is built to avoid". That is true of *push* and false of *local scheduled*
-notifications, which are an OS API, work with the radio off, and are the natural
-output of a due engine that already recomputes locally. We refused the wrong
-thing. A withdrawal clearing, a hatch date and a service due are precisely the
-events worth a notification, and none of them needs a server.
+error of ours — **two of them, stacked.**
+
+`DOMAIN-SCOPE.md` §8.2 filed push notifications as an open question because
+they "need a server, which is exactly the dependency this app is built to
+avoid".
+
+The first error is the distinction: that is true of *push* and false of *local
+scheduled* notifications, which are an OS API, fire with the radio off, and are
+the natural output of a due engine that already recomputes locally.
+
+**The second is the premise, and it is the one worth catching, because it was
+load-bearing under the first.** There is a server. `api.swbuild.dev` has
+authenticated, synced, billed and served the APK since long before that
+sentence was written, and D10 describes a separate Fastify service as a settled
+decision. Offline-first is a promise about the handset — records land in local
+SQLite and the app opens with no signal — not a claim that the project has no
+back end. Treating "it needs the server" as disqualifying is a rule this
+project has never actually held, and it has been quietly ruling things out on
+those grounds.
+
+Both are now corrected in `DOMAIN-SCOPE.md` itself. A withdrawal clearing, a
+hatch date and a service due are precisely the events worth a notification, and
+the local ones need nothing that does not already exist.
 
 **Individual-animal lifecycle.** Adopt. The record exists and terminates
 nowhere: no outcome, no location history, no linked timeline. This is the same
