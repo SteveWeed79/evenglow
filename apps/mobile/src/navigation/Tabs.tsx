@@ -112,6 +112,23 @@ export function Tabs(): React.ReactElement {
                * is what a rail wants anyway.
                */
               tabBarLabelPosition: 'below-icon' as const,
+              /**
+               * Give the word the whole rail, because the item is padded.
+               *
+               * "HISTORY" came back off the tablet as "HIST…" in a 96dp rail
+               * that a seven-character word fits in twice over. The rail is not
+               * the box: `BottomTabItem` puts `styles.tabVerticalMaterial` on
+               * every item, which is `padding: 10`, and the sidebar branch
+               * beside it spends 40 — so the label is laid out in what is left,
+               * not in 96.
+               *
+               * Only the horizontal half is dropped. The vertical padding is
+               * what separates one tab from the next down a column, and a rail
+               * of words with nothing between them is a worse bar than a
+               * clipped one. `options.tabBarItemStyle` is applied after the
+               * variant style in `BottomTabBar`, so this wins rather than ties.
+               */
+              tabBarItemStyle: { paddingHorizontal: 0 },
             }
           : {}),
         /**

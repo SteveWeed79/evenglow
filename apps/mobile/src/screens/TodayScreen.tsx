@@ -130,7 +130,18 @@ export function TodayScreen(): React.ReactElement {
   const { colors } = useTheme();
   const farmName = useFarmName();
   const nav = useNav();
-  const { panes } = useWindow();
+  /**
+   * `bar: true`, because this is a tab screen and the rail stands in its width.
+   *
+   * Without it this asked a different question than the `Screen` it hands the
+   * aside to — `Screen` uses `{ bar: !back }` — and the two disagreed across a
+   * 96dp band: a window wide enough for two panes *before* the rail is taken
+   * off, but not after. In that band Today believed it was split and `Screen`
+   * knew it was not, so every due rendered stacked under the tallies with the
+   * `VISIBLE_DUES` cap lifted. Nothing on this farm's hardware sat in the band,
+   * which is exactly why it would have waited for one that did.
+   */
+  const { panes } = useWindow({ bar: true });
 
   /**
    * Where a row is discharged.
@@ -324,10 +335,20 @@ export function TodayScreen(): React.ReactElement {
         ? {}
         : {
             aside: (
-              <View style={styles.duesBelow}>
+              <View style={panes === 2 ? styles.duesBeside : styles.duesBelow}>
                 {/* Named, because a list of jobs under the tallies with no heading
-                    reads as more tallies until you have read one. */}
-                <Text style={[styles.moreLabel, { color: colors.muted }]}>Also today</Text>
+                    reads as more tallies until you have read one.
+
+                    Beside them it is a different situation and the heading earns
+                    nothing: the pane is its own column with a spacer down the
+                    side, so there is no run of cards for it to be mistaken for.
+                    What the heading does cost there is alignment — it is the only
+                    thing standing above the aside's first card, so the two columns
+                    started at different heights and the pair read as a mistake.
+                    Reported off the tablet the first time both panes were seen. */}
+                {panes === 2 ? null : (
+                  <Text style={[styles.moreLabel, { color: colors.muted }]}>Also today</Text>
+                )}
 
                 {shown.map((bundle) => (
                   <DueBundleRow key={bundle.key} bundle={bundle} now={now} open={openDue} />
@@ -646,6 +667,15 @@ const styles = StyleSheet.create({
   fix: { alignSelf: 'flex-start', paddingVertical: SPACE.xs, paddingHorizontal: SPACE.md },
   dues: { gap: SPACE.sm, marginBottom: SPACE.sm },
   duesBelow: { gap: SPACE.sm, marginTop: SPACE.md },
+  /**
+   * The same list, with the gap that separated it from the tallies removed.
+   *
+   * `marginTop` is what holds the dues off the column above them when they are
+   * stacked. Beside that column there is nothing above them, so the same margin
+   * only pushes the pane out of line with its neighbour — the second half of
+   * the misalignment the heading caused.
+   */
+  duesBeside: { gap: SPACE.sm },
   bundle: { gap: SPACE.xs },
   more: { alignSelf: 'flex-start', paddingVertical: SPACE.xs, paddingHorizontal: SPACE.sm },
   moreLabel: {
