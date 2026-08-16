@@ -5,9 +5,10 @@ first as a design, then kept as the record of what the building changed about
 it. Where the two differ, §11 says so — a plan that was quietly edited to match
 its outcome is worth nothing to whoever reads it next.
 
-**What is not done: none of it has been seen on a tablet.** The suite has no
-layout engine and every phone falls on the narrow side of every branch here, so
-the wide path has been reasoned about and never looked at. See §12.
+**It has been seen on a tablet once, and that look paid for itself.** One
+screenshot, 16 August, found two defects no test could reach and corrected the
+device dimension the whole plan was drawn against — §11a. What has *not* been
+seen is the state after those fixes. See §12 for what a second look still owes.
 
 Read `docs/UX-SPEC.md` first — R1–R10 are binding and this document proposes an
 amendment to exactly one of them (R3), stated openly rather than worked around.
@@ -611,20 +612,46 @@ or a decision to shrink the measure, which §7 says not to make.
 
 ## 12. What a device still has to answer
 
-Everything below is reasoned from tokens and has never been looked at.
+### What the first look already answered
 
-- **The rail's labels.** Three uppercase mono words in a 96dp rail is the
-  arithmetic saying yes; this bar has clipped twice on arithmetic that said
-  yes. Look before believing it.
-- **`tabBarVariant: 'material'`.** Used with a custom `tabBarLabel` and no
-  icon, which is not the combination it was drawn for.
-- **Which pane the tally wants.** §5a.1 settles it on an argument, not on a
-  measurement. The reach arcs are ±40dp.
-- **The cutout insets.** `insets.left`/`insets.right` are now reserved and no
-  device in the suite reports a non-zero one.
-- **The two-pane fold.** `landscape-fold.test.ts` says the stack clears
-  800dp; whether it looks right with 480dp of dues beside it is a different
-  question and only a screen answers it.
+One screenshot, 16 August, and it settled three of the five questions this
+section used to list — two of them by failing.
+
+- **`tabBarVariant: 'material'` was the wrong combination**, exactly as this
+  section suspected. `BottomTabBar` applies `getDefaultSidebarWidth` as
+  `minWidth` when labels are horizontal, that default is the 360dp *drawer*
+  width, and `minWidth` beats `width` — so `LAYOUT.rail` was never in play.
+  Answered, and fixed with `tabBarLabelPosition: 'below-icon'`.
+- **The bottom inset was not reserved at all.** Not on this list, because
+  nobody thought to put it here: `Screen` read `back ? insets.bottom : 0` and
+  that reasoning expired the moment the bar left the bottom edge. Content ran
+  under the system navigation. Answered by looking, and by nothing else.
+- **The two-pane fold is moot on this hardware.** §11a: 960 × 600dp, 864dp
+  after the rail, against a 992dp threshold. There is no 480dp of dues to
+  judge beside the column because there is no aside. Deferred, not answered —
+  the question returns on a wider display.
+
+The measurement underneath all three is the one that mattered most: the drawer
+rendering at 718px is what gave density 2.0, and therefore 960 × 600dp instead
+of the 1280 × 800 this plan was drawn for.
+
+### What a second look still owes
+
+- **The rail's labels, at 96dp this time.** The first look could not answer
+  this — the rail was 360dp wide, so nothing was under pressure. Three
+  uppercase mono words stacked under no icon in 96dp is arithmetic saying yes,
+  and this bar has clipped twice on arithmetic that said yes.
+- **`tabBarLabelPosition: 'below-icon'` with no icon.** The fix swapped one
+  undrawn-for combination for another. It drops the `minWidth` floor, which is
+  the part that was verified by reading the source; how it *looks* with a label
+  and no icon above it is not.
+- **The bottom of Today, now that the inset is reserved.** The fix is
+  conditional on `!hasRail(width)`, so a phone and a tablet take different
+  branches and only one of them has been seen broken.
+- **The cutout insets.** `insets.left`/`insets.right` are reserved and still no
+  device in the suite reports a non-zero one. Unchanged by the first look.
+- **Which pane the tally wants.** §5a.1 settles it on an argument, not a
+  measurement, and the reach arcs are ±40dp. Dormant with the pane work.
 
 ---
 

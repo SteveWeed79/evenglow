@@ -35,11 +35,14 @@ Stock and Iron, a context pane on Weigh, and the tab bar becoming a navigation
 rail at expanded width.
 
 > **§11 of the plan is the list of five places the plan lost to the code** —
-> kept rather than edited away. **§12 is the honest ledger: none of it has been
-> looked at on a tablet.** The suite has no layout engine and every phone falls
-> on the narrow side of every branch. The rail's labels are the first thing to
-> look at; that bar has clipped its words twice before on arithmetic that said
-> they would fit.
+> kept rather than edited away. **§12 is the ledger of what a device has and
+> has not answered.** It has been looked at once: one screenshot found two
+> defects no test could reach and corrected the device dimension the plan was
+> drawn against (§11a). The suite has no layout engine and every phone falls on
+> the narrow side of every branch, so that look is still the only evidence
+> there is — and it was of the *broken* state. The rail's labels are the first
+> thing to check next, at 96dp this time; that bar has clipped its words twice
+> before on arithmetic that said they would fit.
 
 `UX-SPEC.md` R3 was amended, not bent: primary actions live in the bottom third
 on a compact window and the bottom **outer corners** on an expanded one,
