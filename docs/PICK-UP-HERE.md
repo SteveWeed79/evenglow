@@ -85,12 +85,8 @@ buried under Gradle's cache-saving output"*, and the run's step list is
 consistent with it: signing succeeded, the check that reads the secret is what
 refused.
 
-**So the next run is the one that settles it, and there are two ways it can go.**
-If it goes green, that reading was right. If it fails the same way *and reports
-a 64-character value*, the label was never the problem and it is a real key
-mismatch — **stop there**; the keystore is not the one EAS has been signing
-with, and nothing should ship until that is understood. `apk-check.mjs` now
-prints the length precisely so those two are distinguishable.
+**That reading was wrong, and the second promote said so.** It is recorded
+below rather than left as a theory that quietly stopped being true.
 
 Two more things about that run:
 
@@ -103,6 +99,40 @@ Two more things about that run:
 - **The real test is still the install, not the green tick.** Put it on the
   tablet *over* the existing app without uninstalling. If it goes on and the
   records survive, the signature matched and the whole chain is proven.
+
+#### The second promote, which got further and named the real cause
+
+Run
+[31925150611](https://github.com/SteveWeed79/steading/actions/runs/31925150611),
+the first promote through `ci.yml` → `apk.yml`. `verify`, `container` and
+`release` all green — the version moved to **0.1.14** and `release` was pushed,
+so the server half shipped. `app / build` then failed at the same step and with
+**a different message**:
+
+```
+- No SHA-256 certificate digest in the apksigner output — is the APK signed?
+```
+
+**No comparison happened at all**, so the key-mismatch stop was never reached
+and the label theory above was never even exercised. What failed was reading
+the output: `certificateFrom` was pinned to the literal
+`Signer #1 certificate SHA-256 digest:`, and newer build-tools qualify that
+line with the SDK range it covers. The workflow takes the **newest**
+build-tools on the runner by design, so a fixed string was always going to
+drift out from under it.
+
+**The APK was signed correctly.** `apksigner verify` exits non-zero when an APK
+does not verify, the Sign step runs under `set -euo pipefail`, and that step
+passed — so the artefact verified and only the parsing failed. Everything else
+the check looks at was right too: it reported no other problem, meaning
+package, `0.1.14` and versionCode 18 all matched, which is the whole stamp and
+prebuild chain proven.
+
+Fixed by matching the signer line however it is qualified, and — the part that
+matters more — **by printing what was actually read**. The old message was two
+completely different repairs wearing one sentence, and the only way to tell
+them apart was another thirteen-minute build. The next failure of this kind
+names itself.
 
 #### A defect found while writing this section, and fixed
 
@@ -256,9 +286,26 @@ which is new every build and dies after thirty days.
 Three things to watch, in this order, because each one is the first time its
 step has run for real:
 
-1. **The APK job goes green.** If it fails the signature check again, read
-   §0 — the length it reports says whether the secret is malformed or the key
-   is genuinely wrong, and the second of those is a stop.
+1. **The APK job goes green.** Two promotes have now died at the signature
+   check, so read what it says rather than assuming which failure it is. It
+   prints the `apksigner` output it could not parse, and the fingerprint length
+   when a comparison did happen. **Only one of its messages is a stop**: two
+   64-character fingerprints that differ means the keystore is not the one EAS
+   has been signing with, and nothing should ship until that is understood.
+   Everything else it can say is a parsing or a secret-formatting problem.
+
+   **Prove it with a standalone APK run before promoting again.** Actions →
+   APK → Run workflow builds and signs at whatever `main` is, for the same
+   thirteen minutes, without cutting a version or moving `release` — and the
+   signature check is the only thing still unproven, so that is the cheap way
+   to settle it. `bump: none` is *not* the way to do this: it skips the app job
+   altogether, which is the whole point of that option.
+
+   Once it is green, promote normally with `bump: patch`. The version is
+   already at **0.1.14** — the release job pushed that bump before the app job
+   failed — so a promote cuts 0.1.15, and the standalone run's `v0.1.14+18`
+   release just sits in the archive, tagged at a commit no box serves and
+   therefore never fetched.
 2. **The box publishes it.** `sudo /opt/steading/scripts/deploy/deploy.sh` says
    `fetching 0.1.14` and then `/app/steading.apk now serves it`; on the timer it
    happens within five minutes of the release appearing. If it says

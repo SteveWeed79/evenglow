@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import {
   certificateFrom,
+  certsExcerpt,
   normaliseFingerprint,
   parseBadging,
   sameCertificate,
@@ -83,7 +84,27 @@ if (certs === null) {
 } else {
   const actual = certificateFrom(certs);
   if (actual === null) {
-    note('No SHA-256 certificate digest in the apksigner output — is the APK signed?');
+    /**
+     * Show it, because the alternative is another thirteen-minute build.
+     *
+     * **This said only "is the APK signed?" and it cost a whole promote.** The
+     * APK was signed perfectly well; `apksigner` had simply printed the signer
+     * line in a form the parser did not recognise, and nothing in the output
+     * distinguished that from an unsigned artefact. Two very different repairs,
+     * one message, and no way to tell them apart without building again.
+     *
+     * The digest is not a secret — the *expected* one is, and GitHub masks it
+     * wherever it appears — so there is nothing here that must not be printed.
+     */
+    note(
+      'No SHA-256 certificate digest in the apksigner output.\n' +
+        '      That is either an unsigned APK or a signer line this does not\n' +
+        '      recognise, and these are what it actually printed:\n\n' +
+        certsExcerpt(certs)
+          .split('\n')
+          .map((line) => `        ${line}`)
+          .join('\n'),
+    );
   } else if (!sameCertificate(actual, expectedFingerprint)) {
     const want = normaliseFingerprint(expectedFingerprint);
     /**
