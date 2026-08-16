@@ -1,4 +1,6 @@
+import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
+import { farmOrigin } from '../../scripts/lib/api-origin.mjs';
 import {
   certificateFrom,
   chooseVersionCode,
@@ -198,5 +200,34 @@ Signer #1 certificate SHA-1 digest: 0123456789abcdef0123456789abcdef01234567
     // A truncated paste — 63 hex characters — must not pass by prefix.
     const short = 'a'.repeat(63);
     expect(sameCertificate(short, short)).toBe(false);
+  });
+});
+
+/**
+ * The address the APK carries, which it cannot ask for later.
+ *
+ * ## Why this is here and not only in `api-origin.test.ts`
+ *
+ * That file tests `farmOrigin` as a function. This tests the *fact the runner
+ * build depends on*: that `eas.json` still holds a real remote origin under
+ * `preview-farm`, because a runner build reads no profile and `apk-plan.mjs`
+ * lifts it from there.
+ *
+ * The first version of that script did not, and the failure is the worst shape
+ * in this whole pipeline: the APK builds, signs, passes every check, installs
+ * cleanly — and boots saying *"This copy of the app was built without the
+ * address of your farm server"*. Every guard held and the artefact was useless.
+ */
+describe('the farm server address a runner build has to supply', () => {
+  it('is in eas.json, and is not a local machine', async () => {
+    const easJson = JSON.parse(
+      await readFile(new URL('../../apps/mobile/eas.json', import.meta.url), 'utf8'),
+    );
+    const origin = farmOrigin(easJson);
+
+    expect(origin).not.toBeNull();
+    // `farmOrigin` returns null for localhost, 10.x, the emulator alias and so
+    // on — so this passing means an APK built from it can actually reach a farm.
+    expect(origin).toMatch(/^https:\/\//);
   });
 });
