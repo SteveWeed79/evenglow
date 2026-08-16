@@ -12,7 +12,9 @@ This file is a point-in-time note, not a spec. It goes stale by design.
 
 ## 0. Where 16 August left things
 
-Three threads. Two are finished and unverified; one is half done and knows it.
+Three threads, and all three are now built and unverified. The half-done one —
+the box still pulling from EAS — was finished later the same day; what every
+one of them is waiting on is the same thing, a promote and a tablet.
 
 ### The landscape layout — merged, never seen on a device
 
@@ -64,22 +66,43 @@ in the path**, so no quota can refuse it.
 `eas credentials` → Download credentials, which also served as the §8 keystore
 backup that had never been taken.
 
-**First run: [31922188936](https://github.com/SteveWeed79/steading/actions/runs/31922188936)**,
-dispatched from `main` at `9daed0c`. At the time of writing it was on the Gradle
-step with every earlier step green — including the secrets check, the
-versionCode derivation and the prebuild. **Its outcome is not recorded here;
-look at the run.**
+**First run:
+[31922188936](https://github.com/SteveWeed79/steading/actions/runs/31922188936)
+— failed, and the outcome is now recorded rather than left to be looked up.**
 
-Two things about that first run:
+Dispatched from `main` at `9daed0c`. It got through the secrets check, the
+versionCode derivation, the prebuild, twelve minutes of Gradle and the signing,
+and then **failed its own signature check** — step 13 of 14, with `publish`
+skipped. So the expensive half of the pipeline is proven: a runner really does
+build and sign this app, and the quota was never in the path.
 
-- It should produce **`steading-0.1.13-18.apk`** and a release tagged
-  `v0.1.13+18`. 18 because `EAS_LAST_CODE` is 17 — the code EAS consumed on the
-  submission that the quota then refused.
-- **The real test is the install, not the green tick.** Put it on the tablet
-  *over* the existing app without uninstalling. If it goes on and the records
-  survive, the signature matched and the whole chain is proven. If Android
-  refuses with a signature error, **stop** — the keystore is not the one EAS has
-  been signing with, and nothing should ship until that is understood.
+The cause is the fingerprint-label defect fixed in `83c5df3` (merged in #155,
+so it is in `main`): `keytool` prints `SHA256: A1:B2:…`, **`SHA256` contains
+four hex characters**, and stripping non-hex without removing the label first
+prepended `A256` and produced 68 characters that matched nothing. That was
+written up as *"a likely cause rather than a confirmed one — the failure text is
+buried under Gradle's cache-saving output"*, and the run's step list is
+consistent with it: signing succeeded, the check that reads the secret is what
+refused.
+
+**So the next run is the one that settles it, and there are two ways it can go.**
+If it goes green, that reading was right. If it fails the same way *and reports
+a 64-character value*, the label was never the problem and it is a real key
+mismatch — **stop there**; the keystore is not the one EAS has been signing
+with, and nothing should ship until that is understood. `apk-check.mjs` now
+prints the length precisely so those two are distinguishable.
+
+Two more things about that run:
+
+- It never produced an artefact, so there is no `steading-0.1.13-18.apk`
+  anywhere and no `v0.1.13+18` tag. The next run derives 18 again — 18 because
+  `EAS_LAST_CODE` is 17, the code EAS consumed on the submission the quota
+  refused.
+- It also predates the `EXPO_PUBLIC_API_URL` / `EXPO_PUBLIC_BUILD` fix below, so
+  even a green run 1 would not have been usable against the live server.
+- **The real test is still the install, not the green tick.** Put it on the
+  tablet *over* the existing app without uninstalling. If it goes on and the
+  records survive, the signature matched and the whole chain is proven.
 
 #### A defect found while writing this section, and fixed
 
@@ -100,52 +123,71 @@ at this.
 
 `apk-plan.mjs` now lifts the address via `farmOrigin` — the same profile the EAS
 build would have read, so it is not written down twice — and refuses if it is
-absent or points at a local machine. `pnpm stamp` runs before the prebuild.
+absent or points at a local machine. The stamp runs before the prebuild.
 
 > **So the APK from run 1 is not usable against the live server.** Rebuild
 > after the fix lands. The run is still worth watching for the signature check,
 > which is the part it can prove.
+
+#### And the fix for that had a defect of its own, also fixed
+
+The step added above ran **`pnpm stamp`**, and there is no `stamp` script in the
+root manifest — it is in `apps/mobile/package.json`. From the repository root
+that exits 254 with `ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL`, which is a hard
+failure of the step, so **the next APK run would have died at step 10 of 14**
+before Gradle. It is now `pnpm --filter @steading/mobile stamp`.
+
+Nothing caught it because nothing could: run 1 predates the step, and there has
+been no run since. It is the third time in this one pipeline that a change was
+written, merged and first exercised on the run that mattered — which is the
+argument `apk.yml`'s own header makes for keeping judgement out of YAML, landing
+on the part of the file that is not judgement and cannot be moved.
 
 > **PR #154's description is stale.** It describes the first draft, where
 > `versionCode` was a required free-text input. The second commit replaced that
 > with derivation. `TESTING-BUILD.md` §7 and the code are correct; the PR body
 > is not.
 
-### The box still pulls from EAS — this is the open work
+### The box pulls the Release now — built, unverified
 
-`deploy.sh` finds the APK by asking EAS (`eas build:list`). **So a
-runner-built APK never reaches the shelf.** The box will go on serving the last
-EAS build, with no error — the same silent half-done shape as #153 itself.
+**This was the open work and it is done.** Both parts, as they were set out
+here, plus the tested `.mjs` the note asked for. Nothing has run end to end yet;
+that needs a promote, which is §1 below.
 
-This is #153's remaining half, and there is a decision in it. The EAS lookup
-filters on `--git-commit-hash "$NOW_FULL"` — *the build made from the commit
-this box is serving*. Its own comment argues that is better than a build id
-because it needs no channel between CI and the box. **Swapping in "newest
-GitHub Release" throws that away**, and breaks specifically: `release` bumps the
-version, commits it and promotes *that* commit, while the APK workflow is
-dispatched separately at whatever `main` is. Two commits, no link.
+| | |
+|---|---|
+| Decisions | `scripts/lib/release-apk.mjs`, held by `tests/unit/release-apk.test.ts` |
+| CLI | `scripts/release-apk.mjs` — `git tag --points-at HEAD \| … --remote <origin>` |
+| Wiring | `ci.yml`'s `app` job calls `apk.yml`; `deploy.sh`'s app block |
+| Docs | `TESTING-BUILD.md` §7, `DEPLOY-THE-SERVER.md` §7 |
 
-The coherent fix is two parts:
+**The commit stayed the key, which was the constraint.** The EAS lookup filtered
+on `--git-commit-hash` and argued that beat a build id because it needs no
+channel between CI and the box; "newest GitHub Release" would have thrown that
+away. So git on the box resolves HEAD to a `v<version>+<code>` tag — locally, no
+network, nothing handed over — and GitHub is asked only what is attached to that
+tag. `ci.yml` passes the **promoted sha** to `apk.yml` (a new `ref` input),
+because the version-bump commit is the one `release` points at and it does not
+exist when the run starts. Without that the tag would land a commit early and
+the box would never find it.
 
-1. **`ci.yml`'s release job calls `apk.yml`** instead of `eas build`.
-   `workflow_call` is already on `apk.yml` for exactly this. The APK is then
-   built at the promoted commit and the commit link is restored.
-2. **`deploy.sh` looks up the release whose tag points at `$NOW_FULL`** and
-   takes its APK asset URL. Same three guarantees, same `.last-artifact`
-   marker, same "the box pulls, nothing pushes" shape — and `EXPO_TOKEN` comes
-   off the box entirely.
+**The feared cost did not materialise, and that is worth writing down rather
+than leaving as a decision somebody still owes.** The note here said the two
+would become one action, so a server-only fix would wait on a Gradle build. It
+does not: the app job runs *after* `release` is pushed, so the server is already
+shipping while Gradle runs, and `bump: none` still skips the app entirely —
+the property is preserved exactly. The quarter of an hour only keeps the run
+marked in progress. One thing genuinely did change: **a failed app build is now
+a red job** rather than the silence #153 was, which is the point.
 
-The decision logic belongs in a tested `.mjs`, not in shell, for the reason
-`scripts/lib/apk.mjs` gives.
+`EXPO_TOKEN` is off the box. There is no credential on that machine for
+anything to leak, because a public repository's releases are readable by
+anybody; `GITHUB_TOKEN` in `deploy.env` is honoured if the repo is ever made
+private.
 
-**The cost, which is a real choice and not an oversight:** today you can promote
-the server without building an app (`bump: none`). Under (1) the two become one
-action, so a server-only fix waits on a Gradle build. The release job's own
-comments argue *"am I shipping a new app?" is one question, not two* — but it is
-worth deciding deliberately.
-
-**Until this lands, both build routes should stay.** The APK workflow costs no
-quota and the EAS one still feeds the box.
+**Both build routes still work.** Nothing removed `eas build` as a thing a
+person can run by hand, and the EAS quota resets on 1 September. What changed is
+which one CI uses and which one the box reads.
 
 ### Other state worth knowing
 
@@ -200,17 +242,38 @@ exits 1. The real fix is in PR #100; the drop-in can go once that merges and
 
 ## Next, and it needs the tablet
 
-### 1. Build the tester APK — any machine with the checkout
+### 1. Promote, which now builds the APK and puts it on the shelf
 
-```
-pnpm --filter @steading/mobile exec eas login
-pnpm --filter @steading/mobile exec eas build --profile preview-farm --platform android
-```
+**Actions → CI → Run workflow**, `bump: patch`. One button, and it does the
+whole chain: verify, move `release`, build the APK at the promoted commit on a
+runner, attach it to a release tagged at that commit. The box deploys the server
+within five minutes and publishes the APK to `https://api.swbuild.dev/app` on a
+tick after the build finishes.
 
-`preview-farm`, **not** `preview`. The profile carries
-`EXPO_PUBLIC_API_URL=https://api.swbuild.dev`, which is compiled into the APK;
-`preview` leaves it empty and the sync chip reads *Not set up*. EAS prints a URL
-and that URL is the install link.
+**That address is the install link** — a constant, unlike an EAS artefact url,
+which is new every build and dies after thirty days.
+
+Three things to watch, in this order, because each one is the first time its
+step has run for real:
+
+1. **The APK job goes green.** If it fails the signature check again, read
+   §0 — the length it reports says whether the secret is malformed or the key
+   is genuinely wrong, and the second of those is a stop.
+2. **The box publishes it.** `sudo /opt/steading/scripts/deploy/deploy.sh` says
+   `fetching 0.1.14` and then `/app/steading.apk now serves it`; on the timer it
+   happens within five minutes of the release appearing. If it says
+   `nothing to publish for this commit`, the line above it on stderr gives the
+   reason — no tag on this commit, no APK on the release, still uploading.
+3. **The install page shows the version.** `https://api.swbuild.dev/app`.
+
+To build without promoting — a signing fix to prove out — **Actions → APK → Run
+workflow** still works and leaves the shelf alone, deliberately: it is not built
+at a commit any box is serving.
+
+The EAS route also still works by hand (`eas build --profile preview-farm`,
+**not** `preview` — the profile carries `EXPO_PUBLIC_API_URL` and `preview`
+leaves it empty, so the sync chip reads *Not set up*). Its quota resets on
+1 September.
 
 ### 2. Read the tablet's queue depth before touching anything
 
@@ -224,19 +287,26 @@ accumulates rather than dropping.
 
 ### 3. The tablet first, still on its USB dev build
 
-Sign up on the tablet **before any EAS APK goes near it**. Signing up claims the
-org the device already minted (D15) and flushes its queue, so the records reach
-Atlas without anything being retyped.
+Sign up on the tablet **before any released APK goes near it**. Signing up
+claims the org the device already minted (D15) and flushes its queue, so the
+records reach Atlas without anything being retyped.
 
-> **Installing the EAS APK over a locally-built one forces an uninstall** —
+> **Installing a released APK over a locally-built one forces an uninstall** —
 > different signing keys, `INSTALL_FAILED_UPDATE_INCOMPATIBLE` — and an
 > uninstall takes the farm. Pick one route per device and stay on it: local for
-> the machine you develop on, EAS for anything handed to somebody else.
+> the machine you develop on, the shipped build for anything handed to somebody
+> else.
+>
+> A runner-built APK and an EAS one are **not** two routes in that sense: the
+> whole point of `ANDROID_CERT_SHA256` is that they carry the same signature, so
+> one installs over the other as an ordinary update. That is precisely the claim
+> run 1 was meant to prove and has not yet — see §0.
 
 ### 4. Then the phone
 
-Install the EAS APK, sign in with the same account. The records arrive by
-snapshot. **That is the continuity test** and the whole point of the exercise.
+Install from `https://api.swbuild.dev/app`, sign in with the same account. The
+records arrive by snapshot. **That is the continuity test** and the whole point
+of the exercise.
 
 ### 5. A second person, optionally
 
