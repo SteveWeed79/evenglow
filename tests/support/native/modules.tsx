@@ -155,9 +155,22 @@ class FakeDirectory {
   constructor(readonly uri: string) {}
 }
 
+/**
+ * How much room the fake device has left, in bytes. Steerable by a test.
+ *
+ * A full phone is not a state a test can produce by writing files, and it is
+ * the state `photos/store.ts` checks before opening the camera — so the only
+ * way to exercise the refusal is to be able to say "this device is full".
+ * Generous by default, because every other test is about something else.
+ */
+export const disk = { available: 8_000_000_000 };
+
 export const Paths = {
   cache: new FakeDirectory('file:///cache/'),
   document: new FakeDirectory('file:///documents/'),
+  get availableDiskSpace(): number {
+    return disk.available;
+  },
 };
 
 /**

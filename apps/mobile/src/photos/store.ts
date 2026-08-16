@@ -95,6 +95,62 @@ export interface Captured {
 }
 
 /**
+ * Room to take one, checked before the camera opens rather than after.
+ *
+ * `[36]`. A full device is not a rare state on a farm phone — it is a phone
+ * with four years of photographs on it, which is most of them — and the app
+ * met it in the worst possible order: open the camera, let somebody frame a
+ * wound they are worried about, take it, and then fail while writing. The
+ * subject of that photograph does not wait to be photographed twice.
+ *
+ * ## Why the floor is well above one photo
+ *
+ * A capture is not one file's worth of disk. `manipulateAsync` writes its
+ * output to a temporary before the move, so the original and the shrunk copy
+ * exist at once; the mutation lands in SQLite, which grows its WAL; and the
+ * upload later reads the whole file. Ten megabytes is roughly three times the
+ * worst case a single photo can cost, which is the margin worth having when
+ * the alternative is failing halfway.
+ *
+ * It is deliberately not a percentage. A tenth of a 512 GB tablet is fifty
+ * gigabytes, which would refuse a photo on a device with room for fifteen
+ * thousand of them.
+ */
+const ROOM_FOR_A_PHOTO = 10_000_000;
+
+/**
+ * The device is out of room, said before anything irreversible happens.
+ *
+ * Distinct from `StorageFullError`, which is the store's: this one is about a
+ * photograph that has not been taken yet, and the useful advice is different.
+ * A farm cannot free space by syncing here — the bytes are the weight, and
+ * they are on this phone until they are uploaded.
+ */
+export class NoRoomForPhotoError extends Error {
+  constructor() {
+    super('This phone is out of room for photographs. Free some space and try again.');
+    this.name = 'NoRoomForPhotoError';
+  }
+}
+
+/**
+ * Whether there is room, in a form the caller can act on.
+ *
+ * Returns true when it cannot tell. The property is a synchronous native read
+ * and it can throw on a platform or a filesystem that will not answer; a
+ * device that declines to say how much room it has is not a device that is
+ * known to be full, and refusing a photograph on a guess is worse than the bug
+ * this guards against.
+ */
+export function roomForAPhoto(): boolean {
+  try {
+    return Paths.availableDiskSpace >= ROOM_FOR_A_PHOTO;
+  } catch {
+    return true;
+  }
+}
+
+/**
  * Takes or picks a photo, shrinks it, and writes it under `id`.
  *
  * Returns null when the person backed out or refused the camera — a cancel is
@@ -104,6 +160,10 @@ export async function capture(
   id: string,
   source: 'camera' | 'library',
 ): Promise<Captured | null> {
+  // Before the permission prompt and before the camera: the whole point is
+  // that nobody frames a shot this app already knows it cannot keep.
+  if (!roomForAPhoto()) throw new NoRoomForPhotoError();
+
   if (source === 'camera') {
     const permission = await requestCameraPermissionsAsync();
     // Refusing the camera is an answer, not an error. The library is still

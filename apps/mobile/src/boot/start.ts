@@ -1,9 +1,10 @@
-import { currentAccessToken, setSessionRefresher } from '@steading/core/api';
+import { currentAccessToken, setClientVersion, setSessionRefresher } from '@steading/core/api';
 import { localStore } from '@steading/core/db/store';
 import { startSync, stopSync } from '@steading/core/sync/engine';
 import { setPhotoBytes } from '@steading/core/sync/photos';
 import { setStorageBacking } from '@steading/core/sync/storage';
 import { ensureLocalOrgId } from '../auth/local-org';
+import { APP_VERSION } from '../version';
 import { type CachedClaims, refreshSession } from '../auth/session';
 import { deviceBytes } from '../photos/bytes';
 import { recoverPendingPhoto } from '../photos/store';
@@ -110,6 +111,15 @@ export async function start(raw?: string): Promise<Started> {
    * moves them.
    */
   setPhotoBytes(deviceBytes);
+
+  /**
+   * Which build this is, so a server that has set a floor can say so ([24]).
+   *
+   * Told rather than detected, for the third time on this page and the same
+   * reason: `packages/core` has no `app.json` and must not grow one. A server
+   * with no floor — every server today — never looks at it.
+   */
+  setClientVersion(APP_VERSION);
 
   /**
    * How the sync loop renews a lapsed session, told rather than detected.

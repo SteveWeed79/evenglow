@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { apiBase, apiUrl, resetApiBase, setApiBase } from '@steading/core/api';
+import { apiBase, apiUrl, resetApiBase, setApiBase, setClientVersion, syncHeaders } from '@steading/core/api';
+import { CLIENT_VERSION_HEADER } from '@steading/contracts';
 
 /**
  * Which server the transports talk to.
@@ -75,5 +76,39 @@ describe('a base that cannot work', () => {
 
     // A half-applied configuration would be worse than either state.
     expect(apiUrl('sync')).toBe('https://good.example/sync');
+  });
+});
+
+/**
+ * Which build is asking, so a server that has set a floor can answer ([24]).
+ *
+ * Told rather than detected: `packages/core` has no `app.json` and must not
+ * grow one, which is the same reason the access token and the API base are
+ * installed rather than imported.
+ */
+describe('the client version header', () => {
+  afterEach(() => {
+    setClientVersion(null);
+  });
+
+  it('is absent until the client says what it is', () => {
+    // Every test and the browser build are in this state, and a server with no
+    // floor accepts it exactly as it always did.
+    expect(syncHeaders()[CLIENT_VERSION_HEADER]).toBeUndefined();
+  });
+
+  it('rides on every sync request once it is set', () => {
+    setClientVersion('0.1.18');
+
+    expect(syncHeaders()[CLIENT_VERSION_HEADER]).toBe('0.1.18');
+    // Beside what was already there rather than instead of it.
+    expect(syncHeaders()['x-steading-sync']).toBe('1');
+  });
+
+  it('can be taken away again', () => {
+    setClientVersion('0.1.18');
+    setClientVersion(null);
+
+    expect(syncHeaders()[CLIENT_VERSION_HEADER]).toBeUndefined();
   });
 });

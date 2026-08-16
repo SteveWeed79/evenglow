@@ -93,6 +93,22 @@ const envSchema = z.object({
    * money has ever been on.
    */
   FREE_SYNC_ORGS: z.string().default(''),
+  /**
+   * The oldest client build this server will take a batch from, or empty.
+   *
+   * `[24]`. Empty is the default and means no floor at all — nothing is
+   * refused, which is the state every server is in until somebody deliberately
+   * decides otherwise. Setting it is a decision taken once the fleet reports
+   * versions and once there is a build worth insisting on: the wire has
+   * widened its entity list before and now has a `null` that means *clear this
+   * field*, and a build old enough to misread either one disagrees with the
+   * farm's other devices silently.
+   *
+   * A refused batch is **held, never dropped** — the mutations are valid and
+   * the client is old, so they stay queued and go up when the app is updated.
+   * See `isClientTooOld` and the `appTooOld` refusal.
+   */
+  MINIMUM_CLIENT_VERSION: z.string().default(''),
   SUPPORT_GITHUB_TOKEN: z.string().default(''),
   /** `owner/repo`. */
   SUPPORT_REPO: z.string().default(''),
@@ -187,6 +203,8 @@ export type Env = z.infer<typeof envSchema> & {
   supportConfig: SupportConfig | null;
   /** Farms that sync free regardless of subscription. Usually empty. */
   freeSyncOrgs: ReadonlySet<string>;
+  /** Null when this server takes a batch from any build, which is the default. */
+  minimumClientVersion: string | null;
 };
 
 /**
@@ -217,6 +235,9 @@ export function readEnv(source: Record<string, string | undefined> = process.env
       parsed.data.GOOGLE_PLAY_PACKAGE || undefined,
     ),
     freeSyncOrgs: readFreeSyncOrgs(parsed.data.FREE_SYNC_ORGS),
+    // Null rather than empty string, so "no floor" is a value the type carries
+    // rather than a convention every caller has to remember.
+    minimumClientVersion: parsed.data.MINIMUM_CLIENT_VERSION || null,
     supportConfig: readSupportConfig(
       parsed.data.SUPPORT_GITHUB_TOKEN,
       parsed.data.SUPPORT_REPO,

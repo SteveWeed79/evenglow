@@ -215,6 +215,25 @@ async function runFlush(transport: SyncTransport): Promise<FlushOutcome> {
     return { ...outcome, deferred: 'unsubscribed' };
   }
 
+  /**
+   * This build is older than the server will take a batch from ([23], [24]).
+   *
+   * The same shape as the 402 above and for the same reason: **nothing is
+   * wrong with these mutations.** They are valid, the client is old, and
+   * routing a farm's history to the rejected inbox over the version of an APK
+   * would be the app punishing somebody for not having been told to update.
+   * No `recordAttempt` either — attempts ripen into `rejectExhausted`, and a
+   * farm that does not notice the sentence for a fortnight must not have its
+   * queue swept as a consequence.
+   *
+   * The day the app is updated, the batch goes up untouched.
+   */
+  if (response.status === 426) {
+    await setLastError(heldMessage(response.body));
+    await localStore().setSyncHeld('appTooOld');
+    return { ...outcome, deferred: 'app-too-old' };
+  }
+
   if (!isSyncResponse(response.body)) {
     // A 4xx with no per-mutation results (a malformed batch) is not retryable
     // in any useful sense, but it must not loop forever either.

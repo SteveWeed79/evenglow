@@ -266,3 +266,52 @@ export async function applyPragmas(db: SqliteConnection): Promise<void> {
   // silently lose its constraint.
   await db.execAsync('PRAGMA foreign_keys = ON;');
 }
+
+/**
+ * Whether the file is sound, asked once as it opens.
+ *
+ * `[37]`. SQLite corruption had no path back and, worse, no way to know: a
+ * damaged page announces itself as a query returning nothing, which this app
+ * renders as a farm with no animals. That is the single most dangerous thing
+ * it can say, and it would be saying it about a fixable problem.
+ *
+ * ## `quick_check`, not `integrity_check`
+ *
+ * `integrity_check` cross-checks every index against its table, which is
+ * O(database) and lands on the cold start of every launch — the 2s budget in
+ * the rubric, on the oldest handset a farm owns. `quick_check` reads the same
+ * page structure and skips the index cross-check, which is the expensive half
+ * and the half a rebuild would repair anyway. It catches the corruption that
+ * actually happens: torn pages from a battery pull, a truncated file from a
+ * full disk.
+ *
+ * ## It reports; it does not refuse, and it does not repair
+ *
+ * **Refusing to open would be the wrong call.** A partially damaged file still
+ * holds most of a farm's records, and the one thing somebody needs at that
+ * moment is to get them out — the export, the backup, the sync queue. An app
+ * that will not start is an app that cannot hand anything over.
+ *
+ * And nothing here deletes, rebuilds or vacuums. Every automatic repair for
+ * this is destructive in some case, and a device that has just reported
+ * corruption is the last place to run one unattended.
+ *
+ * Returns the message rather than throwing, so the caller decides. A failure
+ * to run the check at all reads as sound: an unanswerable pragma is not
+ * evidence of damage, and inventing a corruption report would send a farm
+ * looking for a problem it does not have.
+ */
+export async function integrityProblem(db: SqliteConnection): Promise<string | null> {
+  try {
+    const row = await db.getFirstAsync<{ integrity_check?: string }>('PRAGMA quick_check;', []);
+    const answer = row?.integrity_check;
+
+    // SQLite answers the single word "ok" when it is happy, and one row per
+    // problem otherwise. Anything that is not "ok" is a problem, including an
+    // answer shaped in a way this build does not recognise.
+    if (typeof answer !== 'string' || answer.toLowerCase() === 'ok') return null;
+    return answer.slice(0, 300);
+  } catch {
+    return null;
+  }
+}

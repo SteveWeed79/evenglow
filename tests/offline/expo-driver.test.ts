@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   applyPragmas,
   createExpoDriver,
+  integrityProblem,
   type SqliteConnection,
 } from '@steading/mobile/db/expo-driver';
 import { fakeExpoConnection, tracingExpoConnection } from '../support/expo-sqlite';
@@ -327,5 +328,72 @@ describe('the connection a transaction actually runs on', () => {
     );
 
     expect(inside?.timeout).toBeGreaterThanOrEqual(5_000);
+  });
+});
+
+/**
+ * Whether the file is sound, asked once as it opens.
+ *
+ * `[37]`. SQLite corruption had no path back and, worse, no way to know: a
+ * damaged page announces itself as a query returning nothing, which this app
+ * renders as a farm with no animals — the single most dangerous thing it can
+ * say, and it would be saying it about a fixable problem.
+ */
+describe('the integrity check', () => {
+  it('says nothing is wrong with a sound database', async () => {
+    const connection = fakeExpoConnection();
+    await applyPragmas(connection);
+    await connection.execAsync('CREATE TABLE records (key TEXT PRIMARY KEY, value TEXT)');
+    await connection.runAsync("INSERT INTO records VALUES ('a', '1')", []);
+
+    expect(await integrityProblem(connection)).toBeNull();
+  });
+
+  /**
+   * The answer SQLite gives when it is unhappy, which is one row per problem
+   * rather than the single word "ok". Driven through a stub rather than by
+   * damaging a file, because corrupting a page portably is not something a
+   * test can do — and what is being asserted is the reading of the answer.
+   */
+  it('reports what SQLite said when it is not "ok"', async () => {
+    const damaged: SqliteConnection = {
+      ...fakeExpoConnection(),
+      getFirstAsync: async <T,>() =>
+        ({ integrity_check: '*** in database main *** Page 4 is never used' }) as T,
+    };
+
+    expect(await integrityProblem(damaged)).toContain('Page 4 is never used');
+  });
+
+  it('treats an unanswerable check as sound rather than inventing damage', async () => {
+    const mute: SqliteConnection = {
+      ...fakeExpoConnection(),
+      getFirstAsync: async () => {
+        throw new Error('this build does not support that pragma');
+      },
+    };
+
+    // A pragma that will not run is not evidence of corruption, and a false
+    // report would send a farm looking for a problem it does not have.
+    expect(await integrityProblem(mute)).toBeNull();
+  });
+
+  it('asks the quick check rather than the full one', async () => {
+    // `integrity_check` cross-checks every index against its table, which is
+    // O(database) on the cold start of every launch. The cheap half catches
+    // the corruption that actually happens: torn pages, a truncated file.
+    const seen: string[] = [];
+    const traced: SqliteConnection = {
+      ...fakeExpoConnection(),
+      getFirstAsync: async <T,>(sql: string) => {
+        seen.push(sql);
+        return { integrity_check: 'ok' } as T;
+      },
+    };
+
+    await integrityProblem(traced);
+
+    expect(seen.join(' ')).toContain('quick_check');
+    expect(seen.join(' ')).not.toContain('PRAGMA integrity_check');
   });
 });

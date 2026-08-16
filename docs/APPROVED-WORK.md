@@ -352,6 +352,18 @@ period rather than a task.
       added.
 - [ ] **A minimum client version the server can require**, and an in-app update
       check against the shelf. `[23]`, `[24]`
+      **The first half is built** *(16 August)*: the client states its version
+      in `x-steading-client`, `MINIMUM_CLIENT_VERSION` sets a floor that is
+      empty and inert on every server today, and a batch from below it gets a
+      426 and the `appTooOld` refusal — **held exactly as an unsubscribed farm
+      is held**, queued and uncounted, because the mutations are valid and only
+      the APK is old. A floor the server cannot parse is ignored rather than
+      enforced: a typo in a config file must not be this server breaking a
+      working app.
+      **The second half is not**: nothing tells a farm an update exists. That
+      wants a version the shelf can be asked for and a screen to say it on,
+      which is its own piece of work — and until it exists the refusal above is
+      the only thing that will ever mention it.
 - [x] **Guard against a database from the future.** `[151]` — *built 16 August*
       `migrate()` silently no-opped when `user_version` exceeded
       `SCHEMA_VERSION`, reporting the higher number as a success and handing
@@ -375,7 +387,23 @@ period rather than a task.
       may be what failed — and the next launch that works picks it up into the
       trouble history, where a support bundle carries it. Reading clears it, so
       one crash rides on one ticket.
-- [ ] **Free-space check before photo capture; `integrity_check` on open.** `[36]`, `[37]`
+- [x] **Free-space check before photo capture; `integrity_check` on open.**
+      `[36]`, `[37]` — *built 16 August*
+      A full phone was met in the worst possible order: open the camera, let
+      somebody frame a wound they are worried about, take it, then fail while
+      writing. `capture` now refuses before the picker opens, with a floor
+      well above one photo — the resize writes a temporary beside the original
+      — and a device that will not say how much room it has counts as having
+      room, because refusing a photograph on a guess is worse than the bug.
+      The file check is `quick_check` rather than `integrity_check`: the full
+      one is O(database) on every cold start, and the cheap half catches what
+      actually happens, which is a torn page from a battery pull. **It reports
+      and does not refuse** — a damaged file still holds most of a farm's
+      records, and the one thing somebody needs then is to get them out, so an
+      app that will not start is an app that cannot hand anything over. It
+      repairs nothing either: every automatic repair here is destructive in
+      some case, and a device that has just reported damage is the last place
+      to run one unattended.
 - [ ] **Run the restore drill, and decide the RPO it implies.** `[50]`
 - [ ] **Second custody location for the `age` key and the keystore.** `[51]`, `[52]`
 - [ ] **Stop the nightly `mongodump` copying every photo every night.** `[159]`

@@ -14,6 +14,8 @@
  * and these files are compiled by webpack too.
  */
 
+import { CLIENT_VERSION_HEADER } from '@steading/contracts';
+
 export type Endpoint = 'sync' | 'snapshot' | 'photo' | 'support';
 
 const PATHS: Record<Endpoint, { sameOrigin: string; api: string }> = {
@@ -184,6 +186,22 @@ export async function renewSession(): Promise<SessionRenewal> {
  */
 export function syncHeaders(extra: Record<string, string> = {}): Record<string, string> {
   const headers: Record<string, string> = { 'x-steading-sync': '1', ...extra };
+  if (clientVersion !== null) headers[CLIENT_VERSION_HEADER] = clientVersion;
   if (accessToken !== null) headers['authorization'] = `Bearer ${accessToken}`;
   return headers;
+}
+
+/**
+ * What build this is, for a server that has decided on a floor ([24]).
+ *
+ * Set by the client at boot, because `core` has no `app.json` to read and must
+ * not grow one — the same reason the access token is installed rather than
+ * imported. Unset means the header is simply absent, which is what every test
+ * and the browser build want, and which a server with no floor accepts exactly
+ * as it always did.
+ */
+let clientVersion: string | null = null;
+
+export function setClientVersion(version: string | null): void {
+  clientVersion = version;
 }
