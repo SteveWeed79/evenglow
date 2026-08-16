@@ -188,15 +188,23 @@ export function TreatmentScreen({ route }: ScreenProps<'Treatment'>): React.Reac
        * An update MERGES on both sides (see db/project.ts), so a field the
        * person cleared would keep its old value — a withdrawal revised down to
        * nothing would go on holding the produce. Every optional field is
-       * therefore named explicitly on an edit, with `undefined` where it is
-       * now absent, rather than being left out of the object.
+       * therefore named explicitly on an edit, rather than being left out of
+       * the object.
+       *
+       * **`null`, not `undefined`, and the difference was a real divergence.**
+       * `undefined` cleared this handset and nothing else: `JSON.stringify`
+       * drops the key, so the server's `$set` kept the old value and every
+       * other device on the farm went on holding produce this one had released.
+       * On a medicine record that is the wrong way round to be wrong — the
+       * lenient answer sat on the phone of the person deciding whether to sell.
+       * `contracts/clearing.ts` is the mechanism; `$unset` is what it becomes.
        */
       const cleared = editing
         ? {
-            reason: reason.trim() === '' ? undefined : reason.trim(),
-            dose: dose.trim() === '' ? undefined : dose.trim(),
-            withdrawalDays: Object.keys(days).length === 0 ? undefined : days,
-            treatmentEndsAt: endsAt,
+            reason: reason.trim() === '' ? null : reason.trim(),
+            dose: dose.trim() === '' ? null : dose.trim(),
+            withdrawalDays: Object.keys(days).length === 0 ? null : days,
+            treatmentEndsAt: endsAt ?? null,
           }
         : {};
 
@@ -239,7 +247,13 @@ export function TreatmentScreen({ route }: ScreenProps<'Treatment'>): React.Reac
       </Field>
 
       <Field label="What for? (optional)">
-        <TextField value={reason} onChangeText={setReason} placeholder="Respiratory, mites" maxLength={200} />
+        <TextField
+          value={reason}
+          onChangeText={setReason}
+          placeholder="Respiratory, mites"
+          maxLength={200}
+          testID="treatment-reason"
+        />
       </Field>
 
       <Field label="How did it go in?">
@@ -256,7 +270,13 @@ export function TreatmentScreen({ route }: ScreenProps<'Treatment'>): React.Reac
       </Field>
 
       <Field label="Dose (optional)">
-        <TextField value={dose} onChangeText={setDose} placeholder="10 ml per gallon" maxLength={80} />
+        <TextField
+          value={dose}
+          onChangeText={setDose}
+          placeholder="10 ml per gallon"
+          maxLength={80}
+          testID="treatment-dose"
+        />
       </Field>
 
       <Toggle

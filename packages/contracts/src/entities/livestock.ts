@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { updateSchemaOf } from '../clearing';
 import { minorSchema } from '../money';
 import { careIntervalsSchema } from './care';
 
@@ -260,7 +261,7 @@ const flockShape = {
 };
 
 export const flockCreateSchema = z.object(flockShape).strict();
-export const flockUpdateSchema = z.object(flockShape).partial().strict();
+export const flockUpdateSchema = updateSchemaOf(flockShape);
 
 // ── eggLog (append-only) ─────────────────────────────────────────────────────
 
@@ -311,7 +312,7 @@ const animalShape = {
 };
 
 export const animalCreateSchema = z.object(animalShape).strict();
-export const animalUpdateSchema = z.object(animalShape).partial().strict();
+export const animalUpdateSchema = updateSchemaOf(animalShape);
 
 // ── productionLog (append-only) ──────────────────────────────────────────────
 
@@ -409,8 +410,17 @@ const medicationShape = {
  * See `mergedUpdateProblem` in `entities/index.ts`.
  *
  * Takes `unknown` fields so the same predicate can read a parsed payload and a
- * document off disk. Null counts as absent: a client that clears a field sends
- * `undefined`, and the Mongo driver stores that as null.
+ * document off disk.
+ *
+ * **Null counts as absent, and it is worth saying what null actually is.** This
+ * comment used to explain it as a client sending `undefined` and the driver
+ * storing that as null — which never happened once: `JSON.stringify` dropped
+ * the key before the mutation left the handset, so the field arrived missing
+ * rather than null, and the clear was lost. Null is now the wire's word for
+ * *cleared* (`../clearing.ts`), the applier turns it into `$unset`, and this
+ * predicate reads a merged document where the cleared key may be either
+ * absent or still null depending on which side merged it. Both mean the same
+ * thing here, which is why both are checked.
  */
 export function namesOneSubject(v: { flockId?: unknown; animalId?: unknown }): boolean {
   const named = (value: unknown) => value !== undefined && value !== null;
@@ -424,7 +434,7 @@ export const medicationCreateSchema = z
     message: 'A treatment needs exactly one of flockId or animalId.',
   });
 
-export const medicationUpdateSchema = z.object(medicationShape).partial().strict();
+export const medicationUpdateSchema = updateSchemaOf(medicationShape);
 
 // ── feedLog (append-only) ────────────────────────────────────────────────────
 

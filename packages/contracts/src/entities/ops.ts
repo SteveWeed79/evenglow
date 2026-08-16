@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { updateSchemaOf } from '../clearing';
 import { minorSchema } from '../money';
 import { speciesSchema } from './livestock';
 
@@ -17,7 +18,7 @@ const taskShape = {
 };
 
 export const taskCreateSchema = z.object(taskShape).strict();
-export const taskUpdateSchema = z.object(taskShape).partial().strict();
+export const taskUpdateSchema = updateSchemaOf(taskShape);
 
 // ── photo (mutable) ──────────────────────────────────────────────────────────
 
@@ -66,7 +67,7 @@ const photoShape = {
 };
 
 export const photoCreateSchema = z.object(photoShape).strict();
-export const photoUpdateSchema = z.object(photoShape).partial().strict();
+export const photoUpdateSchema = updateSchemaOf(photoShape);
 
 // ── inventory (mutable) ──────────────────────────────────────────────────────
 
@@ -144,7 +145,7 @@ const inventoryShape = {
 };
 
 export const inventoryCreateSchema = z.object(inventoryShape).strict();
-export const inventoryUpdateSchema = z.object(inventoryShape).partial().strict();
+export const inventoryUpdateSchema = updateSchemaOf(inventoryShape);
 
 // ── stockAdjustment (append-only) ────────────────────────────────────────────
 

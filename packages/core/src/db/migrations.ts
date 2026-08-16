@@ -1,4 +1,5 @@
 import type { SqlOps } from './driver';
+import { DatabaseFromTheFutureError } from './errors';
 
 /**
  * The SQLite schema, as an additive ladder.
@@ -336,9 +337,19 @@ export async function currentVersion(driver: SqlOps): Promise<number> {
  *
  * `user_version` cannot be parameterised, so it is interpolated. The value is
  * a number from this module's own constant list, never from input.
+ *
+ * **A database from the future is refused rather than opened.** This walk only
+ * goes forward, so a file at a version above `SCHEMA_VERSION` used to fall
+ * through every branch and return that higher number — reporting success and
+ * handing back a store this build does not understand the shape of. It reads
+ * tables whose columns a later migration may have moved and writes rows the
+ * newer build will meet again, which is a corruption that surfaces long after
+ * the downgrade that caused it and looks nothing like its cause.
  */
 export async function migrate(driver: SqlOps): Promise<number> {
   const from = await currentVersion(driver);
+
+  if (from > SCHEMA_VERSION) throw new DatabaseFromTheFutureError(from, SCHEMA_VERSION);
 
   for (const migration of MIGRATIONS) {
     if (migration.version <= from) continue;

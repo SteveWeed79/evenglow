@@ -122,11 +122,32 @@ function within(at: number, range: ExportRange): boolean {
   return true;
 }
 
+/**
+ * The two columns every sheet ends with, and why they are not optional.
+ *
+ * A name is what a person reads and it is not an identity: two groups called
+ * *Big coop* export as the same word, a group renamed in March makes February's
+ * rows look like a different flock, and an archived subject reads `(archived)`
+ * for all of them at once. Every one of those is a question an accountant, a
+ * vet or an inspector asks of a spreadsheet, and none of them can be answered
+ * from the words alone.
+ *
+ * So the name stays first — it is what the sheet is for — and the ULID goes at
+ * the end, where it is available to anyone who needs to group, join or trace a
+ * row and out of the way of everybody else.
+ *
+ * **Two ids, because they answer different questions.** `Subject id` is what
+ * the row is *about*; `Record id` is the row itself, which is what makes a
+ * particular entry traceable back to the app, and to whatever it was that
+ * looked wrong.
+ */
+const ID_COLUMNS = ['Subject id', 'Record id'] as const;
+
 /** Reads one entity, parsing each row and dropping what will not parse. */
 async function rowsFrom<T>(
   entity: string,
   schema: z.ZodType<T>,
-  build: (value: T, id: string) => { at: number; cells: unknown[] } | null,
+  build: (value: T, id: string) => { at: number; cells: unknown[]; subject?: string | undefined } | null,
   range: ExportRange,
 ): Promise<unknown[][]> {
   const records = await localStore().readRecordsByEntity(entity);
@@ -139,7 +160,7 @@ async function rowsFrom<T>(
       const built = build(parsed.data, record.targetId);
       // A single unreadable row must not cost a farm the other nine hundred.
       if (built === null || !within(built.at, range)) return [];
-      return [built.cells];
+      return [[...built.cells, built.subject ?? '', record.targetId]];
     })
     .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
 }
@@ -173,7 +194,11 @@ export async function buildExport(range: ExportRange = {}): Promise<Sheet[]> {
   const sheets: Sheet[] = [];
   const add = (name: string, header: readonly string[], rows: unknown[][]): void => {
     if (rows.length === 0) return;
-    sheets.push({ name, csv: toCsv(header, rows), rows: rows.length });
+    // The id columns are appended here rather than written into each header,
+    // for the reason `rowsFrom` appends the values rather than each sheet
+    // building them: twelve sheets is twelve chances to leave one out, and the
+    // sheet that got left out would be the one somebody needed.
+    sheets.push({ name, csv: toCsv([...header, ...ID_COLUMNS], rows), rows: rows.length });
   };
 
   add(
@@ -190,6 +215,7 @@ export async function buildExport(range: ExportRange = {}): Promise<Sheet[]> {
           v.count,
           v.withdrawalAcknowledged === true ? 'yes' : '',
         ],
+        subject: v.flockId ?? v.birdId,
       }),
       range,
     ),
@@ -211,6 +237,7 @@ export async function buildExport(range: ExportRange = {}): Promise<Sheet[]> {
           v.unit,
           v.withdrawalAcknowledged === true ? 'yes' : '',
         ],
+        subject: v.flockId ?? v.animalId,
       }),
       range,
     ),
@@ -225,6 +252,7 @@ export async function buildExport(range: ExportRange = {}): Promise<Sheet[]> {
       (v) => ({
         at: v.occurredAt,
         cells: [stamp(v.occurredAt), named(groupName, v.flockId), v.amountGrams, v.feedType ?? ''],
+        subject: v.flockId,
       }),
       range,
     ),
@@ -245,6 +273,7 @@ export async function buildExport(range: ExportRange = {}): Promise<Sheet[]> {
           v.cause,
           v.cullWeightGrams ?? '',
         ],
+        subject: v.animalId ?? v.flockId,
       }),
       range,
     ),
@@ -288,6 +317,7 @@ export async function buildExport(range: ExportRange = {}): Promise<Sheet[]> {
           v.withdrawalDays?.meat ?? '',
           v.withdrawalDays?.milk ?? '',
         ],
+        subject: v.flockId ?? v.animalId,
       }),
       range,
     ),
@@ -308,6 +338,7 @@ export async function buildExport(range: ExportRange = {}): Promise<Sheet[]> {
           v.product ?? '',
           v.animalsTreated ?? '',
         ],
+        subject: v.flockId ?? v.animalId,
       }),
       range,
     ),
@@ -327,6 +358,7 @@ export async function buildExport(range: ExportRange = {}): Promise<Sheet[]> {
           v.massUg,
           v.sampled === true ? 'yes' : '',
         ],
+        subject: v.flockId ?? v.animalId,
       }),
       range,
     ),
@@ -346,6 +378,7 @@ export async function buildExport(range: ExportRange = {}): Promise<Sheet[]> {
           v.massUg,
           v.animalsShorn ?? '',
         ],
+        subject: v.flockId ?? v.animalId,
       }),
       range,
     ),
@@ -360,6 +393,7 @@ export async function buildExport(range: ExportRange = {}): Promise<Sheet[]> {
       (v) => ({
         at: v.occurredAt,
         cells: [stamp(v.occurredAt), v.plantingId, v.unit, v.massUg ?? '', v.count ?? ''],
+        subject: v.plantingId,
       }),
       range,
     ),
@@ -378,6 +412,7 @@ export async function buildExport(range: ExportRange = {}): Promise<Sheet[]> {
       (v) => ({
         at: v.occurredAt,
         cells: [stamp(v.occurredAt), named(machineName, v.equipmentId), v.hours],
+        subject: v.equipmentId,
       }),
       range,
     ),
@@ -401,6 +436,7 @@ export async function buildExport(range: ExportRange = {}): Promise<Sheet[]> {
           v.lastDoneAtDate === undefined ? '' : stamp(v.lastDoneAtDate),
           v.lastDoneAtHours ?? '',
         ],
+        subject: v.equipmentId,
       }),
       range,
     ),

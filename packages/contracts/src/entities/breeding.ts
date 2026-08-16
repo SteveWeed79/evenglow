@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { updateSchemaOf } from '../clearing';
 import { speciesSchema } from './livestock';
 import { microgramsSchema } from '../units';
 
@@ -65,7 +66,7 @@ const breedingShape = {
 };
 
 export const breedingCreateSchema = z.object(breedingShape).strict();
-export const breedingUpdateSchema = z.object(breedingShape).partial().strict();
+export const breedingUpdateSchema = updateSchemaOf(breedingShape);
 
 // ── incubation (mutable) ─────────────────────────────────────────────────────
 
@@ -132,7 +133,7 @@ const incubationShape = {
 };
 
 export const incubationCreateSchema = z.object(incubationShape).strict();
-export const incubationUpdateSchema = z.object(incubationShape).partial().strict();
+export const incubationUpdateSchema = updateSchemaOf(incubationShape);
 
 // ── weight (append-only) ─────────────────────────────────────────────────────
 
@@ -216,4 +217,4 @@ const feedPlanShape = {
 };
 
 export const feedPlanCreateSchema = z.object(feedPlanShape).strict();
-export const feedPlanUpdateSchema = z.object(feedPlanShape).partial().strict();
+export const feedPlanUpdateSchema = updateSchemaOf(feedPlanShape);

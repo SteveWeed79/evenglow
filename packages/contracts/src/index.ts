@@ -9,6 +9,7 @@
  */
 
 export * from './mutation';
+export * from './clearing';
 export * from './roles';
 export * from './billing';
 export * from './membership';

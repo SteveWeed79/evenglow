@@ -63,8 +63,26 @@ on the exact failure they then permit.
       *Done for the half that can be done, and the audit found the pattern was
       wrong.* `EditGroupScreen` now always sends `purposes`, so removing the
       last one works. See the item below for the rest.
-- [ ] **Give the wire a way to say "clear this field".** *(found while fixing
-      the item above)*
+- [x] **Give the wire a way to say "clear this field".** *(found while fixing
+      the item above; built 16 August)*
+      **Done.** `contracts/clearing.ts` is the mechanism: `null` at the top
+      level of an update payload means *remove this*, `updateSchemaOf` makes
+      exactly the omittable fields accept it — never a required one, never one
+      with a default — the applier splits the payload into `$set` and `$unset`,
+      and `db/project.ts` deletes the key rather than storing a null, so no
+      reader ever meets a value its schema forbids. A create still refuses null
+      outright. The three screens that were losing clears now send them.
+      **One consequence, named rather than discovered later:** the log carries
+      the null, so a device still running the previous build projects it into
+      its own record, where its create schema will not parse it and the reader
+      drops that one row until it is upgraded. It is the ordering `mutation.ts`
+      already sets out for a widened entity list — server first, then clients —
+      and this is the cheapest week it will ever be, with one farm and no store
+      release. It is also the first concrete case for the minimum client version
+      in §6.
+
+      *The diagnosis, kept as it was written, because the shape of the bug is
+      the reason the contract change looks the way it does:*
       `TreatmentScreen`'s established fix — name every optional field, with
       `undefined` where it is now absent — **clears the device and never
       reaches the server.** `JSON.stringify` drops an `undefined` value, so the
@@ -132,10 +150,19 @@ on the exact failure they then permit.
       and converted with `poundsToUg` whatever the farm had set. The entry
       units moved to `contracts/units.ts` so `WeighScreen` and this one read
       one table.
-- [ ] **Finish photo restore re-upload.** `ROADMAP.md` §12c, **GA**
-      Restored metadata retains its uploaded flag, so bytes the server does not
-      have are never re-sent. Already tracked; the assessment confirms it
-      independently.
+- [x] **Finish photo restore re-upload.** `ROADMAP.md` §12c, **GA** — *built 16
+      August*
+      Restored metadata retained its uploaded flag, so bytes the server does not
+      have were never re-sent. `restore.ts` now drops `uploadedAt` from a photo
+      payload as it restores it — photo-specific and named as such, since every
+      other entity wants its payload back exactly as it was — so the transfer
+      loop sees a photo whose bytes are not up yet and the device still holding
+      the file offers them again. The restore panel says out loud that the
+      pictures come back only from a phone that still has them.
+      **Still open, and it is the interesting half:** the rehearsal nobody has
+      run — build a file on a device that has synced photos, wipe the server,
+      restore, and watch the bytes arrive. And `ACCESS-AND-BILLING.md` §4.1a-i
+      is now wrong in the app's favour and wants the correction §12c asks for.
 
 ## 2. Start on the same day — the only work with a calendar attached
 
@@ -278,7 +305,9 @@ period rather than a task.
       product, registration number, rate, area, date, operator, re-entry
       interval. **GA**, `[107]`
       *Two reviewers reached this independently.*
-- [ ] **Reports carrying human-readable names beside stable identifiers.** **GA**
+- [x] **Reports carrying human-readable names beside stable identifiers.** **GA**
+      — *built 16 August: every sheet now ends with `Subject id` and `Record
+      id`, appended in one place rather than written into twelve headers.*
       **Adopted the wrong way round, and the missing half is the cheaper one**
       *(corrected 16 August)*. Every sheet `export/csv.ts` writes already
       resolves a ULID to a name — `named(groupName, v.flockId)`, printing
@@ -323,11 +352,29 @@ period rather than a task.
       added.
 - [ ] **A minimum client version the server can require**, and an in-app update
       check against the shelf. `[23]`, `[24]`
-- [ ] **Guard against a database from the future.** `[151]`
-      `migrate()` silently no-ops when `user_version` exceeds `SCHEMA_VERSION`.
-- [ ] **An error boundary and a crash breadcrumb.** `[39]`, `[40]`
-      A launch crash currently reports nothing, because the support screen is
-      inside the tree that failed.
+- [x] **Guard against a database from the future.** `[151]` — *built 16 August*
+      `migrate()` silently no-opped when `user_version` exceeded
+      `SCHEMA_VERSION`, reporting the higher number as a success and handing
+      back a store shaped to a schema this build has never seen. It now throws
+      `DatabaseFromTheFutureError`, which `Boot` already renders in words. The
+      message names the fix rather than the fault and is tested for what it must
+      never say: clearing app data is the one action that would turn a temporary
+      refusal — a downgrade, which `[156]` calls the only route back from a bad
+      release — into the loss the guard exists to prevent.
+- [x] **An error boundary and a crash breadcrumb.** `[39]`, `[40]` — *built 16
+      August*
+      `components/Boundary.tsx` sits above the providers in `App.tsx`, so it
+      catches the store and the theme as well as the screens, and draws a
+      fallback that answers the only question a farm has at that moment —
+      nothing logged has been lost — with a retry and the build it happened on.
+      It is the one class component in the app, because React has no hook form
+      of `componentDidCatch`; `CLAUDE.md` now names that exception rather than
+      leaving the rule quietly broken.
+      **The crumb is what closes `[40]`.** A crash report held in memory is not
+      a crash report, so the fallback writes one small file — not SQLite, which
+      may be what failed — and the next launch that works picks it up into the
+      trouble history, where a support bundle carries it. Reading clears it, so
+      one crash rides on one ticket.
 - [ ] **Free-space check before photo capture; `integrity_check` on open.** `[36]`, `[37]`
 - [ ] **Run the restore drill, and decide the RPO it implies.** `[50]`
 - [ ] **Second custody location for the `age` key and the keystore.** `[51]`, `[52]`

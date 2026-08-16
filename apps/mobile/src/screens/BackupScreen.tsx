@@ -491,6 +491,15 @@ function RestoreOffer({
           If you have a backup file from another phone, this puts its records onto this one. They
           come back with the same names and dates.
         </Body>
+        {/* Said here rather than left to be discovered in an empty gallery.
+            The file holds the photo records and never the images, so a
+            photograph comes back only from a phone that still has it — and a
+            restored record now asks for its picture again rather than claiming
+            the server already has one. */}
+        <Body>
+          Photographs are not in the file. The records of them come back, and the pictures
+          themselves only if the phone that took them still has them.
+        </Body>
         <Body>
           If the farm has an account, signing in is better — it brings everything back including
           anything logged since, and it keeps doing it.

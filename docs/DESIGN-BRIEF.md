@@ -6,7 +6,15 @@ adversarially re-checked by a separate reader against the code. 47 confirmed, 13
 corrected as overstated, 1 refuted and dropped.
 
 This document exists so the design run starts from what is true rather than from
-what the docs claim. Where this disagrees with `ROADMAP.md`, this is newer.
+what the docs claim.
+
+> **Point-in-time, and going stale by design — like `PICK-UP-HERE.md`, which is
+> the only other file here that says so.** It was written on 9 August and it
+> asserted priority over `ROADMAP.md` on the grounds of being newer. That
+> sentence has since expired: §3 lists a missing launcher icon, a missing splash
+> and no Android build in CI, and all three landed in the weeks after. Read the
+> diagnosis, which holds, and check any specific gap against the code before
+> acting on it.
 
 ---
 

@@ -143,6 +143,35 @@ export interface RestoreResult {
 const NAME_AT_MOST = 6;
 
 /**
+ * A restored photo must not claim its bytes are on the server.
+ *
+ * `BACKUP_EXCLUDES` keeps the images out of the file deliberately — a backup
+ * that quietly grew to 300 MB is one that fails to send with no explanation —
+ * but `buildBackup` walks every entity, so the photo's *record* is in there,
+ * carrying the projection's current value including `uploadedAt`.
+ *
+ * Restored verbatim onto a rebuilt server, that field is a claim about bytes
+ * nothing holds: `sync/photos.ts` offers a photo only when `uploadedAt` is
+ * absent, so the device that still has the file never offers it again, and
+ * every download answers 404 — a gallery of records with no pictures in it and
+ * no reason given. Dropping the stamp puts the photo back in the queue of
+ * things to send, which is the state it was in before it was ever uploaded.
+ *
+ * **Photo-specific rather than a general rule about optional fields.** Every
+ * other entity wants its payload restored exactly as it was; this one field is
+ * an assertion about the server rather than about the farm, and a server that
+ * has been rebuilt is a server that never heard it.
+ */
+function withoutUploadStamp(entry: BackupEntry): unknown {
+  const payload: unknown = entry.payload;
+  if (entry.entity !== 'photo' || typeof payload !== 'object' || payload === null) return payload;
+  if (!('uploadedAt' in payload)) return payload;
+
+  const { uploadedAt: _dropped, ...rest } = payload as Record<string, unknown>;
+  return rest;
+}
+
+/**
  * What a record calls itself, if anything.
  *
  * Every entity that has a human handle uses one of these three keys — `name`
@@ -321,7 +350,8 @@ export async function runRestore(
           entity: entry.entity,
           op: 'create',
           targetId: entry.targetId,
-          payload: entry.payload,
+          // Verbatim for every entity but one — see `withoutUploadStamp`.
+          payload: withoutUploadStamp(entry),
         },
         ...(archiveToo
           ? [

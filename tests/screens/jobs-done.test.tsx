@@ -3,6 +3,7 @@ import { newId } from '@steading/contracts';
 import { listHistory } from '@steading/core/read/history';
 import { listTasks } from '@steading/core/read/tasks';
 import { enqueue } from '@steading/core/sync/queue';
+import { localStore } from '@steading/core/db/store';
 import { freshStore } from '../support/store';
 import { mount } from '../support/screen';
 import { JobsScreen } from '../../apps/mobile/src/screens/JobsScreen';
@@ -97,6 +98,33 @@ describe('a job finished today', () => {
     screen.unmount();
 
     expect((await listTasks())[0]?.completedAt).toBeUndefined();
+  });
+
+  /**
+   * And the undo has to leave the handset.
+   *
+   * This button wrote `{ completedAt: undefined }`, which cleared the local
+   * record — the test above passed the whole time — and never reached the
+   * server: `JSON.stringify` drops the key, so `$set` left `completedAt`
+   * standing and every other device on the farm went on showing the job done.
+   * The one assertion that tells the two apart is what the payload looks like
+   * after a round trip through JSON. See `contracts/clearing.ts`.
+   */
+  it('sends the undo as a null, so the farm’s other devices get it too', async () => {
+    const id = await aJob('Fix the gate');
+    await finishedAt(id, Date.now());
+
+    const screen = await mount(<JobsScreen />);
+    await screen.press(`job-redo-${id}`);
+    await screen.press(`job-redo-${id}`);
+    screen.unmount();
+
+    const outbox = await localStore().readOutboxBySeq();
+    const undo = outbox.filter((m) => m.entity === 'task' && m.op === 'update').pop();
+    const onTheWire = JSON.parse(JSON.stringify(undo?.payload)) as Record<string, unknown>;
+
+    expect(onTheWire).toHaveProperty('completedAt');
+    expect(onTheWire.completedAt).toBeNull();
   });
 
   /** Where they go, said before they go, so tomorrow is not a surprise. */

@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Boot } from './Boot';
+import { Boundary } from './components/Boundary';
 import { Root } from './navigation/Root';
 import { ThemeProvider, useTheme } from './theme/ThemeProvider';
 import { FONTS, THEMES } from './theme/tokens';
@@ -18,11 +19,16 @@ import { FONTS, THEMES } from './theme/tokens';
 export function App(): React.ReactElement {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <ThemeProvider>
-          <Themed />
-        </ThemeProvider>
-      </SafeAreaProvider>
+      {/* Above the providers, not inside them: a boundary can only catch what
+          renders beneath it, and the theme provider and the store opening are
+          exactly the things whose failure used to leave a white screen. */}
+      <Boundary>
+        <SafeAreaProvider>
+          <ThemeProvider>
+            <Themed />
+          </ThemeProvider>
+        </SafeAreaProvider>
+      </Boundary>
     </GestureHandlerRootView>
   );
 }

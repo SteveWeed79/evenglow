@@ -219,8 +219,15 @@ export function isOpAllowed(entity: Entity, op: Op): boolean {
  * rather than restated — a second copy would be a second chance to disagree,
  * and the two are meant to say the same thing for ever.
  *
- * `null` counts as absent throughout, because a client clearing a field sends
- * `undefined` and the driver stores that as null.
+ * `null` counts as absent throughout, and now for a reason that is true: it is
+ * the wire's word for a cleared field (`../clearing.ts`). The merge handed in
+ * here is `{ ...stored, ...payload }`, which means a field being cleared in
+ * this very update reads as `null` rather than as gone — so an invariant that
+ * treated null as a value would let a clear through that leaves the record
+ * invalid. The sentence this replaces claimed the null came from the Mongo
+ * driver storing an `undefined`, which never once happened: `JSON.stringify`
+ * dropped the key first, and that lost clear is the defect this contract
+ * change exists to fix.
  */
 interface MergedInvariant {
   holds: (merged: Record<string, unknown>) => boolean;
