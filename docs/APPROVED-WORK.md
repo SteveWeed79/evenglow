@@ -62,15 +62,29 @@ on the exact failure they then permit.
 - [x] **Filter breeding records by group.** **GA**
       `names` is built from every animal on the farm, so the filter means "the
       dam exists here" rather than "the dam is in this group".
-- [ ] **Add password recovery.** **GA** — *designed, not built:*
-      [`PASSWORD-RECOVERY.md`](PASSWORD-RECOVERY.md)
-      None exists; `AccountScreen` says so in a comment. Recovery currently
-      needs a shell on the server, and a lockout hits farms who are paying and
-      doing nothing wrong. **The delivery channel is decided: Steading sends
-      email**, which is a route on the Fastify service that already
-      authenticates, syncs and serves the APK — plus a secret on the box and a
-      processor to name in `[1]` and `[3]`. The design is researched and
-      written; the build is the next piece.
+- [ ] **Build the mail sender, and password recovery on top of it.** **GA** —
+      *designed:* [`PASSWORD-RECOVERY.md`](PASSWORD-RECOVERY.md)
+      There is no password reset; `AccountScreen` says so in a comment, and
+      recovery means a shell on the server. **The deliverable is a sender, not
+      one flow** — it also finishes the invite feature, which binds a token to
+      an email address and has never had anything to send it with, and it opens
+      `[148]` and `SUPPORT-LOOP.md` §6. A code the person types, not a link, on
+      phishing and cross-device grounds. Postmark behind a `sendEmail` port.
+      **SPF, DKIM and DMARC are part of the work, not follow-up** — large
+      providers reject unauthenticated mail outright now, so getting the DNS
+      wrong is a farmer who never receives their code.
+- [ ] **Decide what domain Steading's mail comes from.** *(raised by the design
+      above)*
+      The domain is `swbuild.dev` and the app is called Steading. A password
+      reset from a domain the farm has never heard of is indistinguishable from
+      phishing, and ignoring it is the correct user response. Cheaper to settle
+      before the sending DNS exists than after.
+- [ ] **Verify email addresses at signup.** *(raised by the design above)*
+      Password signup accepts whatever is typed; only the Google path carries
+      `email_verified`. Harmless while an address does nothing — and once an
+      address can receive a password reset, a typo at signup is a recovery
+      route that reaches a stranger. Same token machinery, one more route,
+      immediately after the sender exists.
 - [x] **Verify units on Harvest and reporting.** **GA**
       *Confirmed true and fixed.* `HarvestScreen` offered pounds to everybody
       and converted with `poundsToUg` whatever the farm had set. The entry

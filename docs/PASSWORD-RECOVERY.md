@@ -1,88 +1,103 @@
-# Password recovery
+# Password recovery, and the mail sender under it
 
-**Decided, not built.** The delivery channel was the open question and it is
-answered: **Steading gains an email sender.** This document is the design that
-answer implies, researched before any code, so the implementation is a
-transcription rather than a series of judgement calls made at the keyboard.
+**Decided, researched, not yet built.** This is the design to transcribe, so
+the implementation is a typing exercise rather than a series of judgement calls
+made at a keyboard.
 
-**The gap it closes.** There is no password reset. `AccountScreen` says so in a
-comment: recovery needs `pnpm db:password`, which needs a shell on the server.
-A farm that forgets its password is locked out of sync until the author
-personally runs a script — and it is a lockout that hits people who are paying
-and doing nothing wrong. `UNCONSIDERED.md` catalogued account deletion `[4]`
-and never thought to ask about recovery; the August product assessment caught
-it.
-
-**Email is the route, and it is an ordinary addition to a server that already
-exists.** `api.swbuild.dev` runs Fastify on the Oracle box and already
-authenticates, syncs, serves the APK, takes support tickets and talks to Play.
-Sending one message is a route beside those, not a new dependency.
-
-Worth stating because an earlier draft of this document got it wrong: it
-described email as a departure from an app "that needs no server to function".
-That conflates two different things. **Offline-first is a promise about the
-handset** — every record is written to local SQLite, the app opens and works
-with the radio off, and sync is what happens afterwards. It has never been a
-claim that the project has no server, and the two have been distinct since D10.
-
-The two real costs are small and are already on the list: a secret on the box
-alongside the ones there now, and a processor to name in the privacy policy
-`[1]` and the Data Safety declaration `[3]` — the same paragraph that has to
-name Atlas, S3, GitHub and Google.
+**The gap.** There is no password reset. `AccountScreen` says so in a comment:
+recovery needs `pnpm db:password`, which needs a shell on the server. A farm
+that forgets its password is locked out of sync until the author personally
+runs a script — a lockout aimed squarely at people who are paying and doing
+nothing wrong.
 
 ---
 
-## 1. What the standard requires
+## 1. This is a mail sender, and password reset is its first customer
 
-Every one of these is channel-independent — they apply as much to a code typed
-into the app as to a link in a browser. Taken from the OWASP Forgot Password
-guidance.
+Worth putting first, because it changes what the work is worth.
+
+`api.swbuild.dev` already authenticates, syncs, bills, takes support tickets,
+talks to Play and serves the APK. A mail send is a route beside those. What it
+unlocks is not one flow:
+
+- **Invites do not currently reach anybody.** `POST /invites` binds a token to
+  an email address, returns it **once, to the owner who created it**, and there
+  the trail ends. The design in `DOMAIN-SCOPE.md` §8.1 is explicitly an
+  email-bound invitation — *"a link that travels by text message and sits in a
+  phone forever"* is named as the thing it avoids — and there has never been
+  anything to send it with. Today an owner has to read a 43-character token
+  down the phone. **Mail finishes a feature that is otherwise built and
+  stranded.**
+- **The support loop has no way to close.** `SUPPORT-LOOP.md` §6 lists "there
+  is no channel to tell a farm their report mattered" as outstanding. A farm
+  that raised a ticket has an address.
+- **Nothing verifies an email address.** Password signup accepts whatever is
+  typed; only the Google path carries `email_verified`. Once mail exists,
+  verification is a small follow-on — see §10.
+- **`[148]` in `UNCONSIDERED.md`** — "there is no way to tell a farm anything",
+  which covers release notes, an outage, and a fixed defect — stops being
+  structural.
+
+So the sender is the deliverable and the reset is the first thing routed
+through it. Build it as a capability.
+
+## 2. What the standard requires
+
+Channel-independent: these apply to a code typed into an app exactly as they do
+to a link in a browser.
 
 | Requirement | How this design meets it |
 |---|---|
-| CSPRNG token, long enough to resist brute force | `randomInt` over `JOIN_CODE_ALPHABET`, 8 characters — §3 does the arithmetic |
+| CSPRNG token, long enough to resist brute force | `randomInt` over `JOIN_CODE_ALPHABET`, 8 characters — §4 |
 | Stored securely, never in the clear | SHA-256, and the hash **is** the `_id` |
 | Single use | Redemption is a conditional update; exactly one caller wins |
 | Expires | 20 minutes |
 | No user enumeration | One response, one shape, one timing envelope — §5 |
-| Rate limited | The auth routes already fail closed per IP; per-account limit added |
+| Rate limited | Per IP as the auth routes already do, **and per account** — §5 |
 | Existing sessions invalidated on success | Every refresh token for that user revoked — §6 |
 
-**None of this is new machinery.** `db/join-codes.ts` already implements the
-first four, argues for them, and is tested. This follows it deliberately rather
-than inventing a second idiom — the reasoning in that module's header is the
-reasoning here, with one parameter changed and the change argued in §3.
+**Almost none of this is new machinery.** `db/join-codes.ts` implements the
+first four, argues for each, and is tested. This follows it rather than
+inventing a second idiom.
 
-## 2. A code, not a link
+## 3. A code, not a link — and this time on the merits
 
-The email carries **an eight-character code the person types into the app**,
-not a link.
+The earlier draft of this document chose a code partly because "there is no web
+frontend to land on". That was a bad reason: there is a server, and a reset
+page is a route. Re-decided properly, the answer is the same and the reasons
+are better.
 
-A link is the web default and it is wrong here, for three reasons that are all
-about this being an app:
+**A one-time code, typed into the app.**
 
-1. **There is no web frontend to land on.** A reset page would be a new
-   surface, on a server whose only current job is an API and a shelf.
-2. **A deep link only works on the device that opened the email.** Farms read
-   email on a phone and log the flock on a tablet. An `Android App Link` also
-   needs domain verification via `assetlinks.json`, which is one more thing
-   that silently stops working.
-3. **A code is what this farm already knows.** Join codes are six characters
-   typed by somebody standing in a barn. The gesture is familiar and the
-   control already exists.
+1. **Phishing.** A password reset email that trains people to click a link is a
+   password reset email that trains people to click *any* link claiming to be a
+   reset. A code the person carries into an app they already have open cannot
+   be redirected to a lookalike domain. This is the security argument and it is
+   the strongest one.
+2. **Cross-device.** Email gets read on a phone; the farm's records are on the
+   tablet in the kitchen. A link completes on the device that opened it. A code
+   travels.
+3. **The alternative costs real setup to work at all.** An Android App Link
+   needs `assetlinks.json` served from the domain and verified, and it fails
+   open into a browser when verification breaks — which is a silent failure
+   mode on a flow used by people who are already stuck.
+4. **It is the gesture this farm already knows.** Join codes are six characters
+   typed by somebody standing in a barn.
 
-## 3. Eight characters, and why not six
+The cost is honest: typing eight characters is slower than tapping a link. For
+a flow somebody hits once a year, that is the right trade.
 
-`JOIN_CODE_ALPHABET` is 32 characters with the ambiguous ones removed
-(no `I`, `L`, `O`, `U`), so each character is exactly five bits.
+## 4. Eight characters, and why not six
 
-**A join code is six characters and that is defensible because somebody is
-holding their phone out while it lives.** Ten minutes, one per farm, redeemed
+`JOIN_CODE_ALPHABET` is 32 characters with the ambiguous ones removed (no `I`,
+`L`, `O`, `U`), so each character is exactly five bits.
+
+**A join code is six characters, and that is defensible because somebody is
+holding their phone out while it lives** — ten minutes, one per farm, redeemed
 by a person standing next to the person who minted it.
 
-**A reset code has none of those properties.** It sits in an inbox. The inbox
-may be open on a shared machine. Nobody is watching the window. So the
-parameter moves:
+**A reset code has none of those properties.** It sits in an inbox, possibly on
+a shared machine, with nobody watching the window.
 
 | | Join code | Reset code |
 |---|---|---|
@@ -91,50 +106,29 @@ parameter moves:
 | Live at once | One per farm | **One per user** |
 | Wrong attempts | Route limit only | **Five, then the code dies** |
 
-The attempt counter is the part that matters more than the length. A code that
-dies on the fifth wrong guess makes the entropy argument almost academic — but
-both are cheap, and this is the flow that hands over an account.
+**The attempt counter matters more than the length.** A code that dies on the
+fifth wrong guess makes the entropy argument nearly academic — but both are
+cheap, and this is the flow that hands over an account.
 
-**Twenty minutes rather than ten** because an email has to arrive, be noticed,
-and be carried to another device. Ten minutes is a window that fails honest
-people.
-
-## 4. The provider
-
-**Postmark**, on deliverability, with the integration written against a seam so
-the choice stays cheap to revisit.
-
-The comparison, for the record: Resend has the nicest API and a free tier;
-Amazon SES is cheapest at scale and wants dedicated attention to configure;
-Postmark keeps transactional and bulk sending on separate infrastructure and
-refuses marketing mail, which is why its inbox placement is the best of the
-three.
-
-**Deliverability is the whole product here.** A reset email that lands in spam
-is a lockout with extra steps, and this is the only email Steading will ever
-send. Volume is a handful a month, so cost-at-scale — the one axis SES wins —
-is the axis that does not apply.
-
-Written against a `sendEmail` port with the provider behind it, for the same
-reason `blobsFor(orgId)` is a seam: the second choice should be a file, not a
-migration.
-
-**`EMAIL_API_TOKEN` and `EMAIL_FROM` join `env.ts` as optional**, defaulting to
-empty like `SUPPORT_GITHUB_TOKEN` and `GOOGLE_PLAY_SERVICE_ACCOUNT` — so a
-development box with no mail configured refuses the route cleanly instead of
-failing at send time. The token is server-side only; invariant 12 is not in
-play, and it must never reach the client bundle.
+**Twenty minutes rather than ten** because mail has to arrive, be noticed, and
+be carried to another device. Ten minutes is a window that fails honest people.
 
 ## 5. Not saying whether the account exists
 
-`POST /auth/forgot` **always** answers `202` with the same body, in the same
-shape, whether or not the email belongs to anybody.
+`POST /auth/forgot` **always** answers `202`, same body, same shape, whether or
+not the address belongs to anybody.
 
-The timing has to match too, and that is the part implementations get wrong: a
-real account does an argon2 hash and a database write while a non-existent one
-returns immediately, and the difference is measurable from outside. Either do
-the same work in both branches or hold the response to a fixed floor. **The
-fixed floor is simpler and does not burn CPU on an attacker's behalf.**
+**The timing has to match, and that is the part implementations get wrong.** A
+real account does an argon2 hash and a database write; a non-existent one
+returns immediately, and the difference is measurable from outside. Hold the
+response to a fixed floor rather than doing fake work — simpler, and it does
+not burn the box's CPU on an attacker's behalf.
+
+**Rate limited on two axes**, because they stop different attacks: per IP,
+which the auth routes already do and which fails closed; and **per account**,
+so somebody who knows one farmer's address cannot fill their inbox with reset
+codes. The per-account limit is the anti-harassment one and it is easy to
+forget.
 
 The copy says what happened without asserting the account exists:
 
@@ -143,22 +137,21 @@ The copy says what happened without asserting the account exists:
 
 ## 6. What a successful reset does
 
-Three writes, and the second two are the ones people forget:
+Three writes, and the last two are the ones people forget:
 
-1. Set the new `passwordHash` (argon2, as signup does).
-2. **Revoke every refresh token for that user.** A reset is what somebody does
-   when they think another person has their password, and leaving that
-   person's session alive defeats the entire exercise.
+1. **Revoke every refresh token for that user.** A reset is what somebody does
+   when they think another person has their password; leaving that person's
+   session alive defeats the whole exercise.
+2. Set the new `passwordHash` (argon2, as signup does).
 3. Mark the code used, so a replay finds it spent.
 
-Ordered so a crash cannot leave a live session on a changed password: revoke
-first, then set, then mark. A crash after step one signs everybody out, which
-is survivable; a crash the other way round is not.
+**In that order**, so a crash cannot leave a live session on a changed
+password. A crash after step one signs everybody out, which is survivable; a
+crash the other way round is not.
 
-**A reset does not delete the farm's data, log anybody out of the app, or
-affect the local SQLite database.** The app opens before it authenticates
-(D14), so a locked-out farm has been logging normally all along — this restores
-sync, not the records.
+**A reset does not touch the farm's records.** The app opens before it
+authenticates (D14), so a locked-out farm has been logging normally all along.
+This restores sync, not the data.
 
 ## 7. The shape
 
@@ -181,65 +174,147 @@ interface PasswordResetDoc {
 }
 ```
 
-Lives in `apps/api/src/db/password-resets.ts`, **deliberately not tenant
-scoped**, for the reason `join-codes.ts` gives: it is used by somebody with no
-session and therefore no `orgId`, so `scoped()` cannot serve it. Same
-discipline — no collection handle leaves the module, every function is
-purpose-built, and `tests/isolation` covers it.
+`apps/api/src/db/password-resets.ts`, **deliberately not tenant scoped**, for
+the reason `join-codes.ts` gives: it is used by somebody with no session and
+therefore no `orgId`, so `scoped()` cannot serve it. Same discipline — no
+collection handle leaves the module, every function purpose-built, and
+`tests/isolation` covers it.
 
-Minting replaces whatever that user had live, so a person who taps twice has
-one working code rather than two, and the one in the newest email is the one
-that works.
+Minting replaces whatever that user had live, so somebody who taps twice has
+one working code, and it is the one in the newest email.
 
-## 8. What the client needs
+## 8. The sender
+
+### 8.1 The provider
+
+**Postmark**, on deliverability, behind a port so the choice stays a file
+rather than a migration.
+
+For the record: Resend has the nicest API and a free tier; Amazon SES is
+cheapest at scale and wants dedicated attention to configure; Postmark keeps
+transactional and bulk sending on separate infrastructure and refuses marketing
+mail, which is why its inbox placement leads.
+
+**Deliverability is the entire product here.** A reset that lands in spam is a
+lockout with extra steps. Volume is a handful a month, so cost-at-scale — the
+one axis SES wins — does not apply.
+
+The seam is `sendEmail({ to, subject, text, html })`, one module, provider
+behind it, exactly as `blobsFor(orgId)` is the seam for photo bytes.
+
+### 8.2 The DNS, which is not optional any more
+
+**This is the part that decides whether any of the above works**, and it is
+configuration rather than code — which means it can be got wrong quietly and
+discovered by a farmer who never got their code.
+
+- **SPF, DKIM and DMARC all three.** As of late 2025 the large mailbox
+  providers reject non-compliant mail outright rather than filing it in spam.
+  Transactional mail is exempt from the one-click-unsubscribe rule and is
+  **not** exempt from authentication.
+- **DKIM must be signed with our domain, not the provider's.** The classic
+  failure is an ESP signing as `mailer.provider.com` while the From header says
+  ours, which passes DKIM and fails DMARC alignment. Postmark's DKIM setup
+  publishes a record on our domain; use it.
+- **A dedicated sending subdomain**, so a reputation problem cannot reach
+  whatever else the apex is used for.
+- **A reachable reply address, not `no-reply@`.** Replies to a black hole are
+  an engagement signal against you, and for a one-person operation the replies
+  are worth reading — it is the support channel `SUPPORT-LOOP.md` §6 says does
+  not exist.
+
+**The From domain is an open question and it is a security one.** The domain is
+`swbuild.dev`; the app is called Steading. A password reset arriving from a
+domain the farm has never heard of is indistinguishable from phishing, and the
+correct user response to it is to ignore it. Either the mail comes from
+something that says Steading, or the email body has to work harder than any
+copy should have to. **Worth deciding before the DNS is set up rather than
+after.**
+
+### 8.3 When mail fails
+
+The flow has to behave when the provider is down, the address bounces, or no
+mail is configured at all.
+
+- **No mail configured** — `EMAIL_API_TOKEN` empty, as on a development box —
+  the route refuses cleanly at the edge with a plain message, rather than
+  erroring at send time. Same shape as `SUPPORT_GITHUB_TOKEN` and
+  `GOOGLE_PLAY_SERVICE_ACCOUNT`, which already default to empty in `env.ts`.
+- **The provider is down.** The code is minted and stored before the send is
+  attempted, so a failed send is a farmer who waits and asks again — not a
+  broken row. Do not surface the failure differently from success: that would
+  reintroduce the enumeration §5 removes.
+- **A hard bounce** means the address is wrong or gone, and nothing in this
+  system currently knows that. Not solved here; noted as the first thing worth
+  adding once mail has a webhook.
+
+## 9. What the client needs
 
 - **A link on the sign-in screen**, which is where somebody discovers they are
   stuck.
 - **Two steps on one screen**: ask for the email, then take the code and the
-  new password together. One screen because the code arrives while the person
+  new password together. One screen, because the code arrives while the person
   is still holding the phone, and a second navigation is a place to get lost.
-- **The refusal is one message for every failure** — wrong code, expired code,
-  spent code, too many attempts — because distinguishing them tells an attacker
-  which of those they achieved. It names the recovery: *"That code is not
-  right, or it has expired. Ask for another."*
+- **One refusal message for every failure** — wrong code, expired, spent, too
+  many attempts — because distinguishing them tells an attacker which of those
+  they achieved. It names the recovery: *"That code is not right, or it has
+  expired. Ask for another."*
+- **The new password field obeys the same rules signup uses.** One place, not
+  two, or they will drift.
 
-## 9. What has to be tested before this ships
+## 10. Email verification, immediately after
 
-The list, so it is not assembled from memory at the end:
+Not part of this, and the obvious next thing once a sender exists.
+
+Password signup accepts any address; only Google carries `email_verified`. That
+is tolerable while an address does nothing, and it stops being tolerable the
+moment an address can receive a password reset — a typo at signup means a
+recovery route that reaches a stranger, and the farm cannot tell.
+
+Same token machinery, same table shape, one more route. **Not folded in here**
+because it changes the signup flow and this document is about the lockout.
+
+## 11. What has to be tested
+
+Assembled now rather than from memory at the end:
 
 - A code works exactly once; the second attempt is refused.
 - An expired code is refused.
 - The fifth wrong guess kills the code, and the correct one then fails too.
 - Minting twice leaves exactly one live code, and it is the newer.
-- `/auth/forgot` answers identically for a real and an unknown address, and
-  within the same timing envelope.
-- A successful reset revokes every refresh token for that user, and a session
-  that was live before it is refused afterwards.
+- `/auth/forgot` answers identically for a real and an unknown address, **and
+  within the same timing envelope** — the assertion people skip.
+- A successful reset revokes every refresh token for that user; a session live
+  before it is refused after it.
 - The stored row never contains the code in the clear.
+- The route refuses cleanly when no mail is configured.
+- A send failure does not leave the caller a different answer from a success.
 - **Isolation**: the collection is reachable only through its module, and a
   reset cannot be minted or redeemed across orgs.
-- The route refuses cleanly when no mail is configured, rather than erroring at
-  send time.
 
-## 10. What this does not do
+## 12. What this does not do
 
 - **No security questions.** They are a weaker password nobody chose.
-- **No "reset link expires when you click it" web page.** §2.
-- **No recovery codes at signup**, which was one alternative considered: it
-  works for a solo owner without any email at all, and it is a thing people
-  lose in the drawer with the manual. It remains the obvious second factor if
-  this app ever grows one, and the token machinery here would serve it
-  unchanged.
-- **No owner-mediated reset** for now — another farm member minting a reset
-  code the way they mint a join code. It is a natural companion for a farm with
-  more than one person, it reuses every part of this, and it is a smaller piece
-  of work once this exists. It is not a substitute: most farms are one person,
-  and that person has nobody to ask.
+- **No emailed link, and no reset web page.** §3.
+- **No recovery codes at signup.** They work with no mail at all and for a solo
+  owner, and they are a thing people lose in the drawer with the manual. The
+  obvious second factor if this app ever grows one, and the machinery here
+  would serve it unchanged.
+- **No owner-mediated reset** yet — another member minting a reset code the way
+  they mint a join code. A natural companion for a farm with more than one
+  person, reusing every part of this, and a small piece of work once this
+  exists. Not a substitute: most farms are one person, and that person has
+  nobody to ask.
+- **No bounce handling.** §8.3.
 
 ---
 
-**Sources for the standard and the provider comparison** —
-[OWASP Forgot Password Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html),
-[OWASP Top 10 A07: Identification and Authentication Failures](https://owasp.org/Top10/2021/A07_2021-Identification_and_Authentication_Failures/),
-[Resend vs Amazon SES vs Postmark, 2026](https://www.buildmvpfast.com/blog/resend-vs-ses-vs-postmark-transactional-email-deliverability-saas-2026),
-[The top transactional email services for developers](https://knock.app/blog/the-top-transactional-email-services-for-developers).
+**Sources.**
+[OWASP Forgot Password Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html) ·
+[OWASP Top 10 A07: Identification and Authentication Failures](https://owasp.org/Top10/2021/A07_2021-Identification_and_Authentication_Failures/) ·
+[MDN, One-time passwords](https://developer.mozilla.org/en-US/docs/Web/Security/Authentication/OTP) ·
+[Password reset best practices, Authgear](https://www.authgear.com/post/authentication-security-password-reset-best-practices-and-more/) ·
+[Universal and deep links, 2026](https://prototyp.digital/blog/universal-links-deep-linking-2026) ·
+[Google and Yahoo email authentication requirements](https://powerdmarc.com/google-and-yahoo-email-authentication-requirements/) ·
+[Bulk email sender requirements checklist](https://redsift.com/guides/bulk-email-sender-requirements) ·
+[Resend vs Amazon SES vs Postmark, 2026](https://www.buildmvpfast.com/blog/resend-vs-ses-vs-postmark-transactional-email-deliverability-saas-2026)
