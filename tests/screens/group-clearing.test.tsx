@@ -19,19 +19,19 @@ import { EditGroupScreen } from '../../apps/mobile/src/screens/EditGroupScreen';
  * `TreatmentScreen` had already met this class and fixed it there, with a
  * comment explaining it. Nobody swept for the rest.
  *
- * ## The half that is not fixed here, and why
+ * ## The half that used to be missing, and now is not
  *
  * That fix — name every optional field, with `undefined` where it is now
- * absent — is right locally and does not reach the server. `JSON.stringify`
- * drops an `undefined` value, so the mutation arrives without the key and
- * `$set` leaves the old value standing: the device reads cleared, the server
- * reads unchanged, and the next snapshot puts it back.
+ * absent — was right locally and did not reach the server. `JSON.stringify`
+ * drops an `undefined` value, so the mutation arrived without the key and
+ * `$set` left the old value standing: the device read cleared, the server read
+ * unchanged, and the next snapshot put it back.
  *
- * An empty array does not have that problem, which is why `purposes` is
- * fixable today and `breedId`, `bornAt` and `processAtWeeks` are not. Clearing
- * those needs a way to say "clear this" on the wire, which is a contract
- * change. Consistently stale beats silently divergent in the meantime, and the
- * test below pins that choice so it is not mistaken for an oversight twice.
+ * An empty array never had that problem, which is why `purposes` was fixable
+ * first and `breedId`, `bornAt` and `processAtWeeks` were not. They are fixed
+ * now: `contracts/clearing.ts` gives the wire a `null` meaning *remove this*,
+ * the applier turns it into `$unset`, and the tests below assert both halves —
+ * the record on this device, and the instruction that leaves it.
  */
 
 const GROUP = newId();
@@ -107,6 +107,57 @@ describe('clearing a purpose', () => {
 
     expect(payload).toHaveProperty('purposes');
     expect(JSON.parse(JSON.stringify(payload))).toHaveProperty('purposes');
+
+    screen.unmount();
+  });
+});
+
+describe('taking the breed off', () => {
+  /**
+   * The field this screen's comment used to say could be set and changed and
+   * never removed. Tapping the selected chip is how a farm says "not that one
+   * after all", and until the wire had a word for it that tap reached nothing.
+   */
+  it('removes it from the record on this device', async () => {
+    await enqueue({
+      entity: 'flock',
+      op: 'update',
+      targetId: GROUP,
+      payload: { breedId: 'chicken-australorp' },
+    });
+
+    const screen = await mount(<EditGroupScreen {...routeProps({ groupId: GROUP })} />);
+    await screen.pressLabel('Australorp');
+    await screen.press('save-group');
+
+    expect(await storedGroup()).not.toHaveProperty('breedId');
+    expect((await storedGroup()).name).toBe('The broilers');
+
+    screen.unmount();
+  });
+
+  /**
+   * And the half that used to be lost: the instruction has to survive
+   * `JSON.stringify`, which is exactly what `{ breedId: undefined }` did not.
+   */
+  it('says so on the wire, as a null the server can act on', async () => {
+    await enqueue({
+      entity: 'flock',
+      op: 'update',
+      targetId: GROUP,
+      payload: { breedId: 'chicken-australorp' },
+    });
+
+    const screen = await mount(<EditGroupScreen {...routeProps({ groupId: GROUP })} />);
+    await screen.pressLabel('Australorp');
+    await screen.press('save-group');
+
+    const outbox = await localStore().readOutboxBySeq();
+    const last = outbox.filter((m) => m.entity === 'flock' && m.op === 'update').pop();
+    const onTheWire = JSON.parse(JSON.stringify(last?.payload)) as Record<string, unknown>;
+
+    expect(onTheWire).toHaveProperty('breedId');
+    expect(onTheWire.breedId).toBeNull();
 
     screen.unmount();
   });

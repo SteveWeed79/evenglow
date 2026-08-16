@@ -94,6 +94,18 @@ export function useColorScheme(): 'light' | 'dark' {
   return 'light';
 }
 
+/**
+ * The same answer as the hook, without needing to be inside a render.
+ *
+ * `components/Boundary.tsx` reads it this way on purpose: it is drawing a
+ * screen *because something under it threw*, so it cannot call a hook that
+ * belongs to a tree it is replacing, and it must not ask the theme provider —
+ * which is one of the things whose failure it exists to catch.
+ */
+export const Appearance = {
+  getColorScheme: (): 'light' | 'dark' => 'light',
+};
+
 export const AppState = {
   currentState: 'active' as const,
   addEventListener: (): { remove: () => void } => ({ remove: () => undefined }),

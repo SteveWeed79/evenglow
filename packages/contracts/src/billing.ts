@@ -77,7 +77,7 @@ export type Subscription = z.infer<typeof subscriptionSchema>;
  * it never paid, its card failed, or the app is broken — and those get very
  * different responses from a person.
  */
-export const SYNC_REFUSALS = ['unsubscribed', 'lapsed', 'noAccount'] as const;
+export const SYNC_REFUSALS = ['unsubscribed', 'lapsed', 'noAccount', 'appTooOld'] as const;
 export type SyncRefusal = (typeof SYNC_REFUSALS)[number];
 
 export interface Entitlement {
@@ -183,6 +183,18 @@ export function syncRefusalMessage(refusal: SyncRefusal): string {
      */
     case 'noAccount':
       return 'Kept on this phone. There is no account yet, so there is nowhere to send it.';
+    /**
+     * Not a payment state, and the only one of the four a farm can fix in a
+     * minute.
+     *
+     * A sideloaded install has no updater (`[23]`), so a build old enough to
+     * misread the wire would otherwise disagree with the farm's other devices
+     * silently — which is the failure this refusal exists to convert into a
+     * sentence. Nothing is lost and nothing is dropped: the batch stays queued
+     * and goes up the moment the app is updated.
+     */
+    case 'appTooOld':
+      return 'Kept on this phone until this app is updated. Nothing has been lost.';
   }
 }
 

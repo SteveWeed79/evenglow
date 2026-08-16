@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { newId } from '@steading/contracts';
 import { localStore } from '@steading/core/db/store';
-import { treatmentsFor } from '@steading/core/read/withdrawals';
+import { treatmentById, treatmentsFor } from '@steading/core/read/withdrawals';
 import { enqueue } from '@steading/core/sync/queue';
 import { freshStore } from '../support/store';
 import { mount, routeProps } from '../support/screen';
@@ -310,5 +310,64 @@ describe('taking one back', () => {
 
     expect(removal?.targetId).toBe(id);
     screen.unmount();
+  });
+});
+
+describe('taking a field off a treatment', () => {
+  /**
+   * The divergence that made the wire change urgent, on the record where it
+   * was most dangerous.
+   *
+   * `TreatmentScreen` named every optional field on an edit with `undefined`
+   * where it was now absent — right on this handset and lost in transit,
+   * because `JSON.stringify` drops the key and the server's `$set` then keeps
+   * the old value. On a medicine record that is the wrong way round to be
+   * wrong: the phone that revised a withdrawal down showed produce released
+   * while the server and every other device went on holding it.
+   */
+  it('sends the clear as a null rather than dropping it in transit', async () => {
+    const id = await aRunningCourse();
+
+    const screen = await mount(
+      <TreatmentScreen {...routeProps({ groupId: GROUP, treatmentId: id })} />,
+    );
+
+    await screen.type('treatment-reason', '');
+    await screen.type('treatment-dose', '');
+    await screen.press('save-treatment');
+    screen.unmount();
+
+    const outbox = await localStore().readOutboxBySeq();
+    const edit = outbox.filter((m) => m.entity === 'medication' && m.op === 'update').pop();
+    const onTheWire = JSON.parse(JSON.stringify(edit?.payload)) as Record<string, unknown>;
+
+    expect(onTheWire).toHaveProperty('reason');
+    expect(onTheWire.reason).toBeNull();
+    expect(onTheWire.dose).toBeNull();
+  });
+
+  /** And the record on this device loses the field rather than holding a null. */
+  it('leaves no null in the record it just edited', async () => {
+    const id = await aRunningCourse();
+
+    const screen = await mount(
+      <TreatmentScreen {...routeProps({ groupId: GROUP, treatmentId: id })} />,
+    );
+    await screen.type('treatment-reason', 'Respiratory');
+    await screen.press('save-treatment');
+    screen.unmount();
+
+    const withReason = await treatmentById(id);
+    expect(withReason?.reason).toBe('Respiratory');
+
+    const second = await mount(
+      <TreatmentScreen {...routeProps({ groupId: GROUP, treatmentId: id })} />,
+    );
+    await second.type('treatment-reason', '');
+    await second.press('save-treatment');
+    second.unmount();
+
+    const cleared = await treatmentById(id);
+    expect(cleared?.reason).toBeUndefined();
   });
 });

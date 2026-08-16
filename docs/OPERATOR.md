@@ -261,6 +261,19 @@ Everything else in `apps/api/src/env.ts` has a default, and the features they
 switch on — Google sign-in, Play billing, the support loop — each stay off and
 say so rather than half-working.
 
+**One of those defaults is worth knowing about before you need it:
+`MINIMUM_CLIENT_VERSION`.** Empty, which means this server takes a batch from
+any build. Set it to a version — `0.1.18` — and anything older is answered 426
+and told, in the app, that its records are kept on the phone until it is
+updated. Nothing is dropped and nothing is counted against the retry budget;
+the queue goes up the moment the app is updated.
+
+Set it when a release changes what the wire means rather than routinely. The
+one to date is the `null` that clears a field: a build that predates it writes
+that null into its own records and then cannot read them back, so it loses a
+row until it is upgraded. A floor this server cannot parse is ignored rather
+than enforced — a typo must not be the reason a working app stops.
+
 **One value is not required and should be set anyway: `TRUSTED_PROXY_HOPS=1`,
 behind any host that terminates TLS for you.** Fly, Render, a reverse proxy —
 all of them forward the request and append the caller to `X-Forwarded-For`.

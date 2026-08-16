@@ -129,25 +129,28 @@ export function EditGroupScreen({ route }: ScreenProps<'EditGroup'>): React.Reac
            */
           purposes: current.purposes,
           /**
-           * **These three can be set and changed, and cannot yet be cleared,
-           * and that is a wire limitation rather than a decision.**
+           * **`null` is how these get cleared, and it reaches the server.**
            *
-           * The pattern `TreatmentScreen` uses — name every optional field
-           * explicitly, with `undefined` where it is now absent — clears the
-           * local projection correctly and does not survive the journey:
-           * `JSON.stringify` drops an `undefined` value outright, so the
-           * mutation reaches `apply.ts` without the key and its `$set` leaves
-           * the old value standing. The device would read cleared, the server
-           * would read unchanged, and the next snapshot would put it back.
-           *
-           * Consistently stale beats silently divergent, so these keep the
-           * conditional spread until there is a way to say "clear this" on the
-           * wire — a JSON `null` mapped to `$unset` in the applier, which is a
-           * contract change and wants designing rather than sweeping in here.
+           * This used to be a conditional spread with a paragraph explaining
+           * that a breed could be set and changed and never removed: naming the
+           * field with `undefined` cleared the handset and stopped there,
+           * because `JSON.stringify` drops the key and `$set` then leaves the
+           * old value standing. The wire has a word for it now
+           * (`contracts/clearing.ts`), so the state this screen has always held
+           * — `null` for "the farmer took it off" — is simply sent.
            */
-          ...(current.breedId === null ? {} : { breedId: current.breedId }),
-          ...(current.bornAt === null ? {} : { bornAt: current.bornAt }),
-          ...(current.purposes.includes('meat') && current.processAtWeeks !== null
+          breedId: current.breedId,
+          bornAt: current.bornAt,
+          /**
+           * Sent only while the group is kept for meat, which is unchanged.
+           *
+           * The field is not editable otherwise — the control below is behind
+           * the same condition — so an update from a non-meat group has no
+           * opinion about it rather than an empty one. Clearing it on the way
+           * out of `meat` would throw away a number the farm typed, and a
+           * purpose comes off for a season more often than for good.
+           */
+          ...(current.purposes.includes('meat')
             ? { processAtWeeks: current.processAtWeeks }
             : {}),
         },

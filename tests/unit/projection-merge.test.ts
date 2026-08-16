@@ -57,6 +57,64 @@ describe('nextRecordValue', () => {
   it('keeps the partial payload when the create has not arrived yet', () => {
     expect(nextRecordValue('update', undefined, { count: 12 })).toEqual({ count: 12 });
   });
+
+  /**
+   * A `null` removes the key rather than storing one.
+   *
+   * Storing it would be nearly right and wrong where it counts: readers parse
+   * this value against the entity's create schema, where an optional field
+   * takes a value or nothing and never a null, so a record carrying one is
+   * dropped from every list on the device that just edited it.
+   */
+  it('removes a field an update clears', () => {
+    const previous = { name: 'The broilers', count: 20, breedId: 'australorp' };
+
+    expect(nextRecordValue('update', previous, { breedId: null })).toEqual({
+      name: 'The broilers',
+      count: 20,
+    });
+  });
+
+  it('leaves the record with no null in it at all', () => {
+    const merged = nextRecordValue('update', { name: 'Hens', bornAt: 1 }, { bornAt: null });
+
+    expect(Object.keys(merged as object)).toEqual(['name']);
+    expect(Object.values(merged as object)).not.toContain(null);
+  });
+
+  it('sets and clears in the same update', () => {
+    const previous = { name: 'Baytril', dose: '2ml', reason: 'lame' };
+
+    expect(nextRecordValue('update', previous, { dose: '3ml', reason: null })).toEqual({
+      name: 'Baytril',
+      dose: '3ml',
+    });
+  });
+
+  it('clears a field the record never had, without inventing one', () => {
+    expect(nextRecordValue('update', { name: 'Hens' }, { breedId: null })).toEqual({
+      name: 'Hens',
+    });
+  });
+
+  /** Nested nulls are values — `careIntervals: { worming: null }` means never. */
+  it('leaves a null one level down alone', () => {
+    const previous = { name: 'The goats' };
+    const payload = { careIntervals: { worming: null } };
+
+    expect(nextRecordValue('update', previous, payload)).toEqual({
+      name: 'The goats',
+      careIntervals: { worming: null },
+    });
+  });
+
+  it('drops the clears when the create has not arrived yet', () => {
+    // Nothing to remove, and a stored null outlives the moment it made sense
+    // in — the create that follows replaces the value wholesale anyway.
+    expect(nextRecordValue('update', undefined, { count: 12, breedId: null })).toEqual({
+      count: 12,
+    });
+  });
 });
 
 describe('editing through the store', () => {
@@ -127,6 +185,53 @@ describe('editing through the store', () => {
     });
   });
 
+  /**
+   * The half of the clearing fix that only a real store can show: the outbox
+   * row is what reaches the server, and it has to still say "clear this" after
+   * the round trip through JSON that lost the old fix.
+   */
+  it('carries the clear through storage and out to the wire', async () => {
+    const id = newId();
+    await enqueue({
+      entity: 'flock',
+      op: 'create',
+      targetId: id,
+      payload: { name: 'The broilers', species: 'chicken', count: 20, breedId: 'australorp' },
+    });
+
+    await enqueue({ entity: 'flock', op: 'update', targetId: id, payload: { breedId: null } });
+
+    const [group] = await listGroups();
+    expect(group?.name).toBe('The broilers');
+    expect(group?.breedId).toBeUndefined();
+
+    const outbox = await localStore().readOutboxBySeq();
+    const update = outbox.find((m) => m.op === 'update');
+    const onTheWire = JSON.parse(JSON.stringify(update?.payload)) as Record<string, unknown>;
+
+    // The assertion that distinguishes this fix from the one it replaces:
+    // `{ breedId: undefined }` survived neither of these two lines.
+    expect(onTheWire).toHaveProperty('breedId');
+    expect(onTheWire.breedId).toBeNull();
+  });
+
+  it('keeps a cleared field cleared across a restart', async () => {
+    const id = newId();
+    await enqueue({
+      entity: 'flock',
+      op: 'create',
+      targetId: id,
+      payload: { name: 'The broilers', species: 'chicken', count: 20, bornAt: T0 },
+    });
+    await enqueue({ entity: 'flock', op: 'update', targetId: id, payload: { bornAt: null } });
+
+    await simulateRestart();
+
+    const [group] = await listGroups();
+    expect(group).toMatchObject({ name: 'The broilers' });
+    expect(group?.bornAt).toBeUndefined();
+  });
+
   it('merges the same way when the change arrives from the server', async () => {
     // Hydration and a device's own writes must build identical state, or the
     // disagreement only shows up after a reinstall.
@@ -165,5 +270,50 @@ describe('editing through the store', () => {
 
     const [group] = await listGroups();
     expect(group).toMatchObject({ name: 'The hens', species: 'chicken', count: 12 });
+  });
+
+  /**
+   * Hydration has to clear too, or a reinstall reproduces the value the farm
+   * removed — the projection is shared between enqueue and pull precisely so
+   * the two cannot disagree, and this is the case where the disagreement would
+   * have been invisible until somebody reinstalled.
+   */
+  it('clears the same way when the change arrives from the server', async () => {
+    const id = newId();
+    const deviceId = '00000000-0000-4000-8000-000000000001';
+
+    await localStore().applyPulled(
+      [
+        {
+          id: newId(),
+          entity: 'flock',
+          op: 'create',
+          targetId: id,
+          payload: { name: 'The broilers', species: 'chicken', count: 20, breedId: 'australorp' },
+          deviceId,
+          clientSeq: 0,
+          clientTs: T0,
+          schemaVersion: 1,
+          serverTs: T0,
+        },
+        {
+          id: newId(),
+          entity: 'flock',
+          op: 'update',
+          targetId: id,
+          payload: { breedId: null },
+          deviceId,
+          clientSeq: 1,
+          clientTs: T0,
+          schemaVersion: 1,
+          serverTs: T0 + 1,
+        },
+      ],
+      { through: T0 + 1, throughId: id },
+    );
+
+    const [group] = await listGroups();
+    expect(group).toMatchObject({ name: 'The broilers', count: 20 });
+    expect(group?.breedId).toBeUndefined();
   });
 });

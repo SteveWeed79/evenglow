@@ -152,6 +152,45 @@ describe('flush', () => {
     }
   });
 
+  /**
+   * The same shape, for the one refusal a farm can act on in a minute.
+   *
+   * A build the server will not take a batch from ([23], [24]) is not a batch
+   * with anything wrong in it: the mutations are valid and the APK is old. So
+   * it holds exactly as the free tier does — queued, uncounted, untouched —
+   * because routing a farm's history to the rejected inbox over the version of
+   * an app nobody told them to update would be the app punishing somebody for
+   * its own delivery problem.
+   */
+  it('holds a batch from an app the server calls too old, and counts nothing', async () => {
+    await enqueue(eggLog());
+    await enqueue(eggLog());
+
+    const tooOld = () =>
+      Promise.resolve({
+        status: 426,
+        body: {
+          error: 'Kept on this phone until this app is updated. Nothing has been lost.',
+          refusal: 'appTooOld',
+        },
+      });
+
+    for (let i = 0; i < 20; i += 1) {
+      const outcome = await flushOnce(tooOld);
+      expect(outcome.deferred).toBe('app-too-old');
+    }
+
+    expect(await queueDepth()).toBe(2);
+    for (const row of await readOutboxBySeq()) {
+      expect(row.attempts).toBe(0);
+      expect(row.status).toBe('queued');
+    }
+
+    // And the chip can say which of the four states it is in.
+    expect(await localStore().getSyncHeld()).toBe('appTooOld');
+    expect((await diagnostics()).lastError).toMatch(/until this app is updated/);
+  });
+
   it('shows the server’s own sentence about why it is holding', async () => {
     await enqueue(eggLog());
 

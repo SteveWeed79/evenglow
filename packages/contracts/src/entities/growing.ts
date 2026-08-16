@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { updateSchemaOf } from '../clearing';
 import { currencySchema } from '../money';
 import { frostDatesSchema } from '../growing/frost';
 import { zoneSchema } from '../growing/zone';
@@ -105,7 +106,7 @@ const siteShape = {
 };
 
 export const siteCreateSchema = z.object(siteShape).strict();
-export const siteUpdateSchema = z.object(siteShape).partial().strict();
+export const siteUpdateSchema = updateSchemaOf(siteShape);
 
 // ── bed (mutable) ────────────────────────────────────────────────────────────
 
@@ -132,7 +133,7 @@ const bedShape = {
 };
 
 export const bedCreateSchema = z.object(bedShape).strict();
-export const bedUpdateSchema = z.object(bedShape).partial().strict();
+export const bedUpdateSchema = updateSchemaOf(bedShape);
 
 // ── variety (mutable) ────────────────────────────────────────────────────────
 
@@ -209,7 +210,7 @@ const varietyShape = {
 };
 
 export const varietyCreateSchema = z.object(varietyShape).strict();
-export const varietyUpdateSchema = z.object(varietyShape).partial().strict();
+export const varietyUpdateSchema = updateSchemaOf(varietyShape);
 
 // ── planting (mutable) ───────────────────────────────────────────────────────
 
@@ -302,7 +303,7 @@ const plantingShape = {
 };
 
 export const plantingCreateSchema = z.object(plantingShape).strict();
-export const plantingUpdateSchema = z.object(plantingShape).partial().strict();
+export const plantingUpdateSchema = updateSchemaOf(plantingShape);
 
 // ── harvest (append-only) ────────────────────────────────────────────────────
 

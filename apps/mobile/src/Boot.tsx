@@ -5,6 +5,7 @@ import { startSync } from '@steading/core/sync/engine';
 import { setStorageBacking } from '@steading/core/sync/storage';
 import { setEngineReporter } from '@steading/core/sync/report';
 import { reportTrouble } from './hooks/useTrouble';
+import { describeBreadcrumb, takeBreadcrumb } from './support/breadcrumb';
 import { ensureLocalOrgId } from './auth/local-org';
 import { start, type Started } from './boot/start';
 import { openLocalStore } from './db/store';
@@ -122,6 +123,25 @@ export function Boot({
    */
   useEffect(() => {
     setEngineReporter((where, error) => reportTrouble(where, error));
+  }, []);
+
+  /**
+   * The crash that killed the last run, picked up by this one.
+   *
+   * `[40]`, and the half a boundary cannot do: the fallback screen writes a
+   * crumb to disk because the support screen is inside the tree that failed, so
+   * somebody has to fetch it once there is a working tree again. This is that
+   * moment — the app is up, the trouble history exists, and a bundle filed from
+   * Settings now carries the crash the farm could not report at the time.
+   *
+   * Reading clears it, so it rides on the next ticket and not on every one
+   * after that. Nothing is shown: the farm has already seen the fallback and
+   * being told about it again on a launch that worked is noise.
+   */
+  useEffect(() => {
+    void takeBreadcrumb().then((crumb) => {
+      if (crumb !== null) reportTrouble('the last time the app was open', new Error(describeBreadcrumb(crumb)));
+    });
   }, []);
 
   useEffect(() => {

@@ -243,6 +243,12 @@ export function JobsScreen(): React.ReactElement {
                 </View>
               </View>
 
+              {/* `null`, not `undefined`. This button wrote `undefined` until
+                  the wire had a word for clearing a field, and the tick came
+                  off this handset and nowhere else: `JSON.stringify` dropped
+                  the key, the server's `$set` left `completedAt` standing, and
+                  every other device on the farm went on showing the job done.
+                  See `contracts/clearing.ts`. */}
               <Confirm
                 label="Need to redo this"
                 armedLabel="Tap again to put it back"
@@ -252,7 +258,7 @@ export function JobsScreen(): React.ReactElement {
                     entity: 'task',
                     op: 'update',
                     targetId: task.id,
-                    payload: { completedAt: undefined },
+                    payload: { completedAt: null },
                   })
                 }
               />

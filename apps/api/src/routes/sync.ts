@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { syncRefusalMessage } from '@steading/contracts';
+import { CLIENT_VERSION_HEADER, isClientTooOld, syncRefusalMessage } from '@steading/contracts';
 import { requireClaims, requireMutationClaims } from '../auth/require';
 import { syncAccess } from '../billing/access';
 import { findOrgById } from '../db/identity';
@@ -66,6 +66,31 @@ export async function syncRoutes(app: FastifyInstance, env: Env): Promise<void> 
      *
      * Read from the server's own environment; nothing on the wire reaches it.
      */
+    /**
+     * Old enough to misread the wire, told so in a sentence ([23], [24]).
+     *
+     * Before the entitlement, because the two answers are about different
+     * things and this one is cheaper: a build that cannot model what the farm
+     * now holds should hear about that rather than about a subscription. It is
+     * also the honest order — a farm whose app is out of date and whose card
+     * has lapsed has two problems, and the one it can fix in a minute goes
+     * first.
+     *
+     * A 426 rather than a 4xx the client would treat as a rejection: nothing
+     * here is wrong with the mutations. The body carries the same shape a 402
+     * does, so the client holds the batch through machinery that already
+     * exists rather than a second path that has to agree with it.
+     */
+    // A repeated header arrives as an array. Two answers to "which build is
+    // this" is not one this server should pick between, and an array is not a
+    // version — `isClientTooOld` reads that as too old, which is right.
+    const said = request.headers[CLIENT_VERSION_HEADER];
+    if (isClientTooOld(typeof said === 'string' ? said : undefined, env.minimumClientVersion)) {
+      return reply
+        .status(426)
+        .send({ error: syncRefusalMessage('appTooOld'), refusal: 'appTooOld' });
+    }
+
     {
       const entitlement = syncAccess(env, await findOrgById(claims.orgId));
 

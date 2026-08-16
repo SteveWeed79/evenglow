@@ -1,7 +1,13 @@
 import { Directory, Paths } from 'expo-file-system';
 import * as SQLite from 'expo-sqlite';
 import type { SqlDriver } from '@steading/core/db/driver';
-import { applyPragmas, createExpoDriver, type SqliteConnection } from './expo-driver';
+import { reportEngineError } from '@steading/core/sync/report';
+import {
+  applyPragmas,
+  createExpoDriver,
+  integrityProblem,
+  type SqliteConnection,
+} from './expo-driver';
 
 /**
  * The only file that names `expo-sqlite`.
@@ -42,6 +48,24 @@ export async function openExpoSqlDriver(databaseName: string): Promise<SqlDriver
   // the failure is a compile error here rather than a runtime one on a handset.
   const connection: SqliteConnection = await SQLite.openDatabaseAsync(databaseName);
   await applyPragmas(connection);
+
+  /**
+   * Asked as the file opens, reported rather than acted on ([37]).
+   *
+   * The store opens either way — see `integrityProblem` for why refusing would
+   * be the wrong call — so this is a report and the app carries on. It goes
+   * through the engine reporter, which puts it in the trouble history where a
+   * support bundle will carry it, rather than in front of somebody who cannot
+   * act on the words "malformed database page".
+   */
+  const problem = await integrityProblem(connection);
+  if (problem !== null) {
+    reportEngineError(
+      'checking the records file',
+      new Error(`SQLite reports damage in ${databaseName}: ${problem}`),
+    );
+  }
+
   return createExpoDriver(connection);
 }
 

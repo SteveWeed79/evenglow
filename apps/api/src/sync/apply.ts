@@ -7,6 +7,7 @@ import {
   roleRefusal,
   MUTATION_SCHEMA_VERSION,
   mergedUpdateProblem,
+  partitionClears,
   payloadSchemaFor,
   type Entity,
   type Mutation,
@@ -369,6 +370,42 @@ async function stampOutcome(
   );
 }
 
+/** What `updateOne` is handed for an edit: what changed, and what was removed. */
+interface EditStamp {
+  updatedAt: Date;
+  updatedBy: string;
+  updatedByDevice: string;
+}
+
+/**
+ * `$set` for what changed, `$unset` for what was cleared.
+ *
+ * A `null` in an update payload is the wire saying *remove this* — see
+ * `contracts/clearing.ts` for why clearing has to be a value rather than an
+ * omission. `$set: { breedId: null }` is the easy reading and the wrong one:
+ * the document would then carry a null where the field's own schema allows a
+ * string or nothing, and every reader that parses it strictly drops the record.
+ * The device that made the edit sees the record disappear from its lists, which
+ * is a worse failure than the one being fixed.
+ *
+ * **The `$unset` clause is left out when nothing is cleared**, which is every
+ * ordinary edit. Mongo refuses an empty `$unset`, so building one
+ * unconditionally would fail every head-count change on the farm — the reason
+ * this is a named function with its own test rather than three lines inside a
+ * switch that only a live database can exercise.
+ */
+export function updateFor(
+  payload: Record<string, unknown>,
+  stamp: EditStamp,
+): { $set: Record<string, unknown>; $unset?: Record<string, ''> } {
+  const { set, clear } = partitionClears(payload);
+  const update = { $set: { ...set, ...stamp } };
+
+  if (clear.length === 0) return update;
+
+  return { ...update, $unset: Object.fromEntries(clear.map((field) => [field, '' as const])) };
+}
+
 /** Writes the derived read model for one command. */
 async function project(
   scope: Scoped,
@@ -454,7 +491,7 @@ async function project(
       break;
 
     case 'update':
-      await col.updateOne({ _id: targetId }, { $set: { ...payload, ...stamp } });
+      await col.updateOne({ _id: targetId }, updateFor(payload as Record<string, unknown>, stamp));
       break;
 
     case 'archive':

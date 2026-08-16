@@ -10,7 +10,7 @@ import {
   gramsToUg,
   harvestCreateSchema,
   hourReadingCreateSchema,
-  maintenanceUpdateSchema,
+  maintenanceStoredSchema,
   mlToUl,
   mortalityCreateSchema,
   predatorCreateSchema,
@@ -147,13 +147,13 @@ const storedTask = taskCreateSchema.partial();
  * A service schedule as the projection holds it — create and updates merged,
  * so every field is optional from a reader's point of view.
  *
- * The update schema rather than `maintenanceCreateSchema.partial()`, because
- * the create schema carries refinements (an interval must be hours or days,
- * not neither) and zod will not make a refined object partial. The update
- * schema is that same shape already made optional, which is exactly what a
- * merged row is.
+ * `maintenanceStoredSchema` rather than `maintenanceCreateSchema.partial()`,
+ * because the create schema carries refinements (an interval must be hours or
+ * days, not neither) and zod will not make a refined object partial. It used to
+ * be the update schema, which was the same object until updates learned to
+ * carry a `null` meaning *cleared* — a value a stored row never holds.
  */
-const storedService = maintenanceUpdateSchema;
+const storedService = maintenanceStoredSchema;
 
 const plural = (n: number, one: string, many = `${one}s`): string =>
   `${n} ${n === 1 ? one : many}`;

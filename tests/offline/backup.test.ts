@@ -508,3 +508,105 @@ describe('naming what was lost', () => {
     expect((await runRestore(plan)).lost).toEqual(['eggLog']);
   });
 });
+
+/**
+ * A restored photo asks for its bytes again.
+ *
+ * `BACKUP_EXCLUDES` keeps the images out of the file on purpose, and
+ * `buildBackup` walks every entity, so the photo's record goes in carrying the
+ * projection's `uploadedAt`. Restored onto a rebuilt server that is a claim
+ * about bytes nothing holds: the transfer loop offers a photo only when
+ * `uploadedAt` is absent, so the device still holding the file never offers it
+ * and every download answers 404 — a gallery of records with no pictures in it.
+ */
+describe('photographs, which the file does not carry', () => {
+  async function aPhotographedFarm(): Promise<string> {
+    const subject = newId();
+    const photo = newId();
+
+    await enqueue({
+      entity: 'flock',
+      op: 'create',
+      targetId: subject,
+      payload: { name: 'The hens', species: 'chicken', count: 6 },
+    });
+    await enqueue({
+      entity: 'photo',
+      op: 'create',
+      targetId: photo,
+      payload: {
+        subjectId: subject,
+        contentType: 'image/jpeg',
+        byteSize: 240_000,
+        capturedAt: Date.now(),
+      },
+    });
+    // The stamp the transfer loop writes once the server has the bytes.
+    await enqueue({
+      entity: 'photo',
+      op: 'update',
+      targetId: photo,
+      payload: { uploadedAt: Date.now() },
+    });
+
+    return photo;
+  }
+
+  it('drops the upload stamp, so the bytes are offered again', async () => {
+    const photo = await aPhotographedFarm();
+    const { file } = await buildBackup(newId(), APP);
+
+    // The record in the file still says the server has them — that is the
+    // projection's honest current value, and it is what makes the restore the
+    // place to deal with it.
+    const entry = file.entries.find((e) => e.targetId === photo);
+    expect(entry?.payload).toHaveProperty('uploadedAt');
+
+    await freshStore();
+    const read = readBackup(JSON.stringify(file));
+    if (!read.ok) throw new Error(read.message);
+    const plan = await planRestore(read.file, { signedIn: false });
+    if (!plan.ok) throw new Error(plan.message);
+    await runRestore(plan);
+
+    const records = await readAllRecords();
+    const restored = records.find((r) => r.targetId === photo);
+
+    expect(restored).toBeDefined();
+    expect(restored?.value).not.toHaveProperty('uploadedAt');
+  });
+
+  it('keeps everything else about the photo', async () => {
+    const photo = await aPhotographedFarm();
+    const { file } = await buildBackup(newId(), APP);
+
+    await freshStore();
+    const read = readBackup(JSON.stringify(file));
+    if (!read.ok) throw new Error(read.message);
+    const plan = await planRestore(read.file, { signedIn: false });
+    if (!plan.ok) throw new Error(plan.message);
+    await runRestore(plan);
+
+    const restored = (await readAllRecords()).find((r) => r.targetId === photo);
+    expect(restored?.value).toMatchObject({ contentType: 'image/jpeg', byteSize: 240_000 });
+  });
+
+  /** Every other entity is restored exactly as it was — this is one field, not a rule. */
+  it('leaves other entities untouched', async () => {
+    await aFarm();
+    const { file } = await buildBackup(newId(), APP);
+
+    await freshStore();
+    const read = readBackup(JSON.stringify(file));
+    if (!read.ok) throw new Error(read.message);
+    const plan = await planRestore(read.file, { signedIn: false });
+    if (!plan.ok) throw new Error(plan.message);
+    await runRestore(plan);
+
+    const records = await readAllRecords();
+    for (const entry of file.entries.filter((e) => e.entity !== 'photo')) {
+      const restored = records.find((r) => r.targetId === entry.targetId);
+      expect(restored?.value).toEqual(entry.payload);
+    }
+  });
+});

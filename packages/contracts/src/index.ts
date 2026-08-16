@@ -9,6 +9,8 @@
  */
 
 export * from './mutation';
+export * from './clearing';
+export * from './client-version';
 export * from './roles';
 export * from './billing';
 export * from './membership';

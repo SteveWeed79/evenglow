@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { mergedSchemaOf, updateSchemaOf } from '../clearing';
 
 // ── equipment (mutable) ──────────────────────────────────────────────────────
 
@@ -16,7 +17,7 @@ const equipmentShape = {
 };
 
 export const equipmentCreateSchema = z.object(equipmentShape).strict();
-export const equipmentUpdateSchema = z.object(equipmentShape).partial().strict();
+export const equipmentUpdateSchema = updateSchemaOf(equipmentShape);
 
 // ── hourReading (append-only) ────────────────────────────────────────────────
 
@@ -78,8 +79,12 @@ const maintenanceShape = {
  *
  * Exported for the same reason as `namesOneSubject`: a `.partial()` update
  * cannot carry this, so it is re-checked against the merged document at apply
- * time (`mergedUpdateProblem`). Null counts as absent, because clearing a field
- * arrives as undefined and is stored as null.
+ * time (`mergedUpdateProblem`). Null counts as absent because null is how the
+ * wire clears a field (`../clearing.ts`) — so this is what stops an update
+ * clearing the last trigger and leaving a schedule that can never fire. The
+ * sentence it replaces said the null came from an `undefined` being stored as
+ * one, which never happened: the key was dropped in transit and the clear was
+ * lost, which is the defect that made a word for it necessary.
  */
 export function hasATrigger(v: { intervalHours?: unknown; intervalDays?: unknown }): boolean {
   const set = (value: unknown) => value !== undefined && value !== null;
@@ -91,4 +96,14 @@ export const maintenanceCreateSchema = z
   .strict()
   .refine(hasATrigger, { message: 'A schedule needs an hour interval, a day interval, or both.' });
 
-export const maintenanceUpdateSchema = z.object(maintenanceShape).partial().strict();
+export const maintenanceUpdateSchema = updateSchemaOf(maintenanceShape);
+
+/**
+ * A schedule as the projection holds it, for readers.
+ *
+ * Not `maintenanceCreateSchema.partial()`: the create schema is refined — an
+ * interval must be hours or days and not neither — and zod will not make a
+ * refined object partial. Not the update schema either, which now admits the
+ * nulls that clear a field on the wire and never reach a stored record.
+ */
+export const maintenanceStoredSchema = mergedSchemaOf(maintenanceShape);

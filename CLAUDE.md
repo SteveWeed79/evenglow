@@ -106,9 +106,7 @@ export const mutationSchema = z.object({
   schemaVersion: z.number().int().positive(),
   id: z.string().length(26),        // ULID — idempotency key, becomes _id
   targetId: z.string().length(26),  // ULID — entity id, minted offline
-  entity: z.enum(['flock', 'animal', 'medication', 'eggLog', 'productionLog',
-                  'feedLog', 'mortality', 'predator', 'equipment',
-                  'hourReading', 'maintenance', 'task', 'inventory', 'photo']),
+  entity: entitySchema,             // ENTITIES in contracts/mutation.ts — 26 of them
   op: z.enum(['create', 'update', 'delete']),
   payload: z.unknown(),             // validated per-entity in sync/apply.ts
   deviceId: z.string().uuid(),
@@ -117,9 +115,13 @@ export const mutationSchema = z.object({
 }).strict();
 ```
 
-**Append-only entities** (`eggLog`, `productionLog`, `feedLog`, `mortality`, `predator`, `hourReading`) accept `create` only; `update`/`delete` on them is a 400. They cannot conflict.
+**The entity list lives in `contracts/mutation.ts` and is not repeated here.** It was, and it went stale: this section named fourteen entities long after there were twenty-six, so everything growing, `breeding`, `incubation`, `weight`, `shearing`, `feedPlan`, `careLog`, `stockAdjustment` and `note` were invisible to anyone starting from this file. Widening the list is additive and does not bump `MUTATION_SCHEMA_VERSION` — the server ships first, because an old server answers 400 for an entity it does not know, and an old client skips a row it cannot model and keeps the rest.
 
-**Mutable entities** (`flock`, `animal`, `medication`, `equipment`, `maintenance`, `task`, `inventory`, `photo`) support update/delete and need conflict handling. They are **archived, never deleted** — `delete` sets `archivedAt` (P13).
+**Append-only entities** — `eggLog`, `productionLog`, `feedLog`, `mortality`, `predator`, `hourReading`, `harvest`, `weight`, `shearing`, `careLog`, `stockAdjustment` — accept `create` and `delete`; `update` on them is a 400. They cannot conflict. `APPEND_ONLY_ENTITIES` is the list, and `isAppendOnly()` is how to ask. **Delete is allowed on all of them:** a mistyped hour meter reading cannot be corrected by recording a better one, because the meter's own rule refuses anything lower.
+
+**Every other entity is mutable**, supports update and delete, and needs conflict handling. They are **archived, never deleted** — `delete` sets `archivedAt` (P13).
+
+**A cleared field is `null` on the wire** (`contracts/clearing.ts`). An update merges on both sides, so an omitted key keeps its old value; `undefined` cannot say otherwise because `JSON.stringify` drops it. Null maps to `$unset` on the server and to key removal in the client projection — so a stored record never holds one. Only optional fields accept it, only at the top level of an update, and never on a create.
 
 **Stock is mixed, not poultry.** `animal`, not `bird`: goats and cattle die, get treated, and get weighed too. `flock` is the wire name for any group; the UI says herd, drove, or gaggle per species via `SPECIES_TRAITS`. Egg logging is offered per species through `laysEggs()`, and `productionLog` carries milk, fibre, and honey so ruminants are not head-count-only. Do not reintroduce poultry-only assumptions.
 
@@ -208,7 +210,7 @@ git cherry-pick <my-commit>                            # keep it, never discard
 
 ## Style
 
-- Function components and hooks. No class components.
+- Function components and hooks. No class components — with exactly one exception, `components/Boundary.tsx`, because React has no hook form of `componentDidCatch` and an error boundary is a class or it does not exist. A second class needs a reason of that kind.
 - Data access lives in `src/db/` and `src/sync/`. **Components never call `fetch` or touch SQLite directly** — they read through hooks over the local store.
 - The local SQLite projection is the only thing the UI renders. Network results land in SQLite first, then render.
 - Explicit return types on exported functions.

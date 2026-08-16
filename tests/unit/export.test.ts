@@ -229,3 +229,101 @@ describe('what comes out', () => {
     expect(eggs?.csv).toContain('"The ""back"" run, by the gate"');
   });
 });
+
+/**
+ * Names are what a person reads; they are not an identity.
+ *
+ * The gap assessment asked for "reports carrying human-readable names beside
+ * stable identifiers" and the export already had the names — every sheet
+ * resolved a ULID to one — and printed no identifier at all. So the half that
+ * was missing is the half that answers *which* Big coop, and lets a season's
+ * rows be joined back to anything.
+ */
+describe('the identifier beside the name', () => {
+  it('ends every sheet with the subject and the record', async () => {
+    await theHens();
+    const log = newId();
+    await enqueue({
+      entity: 'eggLog',
+      op: 'create',
+      targetId: log,
+      payload: { occurredAt: Date.now(), flockId: GROUP, count: 12 },
+    });
+
+    const eggs = (await buildExport()).find((s) => s.name === 'eggs');
+    const [header, row] = eggs?.csv.split('\r\n') ?? [];
+
+    expect(header?.endsWith('Subject id,Record id')).toBe(true);
+    expect(row?.endsWith(`${GROUP},${log}`)).toBe(true);
+  });
+
+  /** The case the words cannot answer, and the reason this column exists. */
+  it('tells two groups of the same name apart', async () => {
+    const second = newId();
+    await theHens('Big coop');
+    await enqueue({
+      entity: 'flock',
+      op: 'create',
+      targetId: second,
+      payload: { name: 'Big coop', species: 'chicken', count: 9, purposes: ['eggs'] },
+    });
+
+    await enqueue({
+      entity: 'eggLog',
+      op: 'create',
+      targetId: newId(),
+      payload: { occurredAt: Date.now(), flockId: GROUP, count: 12 },
+    });
+    await enqueue({
+      entity: 'eggLog',
+      op: 'create',
+      targetId: newId(),
+      payload: { occurredAt: Date.now(), flockId: second, count: 7 },
+    });
+
+    const eggs = (await buildExport()).find((s) => s.name === 'eggs');
+    const rows = eggs?.csv.split('\r\n').slice(1) ?? [];
+
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.includes('Big coop'))).toBe(true);
+    // Identical in every column a person reads, and separable anyway.
+    expect(rows.filter((r) => r.includes(GROUP))).toHaveLength(1);
+    expect(rows.filter((r) => r.includes(second))).toHaveLength(1);
+  });
+
+  /**
+   * An archived subject reads `(archived)` for every group at once, which is
+   * exactly when the id is the only thing left that distinguishes them.
+   */
+  it('still carries the id when the subject is gone', async () => {
+    await theHens();
+    await enqueue({
+      entity: 'eggLog',
+      op: 'create',
+      targetId: newId(),
+      payload: { occurredAt: Date.now(), flockId: GROUP, count: 6 },
+    });
+    await enqueue({ entity: 'flock', op: 'delete', targetId: GROUP, payload: {} });
+
+    const eggs = (await buildExport()).find((s) => s.name === 'eggs');
+
+    expect(eggs?.csv).toContain('(archived)');
+    expect(eggs?.csv).toContain(GROUP);
+  });
+
+  /** A sighting is about no record, so the column is empty rather than absent. */
+  it('leaves the subject blank where a row is about nothing in particular', async () => {
+    await enqueue({
+      entity: 'predator',
+      op: 'create',
+      targetId: newId(),
+      payload: { occurredAt: Date.now(), species: 'Fox', lossCount: 2 },
+    });
+
+    const sheet = (await buildExport()).find((s) => s.name === 'predators');
+    const [header, row] = sheet?.csv.split('\r\n') ?? [];
+
+    expect(header?.endsWith('Subject id,Record id')).toBe(true);
+    expect(row).toMatch(/,,[0-9A-HJKMNP-TV-Z]{26}$/);
+  });
+});

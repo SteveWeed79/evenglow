@@ -1,4 +1,4 @@
-import type { Entity, Op } from '@steading/contracts';
+import { type Entity, type Op, partitionClears } from '@steading/contracts';
 import { type LocalRecord, recordKey } from './records';
 
 /**
@@ -31,17 +31,35 @@ import { type LocalRecord, recordKey } from './records';
  * (P13) and the delete payload is only a reason string; overwriting a flock
  * with `{ reason: '…' }` would throw away the record the archive exists to
  * preserve.
+ *
+ * **A `null` removes the key rather than storing a null**, which is the client
+ * half of `contracts/clearing.ts` and the reason the merge is not a plain
+ * spread. Storing the null would be nearly right and wrong where it counts: a
+ * reader parses this value against the entity's create schema, where an
+ * optional field accepts a value or nothing and never a null, so a record
+ * carrying one is dropped from every list on the device that just edited it.
+ * Removing the key leaves exactly the record a farm that had never filled the
+ * field in would have, which is what "cleared" means.
  */
 export function nextRecordValue(op: Op, previous: unknown, payload: unknown): unknown {
   if (op === 'delete') return previous ?? payload;
   if (op !== 'update') return payload;
 
+  if (!isPlainObject(payload)) return payload;
+
+  const { set, clear } = partitionClears(payload);
+
   // Nothing to merge into: an update that reached a device before its create
   // did. Keeping the partial payload is what lets the create fill in the rest
-  // when it arrives, and readers skip an incomplete record meanwhile.
-  if (!isPlainObject(previous) || !isPlainObject(payload)) return payload;
+  // when it arrives, and readers skip an incomplete record meanwhile. The
+  // clears are dropped rather than stored, because there is nothing yet for
+  // them to remove and a stored null outlives the moment it made sense in.
+  if (!isPlainObject(previous)) return set;
 
-  return { ...previous, ...payload };
+  const merged: Record<string, unknown> = { ...previous, ...set };
+  for (const key of clear) delete merged[key];
+
+  return merged;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

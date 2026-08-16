@@ -185,3 +185,23 @@ describe('the flag itself', () => {
     expect(syncAccess(readEnv({ ...withPlay, SYNC_OPEN_TO_ALL: '1' }), farm()).syncing).toBe(false);
   });
 });
+
+/**
+ * The floor a server may set on how old a client may be ([23], [24]).
+ *
+ * Here rather than in a route test because this is the decision; the route is
+ * three lines that read a header and send a 426. What matters is that the
+ * default refuses nobody, since every server today runs with it.
+ */
+describe('the minimum client version', () => {
+  it('is absent by default, which is every server today', () => {
+    expect(readEnv(base).minimumClientVersion).toBeNull();
+  });
+
+  it('carries what was set, and an empty setting stays absent', () => {
+    expect(readEnv({ ...base, MINIMUM_CLIENT_VERSION: '0.1.18' }).minimumClientVersion).toBe(
+      '0.1.18',
+    );
+    expect(readEnv({ ...base, MINIMUM_CLIENT_VERSION: '' }).minimumClientVersion).toBeNull();
+  });
+});

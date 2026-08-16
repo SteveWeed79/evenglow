@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { SqlDriver } from '@steading/core/db/driver';
 import { currentVersion, migrate, MIGRATIONS, SCHEMA_VERSION } from '@steading/core/db/migrations';
+import { DatabaseFromTheFutureError } from '@steading/core/db/errors';
 import { nodeSqlDriver } from '../support/sqlite';
 
 /**
@@ -114,6 +115,61 @@ describe('migration ladder', () => {
 
     expect(await currentVersion(db)).toBe(good);
     expect(await tableNames(db)).not.toContain('later');
+  });
+
+  /**
+   * A downgrade is the one way this happens on a farm — a sideloaded APK
+   * installed over a newer one, which is the only route back from a bad
+   * release. The walk goes forward only, so before this guard the loop skipped
+   * every branch, reported the higher version as a success, and handed back a
+   * store built to a schema this build has never seen.
+   */
+  describe('a database from the future', () => {
+    it('refuses to open rather than running against a schema it does not know', async () => {
+      const db = open();
+      await migrate(db);
+      await db.run(`PRAGMA user_version = ${SCHEMA_VERSION + 1}`);
+
+      await expect(migrate(db)).rejects.toThrow(DatabaseFromTheFutureError);
+    });
+
+    it('says nothing that reads as an instruction to clear app data', async () => {
+      const db = open();
+      await migrate(db);
+      await db.run(`PRAGMA user_version = ${SCHEMA_VERSION + 3}`);
+
+      const error = await migrate(db).catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(DatabaseFromTheFutureError);
+      const message = (error as Error).message;
+
+      // Clearing app data is the one action that turns a temporary refusal
+      // into the loss it exists to prevent.
+      expect(message).not.toMatch(/delete|clear|reinstall|uninstall|reset/i);
+      expect(message).toContain('Nothing is lost');
+      expect(message).toContain(`v${SCHEMA_VERSION}`);
+    });
+
+    it('leaves the file exactly as it found it', async () => {
+      const db = open();
+      await migrate(db);
+      const before = await tableNames(db);
+      await db.run(`PRAGMA user_version = ${SCHEMA_VERSION + 1}`);
+
+      await expect(migrate(db)).rejects.toThrow();
+
+      expect(await currentVersion(db)).toBe(SCHEMA_VERSION + 1);
+      expect(await tableNames(db)).toEqual(before);
+    });
+
+    it('opens normally at exactly the current version', async () => {
+      const db = open();
+      await migrate(db);
+
+      // The boundary, because `>` and `>=` are one keystroke apart and the
+      // wrong one refuses every device on the current build.
+      expect(await migrate(db)).toBe(SCHEMA_VERSION);
+    });
   });
 
   it('never contains a destructive statement', async () => {
