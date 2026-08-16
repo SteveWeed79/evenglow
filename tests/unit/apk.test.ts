@@ -177,6 +177,33 @@ Signer #1 certificate SHA-1 digest: 0123456789abcdef0123456789abcdef01234567
     expect(normaliseFingerprint(keytool)).toBe(plain.toUpperCase());
   });
 
+  /**
+   * The failure that took run 1 down, and the reason it was not obvious.
+   *
+   * `keytool` prints `         SHA256: A1:B2:…` and copying the whole line is
+   * the natural thing to do. **`SHA256` contains four hex characters** — A, 2,
+   * 5 and 6 — so stripping non-hex without removing the label first prepends
+   * `A256`, giving 68 characters that look almost right and match nothing.
+   *
+   * Refusing that was technically correct and practically useless: it is the
+   * "check that always breaks" shape this function's own comment warns about.
+   */
+  it('tolerates the label keytool prints in front of it', () => {
+    const plain = 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90';
+    const colons = plain.toUpperCase().replace(/(..)(?=.)/g, '$1:');
+
+    for (const pasted of [`         SHA256: ${colons}`, `SHA-256: ${colons}`, `sha256=${colons}`]) {
+      expect(sameCertificate(pasted, plain), pasted.trim().slice(0, 12)).toBe(true);
+    }
+    expect(normaliseFingerprint(`SHA256: ${colons}`)).toHaveLength(64);
+  });
+
+  it('still refuses a wrong key wearing that same label', () => {
+    // Tolerating the label must not become "find 64 hex characters anywhere".
+    expect(sameCertificate(`SHA256: ${'b'.repeat(64)}`, 'a'.repeat(64))).toBe(false);
+    expect(sameCertificate('SHA256:', 'a'.repeat(64))).toBe(false);
+  });
+
   it('does not match a different key', () => {
     const a = 'a'.repeat(64);
     const b = `${'a'.repeat(63)}b`;
