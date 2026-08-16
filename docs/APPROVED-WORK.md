@@ -62,13 +62,18 @@ on the exact failure they then permit.
 - [x] **Filter breeding records by group.** **GA**
       `names` is built from every animal on the farm, so the filter means "the
       dam exists here" rather than "the dam is in this group".
-- [ ] **Add password recovery.** **GA**
+- [ ] **Add password recovery.** **GA** — *designed, not built:*
+      [`PASSWORD-RECOVERY.md`](PASSWORD-RECOVERY.md)
       None exists; `AccountScreen` says so in a comment. Recovery currently
       needs a shell on the server, and a lockout hits farms who are paying and
-      doing nothing wrong.
-- [ ] **Verify units on Harvest and reporting.** **GA**
-      The one assessment claim that could not be confirmed either way. Check
-      before assuming it is fine.
+      doing nothing wrong. **The delivery channel is decided: Steading gains an
+      email sender**, which adds a processor to name in `[1]` and `[3]`. The
+      design is researched and written; the build is the next piece.
+- [x] **Verify units on Harvest and reporting.** **GA**
+      *Confirmed true and fixed.* `HarvestScreen` offered pounds to everybody
+      and converted with `poundsToUg` whatever the farm had set. The entry
+      units moved to `contracts/units.ts` so `WeighScreen` and this one read
+      one table.
 - [ ] **Finish photo restore re-upload.** `ROADMAP.md` §12c, **GA**
       Restored metadata retains its uploaded flag, so bytes the server does not
       have are never re-sent. Already tracked; the assessment confirms it
