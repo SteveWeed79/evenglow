@@ -3,7 +3,8 @@
 **The decided subset, as a checklist.** Everything here has been argued
 somewhere else and agreed; this file is what to do, not why. The reasoning
 lives in `UNCONSIDERED.md` (items `[n]`), `UNCONSIDERED-PHASES.md` (phases
-A–P) and `GAP-ASSESSMENT-REVIEW.md` (the outside assessment, checked).
+A–P), `GAP-ASSESSMENT-REVIEW.md` (the outside assessment, checked) and
+`SYNC-INTEGRITY-TODO.md` (the audit and its verification pass).
 
 **Provenance is marked** so any line can be traced back and re-argued:
 
@@ -12,6 +13,7 @@ A–P) and `GAP-ASSESSMENT-REVIEW.md` (the outside assessment, checked).
 | `[n]` | `UNCONSIDERED.md`, item number |
 | **GA** | The August 2026 product gap assessment, verified against the code |
 | **GA-c** | Same, adopted in changed form — the change is stated |
+| **SI** | `SYNC-INTEGRITY-TODO.md`, carried rather than re-decided — §7 |
 
 **What this file is not.** Not a roadmap and not an estimate. `ROADMAP.md`
 still orders the product; the phases file still holds the dependency argument.
@@ -19,6 +21,22 @@ Nothing here is sized in hours, because shape is knowable and hours are not.
 
 **Rejections are at the foot**, named with reasons, so the boundary of "agreed"
 is unambiguous and nothing on the reject list gets quietly picked up later.
+
+**There are three states, not two, and the third one used to be invisible.**
+Approved is above, refused is at the foot, and the two together cover perhaps
+forty of the two hundred and seven items in `UNCONSIDERED.md`. Everything else
+is *undecided* — considered, written down, and not yet argued to a conclusion.
+Silence in this file has never meant refusal, and the foot of it says so about
+the reject list without saying it about the rest. **§8 names the undecided
+clusters** so nobody has to infer their status from an absence.
+
+**Checked against the code, 16 August.** Every unticked item below was re-read
+against the source. Where the code contradicted the line, the correction sits
+under the original wording and is marked *corrected 16 August*, so the claim
+that was wrong stays visible rather than being edited away. Two ran the way
+nobody expects — the clearing defect is live in shipped screens rather than
+latent, and the reports item turned out to describe the opposite of the code.
+Nothing already ticked was re-opened.
 
 ---
 
@@ -59,6 +77,30 @@ on the exact failure they then permit.
       applier** — a contract change, deliberately not swept in with the defect
       fixes. Until then those fields keep the conditional spread, because
       consistently stale beats silently divergent.
+      **Wider than filed, and it is not only latent** *(corrected 16 August)*.
+      The three fields named above are the ones nobody has a screen for yet.
+      The ones that ship today:
+      - **`task.completedAt`.** The *Need to redo this* confirm on
+        `JobsScreen` sends `{ completedAt: undefined }` — a button a farm
+        presses whenever somebody ticks a chore they had not actually done.
+        The tick clears on that handset and nowhere else: every other device
+        on the farm goes on showing the job done, and a rehydration replays
+        the log and marks it done again on the handset that undid it.
+      - **`medication.reason`, `dose`, `withdrawalDays`, `treatmentEndsAt`.**
+        `TreatmentScreen`'s own `cleared` object — the pattern this item is
+        named after. A withdrawal revised down to nothing frees produce on the
+        handset that revised it while the server and every other device go on
+        holding it. The two answers disagree about a record a regulator may
+        read, and the lenient one is the one in the hand of the person deciding
+        whether to sell.
+      **Two comments in `packages/contracts` assert the mechanism that does not
+      happen**, and both will mislead whoever does this work: `namesOneSubject`
+      and the note above `mergedUpdateProblem` each say a client clearing a
+      field sends `undefined` and the driver stores it as null. No such value
+      arrives — `JSON.stringify` dropped the key before it left the handset.
+      Implementing `null` → `$unset` makes those two sentences true for the
+      first time, and they should be corrected in the same commit rather than
+      read as a description of today.
 - [x] **Filter breeding records by group.** **GA**
       `names` is built from every animal on the farm, so the filter means "the
       dam exists here" rather than "the dam is in this group".
@@ -130,6 +172,19 @@ period rather than a task.
 - [ ] **Name the processors** — Atlas, S3, GitHub, Google, weather.gov, the
       Census geocoder. `[7]`
 - [ ] **Verify target API level and 16 KB page support.** `[11]`
+- [ ] **Acknowledge a Play purchase inside three days.** `[181]` — *added 16
+      August; entailed by §2's Play items rather than a new decision*
+      Google auto-refunds and revokes a subscription nobody acknowledges within
+      72 hours, and neither half of the acknowledgement exists: there is no
+      billing library on the client to call `acknowledgePurchase`, and
+      `billing/play.ts` verifies a token against `purchases.subscriptionsv2`
+      and stops — `acknowledge` appears nowhere in this repository.
+      **Not a gap in the running server.** `A2.8` is deliberate that no farm can
+      buy anything yet; grants and promotion codes carry every one of them, and
+      `playConfig === null` means the question is never asked. It goes live on
+      the day the closed test in §2 sells its first subscription, which is why
+      it belongs beside the purchase flow rather than after it — a refund that
+      arrives 72 hours later looks like a farm that changed its mind.
 
 ## 4. Structural — the highest-leverage work
 
@@ -139,12 +194,30 @@ period rather than a task.
       each overwrite, so a machine serviced for six years can show one date —
       and `Steading-Masterplan.md` advertises a full service record for resale
       that therefore cannot be produced.
+      **It also removes one of §1's two live clearing symptoms** *(noted 16
+      August)*. An un-complete is `{ completedAt: undefined }` today, which is
+      the field that never reaches the server; against an append-only
+      completion it is a `delete` of the event, which does. That does not make
+      the wire fix optional — the medication fields still need it — but it does
+      mean these two items should be sequenced, not done twice.
 - [ ] **One reusable detail-and-timeline screen.** **GA**
       Status, primary actions, upcoming work, full timeline, edit and archive.
       Used for animals, groups, beds, varieties, plantings, machines and
       inventory. *The best single idea from the assessment: several entities
       stop at creation and a static list, and this makes almost every other
       item on every list smaller.*
+      **Its first commit is a read, not a screen** *(added 16 August)*.
+      `read/history.ts` is farm-wide and has no notion of a subject:
+      `listHistory` takes none, and `HistoryEvent` carries the record's own id
+      and its entity but not what the record is *about*. So nothing today can
+      answer "what has happened to this animal", and the screens that want it
+      filter by hand — `WeighScreen` sorts and slices the weight list itself to
+      put the last three weighings beside the form. A subject key on
+      `HistoryEvent` and a filter on the read is what makes one screen reusable
+      instead of seven screens each re-implementing that pane. Three of the
+      seven have a detail route today — `Group`, `Machine` and `Planting`, with
+      `Incubation` beside them off-list. Animals, beds, varieties and inventory
+      items go from a list straight to an edit form.
 - [ ] **A common event field set** — backdated date and time, who, where, note,
       photo — added to the entities that already exist. **GA-c**
       This is the universal-event proposal adopted in the one form that does not
@@ -160,6 +233,20 @@ period rather than a task.
 - [ ] **One farm-wide inventory model** — feed, seed, medicine, fertiliser,
       fuel, parts, packaging — with movements linked to the event that consumed
       or produced them. **GA**, `[116]`
+      **The shelf is mostly built; the link is the item** *(corrected 16
+      August)*. `inventory` and `stockAdjustment` are both in the contract and
+      both have screens — five kinds (`feed`, `bedding`, `medicine`, `part`,
+      `other`) against the seven above, and six reasons a quantity moved. Seed,
+      fertiliser, fuel and packaging have nowhere to go, and **the one movement
+      the app already makes for itself records no reason at all**: logging feed
+      writes a `feedLog` and then an `inventory` update that lowers `quantity`,
+      with no `stockAdjustment` beside it. `stockAdjustment` exists because
+      every non-consumption reason *looked* like consumption; the inverse now
+      holds, and a sack's history reads as purchases and losses with the
+      feeding invisible between them. Whether that pair should also become one
+      transaction is a separate call — `enqueueAll` is the tool, and
+      `FeedScreen` argues out loud for the opposite, that the feed is the fact
+      and the shelf is bookkeeping derived from it.
 - [ ] **Meat processing record.** **GA**, `[98]`
       Closes the grow-out clock, which counts down to a day nothing records.
       Freezer and package tracking optional and off by default.
@@ -178,11 +265,29 @@ period rather than a task.
       A vetted table, a confirm-against-the-label step, or a warning on
       implausibly short windows.
 - [ ] **A provenance line on each heat, cold and THI threshold.** `[21]`
+      **The reasons are written; the sources are not, and neither reaches a
+      farm** *(clarified 16 August)*. `contracts/warnings.ts` argues every
+      number it uses — why 33–36 °F rather than freezing, why poultry pant at
+      29 °C, why an alpaca gets a heat index and a cow gets THI, and it prints
+      the THI formula. What none of them carries is where the figure came from,
+      and none of the reasoning is visible outside the source file: the farmer
+      sees *"Dangerous heat today for the goats"* with no way to ask why. So
+      this is two things — a citation per threshold, and a decision about
+      whether any of it is shown.
 - [ ] **Crop input and pesticide records** with the statutory field list —
       product, registration number, rate, area, date, operator, re-entry
       interval. **GA**, `[107]`
       *Two reviewers reached this independently.*
 - [ ] **Reports carrying human-readable names beside stable identifiers.** **GA**
+      **Adopted the wrong way round, and the missing half is the cheaper one**
+      *(corrected 16 August)*. Every sheet `export/csv.ts` writes already
+      resolves a ULID to a name — `named(groupName, v.flockId)`, printing
+      `(archived)` when the subject is gone — and not one of them prints an
+      identifier. So the line as agreed describes the opposite of the code. What
+      an accountant cannot use is not a column of ULIDs; it is two groups both
+      called *Big coop* with nothing to tell them apart, and a season's rows
+      that cannot be joined back to anything. One column per sheet, beside the
+      name that is already there.
 - [ ] **Opt-in local notifications.** **GA**
       Treatment doses, withdrawal clearance, birth and hatch, succession sowing,
       harvest windows, service due, recurring chores. **This corrects
@@ -238,6 +343,88 @@ period rather than a task.
       on the screen registers taps nobody made. This is the precondition under
       every field-usability rule in `UX-SPEC.md` §1, and the real argument for
       voice entry `[76]`.
+- [ ] **Correct the two documents the code has outgrown.** `[203]`, `[205]` —
+      *added 16 August*
+      Both were found by checking this file against the source, which is the
+      failure mode `[203]` predicted: nothing checks the documents against each
+      other.
+      - **`CLAUDE.md`'s Mutation Envelope section lists 14 entities and there
+        are 26**, and its append-only set names six of the eleven in
+        `APPEND_ONLY_ENTITIES`. Everything growing, `breeding`, `incubation`,
+        `weight`, `shearing`, `feedPlan`, `careLog`, `stockAdjustment` and
+        `note` are absent from the file every agent and every new reader is told
+        to start from. *Highest leverage per line in this document*: a wrong
+        invariant list in the instruction file is wrong in every task that
+        reads it.
+      - **`DESIGN-BRIEF.md` says "where this disagrees with `ROADMAP.md`, this
+        is newer"** and is dated 9 August. Three of its stated gaps have since
+        closed — there is a launcher icon, there is a splash, and `apk.yml`
+        compiles Android in CI — so on those points it is now the older
+        document asserting priority over the newer one. It wants the staleness
+        line `PICK-UP-HERE.md` carries.
+
+## 7. Carried from the sync integrity list — **SI**
+
+**Pointers, not decisions.** These were argued and agreed in
+`SYNC-INTEGRITY-TODO.md` and are unticked there. They are repeated here because
+that file was not in this one's source table until 16 August, so the repository's
+highest-severity open work was invisible from the checklist that is supposed to
+say what to do. **The file remains the authority; do not re-argue them here.**
+
+- [ ] **A sweeper for `pending` mutation rows.** P0-2's last open box. The
+      outcome field, the accepted-only feed and the repair have shipped; what
+      is missing is the hourly pass over rows whose client never came back,
+      running the same stored-envelope re-projection. Until it exists a row
+      logged at the moment a device dies stays `pending` for ever, and
+      `pending` is withheld from the feed — so that record reaches no other
+      device on the farm.
+- [ ] **Mint a fresh ULID in `retryRejected`.** P0-1(b). Reusing the id of a
+      refused mutation means the corrected payload meets the duplicate branch
+      and is answered as already-done.
+- [ ] **Restate P0-3 as a property of visible order**, rather than replacing the
+      cursor. The verification pass re-ranked it and refused the original
+      prescription; the restatement is what it left open.
+- [ ] **The two-device harness**, and the six assertions listed under it. Every
+      symptom P0-2 describes is invisible to a suite that runs one device, and
+      the fix shipped without a test that could have caught the bug.
+
+## 8. Undecided, and not refused
+
+**Named so an absence stops reading as a judgement.** None of this is agreed and
+none of it is rejected; it is the part of `UNCONSIDERED.md` that has not been
+argued to a conclusion. Listed as clusters rather than items because the
+decisions are cluster-shaped — one argument settles each group.
+
+- **Entry quality** — `[174]`–`[180]`. Plausibility of a typed figure, the
+  double-log at 6:02 and 6:04, undo on the screen that just wrote, duplicate
+  entities, unnormalised free text. **`GAP-ASSESSMENT-REVIEW.md` §3 names this
+  as one of the six things the assessment is blind to, and then nothing carries
+  it** — §5's withdrawal sanity check is the only entry-quality line in this
+  file, and it covers one field on one screen. Nothing in the app checks a
+  figure anywhere: the schemas bound it (an egg count stops at 10,000) and
+  `WeighScreen` shows the last three weighings beside the form on a wide window,
+  which is context rather than a check.
+- **Data protection beyond the two policies** — `[6]` subject access, `[12]` the
+  EU trader declaration, `[15]` the bundled reference data's licensing, `[19]` a
+  retention floor for medicine records. §2 and §3 carry the launch-blocking
+  paperwork; these four are the same kind of work and were not argued.
+- **Security posture** — `[53]`–`[67]`. Secret rotation, dependency
+  vulnerabilities, per-org quota, app lock, a lost device, `SECURITY.md` and a
+  disclosure address. Two of them are narrower than they read and worth saying
+  so: `[64]` is about the S3 successor rather than today — GridFS is covered by
+  `tests/isolation/photo-bytes.test.ts`, in both directions — and `[65]` is
+  specifically `/sync`, which is the one route with no `@fastify/rate-limit`
+  scope on it; auth, billing and members all have one.
+- **Accessibility and language** — `[69]`–`[75]`. Screen-reader flow, colour as
+  the only carrier of meaning, locale formatting, English-only. §6 carries font
+  scaling `[68]` alone, because the rail has already clipped its labels twice.
+- **The domain phases** — `[91]`–`[135]`, which are phases K, L and M in
+  `UNCONSIDERED-PHASES.md`. §4 and §5 take the parts the gap assessment reached
+  independently; grazing, forage, water, soil, quarantine, biosecurity, labour
+  and the rest are untouched by either sweep's conclusions.
+- **Device and platform reach** — `[77]`–`[90]`. Barcode, EID, Bluetooth
+  scales, printing, calendar export, foldables, Chromebooks. `[76]`, voice, is
+  argued in §6's wet-glove item and is still undecided as work.
 
 ---
 
