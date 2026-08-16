@@ -82,7 +82,19 @@ export function BreedingScreen({ route }: ScreenProps<'Breeding'>): React.ReactE
 
   const gestation = GESTATION_DAYS[group.species];
   const dams = possibleDams((animals ?? []).filter((a) => a.flockId === groupId));
-  const names = new Map((animals ?? []).map((a) => [a.id, a.name]));
+  /**
+   * The dams of THIS group, which is what "mine" has to mean.
+   *
+   * `names` was built from every animal on the farm, so the filter below asked
+   * "does this dam exist here" rather than "is this dam in this group" — and a
+   * goat's mating appeared on the sheep's breeding screen. The line above it
+   * had always filtered by `flockId` correctly, which is what made it a slip
+   * rather than a misunderstanding, and why nothing looked twice at it.
+   *
+   * Built from `dams` rather than from a second pass over `animals`, so the
+   * set on screen and the set the list is filtered by cannot drift apart.
+   */
+  const names = new Map(dams.map((a) => [a.id, a.name]));
   const mine = (breedings ?? []).filter((b) => names.has(b.damId));
 
   if (gestation === undefined) {
