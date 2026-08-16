@@ -131,8 +131,42 @@ prebuild chain proven.
 Fixed by matching the signer line however it is qualified, and — the part that
 matters more — **by printing what was actually read**. The old message was two
 completely different repairs wearing one sentence, and the only way to tell
-them apart was another thirteen-minute build. The next failure of this kind
-names itself.
+them apart was another thirteen-minute build.
+
+#### And that fix was still a guess. Here is the format, from a real runner
+
+APK run 2 failed the same way, and this time the log said why. **The prefix is
+per signing scheme**, not a signer number and not an SDK range:
+
+```
+V3.0 Signer: certificate DN: CN=, OU=, O=, L=, ST=, C=US
+V3.0 Signer: certificate SHA-256 digest: e5cc9f91ba8d6f5ce0afa2482ca765d10efebfd7d2f5fbc111d93247428863cc
+V3.0 Signer: certificate SHA-1 digest: a25ba0bf06d52ed6e109d361ffc1ccb43c5ef4fb
+V3.0 Signer: certificate MD5 digest: e57ad165764850942329018d31af2152
+```
+
+Three formats guessed at across three builds, twenty-six minutes of Gradle
+spent learning that **the prefix is the part that moves**. So it is no longer
+matched at all: `certificate SHA-256 digest:` is the only thing every version
+of every format has agreed on, and that is what the parser looks for now. The
+real output is a test fixture, copied verbatim, because every previous version
+of this parser was written against a guess.
+
+Two things that run settled, both worth keeping:
+
+- **The APK is signed with our keystore, not a debug key.** A debug key's DN is
+  `CN=Android Debug, O=Android, C=US`; blank fields with `C=US` is what EAS
+  generates. So `ANDROID_KEYSTORE_BASE64` is real and is being used, and the
+  Gradle-then-resign path works end to end.
+- **The APK's certificate SHA-256 is
+  `E5:CC:9F:91:BA:8D:6F:5C:E0:AF:A2:48:2C:A7:65:D1:0E:FE:BF:D7:D2:F5:FB:C1:11:D9:32:47:42:88:63:CC`.**
+  That is now a known quantity and does not need another build to obtain. If
+  `ANDROID_CERT_SHA256` does not equal it, the secret is what is wrong — not
+  the keystore — and it can be corrected before the next run rather than after
+  it.
+
+**Whether the key is the *right* one is still unproven**, because no comparison
+has ever run. The next build is the first that can answer it.
 
 #### A defect found while writing this section, and fixed
 

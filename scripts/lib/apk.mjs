@@ -158,35 +158,44 @@ export function parseBadging(text) {
  * one.
  */
 /**
- * The signer line, in the forms `apksigner` actually prints it.
+ * The certificate digest, from whatever shape `apksigner` prints this week.
  *
- * **This was pinned to the literal `Signer #1 certificate SHA-256 digest:` and
- * that is what failed the first promote.** Newer build-tools qualify the signer
- * with the SDK range it applies to —
+ * ## Three formats in three attempts, and the lesson in that
  *
- *     Signer #1 (minSdkVersion=24, maxSdkVersion=2147483647) certificate SHA-256 digest: …
- *     Signer (minSdkVersion=24, maxSdkVersion=32) #1 certificate SHA-256 digest: …
+ * This started pinned to the literal `Signer #1 certificate SHA-256 digest:`.
+ * It then guessed at the SDK-range form. What the runner actually prints is a
+ * **per-scheme** prefix:
  *
- * — and the workflow takes the **newest** build-tools on the runner, so this
- * was always going to drift out from under a fixed string. Anything between
- * `Signer` and `certificate` is therefore skipped rather than spelled out.
+ *     V3.0 Signer: certificate DN: CN=, OU=, O=, L=, ST=, C=US
+ *     V3.0 Signer: certificate SHA-256 digest: e5cc9f91…
+ *     V3.0 Signer: certificate SHA-1 digest: a25ba0bf…
  *
- * Matched per line, not across the whole text, so the capture cannot run past
- * the end of its own line into the SHA-1 that follows it.
+ * — and there are `V1.0`, `V2.0`, `V3.1` and `V4.0` forms of the same thing.
+ * Two builds, twenty-six minutes, spent learning that the prefix is the part
+ * that moves. **So the prefix is no longer matched at all.**
  *
- * `SHA-?256` and nothing looser: the SHA-1 and MD5 digests sit directly above
- * and below this line, and picking one of those would compare a real
- * fingerprint against a real fingerprint of the wrong kind — a mismatch that
- * looks exactly like a wrong key.
+ * What is matched is the part every version of every format has agreed on:
+ * `certificate SHA-256 digest:` followed by hex. The workflow deliberately
+ * takes the NEWEST build-tools on the runner, so anything keyed to a signer
+ * label is a thing that will break again on somebody else's afternoon.
+ *
+ * `SHA-?256` and nothing looser: the SHA-1 and MD5 digests sit on the very
+ * next lines, and picking one of those would compare a real fingerprint
+ * against a real fingerprint of the wrong kind — which fails looking exactly
+ * like a wrong key, and would send somebody hunting for a keystore problem
+ * that does not exist.
+ *
+ * Matched per line, so a capture cannot run past the end of its own line into
+ * the digest below it.
  */
-const SIGNER_SHA256 = /^\s*Signer\b.*?\bcertificate\s+SHA-?256\s+digest\s*:\s*([0-9a-fA-F:\s]*?)\s*$/i;
+const CERT_SHA256 = /\bcertificate\s+SHA-?256\s+digest\s*:\s*([0-9a-fA-F][0-9a-fA-F:\s]*?)\s*$/i;
 
 export function certificateFrom(text) {
   for (const line of String(text).split('\n')) {
-    const match = SIGNER_SHA256.exec(line);
+    const match = CERT_SHA256.exec(line);
     if (match === null) continue;
     const digest = normaliseFingerprint(match[1]);
-    // A signer line with nothing after the colon is not an answer. Keep
+    // A digest line with nothing usable after the colon is not an answer. Keep
     // looking, and fall through to null rather than returning an empty string
     // that `sameCertificate` would have to refuse a second time.
     if (digest !== '') return digest;
