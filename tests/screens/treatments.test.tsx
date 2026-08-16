@@ -179,11 +179,20 @@ describe('correcting one', () => {
   });
 
   /**
-   * The under-count itself, stated plainly so nobody re-derives it wrongly.
+   * The under-count itself — **fixed, and this test is the record of it.**
    *
-   * An open course is not held for ever — it is cleared four days early.
+   * It used to read the other way: *"an open course is not held for ever, it
+   * is cleared four days early"*, asserting that a course started eight days
+   * ago with a seven-day withdrawal reported nothing held while the bird was
+   * still being dosed. That was a true description of the code and a wrong
+   * description of the produce, and writing it down as expected behaviour is
+   * how it survived being known about.
+   *
+   * An open course now holds indefinitely: there is no last dose, so there is
+   * nothing to count from, and the honest answer to "are these eggs clear" is
+   * no. Closing the course is what starts the clock.
    */
-  it('an open course clears earlier than the same course closed', async () => {
+  it('an open course holds until somebody records the last dose', async () => {
     const id = newId();
     await enqueue({
       entity: 'medication',
@@ -198,8 +207,9 @@ describe('correcting one', () => {
       },
     });
 
-    // Reads as already clear, though the course is still going on.
-    expect((await treatmentsFor(GROUP))[0]?.holding).toEqual([]);
+    // Eight days in, past a seven-day withdrawal, and still held — because the
+    // course has not ended. This is the assertion that was inverted.
+    expect((await treatmentsFor(GROUP))[0]?.holding).toEqual(['egg']);
 
     const screen = await mount(
       <TreatmentScreen {...routeProps({ groupId: GROUP, treatmentId: id })} />,
@@ -207,8 +217,7 @@ describe('correcting one', () => {
     await screen.pressLabel('The course is still running');
     await screen.press('save-treatment');
 
-    // Closed today, so the eggs are held for another seven days — which is
-    // what was true all along.
+    // Closed today, so the clock starts now: still held, and now with a date.
     expect((await treatmentsFor(GROUP))[0]?.holding).toEqual(['egg']);
     screen.unmount();
   });

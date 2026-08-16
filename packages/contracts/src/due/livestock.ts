@@ -25,7 +25,29 @@ export function withdrawalDue(
   withdrawal: ActiveWithdrawal,
   subjectName: string,
   noticeDays = DEFAULT_NOTICE_DAYS.withdrawal,
-): Due {
+): Due | null {
+  /**
+   * A course still being dosed raises no row, and the refusal is deliberate
+   * rather than a consequence.
+   *
+   * `clearsAt` is null while a course is open, and a `Due` with no date and no
+   * reading is `later`, which `isVisible` filters off Today — so this would
+   * have happened anyway, silently, as a side effect of two unrelated rules
+   * meeting. Stating it is the difference between a decision and an accident
+   * somebody later "fixes".
+   *
+   * The decision itself follows this file's own reasoning. A withdrawal row
+   * says when produce comes *back*, with zero notice, because the holding is
+   * already visible on the screen where the produce is logged. An open course
+   * has no date to come back on, so a row for it could only repeat the banner —
+   * every morning, for as long as the course runs. That is the permanent
+   * resident `DOMAIN-SCOPE.md` §0 builds every builder against.
+   *
+   * The hold itself is not softened by this. `activeWithdrawals` keeps the
+   * withdrawal in force and `withdrawalMessage` says what ends it.
+   */
+  if (withdrawal.clearsAt === null) return null;
+
   return {
     key: `${withdrawal.medicationId}:withdrawal:${withdrawal.kind}`,
     kind: 'withdrawal',

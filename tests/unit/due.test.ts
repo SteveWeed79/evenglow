@@ -269,12 +269,31 @@ describe('livestock', () => {
     const row = withdrawalDue(
       { kind: 'egg', medicationId: 'med1', medication: 'Baytril', subjectId: 'f1', clearsAt: NOW + 4 * DAY },
       'Layers',
-    );
+    ) as Due;
 
     expect(row.at).toBe(NOW + 4 * DAY);
     // Not actionable early: the produce is already being held.
     expect(row.noticeDays).toBe(0);
     expect(urgencyOf(row, NOW)).toBe('later');
+  });
+
+  /**
+   * A course still being dosed raises no row, and it must be a refusal rather
+   * than a `later` that happens to be filtered.
+   *
+   * `clearsAt` is null while a course runs, and a Due with no date is `later`,
+   * which Today already hides — so this would look right whatever the builder
+   * did. Asserting on null is what distinguishes "decided" from "worked by
+   * accident", and it is what stops somebody later giving the row a date to
+   * make it visible again.
+   */
+  it('raises nothing at all for a course that is still running', () => {
+    const row = withdrawalDue(
+      { kind: 'egg', medicationId: 'med1', medication: 'Baytril', subjectId: 'f1', clearsAt: null },
+      'Layers',
+    );
+
+    expect(row).toBeNull();
   });
 
   it('raises candling then hatch, and drops each as it is logged', () => {

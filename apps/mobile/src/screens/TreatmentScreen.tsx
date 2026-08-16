@@ -11,6 +11,7 @@ import { type TreatmentDetail, treatmentById } from '@steading/core/read/withdra
 import {
   Chip,
   Confirm,
+  DayPick,
   Failure,
   Field,
   Primary,
@@ -84,6 +85,21 @@ export function TreatmentScreen({ route }: ScreenProps<'Treatment'>): React.Reac
   const [medRoute, setMedRoute] = useState<(typeof MEDICATION_ROUTES)[number]>('water');
   const [dose, setDose] = useState('');
   const [stillGoing, setStillGoing] = useState(false);
+  /**
+   * When the last dose was given. Only read when the course is closed.
+   *
+   * Defaults to today, which is right for the common case — a single dose
+   * logged as it is given — and is a default rather than an assumption,
+   * because the field is on screen the moment the toggle says the course has
+   * finished.
+   */
+  const [lastDoseAt, setLastDoseAt] = useState(() => {
+    // Local midnight, like every other DayPick in the app: the control speaks
+    // whole days, and a time-of-day riding along would make two records taken
+    // on one morning sort against each other for no reason a person could see.
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  });
   const [withdrawal, setWithdrawal] = useState<Record<WithdrawalKind, number>>({
     egg: 0,
     meat: 0,
@@ -106,6 +122,7 @@ export function TreatmentScreen({ route }: ScreenProps<'Treatment'>): React.Reac
     setMedRoute(existing.route ?? 'water');
     setDose(existing.dose ?? '');
     setStillGoing(existing.treatmentEndsAt === undefined);
+    if (existing.treatmentEndsAt !== undefined) setLastDoseAt(existing.treatmentEndsAt);
     setWithdrawal({
       egg: existing.withdrawalDays?.egg ?? 0,
       meat: existing.withdrawalDays?.meat ?? 0,
@@ -138,17 +155,23 @@ export function TreatmentScreen({ route }: ScreenProps<'Treatment'>): React.Reac
       const administeredAt = existing?.administeredAt ?? now;
 
       /**
-       * Closing a running course dates it today; a course already closed keeps
-       * the end date it had unless the toggle is switched back on.
+       * Closing a course takes the last dose date the person picked.
        *
-       * Closing is what makes the withdrawal correct. With no end date
-       * `withdrawalClearsAt` counts from the first dose, so an open course
-       * under-states the window by however long it ran — it clears produce
-       * early, which is the one direction this must never err in. Recording
-       * the real last day is the only thing that fixes it, and guessing one on
-       * the farmer's behalf would err the same way.
+       * It used to stamp today — `existing?.treatmentEndsAt ?? now` — which is
+       * right only for somebody who closes the record on the same day they
+       * gave the final dose. Anybody who finishes a course on Tuesday and
+       * comes back to the app on Friday got three days of withdrawal they did
+       * not owe. That errs long, which is the safe direction and is still a
+       * wrong number on a record a regulator may read, so the screen asks
+       * instead of assuming.
+       *
+       * An open course carries no end date at all, and `withdrawalWindow`
+       * holds the produce indefinitely rather than counting from the first
+       * dose. That is what makes the toggle safe to leave on: it is now a
+       * statement that the withdrawal is unknown, not a shortcut that
+       * under-states it.
        */
-      const endsAt = stillGoing ? undefined : (existing?.treatmentEndsAt ?? now);
+      const endsAt = stillGoing ? undefined : lastDoseAt;
 
       const payload = {
         flockId: groupId,
@@ -184,7 +207,7 @@ export function TreatmentScreen({ route }: ScreenProps<'Treatment'>): React.Reac
         payload: { ...payload, ...cleared },
       });
     });
-  }, [save, log, groupId, name, medRoute, stillGoing, reason, dose, withdrawal, editing, treatmentId, existing]);
+  }, [save, log, groupId, name, medRoute, stillGoing, lastDoseAt, reason, dose, withdrawal, editing, treatmentId, existing]);
 
   const remove = useCallback(() => {
     if (treatmentId === undefined) return;
@@ -241,6 +264,19 @@ export function TreatmentScreen({ route }: ScreenProps<'Treatment'>): React.Reac
         value={stillGoing}
         onChange={setStillGoing}
       />
+
+      {stillGoing ? (
+        <Panel label="While it is running">
+          <Body>
+            Produce stays held until you record the last dose. There is no date to count to yet,
+            and counting from the first one would clear it early.
+          </Body>
+        </Panel>
+      ) : (
+        <Field label="Last dose">
+          <DayPick value={lastDoseAt} onChange={setLastDoseAt} withYear />
+        </Field>
+      )}
 
       <Panel label="Withdrawal">
         <Body>

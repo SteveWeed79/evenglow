@@ -33,6 +33,21 @@ export function monthDay(month: number, day: number): MonthDay {
   return month * 100 + day;
 }
 
+/**
+ * `monthDay` backwards, in the same 1-indexed months it takes.
+ *
+ * Here rather than in the screen that wanted it, because an encoding and its
+ * inverse belong together — a second decoding written next to a date picker is
+ * how `515` eventually gets read as May the 1st somewhere.
+ *
+ * Does not validate: a caller holding a `MonthDay` has one that was validated
+ * on the way in, and a caller holding garbage should see the garbage rather
+ * than a plausible substitute.
+ */
+export function splitMonthDay(value: MonthDay): { month: number; day: number } {
+  return { month: Math.floor(value / 100), day: value % 100 };
+}
+
 export function isValidMonthDay(value: number): boolean {
   if (!Number.isInteger(value)) return false;
   const month = Math.floor(value / 100);
