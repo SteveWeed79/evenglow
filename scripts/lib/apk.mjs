@@ -157,9 +157,67 @@ export function parseBadging(text) {
  * treat as one — an unsigned APK is not a lesser problem than a wrongly signed
  * one.
  */
+/**
+ * The signer line, in the forms `apksigner` actually prints it.
+ *
+ * **This was pinned to the literal `Signer #1 certificate SHA-256 digest:` and
+ * that is what failed the first promote.** Newer build-tools qualify the signer
+ * with the SDK range it applies to —
+ *
+ *     Signer #1 (minSdkVersion=24, maxSdkVersion=2147483647) certificate SHA-256 digest: …
+ *     Signer (minSdkVersion=24, maxSdkVersion=32) #1 certificate SHA-256 digest: …
+ *
+ * — and the workflow takes the **newest** build-tools on the runner, so this
+ * was always going to drift out from under a fixed string. Anything between
+ * `Signer` and `certificate` is therefore skipped rather than spelled out.
+ *
+ * Matched per line, not across the whole text, so the capture cannot run past
+ * the end of its own line into the SHA-1 that follows it.
+ *
+ * `SHA-?256` and nothing looser: the SHA-1 and MD5 digests sit directly above
+ * and below this line, and picking one of those would compare a real
+ * fingerprint against a real fingerprint of the wrong kind — a mismatch that
+ * looks exactly like a wrong key.
+ */
+const SIGNER_SHA256 = /^\s*Signer\b.*?\bcertificate\s+SHA-?256\s+digest\s*:\s*([0-9a-fA-F:\s]*?)\s*$/i;
+
 export function certificateFrom(text) {
-  const match = /Signer #1 certificate SHA-256 digest:\s*([0-9a-fA-F:\s]+)/.exec(String(text));
-  return match === null ? null : normaliseFingerprint(match[1]);
+  for (const line of String(text).split('\n')) {
+    const match = SIGNER_SHA256.exec(line);
+    if (match === null) continue;
+    const digest = normaliseFingerprint(match[1]);
+    // A signer line with nothing after the colon is not an answer. Keep
+    // looking, and fall through to null rather than returning an empty string
+    // that `sameCertificate` would have to refuse a second time.
+    if (digest !== '') return digest;
+  }
+  return null;
+}
+
+/**
+ * What the tool actually printed, for a failure that could not read it.
+ *
+ * **The check said "is the APK signed?" and showed nothing**, so the only way
+ * to find out what `apksigner` had really written was another thirteen-minute
+ * build. That is the same shape as run 1's failure text being buried under
+ * Gradle's cache output: the guard fired correctly and told nobody anything
+ * they could act on.
+ *
+ * Bounded, because this goes into a log and the point is the first few lines —
+ * `apksigner` puts `Verifies` and the scheme results at the top, which is
+ * exactly what distinguishes "unsigned" from "signed, printed differently".
+ */
+export function certsExcerpt(text, limit = 12) {
+  const lines = String(text ?? '')
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim() !== '');
+
+  if (lines.length === 0) return '(it printed nothing at all)';
+
+  const shown = lines.slice(0, limit);
+  const rest = lines.length - shown.length;
+  return shown.join('\n') + (rest > 0 ? `\n… and ${rest} more line${rest === 1 ? '' : 's'}` : '');
 }
 
 /**

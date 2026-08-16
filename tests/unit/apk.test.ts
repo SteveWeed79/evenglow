@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { farmOrigin } from '../../scripts/lib/api-origin.mjs';
 import {
   certificateFrom,
+  certsExcerpt,
   chooseVersionCode,
   EAS_LAST_CODE,
   normaliseFingerprint,
@@ -159,6 +160,91 @@ Signer #1 certificate SHA-1 digest: 0123456789abcdef0123456789abcdef01234567
     // An unsigned APK is not a lesser problem than a wrongly signed one, so
     // this has to be distinguishable from a match.
     expect(certificateFrom('DOES NOT VERIFY')).toBeNull();
+  });
+
+  /**
+   * The failure that took the first promote down, thirteen minutes in.
+   *
+   * This was pinned to the literal `Signer #1 certificate SHA-256 digest:`.
+   * Newer build-tools qualify the signer with the SDK range it covers, and the
+   * workflow deliberately takes the **newest** build-tools on the runner — so a
+   * fixed string was always going to drift out from under it. The APK was
+   * signed correctly; nothing could read it.
+   */
+  it('reads the signer line however apksigner qualifies it', () => {
+    const digest = 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90';
+    const want = digest.toUpperCase();
+
+    for (const signer of [
+      'Signer #1 certificate SHA-256 digest',
+      'Signer #1 (minSdkVersion=24, maxSdkVersion=2147483647) certificate SHA-256 digest',
+      'Signer (minSdkVersion=24, maxSdkVersion=32) #1 certificate SHA-256 digest',
+      'Signer #1 certificate SHA256 digest',
+    ]) {
+      expect(certificateFrom(`Verifies\n${signer}: ${digest}\n`), signer).toBe(want);
+    }
+  });
+
+  it('does not read the SHA-1 sitting next to it', () => {
+    // The two lines are adjacent and both are real fingerprints, so picking
+    // the wrong one compares a genuine digest against a genuine digest of the
+    // wrong kind — a mismatch indistinguishable from a wrong key.
+    const sha1 = '0123456789abcdef0123456789abcdef01234567';
+    const only1 = `Signer #1 certificate DN: CN=Steading\nSigner #1 certificate SHA-1 digest: ${sha1}\n`;
+    expect(certificateFrom(only1)).toBeNull();
+  });
+
+  it('does not run past the end of its own line', () => {
+    // Matched per line for this reason: the old whole-text regex captured a
+    // character class that included whitespace, so it was one unlucky
+    // neighbouring line away from swallowing the digest below it.
+    const digest = 'a'.repeat(64);
+    const text =
+      `Signer #1 certificate SHA-256 digest: ${digest}\n` +
+      `Signer #1 certificate SHA-1 digest: ${'b'.repeat(40)}\n`;
+    expect(certificateFrom(text)).toBe(digest.toUpperCase());
+  });
+
+  it('keeps looking past a signer line with nothing after the colon', () => {
+    const digest = 'c'.repeat(64);
+    const text = `Signer #1 certificate SHA-256 digest:\nSigner #2 certificate SHA-256 digest: ${digest}\n`;
+    expect(certificateFrom(text)).toBe(digest.toUpperCase());
+    // And an empty one on its own is still nothing, not an empty string.
+    expect(certificateFrom('Signer #1 certificate SHA-256 digest:\n')).toBeNull();
+  });
+});
+
+/**
+ * What the tool printed, when the parser could not read it.
+ *
+ * The check used to say only *"is the APK signed?"*, which is two completely
+ * different repairs wearing one sentence — and the only way to tell them apart
+ * was to build again. Thirteen minutes to learn one line.
+ */
+describe('showing what could not be parsed', () => {
+  it('says plainly when there was nothing at all', () => {
+    // An empty file and an unrecognised format are not the same problem.
+    expect(certsExcerpt('')).toMatch(/nothing at all/);
+    expect(certsExcerpt(null)).toMatch(/nothing at all/);
+    expect(certsExcerpt('\n\n   \n')).toMatch(/nothing at all/);
+  });
+
+  it('keeps the first lines, which are the ones that identify the format', () => {
+    // apksigner leads with `Verifies` and the scheme results, and those are
+    // exactly what separates "unsigned" from "signed, printed differently".
+    const excerpt = certsExcerpt('Verifies\nVerified using v2 scheme: true\nSigner #1 …\n');
+    expect(excerpt).toContain('Verifies');
+    expect(excerpt).toContain('v2 scheme');
+  });
+
+  it('is bounded, and says how much it left out', () => {
+    const excerpt = certsExcerpt(
+      Array.from({ length: 30 }, (_, i) => `line ${i}`).join('\n'),
+      12,
+    );
+    expect(excerpt.split('\n')).toHaveLength(13);
+    expect(excerpt).toContain('18 more lines');
+    expect(excerpt).not.toContain('line 20');
   });
 
   /**

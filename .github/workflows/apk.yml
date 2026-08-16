@@ -277,7 +277,23 @@ jobs:
             "$RUNNER_TEMP/aligned.apk"
 
           "$TOOLS/aapt2" dump badging "$RUNNER_TEMP/$APK" > "$RUNNER_TEMP/badging.txt"
-          "$TOOLS/apksigner" verify --print-certs "$RUNNER_TEMP/$APK" > "$RUNNER_TEMP/certs.txt"
+
+          # `2>&1`, so a failure to read this file can say why. apksigner puts
+          # its warnings on stderr, and the first promote failed with "no
+          # SHA-256 digest" against a file that held only stdout — leaving
+          # nothing to distinguish an unsigned APK from a signer line printed
+          # in a form the parser did not know. The check prints what it read
+          # now, so whatever lands here is what gets shown.
+          "$TOOLS/apksigner" verify --print-certs "$RUNNER_TEMP/$APK" \
+            > "$RUNNER_TEMP/certs.txt" 2>&1
+
+          # Also into the log directly, because the check only prints an
+          # excerpt and this costs nothing. Not a secret: the digest an APK
+          # carries is public, and the expected one is masked wherever it
+          # appears because it comes from ANDROID_CERT_SHA256.
+          echo "--- apksigner verify --print-certs ---"
+          cat "$RUNNER_TEMP/certs.txt"
+          echo "--- end ---"
 
       # ── The gate between this and anybody's tablet ───────────────────────
       #
