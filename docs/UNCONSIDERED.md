@@ -820,6 +820,12 @@ Each of these looked like an omission and is not:
 
 ## What to do with this
 
+**A running order exists: [`UNCONSIDERED-PHASES.md`](UNCONSIDERED-PHASES.md).**
+It sequences all 150 items below into phases A–O, states the four dependencies
+that are real and marks the rest as judgement. This list stays unordered on
+purpose — it is the evidence, and the argument about priority belongs in one
+file rather than in the margins of this one.
+
 Three things are worth pulling out of the list, and they are the three that are
 not features:
 
