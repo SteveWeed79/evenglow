@@ -5,9 +5,14 @@ first as a design, then kept as the record of what the building changed about
 it. Where the two differ, §11 says so — a plan that was quietly edited to match
 its outcome is worth nothing to whoever reads it next.
 
-**What is not done: none of it has been seen on a tablet.** The suite has no
-layout engine and every phone falls on the narrow side of every branch here, so
-the wide path has been reasoned about and never looked at. See §12.
+**It has been on a tablet twice, and both looks paid for themselves.** The
+first, 16 August, found two defects no test could reach. The second found two
+more *and* overturned the first's headline conclusion: the device was never
+960 × 600dp, that was a density setting, and one notch down put the whole
+two-pane layout on screen with no code changed. §11a keeps both versions
+because the wrong one is the more instructive. §12 is the running ledger of
+what a device has and has not answered — including one clip that is fixed on
+paper and not yet explained.
 
 Read `docs/UX-SPEC.md` first — R1–R10 are binding and this document proposes an
 amendment to exactly one of them (R3), stated openly rather than worked around.
@@ -577,54 +582,135 @@ screen at all, and "Also today" ran under the system navigation. The rule the
 old code was reaching for is the one now written: the inset belongs to whichever
 thing actually meets the bottom of the screen.
 
-### **The tablet is 960 × 600dp, and this plan was drawn for 1280 × 800.**
+### **The tablet reported 960 × 600dp — and that was a setting, not the hardware.**
 
-This is the finding, and it is not fixable by moving a number.
+Recorded in two parts because it was got wrong in between, and the wrong
+version is the more instructive one.
 
-The screenshot is 1920 × 1200 physical at density 2.0. Everything checks: the
-360dp drawer default is 720px and the sidebar measured ~718px; the content
-column came out under the 600dp cap rather than over it.
-
-So the real device is **expanded** width, not large. After a correct 96dp rail
-it has **864dp** for content, and the two-pane threshold is 992. **Two panes
-will never appear on this tablet**, and lowering the threshold does not help:
+**What was concluded first.** The screenshot was 1920 × 1200 physical at
+density 2.0. Everything checked: the 360dp drawer default is 720px and the
+sidebar measured ~718px. So the device was read as **expanded** width with
+**864dp** after a 96dp rail, against a 992dp threshold — and the conclusion
+written here was that *two panes will never appear on this tablet*, with this
+arithmetic offered as proof:
 
 ```
 600 column + 24 spacer + 200 aside + 48 margins = 872 > 864
 ```
 
-Even a 200dp aside does not fit, and 200 is already below anything worth
-calling a pane. The arithmetic in §3 is right; the hardware is narrower than
-the plan assumed. `aside` restacks below the column, which is exactly what the
-screenshot shows and exactly what invariant 13 asks for.
+**Two things were wrong with that.** The small one: 872 > 864 by eight
+dp, so what it actually proved was that a *200dp* aside does not fit. 192
+does. "Cannot be rescued" was an overstatement of an eight-dp miss.
 
-**What the tablet does get**, once the two fixes above ship: a 96dp rail
-instead of a 360dp drawer, two-column hubs (864dp of content is two 400dp
-cells), and the charts at full width. That is still most of the 53% back.
+The large one: **960 × 600dp was never a property of the panel.** 10.1" at
+1920 × 1200 is √(1920² + 1200²) / 10.1 ≈ **224 real dpi**, which sits on
+Android's hdpi bucket — density 1.5. The tablet was shipping at 2.0, a full
+bucket coarser than its own pixels, which is an OEM default and a Display Size
+setting away from being something else.
 
-**What it does not get is the pane work** — Today's aside, History and
-Stock/Iron list-detail. That code is correct, tested, and dormant on this
-hardware. It waits for a wider window: a 1280dp tablet, a desktop-mode display,
-or a decision to shrink the measure, which §7 says not to make.
+**One notch down and the pane work simply appeared**, with no code changed:
+
+| | reports | usable after rail | aside |
+|---|---|---|---|
+| density 2.0 | 960 × 600dp | 864 — under the threshold | none |
+| **density 1.7** (set) | **1129 × 706dp** | **1033** | **361dp** |
+| density 1.5 | 1280 × 800dp | 1184 | 480dp — the plan's number |
+
+So the 1280 × 800 this plan was drawn for was not a fantasy. It is what this
+tablet reports when its density matches its pixels, and the real device sat one
+setting away from the drawing the whole time.
+
+**The lesson is the one this section already half-learned.** The first pass
+treated a number the device reported as a fact about the device. dp is a
+negotiated unit — panel, density bucket and a user-facing setting all feed it —
+and "the hardware is narrower than the plan assumed" was a hardware claim made
+from a software reading.
+
+**What the tablet gets, confirmed by looking:** the 96dp rail, two-column hubs,
+full-width charts, and **both panes on Today** — column at 600dp, aside at
+361dp. The cost is that everything is ~15% smaller than at density 2.0;
+`TAP.min` of 56dp goes from 0.50" of glass to 0.43", which is still well over
+Material's 48dp floor but is real margin spent, and R3 is the rule to weigh it
+against.
 
 ---
 
 ## 12. What a device still has to answer
 
-Everything below is reasoned from tokens and has never been looked at.
+### What the first look already answered
 
-- **The rail's labels.** Three uppercase mono words in a 96dp rail is the
-  arithmetic saying yes; this bar has clipped twice on arithmetic that said
-  yes. Look before believing it.
-- **`tabBarVariant: 'material'`.** Used with a custom `tabBarLabel` and no
-  icon, which is not the combination it was drawn for.
-- **Which pane the tally wants.** §5a.1 settles it on an argument, not on a
-  measurement. The reach arcs are ±40dp.
-- **The cutout insets.** `insets.left`/`insets.right` are now reserved and no
-  device in the suite reports a non-zero one.
-- **The two-pane fold.** `landscape-fold.test.ts` says the stack clears
-  800dp; whether it looks right with 480dp of dues beside it is a different
-  question and only a screen answers it.
+One screenshot, 16 August, and it settled three of the five questions this
+section used to list — two of them by failing.
+
+- **`tabBarVariant: 'material'` was the wrong combination**, exactly as this
+  section suspected. `BottomTabBar` applies `getDefaultSidebarWidth` as
+  `minWidth` when labels are horizontal, that default is the 360dp *drawer*
+  width, and `minWidth` beats `width` — so `LAYOUT.rail` was never in play.
+  Answered, and fixed with `tabBarLabelPosition: 'below-icon'`.
+- **The bottom inset was not reserved at all.** Not on this list, because
+  nobody thought to put it here: `Screen` read `back ? insets.bottom : 0` and
+  that reasoning expired the moment the bar left the bottom edge. Content ran
+  under the system navigation. Answered by looking, and by nothing else.
+- **The two-pane fold looks right.** Answered on the second look, after the
+  density change put the window at 1129 × 706dp. A 600dp column beside a 361dp
+  aside reads as two panes rather than as content with an offcut, and the
+  weather strip spanning both is what keeps it legible — `above` staying out
+  of the pane row was the correct call.
+
+The measurement underneath all three is the one that mattered most: the drawer
+rendering at 718px gave density 2.0, and therefore 960 × 600dp. §11a records
+why that turned out to be the *setting* rather than the panel, and what it cost
+to treat a reported number as a hardware fact.
+
+### What the second look found
+
+Both panes rendered, and the seam between them was wrong in two ways that only
+a screen shows.
+
+- **The columns started at different heights.** `Also today` and a `marginTop`
+  both sat above the aside's first card and nothing sat above the column's.
+  Fixed by conditioning both on `panes === 2`: the heading exists to stop a
+  stacked list reading as more tallies, and the margin to hold it off them, and
+  beside the column neither job exists. The phone renders what it always did.
+- **`TodayScreen` asked a different question than `Screen`.** It called
+  `useWindow()` where `Screen` calls `useWindow({ bar: !back })`, so across a
+  96dp band the screen believed it was split while its own frame knew better —
+  every due stacked with the `VISIBLE_DUES` cap lifted. No hardware here sits
+  in that band, which is why it would have waited for hardware that did.
+
+### Still open
+
+- **The rail clips "HISTORY" to "HIST…" — and the arithmetic does not explain
+  it.** `BottomTabItem` puts `padding: 10` on every item, so a 96dp rail should
+  offer 76dp to a word this file's own budget puts at ~62dp. It fits on paper
+  and does not on glass, so **the cause is not yet known.** The horizontal
+  padding is now reclaimed via `tabBarItemStyle`, which takes the box to the
+  full 96dp and should hold even if the estimate is a quarter out — but that is
+  a margin, not a diagnosis. If the next screenshot still clips, the estimate
+  is wrong rather than the box, and the font advance is the thing to measure.
+- **"Also today" is the wrong words.** On the tablet it stood over four rows
+  reading *in 9 days*, *in 13 days*, *in 2 weeks*, *in 4 weeks*. It is hidden
+  beside the column now, so the copy only shows stacked — where it is just as
+  wrong and simply older. Not changed here: it is a copy decision, not a
+  layout one.
+
+### What a second look still owes
+
+- **The rail's labels, at 96dp this time.** The first look could not answer
+  this — the rail was 360dp wide, so nothing was under pressure. Three
+  uppercase mono words stacked under no icon in 96dp is arithmetic saying yes,
+  and this bar has clipped twice on arithmetic that said yes.
+- **`tabBarLabelPosition: 'below-icon'` with no icon.** The fix swapped one
+  undrawn-for combination for another. It drops the `minWidth` floor, which is
+  the part that was verified by reading the source; how it *looks* with a label
+  and no icon above it is not.
+- **The bottom of Today, now that the inset is reserved.** The fix is
+  conditional on `!hasRail(width)`, so a phone and a tablet take different
+  branches and only one of them has been seen broken.
+- **The cutout insets.** `insets.left`/`insets.right` are reserved and still no
+  device in the suite reports a non-zero one. Unchanged by the first look.
+- **Which pane the tally wants.** §5a.1 settles it on an argument, not a
+  measurement, and the reach arcs are ±40dp. Dormant with the pane work.
 
 ---
 
