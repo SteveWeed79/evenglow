@@ -1,5 +1,10 @@
 import { readFileSync } from 'node:fs';
-import { certificateFrom, parseBadging, sameCertificate } from './lib/apk.mjs';
+import {
+  certificateFrom,
+  normaliseFingerprint,
+  parseBadging,
+  sameCertificate,
+} from './lib/apk.mjs';
 
 /**
  * The gate between a built APK and anybody's tablet.
@@ -80,11 +85,25 @@ if (certs === null) {
   if (actual === null) {
     note('No SHA-256 certificate digest in the apksigner output — is the APK signed?');
   } else if (!sameCertificate(actual, expectedFingerprint)) {
+    const want = normaliseFingerprint(expectedFingerprint);
+    /**
+     * Say the length when it is wrong, because that is the difference between
+     * "the secret is malformed" and "this is the wrong key" — and those want
+     * completely different fixes. A fingerprint is 64 hex characters; anything
+     * else came out of a bad copy rather than a bad keystore.
+     */
+    const shape =
+      want.length === 64
+        ? ''
+        : `\n      ANDROID_CERT_SHA256 reduces to ${want.length} hex characters, not 64` +
+          ' — that is a malformed secret rather than a wrong key.';
+
     note(
       'Signing certificate does not match.\n' +
-        `      expected  ${expectedFingerprint}\n` +
-        `      got       ${actual}\n` +
-        '      This APK would install as a different app.',
+        `      expected  ${want}\n` +
+        `      got       ${actual}` +
+        shape +
+        '\n      This APK would install as a different app.',
     );
   }
 }

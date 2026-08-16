@@ -161,7 +161,22 @@ export function certificateFrom(text) {
  * check because it "always breaks".
  */
 export function normaliseFingerprint(value) {
-  return String(value).replace(/[^0-9a-fA-F]/g, '').toUpperCase();
+  /**
+   * The label comes off first, and it has to.
+   *
+   * `keytool` prints `         SHA256: A1:B2:…` and copying the whole line is
+   * the obvious thing to do. **`SHA256` contains four hex characters** — S, H
+   * are not, but A, 2, 5, 6 are — so stripping non-hex without removing the
+   * label first silently prepends `A256` and yields 68 characters that look
+   * almost right. Run 1 of the APK workflow failed on exactly this shape.
+   *
+   * Only a recognised label is removed, not any prefix: the point is to
+   * tolerate the format the tools emit, not to go hunting for 64 hex
+   * characters somewhere inside arbitrary text. A genuinely wrong key must
+   * still fail.
+   */
+  const withoutLabel = String(value).replace(/SHA-?(256|1)\s*[:=]/gi, ' ');
+  return withoutLabel.replace(/[^0-9a-fA-F]/g, '').toUpperCase();
 }
 
 export function sameCertificate(a, b) {

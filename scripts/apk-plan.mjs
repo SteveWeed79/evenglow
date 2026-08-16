@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, appendFileSync } from 'node:fs';
 import { withVersionCode } from './lib/version-bump.mjs';
 import { chooseVersionCode, releaseTag, shippedCodes } from './lib/apk.mjs';
+import { farmOrigin } from './lib/api-origin.mjs';
 
 /**
  * Decides what this APK is called and stamps the number into `app.json`.
@@ -31,6 +32,7 @@ import { chooseVersionCode, releaseTag, shippedCodes } from './lib/apk.mjs';
  */
 
 const APP_JSON = 'apps/mobile/app.json';
+const EAS_JSON = 'apps/mobile/eas.json';
 
 function fail(message) {
   process.stderr.write(`\n  ${message}\n\n`);
@@ -58,11 +60,41 @@ const stamped = withVersionCode(text, decision.code);
 if (stamped === null) fail(`No "versionCode" to rewrite in ${APP_JSON}.`);
 writeFileSync(APP_JSON, stamped);
 
+/**
+ * The farm server's address, which the APK carries and cannot ask for later.
+ *
+ * ## The defect this closes
+ *
+ * `EXPO_PUBLIC_API_URL` is inlined into the bundle at build time
+ * (`apps/mobile/src/boot/config.ts`), and on the EAS path it arrives from the
+ * `preview-farm` profile's `env`. **A runner build does not read `eas.json` at
+ * all** — it is `expo prebuild` and Gradle, with no profile anywhere — so the
+ * first version of this script left it unset and the APK would have booted
+ * saying *"This copy of the app was built without the address of your farm
+ * server"*. It builds, it signs, it verifies, it installs, and it cannot reach
+ * the farm. Exactly the shape of silent failure the rest of this pipeline is
+ * built to refuse, arriving through the one door nobody had shut.
+ *
+ * `farmOrigin` is the single place that address lives — it reads the same
+ * profile the EAS build would have used, and returns `null` for anything that
+ * resolves to a local machine, so a `.env` pointed at `localhost` cannot be
+ * baked into something handed to a farm.
+ */
+const easText = readFileSync(EAS_JSON, 'utf8');
+const apiUrl = farmOrigin(JSON.parse(easText));
+if (apiUrl === null) {
+  fail(
+    `No remote EXPO_PUBLIC_API_URL in ${EAS_JSON} under build["preview-farm"].env.\n  ` +
+      'An APK built without it cannot reach the farm server, and says so on first launch.',
+  );
+}
+
 const tag = releaseTag(version, decision.code);
 const apk = `steading-${version}-${decision.code}.apk`;
 
 process.stdout.write(
-  `version ${version}\nversionCode ${decision.code} — ${decision.reason}\ntag ${tag}\napk ${apk}\n`,
+  `version ${version}\nversionCode ${decision.code} — ${decision.reason}\n` +
+    `tag ${tag}\napk ${apk}\napi ${apiUrl}\n`,
 );
 
 if (process.env.GITHUB_OUTPUT) {
@@ -74,6 +106,7 @@ if (process.env.GITHUB_OUTPUT) {
       `reason=${decision.reason}`,
       `tag=${tag}`,
       `apk=${apk}`,
+      `api=${apiUrl}`,
       '',
     ].join('\n'),
   );

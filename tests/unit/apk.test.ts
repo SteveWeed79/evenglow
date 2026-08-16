@@ -1,4 +1,6 @@
+import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
+import { farmOrigin } from '../../scripts/lib/api-origin.mjs';
 import {
   certificateFrom,
   chooseVersionCode,
@@ -175,6 +177,33 @@ Signer #1 certificate SHA-1 digest: 0123456789abcdef0123456789abcdef01234567
     expect(normaliseFingerprint(keytool)).toBe(plain.toUpperCase());
   });
 
+  /**
+   * The failure that took run 1 down, and the reason it was not obvious.
+   *
+   * `keytool` prints `         SHA256: A1:B2:…` and copying the whole line is
+   * the natural thing to do. **`SHA256` contains four hex characters** — A, 2,
+   * 5 and 6 — so stripping non-hex without removing the label first prepends
+   * `A256`, giving 68 characters that look almost right and match nothing.
+   *
+   * Refusing that was technically correct and practically useless: it is the
+   * "check that always breaks" shape this function's own comment warns about.
+   */
+  it('tolerates the label keytool prints in front of it', () => {
+    const plain = 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90';
+    const colons = plain.toUpperCase().replace(/(..)(?=.)/g, '$1:');
+
+    for (const pasted of [`         SHA256: ${colons}`, `SHA-256: ${colons}`, `sha256=${colons}`]) {
+      expect(sameCertificate(pasted, plain), pasted.trim().slice(0, 12)).toBe(true);
+    }
+    expect(normaliseFingerprint(`SHA256: ${colons}`)).toHaveLength(64);
+  });
+
+  it('still refuses a wrong key wearing that same label', () => {
+    // Tolerating the label must not become "find 64 hex characters anywhere".
+    expect(sameCertificate(`SHA256: ${'b'.repeat(64)}`, 'a'.repeat(64))).toBe(false);
+    expect(sameCertificate('SHA256:', 'a'.repeat(64))).toBe(false);
+  });
+
   it('does not match a different key', () => {
     const a = 'a'.repeat(64);
     const b = `${'a'.repeat(63)}b`;
@@ -198,5 +227,34 @@ Signer #1 certificate SHA-1 digest: 0123456789abcdef0123456789abcdef01234567
     // A truncated paste — 63 hex characters — must not pass by prefix.
     const short = 'a'.repeat(63);
     expect(sameCertificate(short, short)).toBe(false);
+  });
+});
+
+/**
+ * The address the APK carries, which it cannot ask for later.
+ *
+ * ## Why this is here and not only in `api-origin.test.ts`
+ *
+ * That file tests `farmOrigin` as a function. This tests the *fact the runner
+ * build depends on*: that `eas.json` still holds a real remote origin under
+ * `preview-farm`, because a runner build reads no profile and `apk-plan.mjs`
+ * lifts it from there.
+ *
+ * The first version of that script did not, and the failure is the worst shape
+ * in this whole pipeline: the APK builds, signs, passes every check, installs
+ * cleanly — and boots saying *"This copy of the app was built without the
+ * address of your farm server"*. Every guard held and the artefact was useless.
+ */
+describe('the farm server address a runner build has to supply', () => {
+  it('is in eas.json, and is not a local machine', async () => {
+    const easJson = JSON.parse(
+      await readFile(new URL('../../apps/mobile/eas.json', import.meta.url), 'utf8'),
+    );
+    const origin = farmOrigin(easJson);
+
+    expect(origin).not.toBeNull();
+    // `farmOrigin` returns null for localhost, 10.x, the emulator alias and so
+    // on — so this passing means an APK built from it can actually reach a farm.
+    expect(origin).toMatch(/^https:\/\//);
   });
 });

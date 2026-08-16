@@ -170,11 +170,32 @@ jobs:
       # gitignored, so there is nothing to preserve and stale resources are the
       # whole failure mode. It is also what picks up every icon, splash,
       # permission and plugin change in app.json.
+      # ── The two things the EAS profile used to supply ────────────────────
+      #
+      # A runner build reads no `eas.json` profile, so both of the build-time
+      # values `preview-farm` carried have to be put back by hand:
+      #
+      #   `EXPO_PUBLIC_BUILD`   — `pnpm stamp` writes it to `apps/mobile/.env.local`,
+      #                           which is what `eas-build-post-install` did on
+      #                           the EAS side. Without it the support bundle
+      #                           cannot say which build a report came from.
+      #
+      #   `EXPO_PUBLIC_API_URL` — the farm server's address, inlined into the
+      #                           bundle by Metro. Without it the app boots and
+      #                           says it has no farm server. It comes from
+      #                           `farmOrigin`, which reads the same profile the
+      #                           EAS build would have, so the address is not
+      #                           written down twice.
+      - name: Stamp the build
+        run: pnpm stamp
+
       - name: Prebuild the native project
         run: pnpm mobile:prebuild
 
       - name: Build it
         working-directory: apps/mobile/android
+        env:
+          EXPO_PUBLIC_API_URL: ${{ steps.plan.outputs.api }}
         run: ./gradlew assembleRelease --no-daemon
 
       # ── Sign it ──────────────────────────────────────────────────────────

@@ -1,11 +1,162 @@
 # Pick up here
 
-**Last worked: 12 August 2026.** The server is live. The app has not been
-pointed at it yet, and that needs the tablet.
+**Last worked: 16 August 2026.** The server is live. The app still has not been
+pointed at it, and that still needs the tablet — but the *route* to a tablet
+changed today, and §0 is the record of that.
 
-This file is a point-in-time note, not a spec. It goes stale by design — when
-the two devices are syncing, the useful half of it has been spent and it should
-be cut down or deleted. `DEPLOY-THE-SERVER.md` is the durable version.
+This file is a point-in-time note, not a spec. It goes stale by design.
+`DEPLOY-THE-SERVER.md` is the durable version for the server; for the app,
+`TESTING-BUILD.md` §7 is.
+
+---
+
+## 0. Where 16 August left things
+
+Three threads. Two are finished and unverified; one is half done and knows it.
+
+### The landscape layout — merged, never seen on a device
+
+`docs/LANDSCAPE-PLAN.md` is the design and the record. Phases A–C are built and
+merged (**#151**), phase D is the document itself.
+
+The complaint was that a 10" tablet in landscape rendered a 600dp column with
+340dp of plaster either side — 53% of the window was texture. The app had one
+breakpoint, 600, used for two different jobs, and no way to say "expanded" or
+"large" at all.
+
+What is now in `main`: `theme/window.ts` (the vocabulary, pure and tested),
+`insets.left`/`insets.right` finally reserved, `LAYOUT.wide` and `<Grid>` for
+the hubs and charts, `above`/`aside` panes on `Screen`, list-detail on History,
+Stock and Iron, a context pane on Weigh, and the tab bar becoming a navigation
+rail at expanded width.
+
+> **§11 of the plan is the list of five places the plan lost to the code** —
+> kept rather than edited away. **§12 is the honest ledger: none of it has been
+> looked at on a tablet.** The suite has no layout engine and every phone falls
+> on the narrow side of every branch. The rail's labels are the first thing to
+> look at; that bar has clipped its words twice before on arithmetic that said
+> they would fit.
+
+`UX-SPEC.md` R3 was amended, not bent: primary actions live in the bottom third
+on a compact window and the bottom **outer corners** on an expanded one,
+because a tablet in landscape is held in two hands and the centre-bottom is a
+dead spot. Nothing about a phone changed.
+
+### The APK now builds on a GitHub runner — merged, first run in flight
+
+**Issue #153** is what set this off. A promote hit EAS's monthly free-tier
+Android build cap: the server shipped, the app build was refused, and the step
+that would have said so is the one that skips on failure. The run summary for a
+half-done release was blank.
+
+**#154** is the escape. `.github/workflows/apk.yml` runs `expo prebuild` and
+Gradle on a GitHub runner and signs with our own keystore. **No Expo account is
+in the path**, so no quota can refuse it.
+
+| | |
+|---|---|
+| Workflow | `.github/workflows/apk.yml` — Actions → APK → Run workflow |
+| Decisions | `scripts/lib/apk.mjs`, held by `tests/unit/apk.test.ts` (22 cases) |
+| CLIs | `scripts/apk-plan.mjs` (names it, stamps `app.json`), `scripts/apk-check.mjs` (the gate) |
+| Docs | `TESTING-BUILD.md` §7, *"Building it ourselves, when EAS will not"* |
+
+**The five signing secrets are set** (16 Aug). They came out of
+`eas credentials` → Download credentials, which also served as the §8 keystore
+backup that had never been taken.
+
+**First run: [31922188936](https://github.com/SteveWeed79/steading/actions/runs/31922188936)**,
+dispatched from `main` at `9daed0c`. At the time of writing it was on the Gradle
+step with every earlier step green — including the secrets check, the
+versionCode derivation and the prebuild. **Its outcome is not recorded here;
+look at the run.**
+
+Two things about that first run:
+
+- It should produce **`steading-0.1.13-18.apk`** and a release tagged
+  `v0.1.13+18`. 18 because `EAS_LAST_CODE` is 17 — the code EAS consumed on the
+  submission that the quota then refused.
+- **The real test is the install, not the green tick.** Put it on the tablet
+  *over* the existing app without uninstalling. If it goes on and the records
+  survive, the signature matched and the whole chain is proven. If Android
+  refuses with a signature error, **stop** — the keystore is not the one EAS has
+  been signing with, and nothing should ship until that is understood.
+
+#### A defect found while writing this section, and fixed
+
+Run 1 was already in flight when it turned up. **A runner build reads no
+`eas.json` profile**, so the two build-time values `preview-farm` carried were
+both missing:
+
+- **`EXPO_PUBLIC_API_URL`** — inlined by Metro into `boot/config.ts`. Without
+  it the app boots and says *"This copy of the app was built without the address
+  of your farm server"*.
+- **`EXPO_PUBLIC_BUILD`** — written by `pnpm stamp` into
+  `apps/mobile/.env.local`, which `eas-build-post-install` used to do. Without
+  it a support bundle cannot say which build a report came from.
+
+It is the worst shape in the whole pipeline: builds, signs, passes every check,
+installs cleanly, and is useless. Every guard held and none of them was looking
+at this.
+
+`apk-plan.mjs` now lifts the address via `farmOrigin` — the same profile the EAS
+build would have read, so it is not written down twice — and refuses if it is
+absent or points at a local machine. `pnpm stamp` runs before the prebuild.
+
+> **So the APK from run 1 is not usable against the live server.** Rebuild
+> after the fix lands. The run is still worth watching for the signature check,
+> which is the part it can prove.
+
+> **PR #154's description is stale.** It describes the first draft, where
+> `versionCode` was a required free-text input. The second commit replaced that
+> with derivation. `TESTING-BUILD.md` §7 and the code are correct; the PR body
+> is not.
+
+### The box still pulls from EAS — this is the open work
+
+`deploy.sh` finds the APK by asking EAS (`eas build:list`). **So a
+runner-built APK never reaches the shelf.** The box will go on serving the last
+EAS build, with no error — the same silent half-done shape as #153 itself.
+
+This is #153's remaining half, and there is a decision in it. The EAS lookup
+filters on `--git-commit-hash "$NOW_FULL"` — *the build made from the commit
+this box is serving*. Its own comment argues that is better than a build id
+because it needs no channel between CI and the box. **Swapping in "newest
+GitHub Release" throws that away**, and breaks specifically: `release` bumps the
+version, commits it and promotes *that* commit, while the APK workflow is
+dispatched separately at whatever `main` is. Two commits, no link.
+
+The coherent fix is two parts:
+
+1. **`ci.yml`'s release job calls `apk.yml`** instead of `eas build`.
+   `workflow_call` is already on `apk.yml` for exactly this. The APK is then
+   built at the promoted commit and the commit link is restored.
+2. **`deploy.sh` looks up the release whose tag points at `$NOW_FULL`** and
+   takes its APK asset URL. Same three guarantees, same `.last-artifact`
+   marker, same "the box pulls, nothing pushes" shape — and `EXPO_TOKEN` comes
+   off the box entirely.
+
+The decision logic belongs in a tested `.mjs`, not in shell, for the reason
+`scripts/lib/apk.mjs` gives.
+
+**The cost, which is a real choice and not an oversight:** today you can promote
+the server without building an app (`bump: none`). Under (1) the two become one
+action, so a server-only fix waits on a Gradle build. The release job's own
+comments argue *"am I shipping a new app?" is one question, not two* — but it is
+worth deciding deliberately.
+
+**Until this lands, both build routes should stay.** The APK workflow costs no
+quota and the EAS one still feeds the box.
+
+### Other state worth knowing
+
+- **EAS's Android quota resets 1 September 2026.** `versionCode` 17 was burned
+  by the refused submission.
+- **`eas.json` still says `appVersionSource: remote`**, so `app.json`'s
+  `versionCode: 3` is stale and ignored by EAS. Deliberately left alone —
+  flipping it would change the EAS path too. If EAS is dropped entirely, the
+  repo should own that counter.
+- **`main` is at v0.1.13**, promoted 15 Aug. The `release` branch moved with it,
+  so the **server** is current; the **app** on any device is not.
 
 ---
 
