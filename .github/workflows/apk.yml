@@ -63,6 +63,24 @@ on:
       release:
         type: boolean
         default: true
+      # ── Which commit, and why the caller has to say ──────────────────────
+      #
+      # **A called workflow does not see the caller's checkout.** `github.sha`
+      # in here is the commit the *event* fired on, which for a promote is the
+      # commit the button was pressed against — and `ci.yml`'s release job then
+      # makes one more commit on top of it, the version bump, and promotes
+      # THAT. Left to the default this would build the version before the one
+      # being shipped: an APK stamped 0.1.13 for a release of 0.1.14, tagged
+      # against a commit no box is serving.
+      #
+      # The box matches a release to the commit it deployed
+      # (`scripts/lib/release-apk.mjs`), so a tag on the wrong commit is not a
+      # cosmetic mismatch — it is an APK that is never found and a shelf that
+      # never moves. Blank still means "whatever this was dispatched from",
+      # which is right for a hand-run build.
+      ref:
+        type: string
+        required: false
 
 # Least privilege by default; the publish job raises its own.
 permissions:
@@ -84,6 +102,7 @@ jobs:
       tag: ${{ steps.plan.outputs.tag }}
       code: ${{ steps.plan.outputs.code }}
       version: ${{ steps.plan.outputs.version }}
+      sha: ${{ steps.plan.outputs.sha }}
     steps:
       # ── Refuse before doing any work ─────────────────────────────────────
       #
@@ -129,6 +148,10 @@ jobs:
           # The versionCode is derived from the tags of everything already
           # released, so they have to be here. See `scripts/lib/apk.mjs`.
           fetch-depth: 0
+          # Blank on a hand-run build, which is the dispatched ref. Set by
+          # `ci.yml` to the commit it promoted — see the input's note above for
+          # what goes wrong without it.
+          ref: ${{ inputs.ref || github.sha }}
 
       - uses: pnpm/action-setup@v4
 
@@ -164,7 +187,12 @@ jobs:
           # `${{ }}` in a `run:` is textual substitution, and this one comes
           # from a form. Blank means "derive it", which is the normal case.
           APK_VERSION_CODE: ${{ inputs.versionCode }}
-        run: git tag --list 'v*' | node scripts/apk-plan.mjs
+        run: |
+          set -euo pipefail
+          git tag --list 'v*' | node scripts/apk-plan.mjs
+          # Resolved here rather than taken from `github.sha`, which is the
+          # event's commit and not necessarily the one checked out above.
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       # `--clean` for the reason CLAUDE.md gives: `android/` is generated and
       # gitignored, so there is nothing to preserve and stale resources are the
@@ -186,8 +214,15 @@ jobs:
       #                           `farmOrigin`, which reads the same profile the
       #                           EAS build would have, so the address is not
       #                           written down twice.
+      #
+      # `--filter`, and it is not a style preference: `stamp` is a script in
+      # `apps/mobile/package.json`, not in the root manifest. A bare
+      # `pnpm stamp` from the repository root exits 254 with
+      # ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL, which is a hard failure of this
+      # step — written that way, merged, and never run, because run 1 predated
+      # it and there has been no run since.
       - name: Stamp the build
-        run: pnpm stamp
+        run: pnpm --filter @steading/mobile stamp
 
       - name: Prebuild the native project
         run: pnpm mobile:prebuild
@@ -291,11 +326,22 @@ jobs:
       # tablet in August" after the box has been rebuilt or the file pruned. It
       # is a poor *channel* and is not used as one — the box still serves the
       # install page.
+      # ── The tag is what the box looks a release up by ─────────────────────
+      #
+      # `deploy.sh` resolves the commit it just deployed to a tag with git, on
+      # the box, and asks GitHub only what is attached to that tag — so there is
+      # no channel between CI and the box to keep in step. That works because
+      # `--target` below puts the tag on the commit this APK was built from,
+      # which under `ci.yml` is the commit `release` points at.
+      #
+      # `$SHA` and not `$GITHUB_SHA`: on a called run those differ by exactly
+      # the version-bump commit, which is the one being shipped.
       - name: Attach it to a release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.build.outputs.tag }}
           APK: ${{ needs.build.outputs.apk }}
+          SHA: ${{ needs.build.outputs.sha }}
         run: |
           set -euo pipefail
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
@@ -309,7 +355,7 @@ jobs:
           fi
           gh release create "$TAG" "dist/$APK" \
             --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
+            --target "$SHA" \
             --title "$TAG" \
             --notes "Built on a GitHub runner. Package, version and signing certificate verified before publishing — see \`scripts/apk-check.mjs\`."
 
@@ -319,14 +365,27 @@ jobs:
           APK: ${{ needs.build.outputs.apk }}
           CODE: ${{ needs.build.outputs.code }}
           VERSION: ${{ needs.build.outputs.version }}
+          SHA: ${{ needs.build.outputs.sha }}
+          CALLED: ${{ github.event_name != 'workflow_dispatch' }}
         run: |
           {
             echo "### \`$APK\`"
             echo ""
             echo "- versionCode \`$CODE\`, version \`$VERSION\`"
             echo "- signature verified against \`ANDROID_CERT_SHA256\`"
-            echo "- release [\`$TAG\`](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${TAG})"
+            echo "- release [\`$TAG\`](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${TAG}), tagged at \`${SHA}\`"
             echo ""
-            echo "**Not on the box.** Download it and run"
-            echo "\`scripts/deploy/publish-apk.sh <path>\` to put it on the shelf."
+            # Which of the two this was decides whether anything else happens
+            # on its own, and getting that wrong in either direction wastes
+            # somebody's afternoon: waiting for a box that is never going to
+            # fetch this, or publishing by hand over one that already did.
+            if [ "$CALLED" = "true" ]; then
+              echo "**The box fetches this within five minutes.** It matches a release to"
+              echo "the commit it is serving, and this one is tagged at the promoted commit."
+            else
+              echo "**Nothing will fetch this on its own.** A box only publishes the release"
+              echo "tagged at the commit it is serving, and this was built from"
+              echo "\`${SHA}\` outside a promote. Download it and run"
+              echo "\`scripts/deploy/publish-apk.sh <path>\` to put it on the shelf."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"

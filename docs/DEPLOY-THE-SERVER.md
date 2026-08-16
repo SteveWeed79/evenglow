@@ -339,18 +339,24 @@ there is no runtime setting, deliberately: a server address a stranger can talk
 somebody into changing is a phishing surface. Pointing at a different server
 means another build.
 
-**A cloud build of any other profile will not reach `/app`.** The deploy script
-asks EAS for the build matching the `preview-farm` profile, the `com.steading.app`
-application id, *and* the exact commit the box is serving — so a `development`
-build somebody runs from a laptop is invisible to it. It used to ask for the
-newest finished Android build of anything, and the next timer tick would have
-published a dev-client APK that demands Metro to whoever downloaded the link.
-`publish-apk.sh` checks the application id again on the file that arrives, which
-is the only check on the hand-run path.
+**Nothing but a promoted build will reach `/app`.** The deploy script resolves
+the commit the box is serving to a `v<version>+<code>` tag with git — locally,
+with no network — and asks GitHub only for the APK attached to that release.
+So a build somebody runs from a laptop, or a hand-dispatched APK built at some
+other commit, is invisible to it. `publish-apk.sh` checks the application id
+again on the file that arrives, which is the only check on the hand-run path.
 
-A release that changes no app code matches no build and publishes nothing, which
-is what you want: the shelf keeps the APK it has until a commit that actually
-produced one is deployed.
+A release that changes no app code has no tag on its commit and publishes
+nothing, which is what you want: the shelf keeps the APK it has until a commit
+that actually produced one is deployed.
+
+**This used to ask EAS** (`eas build:list --git-commit-hash`), which was the
+remaining half of #153: the APK workflow moved to a GitHub runner so a build
+quota could not refuse a release, and the box went on asking Expo — so a
+runner-built APK never reached the shelf and nothing reported an error. The
+commit is still the key, which is the property that made the EAS query right;
+only the place the artefact is fetched from changed. `EXPO_TOKEN` is no longer
+needed on the box at all.
 
 ---
 
