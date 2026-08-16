@@ -238,6 +238,22 @@ written, merged and first exercised on the run that mattered — which is the
 argument `apk.yml`'s own header makes for keeping judgement out of YAML, landing
 on the part of the file that is not judgement and cannot be moved.
 
+#### The tablet is 960dp, and the pane work is dormant on it
+
+First screenshot of the rail, 16 August. Two bugs fixed — the rail rendering at
+Material's 360dp *drawer* default because `minWidth` beat our `width`, and the
+bottom inset going unreserved once the bar was no longer at the bottom.
+
+**The finding underneath them matters more.** The tablet is 960 × 600dp, and
+`LANDSCAPE-PLAN.md` was drawn for 1280 × 800. After a correct rail that leaves
+864dp, against a 992dp two-pane threshold — so **Today's aside, and the
+list-detail on History, Stock and Iron, will not appear on this hardware.** Not
+a bug: 600 + 24 + 200 + 48 is already 872, so even a token aside does not fit
+beside the measure. The plan's §11a has the arithmetic.
+
+The rail, the two-column hubs and the wider charts all do land. The pane code
+is correct, tested, and waiting for a wider window.
+
 > **PR #154's description is stale.** It describes the first draft, where
 > `versionCode` was a required free-text input. The second commit replaced that
 > with derivation. `TESTING-BUILD.md` §7 and the code are correct; the PR body

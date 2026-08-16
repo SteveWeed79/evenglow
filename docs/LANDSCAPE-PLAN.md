@@ -558,6 +558,57 @@ which is a redesign of the screen rather than a layout for it.
 
 ---
 
+## 11a. What the tablet said, the first time it was looked at
+
+A screenshot, 16 August. Three things, and the third is not a bug.
+
+**The rail was 360dp, not 96.** `BottomTabBar` applies
+`getDefaultSidebarWidth()` as a **`minWidth`** whenever the labels are
+horizontal, and that default is Material's navigation *drawer* width. A
+`minWidth` beats the `width` in `tabBarStyle`, so `LAYOUT.rail` was never
+reached and nothing said so. `tabBarLabelPosition: 'below-icon'` drops the
+minimum to zero. This bar has no icons, so "below the icon" only means
+"stacked" — which is what a rail wants anyway.
+
+**Nothing reserved the bottom inset.** `Screen` read `back ? insets.bottom : 0`
+because a tab screen has the bar beneath it and the bar reserves its own. The
+moment the bar moved to the leading edge, nothing stood at the bottom of a tab
+screen at all, and "Also today" ran under the system navigation. The rule the
+old code was reaching for is the one now written: the inset belongs to whichever
+thing actually meets the bottom of the screen.
+
+### **The tablet is 960 × 600dp, and this plan was drawn for 1280 × 800.**
+
+This is the finding, and it is not fixable by moving a number.
+
+The screenshot is 1920 × 1200 physical at density 2.0. Everything checks: the
+360dp drawer default is 720px and the sidebar measured ~718px; the content
+column came out under the 600dp cap rather than over it.
+
+So the real device is **expanded** width, not large. After a correct 96dp rail
+it has **864dp** for content, and the two-pane threshold is 992. **Two panes
+will never appear on this tablet**, and lowering the threshold does not help:
+
+```
+600 column + 24 spacer + 200 aside + 48 margins = 872 > 864
+```
+
+Even a 200dp aside does not fit, and 200 is already below anything worth
+calling a pane. The arithmetic in §3 is right; the hardware is narrower than
+the plan assumed. `aside` restacks below the column, which is exactly what the
+screenshot shows and exactly what invariant 13 asks for.
+
+**What the tablet does get**, once the two fixes above ship: a 96dp rail
+instead of a 360dp drawer, two-column hubs (864dp of content is two 400dp
+cells), and the charts at full width. That is still most of the 53% back.
+
+**What it does not get is the pane work** — Today's aside, History and
+Stock/Iron list-detail. That code is correct, tested, and dormant on this
+hardware. It waits for a wider window: a 1280dp tablet, a desktop-mode display,
+or a decision to shrink the measure, which §7 says not to make.
+
+---
+
 ## 12. What a device still has to answer
 
 Everything below is reasoned from tokens and has never been looked at.

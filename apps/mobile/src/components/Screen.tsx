@@ -20,7 +20,7 @@ import { SyncChip } from './SyncChip';
 import { Touch } from './Touch';
 import { useTrouble } from '../hooks/useTrouble';
 import { useWindow } from '../hooks/useWindow';
-import { asideWidth } from '../theme/window';
+import { asideWidth, hasRail } from '../theme/window';
 import type { RootParamList } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, LAYOUT, SPACE, TAP, TYPE } from '../theme/tokens';
@@ -117,7 +117,7 @@ export function Screen({
    * screen has no tab bar under it, and above the expanded boundary that bar
    * is a rail taking width off the side.
    */
-  const { usable, panes } = useWindow({ bar: !back });
+  const { usable, panes, width: windowWidth } = useWindow({ bar: !back });
 
   const cap = wide ? LAYOUT.wide : LAYOUT.column;
 
@@ -139,6 +139,15 @@ export function Screen({
    * spacer and two margins", so the frame has to actually spend those margins
    * or the arithmetic and the layout disagree by 8dp.
    */
+  /**
+   * Whether anything is standing at the bottom of this screen.
+   *
+   * Only a tab screen whose bar has not become a rail. A pushed screen never
+   * had one; a tab screen on an expanded window has it beside the content
+   * instead of beneath it.
+   */
+  const barAtBottom = !back && !hasRail(windowWidth);
+
   const gutter = split ? LAYOUT.margin : SPACE.lg;
   const frame = split ? LAYOUT.column + LAYOUT.spacer + asidePane + gutter * 2 : cap;
 
@@ -393,7 +402,21 @@ export function Screen({
            * somewhere to scroll to, `scrollToClear` computes an offset the
            * surface cannot reach and the field stays put.
            */
-          { paddingBottom: SPACE.xl + Math.max(keyboard, back ? insets.bottom : 0) },
+          /**
+           * **A rail is not under the content, so it reserves nothing.**
+           *
+           * This read `back ? insets.bottom : 0` on the reasoning that a tab
+           * screen has the bar beneath it and the bar reserves the inset
+           * itself. That was true right up until the bar moved to the leading
+           * edge — and then nothing at all was standing at the bottom of a tab
+           * screen, so "Also today" ran under the system navigation. Reported
+           * off the tablet in the first screenshot of the rail.
+           *
+           * The rule the old code was reaching for is the one below: the inset
+           * belongs to whichever thing actually meets the bottom of the screen,
+           * and on an expanded window that is the content itself.
+           */
+          { paddingBottom: SPACE.xl + Math.max(keyboard, barAtBottom ? 0 : insets.bottom) },
           contentStyle,
         ]}
        >
