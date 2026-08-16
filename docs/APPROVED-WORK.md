@@ -418,8 +418,8 @@ period rather than a task.
       on the screen registers taps nobody made. This is the precondition under
       every field-usability rule in `UX-SPEC.md` §1, and the real argument for
       voice entry `[76]`.
-- [ ] **Correct the two documents the code has outgrown.** `[203]`, `[205]` —
-      *added 16 August*
+- [x] **Correct the two documents the code has outgrown.** `[203]`, `[205]` —
+      *added and done 16 August*
       Both were found by checking this file against the source, which is the
       failure mode `[203]` predicted: nothing checks the documents against each
       other.
@@ -430,13 +430,17 @@ period rather than a task.
         `note` are absent from the file every agent and every new reader is told
         to start from. *Highest leverage per line in this document*: a wrong
         invariant list in the instruction file is wrong in every task that
-        reads it.
+        reads it. **Fixed by not repeating the list at all** — the section now
+        points at `ENTITIES` and states the rule for widening it, so the one
+        that can go stale is the one nobody has to maintain twice.
       - **`DESIGN-BRIEF.md` says "where this disagrees with `ROADMAP.md`, this
         is newer"** and is dated 9 August. Three of its stated gaps have since
         closed — there is a launcher icon, there is a splash, and `apk.yml`
         compiles Android in CI — so on those points it is now the older
         document asserting priority over the newer one. It wants the staleness
-        line `PICK-UP-HERE.md` carries.
+        line `PICK-UP-HERE.md` carries. **It has one now**, naming the three
+        gaps that have since closed so the diagnosis can still be read without
+        the expired claim being acted on.
 
 ## 7. Carried from the sync integrity list — **SI**
 
@@ -456,6 +460,15 @@ say what to do. **The file remains the authority; do not re-argue them here.**
 - [ ] **Mint a fresh ULID in `retryRejected`.** P0-1(b). Reusing the id of a
       refused mutation means the corrected payload meets the duplicate branch
       and is answered as already-done.
+      **Deferred there, and the deferral is the point** *(noted 16 August, after
+      this line was first written without it)*. The source file says wait until
+      the correction editor is actually being built, and sizes why: the outbox
+      primary key *is* the mutation id, so this needs a new terminal status and
+      a migration, plus an audit of every status predicate — `readOutboxBySeq`
+      would otherwise resend a superseded row for ever, and `checkIntegrity`
+      derives expected depth from enqueued-minus-cleared, so a supersede that
+      skips the counter is later reported to a farm as data loss. Doing it early
+      buys nothing and risks exactly what it is meant to protect.
 - [ ] **Restate P0-3 as a property of visible order**, rather than replacing the
       cursor. The verification pass re-ranked it and refused the original
       prescription; the restatement is what it left open.
