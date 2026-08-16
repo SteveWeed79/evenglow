@@ -41,6 +41,7 @@ Nothing is restated here; if a line is terse, the item explains it.
 | **M** | The farm as a business | Domain, prose | No | K |
 | **N** | Know whether it works | Prose, small code | No | B |
 | **O** | What the suite cannot reach | Test infrastructure | No | Concurrent with all |
+| **P** | The documents as a set | Prose | No | Concurrent with all |
 
 **A and C can run at the same time** and should. A is waiting — forms, accounts
 and a review queue — and C is the only phase here that is pure engineering with
@@ -533,6 +534,54 @@ invisible tax on every other phase; building them together is not the intent.
 
 **Cost of skipping.** Every exit gate in this document is a manual check
 performed once by the person who wrote the code.
+
+---
+
+## The second sweep, placed
+
+`UNCONSIDERED.md` §20–§28 added items 151–207 after these phases were written —
+the code rather than the documents, version skew, the seams, the physical yard,
+and the service as a promise. They are placed here rather than by editing
+fifteen tables, so the diff stays readable and no phase silently changes shape.
+
+**Two of them move a phase's centre of gravity**, and those are called out
+below rather than left to be noticed.
+
+| Phase | Gains | Note |
+|---|---|---|
+| **A** | `[158]` | Google's OAuth consent verification is a **second queue with a calendar**, needing the privacy policy and a verified domain. It belongs beside `[10]` and nothing counted it |
+| **B** | `[157]`, `[160]`, `[181]`–`[189]` | `[157]` is the sharpest item in either sweep and it is a Phase B decision: both install routes mean both signing fingerprints registered. The billing mechanics are the inside of the purchase flow already documented as unbuilt |
+| **C** | `[196]` | Week start is one line and a setting today, and a data-comparison question later |
+| **D** | `[151]`–`[156]` | **This is the phase that changed.** It was the update path; it is now version skew in both directions, and `[152]` is why — the backup guard is correct and tells the farm to do the one thing the product cannot |
+| **E** | `[161]`, `[168]`–`[170]`, `[198]`, `[199]`, `[200]` | Survival now includes the cold, the battery, and the diagnosis with nowhere to go |
+| **F** | `[159]`, `[162]`, `[163]`, `[164]`, `[165]`, `[195]` | `[159]` is the one to look at first: a nightly full dump copies every photo, and §4.1a prices the storage against records |
+| **G** | — | Unchanged |
+| **H** | `[167]`, `[171]`, `[172]`, `[173]` | **This is the other phase that changed.** Reach was accessibility and screens; it now opens with the fact that a wet glove does not register a tap at all, which is the physical precondition of every rule in `UX-SPEC.md` §1 |
+| **I** | `[178]`, `[197]` | Normalisation before search, and the knowledge that the scroll is one component |
+| **J** | — | Unchanged, and `[167]` and `[173]` are now its argument rather than its nice-to-have |
+| **K**–**M** | `[166]`, `[174]`–`[177]`, `[179]`, `[180]` | Entry-quality work sits with the domains, because a plausibility check is per-figure and the figures are domain-shaped |
+| **N** | `[190]`–`[194]` | Knowing whether it works, and whether it survives the person who built it |
+| **O** | `[153]`, `[154]`, `[201]` | The ladder that has never run, the migration test with no real file, and the ordering "probably" |
+| **P** | `[202]`–`[207]` | New. See below |
+
+### Phase P — The documents as a set
+
+**New phase, and the cheapest one here.** Twenty files and eleven and a half
+thousand lines that are the best thing about this project, missing the six
+things that make a set of documents usable by somebody who did not write them:
+an index `[202]`, a check that they do not contradict each other `[203]`, a map
+from a decision number to the file that owns it `[204]`, a freshness marker on
+the nineteen that do not have one `[205]`, a contributing path `[206]`, and a
+glossary `[207]`.
+
+**Why it is a phase rather than a chore.** `[203]` has already been paid for
+once — two documents disagreeing about whether a farm had backups, caught by
+hand. And `[206]` is the cheap half of `[192]`: the expensive half is custody of
+the keystore and the accounts, and the cheap half is a second person being able
+to build the thing at all.
+
+**Concurrent with everything, like O.** Neither has a natural moment, which is
+why both keep being nobody's turn.
 
 ---
 

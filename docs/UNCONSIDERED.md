@@ -30,6 +30,13 @@ And where an item asserts something is absent, it means absent from `main` on
 §19 is the other half of the honesty: the things checked and found already
 covered, listed so they are not raised again as gaps.
 
+**§20 onwards is a second sweep**, run after the first was written and using
+different lenses — the code rather than the documents, version skew, the seams
+between subsystems, the physical conditions of a yard, and what happens to the
+farms if the person running this stops. Items 151–207. It also records the two
+draft findings that did not survive checking, because a gap analysis that only
+reports its hits is not one.
+
 ---
 
 ## 1. Law, licence, and the store — the ones that can stop a release
@@ -818,6 +825,365 @@ Each of these looked like an omission and is not:
 
 ---
 
+---
+
+# Second sweep
+
+**The first pass swept the documents for absence.** This one swept the *code*,
+and applied lenses the first pass did not have: what happens going backwards,
+what happens where two well-built things meet, what happens in the physical
+conditions the product is for, and what happens to the farms if the person
+running this stops.
+
+Two draft findings did not survive checking and are recorded here rather than
+quietly dropped, because a gap analysis that only reports hits is not one:
+
+- **The backup restore does guard its versions.** `backupRefusal` refuses a
+  file whose format or mutation-schema version is newer, with a sentence saying
+  why. It is better than the draft assumed — see item 152 for what it exposes
+  instead.
+- **`fly.toml` is not drift.** It is a documented alternative host with a header
+  explaining its relationship to §4.1a's Oracle box, and `DEPLOY-THE-SERVER.md`,
+  `OPERATOR.md` and `DESIGN-BRIEF.md` all name it.
+
+## 21. Version skew — going backwards, and files from the future
+
+151. **`migrate()` silently no-ops on a database from the future.** A
+     `user_version` above `SCHEMA_VERSION` falls through every `continue` and
+     the function returns as though it had worked. The app then runs against a
+     schema it does not know: unfamiliar columns are harmless, and a `NOT NULL`
+     column added by a later migration is an insert that fails at 6am. The
+     migration runner is otherwise careful — each step in a transaction with
+     its own version bump, for exactly the right reason — and this is the one
+     direction it does not look in.
+
+152. **The backup restore refuses a newer file and tells the farm to update the
+     app, which is the one thing this product cannot do.** `backupRefusal` is
+     correct and its two messages both end *"Update the app and try again."*
+     There is no updater `[23]`, no store listing yet, and on the shelf route
+     no notification that a newer build exists. The guard is right; the remedy
+     it names does not exist, and that pairing is worse than either alone —
+     it is a farm holding its own records in a file the app has told them is
+     readable by a version they cannot get.
+
+153. **`MUTATION_SCHEMA_VERSION` has never been bumped, so the envelope ladder
+     has never run.** `migrate.ts` says so in a comment: *"Empty today."* A8's
+     whole claim — a device offline three weeks across two releases syncs
+     cleanly — rests on a mechanism with zero exercised steps, and the first
+     bump is both the first test and a production event.
+
+154. **No migration test starts from a real database file.** Migrations are
+     tested as statements. Nobody has a v1 file written by a shipped build and
+     walked forward to v7, which is the only test that catches a migration that
+     is wrong about what the previous one actually produced on a device.
+
+155. **The reverse skew has no rule.** N−1 is specified for a client meeting a
+     newer server. A *newer client* meeting an older server — trivially
+     reachable, since the box deploys on its own timer and an APK build takes
+     thirteen minutes longer than the server half — is unspecified.
+
+156. **A bad build has no route back at all.** Android refuses a `versionCode`
+     downgrade, uninstalling takes the farm, `allowBackup` is off, and the
+     database has no downgrade path. Item `[26]` names the release-side
+     rollback; this is the device-side half, and it is the reason `[26]` is
+     harder than it looks.
+
+## 22. Seams — where two well-built things meet
+
+157. **Google sign-in and Play App Signing will collide, in production, for
+     everybody at once.** An Android OAuth client is keyed to the signing
+     certificate's fingerprint. Play re-signs the app, so the fingerprint that
+     must be registered is Play's, not the farm's key — and sign-in works from
+     the shelf and fails from the store, or the reverse, depending on which
+     fingerprint is registered. Both routes are meant to exist `[9]`, which
+     means both fingerprints must be registered and nobody has established
+     that. This is the sharpest item in either sweep.
+
+158. **The Google OAuth consent screen needs verification, and unverified apps
+     are capped.** Verification wants a privacy policy `[1]`, a verified domain
+     and a review. Until then the app shows an unverified-app warning and is
+     limited to a small number of users. It is a second queue with a calendar,
+     alongside `[10]`, and nothing counts it.
+
+159. **The nightly `mongodump` copies every photo, every night.** Photo bytes
+     live in GridFS in the same database `blobsFor(orgId)` uses, so a full dump
+     is a full copy of every image the farm has ever uploaded — encrypted,
+     pushed to S3, and repeated tomorrow. The backup grows without bound, the
+     window grows with it, and §4.1a prices the storage against *records*.
+     Excluding the bucket, dumping it separately, or moving to incremental was
+     never considered, and the S3-successor plan `[4A]` changes the shape of
+     this rather than removing it.
+
+160. **The forecast is United States only and the price is worldwide.** Play
+     sells into whatever countries are enabled. A farm in Ireland pays $39 for
+     an app whose forecast, official alerts and hardiness zones do not work
+     where they live. Restricting distribution, or saying it on the listing, is
+     a decision; charging for it silently is not.
+
+161. **`forgetDatabase` is one of four things on that device.** Handing the
+     tablet on also has to take the cached photo files, the queued support
+     tickets in their own SQLite table, the secure-store tokens and any local
+     backup file sitting in Downloads. C5 covers the database and the photo
+     cache; the other two arrived later and nothing revisited the list.
+
+162. **The local backup file is the whole farm in readable JSON, and it leaves
+     through the share sheet.** Downloads, Drive, a chat app — wherever the
+     farm sent it, unencrypted, indefinitely. That is the right default for
+     recoverability and it has no warning and no optional passphrase, and it
+     sits oddly beside a design that rounds coordinates to a kilometre on the
+     way in.
+
+163. **An export is not a complete copy, and does not say so.** Photo bytes are
+     not in it. §12c covers the restore side of that gap; the export side means
+     a farm that exports everything before wiping a device has not, in fact,
+     got everything.
+
+164. **The support bundle is content-free and the gist beside it is not.** S1 is
+     scrupulous — structure and counts, a hashed org key, `.strict()` so nothing
+     rides along. The opt-in half is then the farm's actual records, in a gist,
+     with no expiry `[66]`. The join between the two is where the care in S1
+     stops applying, and nothing says so.
+
+165. **The shelf is served by the API.** `/app` hands out a 92 MB APK from the
+     same Fastify process that serves sync, on a box whose egress is the free
+     tier's. One scraper, or one farm on a bad connection retrying, competes
+     with every farm's morning flush. Nothing rate-limits the download, caches
+     it at an edge, or separates the two jobs.
+
+166. **The join code and the invite solve the same problem with different
+     security models**, and which one a farm should use is a UX decision
+     nobody has written: `PICK-UP-HERE.md` §5 says "redeem it on the second
+     device rather than signing in, if the aim is a second person" — which is
+     the whole guidance that exists, and it is in a document that goes stale by
+     design.
+
+## 23. The physical world the product is for
+
+The field-usability rules are the best-argued part of `UX-SPEC.md` and they are
+about *seeing* and *reaching*. None of this section is about either.
+
+167. **Capacitive touch does not work through wet or muddy gloves.** The entire
+     rubric — 56px targets, gloved operation, five seconds to a logged egg
+     count — assumes the tap registers. A wet glove does not register at all,
+     and a wet *screen* registers taps nobody made. This is the physical
+     precondition of every interaction rule in the spec and it is not mentioned
+     once. It is also the strongest argument for voice `[76]`, which is the
+     other thing not mentioned.
+
+168. **Cold shuts phones down.** A lithium battery at −5 °C reports 40% and
+     dies. The morning chores this app is designed around are the coldest hour
+     of the day, and the app's answer to a dead phone mid-log is the same as its
+     answer to anything else — the queue survives — which is true and is not the
+     same as having thought about it.
+
+169. **Rain, dust, and a dropped handset** are the ordinary condition of the
+     yard. A rugged case changes the grip, which changes the reach assumptions
+     in `[71]`, and a farm's device is likelier than most to be replaced
+     mid-season — which is the continuity path `[27]` and `[162]` both touch.
+
+170. **Maximum brightness in direct sun is the fastest way to empty the battery
+     in item 168.** The contrast rules solve the seeing half and create the
+     power half.
+
+171. **There is no night mode, only a dark theme.** Lamplight is a beautiful
+     dark palette and it is still a bright white-point screen in a dark barn at
+     5am, which wrecks night vision and wakes the birds. A red-shifted mode is a
+     genuine field feature and is a different thing from `userInterfaceStyle`.
+
+172. **Machinery is loud and ears are protected.** Any audio feedback is
+     useless in the one place iron is worked on. Haptics already carry
+     confirmation, which means the app is accidentally right here — worth
+     writing down as a rule so it stays right.
+
+173. **One hand is holding something.** Not the phone — a bucket, a bird, a
+     torch, a gate. The spec's one-handed reach requirement is about which
+     thumb; the harder version is that the interaction may need to complete
+     with no hands free at all, which again is voice.
+
+## 24. Data quality at the point of entry
+
+The app is excellent at *taking back* a wrong number (A10, and it is one of the
+best-argued rules in the project). It does nothing to *prevent* one.
+
+174. **No figure is checked for plausibility, anywhere.** Forty eggs from six
+     hens, a 900 kg goat, a service interval of twelve hours, a harvest of two
+     tonnes from a raised bed — all accepted in silence. A soft "that looks
+     unusual, is it right?" is not a validation rule and does not block; the
+     app's own thesis is that mistypes are a weekly event, and the entire
+     response to that is downstream.
+
+175. **The wrong-subject error has no defence and leaves no trace.** Logging
+     against the group above the one intended, on a list of similar names, in
+     the dark, is the likeliest mistake this app can absorb — and afterwards it
+     is indistinguishable from a correct record. A confirmation that names the
+     subject in the exhale — *"Twelve, in the big coop"* — costs nothing and is
+     the one moment a person can catch it.
+
+176. **The double-log is not detected.** The same tally entered twice at 6:02
+     and 6:03, because the first did not look like it saved, is two records and
+     a permanently wrong day.
+
+177. **Nothing prevents duplicate entities.** Two groups called "Big coop", two
+     machines with one serial number, two varieties of the same cultivar.
+
+178. **Free text is not normalised.** "Big Coop" and "big coop " are two things
+     forever, and the app's own search `[134]` — when it exists — will treat
+     them as such.
+
+179. **There is no undo on the screen that just wrote.** Correction is per
+     record from the record's own screen, which is the right permanent
+     mechanism and a slower gesture than the moment deserves.
+
+180. **A farm hand's mistakes and an owner's are indistinguishable.** The author
+     is recorded server-side and no screen shows it `[127]`, so the person best
+     placed to spot a wrong entry cannot see whose it was.
+
+## 25. Money, deeper than the price
+
+`ACCESS-AND-BILLING.md` decides the number, the tier, the gate and the refusal
+copy, and maps Play's states to three of its own with a good argument. What
+follows is the mechanics underneath that map.
+
+181. **Play auto-refunds a purchase that is not acknowledged within three
+     days.** It is a server obligation, it is the single most common way a new
+     Play Billing integration loses money silently, and the word
+     "acknowledge" appears nowhere in this repository. The purchase flow is
+     documented as unbuilt, which covers the *existence* of the work and not
+     this deadline inside it.
+
+182. **Restoring a purchase on reinstall is unspecified.** A farm that wipes a
+     device and comes back must not have to buy again, and the entitlement is
+     keyed to an org while the purchase is keyed to a Google account.
+
+183. **Those two keys can diverge.** One farm with two Google accounts, or a
+     farm sold with its org intact, breaks the join between purchase and
+     entitlement in opposite directions.
+
+184. **A price change needs consent, notice and a flow.** Play requires all
+     three for existing subscribers, and the annual term `[4.3]` means the
+     first one lands a year after launch, when nobody is thinking about it.
+
+185. **Auto-renewal disclosure is regulated.** US state statutes and the EU
+     withdrawal right both prescribe what the purchase screen says and how
+     cancellation is reached. The copy is written with unusual care already;
+     it has not been written against these.
+
+186. **There is no refund position of our own** for the farm that pays and then
+     cannot sync because the box was down for three days.
+
+187. **Regional pricing is undecided.** $39 is a US number and Play's local
+     defaults will produce figures that are absurd in some markets — which
+     interacts with `[160]`, since the markets where the price is strangest are
+     the ones where the weather half does not work.
+
+188. **The entitlement direction of truth is unstated.** When Play says entitled
+     and the server disagrees — a lost real-time notification, an unverified
+     token — nothing says which side wins or how it reconciles. Given the sync
+     gate is the only paid thing, the wrong answer locks a paying farm out.
+
+189. **One tier is a decision that needs restating as the farm grows.** It is
+     the right call and it is currently a fact about the code rather than a
+     commitment, and `[119]`'s sales question is the first thing that will
+     press on it.
+
+## 26. The service as a promise
+
+This product's entire pitch is that a record survives. Every item here is about
+the farm's records outliving the person who wrote the app.
+
+190. **The bus factor is one and it is undocumented.** Not a criticism of the
+     work — a description of a risk that this specific product makes worse than
+     most, because a farm is asked to trust it with a decade of records.
+
+191. **There is no sunset commitment.** What a farm gets if this stops: a final
+     build that works offline forever, an export window, and a promise the app
+     keeps functioning without the server. The architecture already delivers
+     every part of that — D9 and the offline engine mean the app is genuinely
+     useful with the server switched off — and nobody has said so anywhere a
+     farm can read.
+
+192. **`OPERATOR.md` is commands, not custody.** A second person could run the
+     day-to-day; they could not take over the keystore, the `age` key, the
+     Atlas account, the DNS registrar, the Play account or the Google Cloud
+     project, because nothing lists them as things that have owners.
+
+193. **Nothing covers a fortnight of illness during lambing.** The support loop
+     assumes somebody reads the issues.
+
+194. **The support load has no model.** One person, GitHub issues, and farms
+     whose mornings break at the same hour. The dedup work `[S3]` is the only
+     part of this that has been sized.
+
+195. **Nothing says what happens to a farm's server data if the service ends.**
+     It is the same question as `[5]` from the other direction and it is the one
+     a farm would actually ask.
+
+## 27. Found while reading the code
+
+196. **`trend.ts` starts its week on Monday** — `(getDay() + 6) % 7`, which is
+     ISO and correct — in an app that defaults to imperial, forecasts from the
+     US National Weather Service and ships USDA hardiness zones. A US farm's
+     weekly chart will disagree with every other calendar they own. It is one
+     line and a setting, and it is the kind of thing that is free now and a
+     data-comparison question later.
+
+197. **The scroll belongs to `Screen`, which makes `[130]` a component change
+     rather than a screen change.** Worth knowing before that work is scoped:
+     every screen inherits the decision, so the fix is one place and the
+     regression surface is everywhere.
+
+198. **`SqlStalledError` is a named, well-argued diagnosis with nowhere to go.**
+     It exists because a handset deadlock produces no message, no log line and
+     no crash report — and it is not in the support bundle's error signatures,
+     so the farm sees a failure and the author still gets nothing.
+
+199. **A restore counts its refusals and cannot retry them.** `runRestore`
+     reports how many records were refused and the first reason, deliberately
+     continuing past each one. There is no second pass, so those records are
+     lost from a file the farm still has.
+
+200. **The backup filename is dated to the day**, so two backups taken on one
+     day collide in most file pickers — which is exactly what a farm does on
+     the day it is nervous enough to take two.
+
+201. **`deviceId` is regenerated when unreadable**, with a comment saying it
+     only groups sequences. That is probably right and it is the sort of
+     "probably" that ordering invariants are made of: a fresh id restarts
+     `clientSeq` at zero, and nothing has confirmed that a device which loses
+     its id mid-life cannot produce two live sequences the server orders
+     against each other.
+
+## 28. The documents themselves
+
+Eleven and a half thousand lines across twenty files, and they are the best
+thing about this project. These are the gaps in them *as a set*.
+
+202. **There is no index.** `CLAUDE.md` gives a reading order to a machine.
+     A person arriving at `docs/` gets twenty filenames.
+
+203. **Nothing checks the documents against each other, and drift has already
+     produced one contradiction** — `ROADMAP.md:477` said backups were done
+     while `PICK-UP-HERE.md` said they were not, caught by hand. A short test
+     that greps for a handful of load-bearing claims is cheap.
+
+204. **Decisions are numbered in seven different sequences** — D, P, A, B, C, R,
+     S, W, N — across as many documents, with no map from a number to the file
+     that owns it.
+
+205. **Only `PICK-UP-HERE.md` declares its own staleness.** The others carry no
+     date, no freshness expectation, and no marker for the sections that were
+     true when written.
+
+206. **There is no `CONTRIBUTING.md` and no path for a second developer**, which
+     is item `[192]`'s other half and the cheaper half.
+
+207. **There is no glossary.** Steading, flock-as-a-wire-name, tally, iron,
+     plaster, worn, burrow, the arch, the exhale. A newcomer — or an
+     accountant, or a vet, or the second developer — meets all of them
+     undefined.
+
+---
+
 ## What to do with this
 
 **A running order exists: [`UNCONSIDERED-PHASES.md`](UNCONSIDERED-PHASES.md).**
@@ -826,8 +1192,7 @@ that are real and marks the rest as judgement. This list stays unordered on
 purpose — it is the evidence, and the argument about priority belongs in one
 file rather than in the margins of this one.
 
-Three things are worth pulling out of the list, and they are the three that are
-not features:
+Four things are worth pulling out, and none of them is a feature:
 
 1. **Items 1–4 and 8–10 are a launch blocker with a calendar attached.** A
    privacy policy, terms, a data-safety declaration, an account-deletion route,
@@ -837,5 +1202,10 @@ not features:
 3. **§4 is one piece of engineering** — define the day, store the zone, stop
    doing calendar arithmetic in milliseconds — and every number the app shows
    depends on it.
+4. **Item 157 is a trap with a delay on it.** Google sign-in is keyed to the
+   signing certificate, Play re-signs, and both install routes are meant to
+   exist. It works in every test you can run today and fails in production, for
+   everybody, on the day the store route opens. It costs one registered
+   fingerprint to avoid and a support inbox to discover.
 
 Everything else is product, and product is what the roadmap is for.
