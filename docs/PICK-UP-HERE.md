@@ -1,6 +1,7 @@
 # Pick up here
 
-**Last worked: 16 August 2026.** The server is live. The app still has not been
+**Last worked: 16 August 2026.** The server is live and the app now builds,
+signs and archives itself on a GitHub runner. It still has not been
 pointed at it, and that still needs the tablet — but the *route* to a tablet
 changed today, and §0 is the record of that.
 
@@ -12,9 +13,10 @@ This file is a point-in-time note, not a spec. It goes stale by design.
 
 ## 0. Where 16 August left things
 
-Three threads, and all three are now built and unverified. The half-done one —
-the box still pulling from EAS — was finished later the same day; what every
-one of them is waiting on is the same thing, a promote and a tablet.
+Three threads. The box-pulls-from-EAS half was finished later the same day, and
+**the APK pipeline now works end to end** — `v0.1.14+18` exists, built and
+signed on a runner. What the other two are still waiting on is the same thing
+it always was: a promote, and a tablet.
 
 ### The landscape layout — merged, never seen on a device
 
@@ -44,7 +46,7 @@ on a compact window and the bottom **outer corners** on an expanded one,
 because a tablet in landscape is held in two hands and the centre-bottom is a
 dead spot. Nothing about a phone changed.
 
-### The APK now builds on a GitHub runner — merged, first run in flight
+### The APK now builds on a GitHub runner — and, after four runs, works
 
 **Issue #153** is what set this off. A promote hit EAS's monthly free-tier
 Android build cap: the server shipped, the app build was refused, and the step
@@ -165,8 +167,37 @@ Two things that run settled, both worth keeping:
   the keystore — and it can be corrected before the next run rather than after
   it.
 
-**Whether the key is the *right* one is still unproven**, because no comparison
-has ever run. The next build is the first that can answer it.
+#### Run 3 was green. The build half is done
+
+[31927760927](https://github.com/SteveWeed79/steading/actions/runs/31927760927),
+at `f149da8`. Build, sign, verify, publish — all of it — and
+**[`v0.1.14+18`](https://github.com/SteveWeed79/steading/releases/tag/v0.1.14%2B18)
+carries `steading-0.1.14-18.apk`**, published 05:10 on 16 August.
+
+The key was right the whole time. `ANDROID_CERT_SHA256` matches the APK's
+certificate exactly, 64 characters, no formatting problem — so the comparison
+that four runs never reached passes on the first attempt it got. **Every one of
+those failures was the parser, not the keystore and not the secrets.** Worth
+saying plainly because the wrong diagnosis was offered more than once, and the
+evidence against it was in the run all along: the preflight step that exits on
+a missing secret (`The signing key has to be here`) reports success in every
+run, and the string `Signing secrets are not set` appears nowhere in any log.
+
+So this is now proven, on a real runner, with no Expo account and no quota
+anywhere in the path:
+
+| | |
+|---|---|
+| Gradle builds and signs | ~13 minutes |
+| The APK is what it claims | package, `0.1.14`, versionCode 18 |
+| Signed by the farm's key | certificate matches the secret |
+| Archived | a Release, tagged at the commit it was built from |
+
+**What has still never run is the box half.** `deploy.sh` resolving its commit
+to a tag and fetching the release has not been exercised once, and it cannot be
+by a standalone build: this release is tagged at `main`'s tip, which is not the
+commit `release` points at, so no box will look for it. That is deliberate, and
+it means the next promote is the first real test of the second half.
 
 #### A defect found while writing this section, and fixed
 
@@ -320,31 +351,25 @@ which is new every build and dies after thirty days.
 Three things to watch, in this order, because each one is the first time its
 step has run for real:
 
-1. **The APK job goes green.** Two promotes have now died at the signature
-   check, so read what it says rather than assuming which failure it is. It
-   prints the `apksigner` output it could not parse, and the fingerprint length
-   when a comparison did happen. **Only one of its messages is a stop**: two
-   64-character fingerprints that differ means the keystore is not the one EAS
-   has been signing with, and nothing should ship until that is understood.
-   Everything else it can say is a parsing or a secret-formatting problem.
+1. **The APK job goes green.** It already has, standalone — see §0. It should
+   need no watching now, and the one message that is still a **stop** is two
+   differing 64-character fingerprints: that would mean the keystore had
+   changed under us, and nothing should ship until it is understood. Anything
+   else it says is a parsing or secret-formatting problem, and it prints the
+   `apksigner` output it could not read so the next one names itself.
 
-   **Prove it with a standalone APK run before promoting again.** Actions →
-   APK → Run workflow builds and signs at whatever `main` is, for the same
-   thirteen minutes, without cutting a version or moving `release` — and the
-   signature check is the only thing still unproven, so that is the cheap way
-   to settle it. `bump: none` is *not* the way to do this: it skips the app job
-   altogether, which is the whole point of that option.
-
-   Once it is green, promote normally with `bump: patch`. The version is
-   already at **0.1.14** — the release job pushed that bump before the app job
-   failed — so a promote cuts 0.1.15, and the standalone run's `v0.1.14+18`
-   release just sits in the archive, tagged at a commit no box serves and
-   therefore never fetched.
-2. **The box publishes it.** `sudo /opt/steading/scripts/deploy/deploy.sh` says
-   `fetching 0.1.14` and then `/app/steading.apk now serves it`; on the timer it
+   Expect **0.1.15**, versionCode **19** — one past the 18 already released.
+2. **The box publishes it. This is the part that has never run.** Everything up
+   to the release is proven; `deploy.sh` resolving its commit to a tag and
+   fetching the asset has not been exercised once, and a standalone build
+   cannot exercise it. `sudo /opt/steading/scripts/deploy/deploy.sh` should say
+   `fetching 0.1.15` and then `/app/steading.apk now serves it`; on the timer it
    happens within five minutes of the release appearing. If it says
    `nothing to publish for this commit`, the line above it on stderr gives the
    reason — no tag on this commit, no APK on the release, still uploading.
+
+   Worth running by hand the first time rather than waiting on the timer, so
+   the output is in front of somebody who can read it.
 3. **The install page shows the version.** `https://api.swbuild.dev/app`.
 
 To build without promoting — a signing fix to prove out — **Actions → APK → Run
