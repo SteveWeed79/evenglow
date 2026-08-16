@@ -1,9 +1,9 @@
 # Pick up here
 
-**Last worked: 16 August 2026.** The server is live and the app now builds,
-signs and archives itself on a GitHub runner. It still has not been
-pointed at it, and that still needs the tablet — but the *route* to a tablet
-changed today, and §0 is the record of that.
+**Last worked: 16 August 2026.** The server is live, and the app now builds,
+signs, archives and *reaches the shelf* on its own — one button, no manual step
+in the middle. What is left needs a tablet in somebody's hands, which no amount
+of CI can stand in for. §0 is the record of how the route got here.
 
 This file is a point-in-time note, not a spec. It goes stale by design.
 `DEPLOY-THE-SERVER.md` is the durable version for the server; for the app,
@@ -13,10 +13,10 @@ This file is a point-in-time note, not a spec. It goes stale by design.
 
 ## 0. Where 16 August left things
 
-Three threads. The box-pulls-from-EAS half was finished later the same day, and
-**the APK pipeline now works end to end** — `v0.1.14+18` exists, built and
-signed on a runner. What the other two are still waiting on is the same thing
-it always was: a promote, and a tablet.
+Three threads. **Two of them are finished and proven on real hardware:** the
+box no longer pulls from EAS, and the whole promote-to-shelf chain ran
+unattended — `v0.1.15+19` is on the box and served at `/app`. The landscape
+layout is the one still waiting on the thing it always was: a tablet.
 
 ### The landscape layout — merged, never seen on a device
 
@@ -243,11 +243,12 @@ on the part of the file that is not judgement and cannot be moved.
 > with derivation. `TESTING-BUILD.md` §7 and the code are correct; the PR body
 > is not.
 
-### The box pulls the Release now — built, unverified
+### The box pulls the Release now — and has done it, on the real box
 
-**This was the open work and it is done.** Both parts, as they were set out
-here, plus the tested `.mjs` the note asked for. Nothing has run end to end yet;
-that needs a promote, which is §1 below.
+**This was the open work and it is done** — both parts as they were set out
+here, plus the tested `.mjs` the note asked for, **and it has now run on the
+box.** `v0.1.15+19` was resolved from the deployed commit, fetched and
+published without anybody touching the shelf. §1 has the whole run.
 
 | | |
 |---|---|
@@ -337,44 +338,62 @@ exits 1. The real fix is in PR #100; the drop-in can go once that merges and
 
 ## Next, and it needs the tablet
 
-### 1. Promote, which now builds the APK and puts it on the shelf
+### 1. Promote — done, and the whole chain is proven
 
-**Actions → CI → Run workflow**, `bump: patch`. One button, and it does the
-whole chain: verify, move `release`, build the APK at the promoted commit on a
-runner, attach it to a release tagged at that commit. The box deploys the server
-within five minutes and publishes the APK to `https://api.swbuild.dev/app` on a
-tick after the build finishes.
+**This step is finished.** `v0.1.15+19` was promoted on 16 August and reached
+the shelf with nothing manual in the middle. What ran, in order, and all of it
+unattended:
 
-**That address is the install link** — a constant, unlike an EAS artefact url,
-which is new every build and dies after thirty days.
+| | |
+|---|---|
+| **Actions → CI → Run workflow**, `bump: patch` | verify, container |
+| `release` job | version 0.1.14 → 0.1.15, `release` moved to `6bc6b2d` |
+| `app` job (`apk.yml`) | prebuild, 13 min of Gradle, sign, verify |
+| Release published | `v0.1.15+19`, **tagged at `6bc6b2d`** |
+| The box, on its own timer | deployed `6bc6b2d` before anybody logged in |
+| `deploy.sh` | `v0.1.15+19 -> steading-0.1.15-19.apk`, 92 MB fetched, published |
 
-Three things to watch, in this order, because each one is the first time its
-step has run for real:
+`https://api.swbuild.dev/app` now serves `steading-0.1.15-19.apk`. **That
+address is the install link** — a constant, unlike an EAS artefact url, which
+is new every build and dies after thirty days.
 
-1. **The APK job goes green.** It already has, standalone — see §0. It should
-   need no watching now, and the one message that is still a **stop** is two
-   differing 64-character fingerprints: that would mean the keystore had
-   changed under us, and nothing should ship until it is understood. Anything
-   else it says is a parsing or secret-formatting problem, and it prints the
-   `apksigner` output it could not read so the next one names itself.
+**The tag landing on `6bc6b2d` is the part that had to be right**, and it is
+why `ci.yml` hands the promoted sha to `apk.yml` rather than letting it default.
+The version-bump commit does not exist when the run starts; without that input
+the tag lands a commit early and the box looks for it forever.
 
-   Expect **0.1.15**, versionCode **19** — one past the 18 already released.
-2. **The box publishes it. This is the part that has never run.** Everything up
-   to the release is proven; `deploy.sh` resolving its commit to a tag and
-   fetching the asset has not been exercised once, and a standalone build
-   cannot exercise it. `sudo /opt/steading/scripts/deploy/deploy.sh` should say
-   `fetching 0.1.15` and then `/app/steading.apk now serves it`; on the timer it
-   happens within five minutes of the release appearing. If it says
-   `nothing to publish for this commit`, the line above it on stderr gives the
-   reason — no tag on this commit, no APK on the release, still uploading.
+**The failure path was observed too, by accident and usefully.** A `deploy.sh`
+run seven minutes before the build finished printed
+`no app release tag on this commit — the shelf keeps what it has` and
+`nothing to publish for this commit`, then left the existing APK alone. That is
+the designed behaviour for "the build is still running", and it has now been
+seen on the real box rather than only in tests.
 
-   Worth running by hand the first time rather than waiting on the timer, so
-   the output is in front of somebody who can read it.
-3. **The install page shows the version.** `https://api.swbuild.dev/app`.
+> **One cosmetic wart, found on the page and fixed.** It read
+> `Version 0.1.15-19` where the wording is meant to be
+> `Version 0.1.15 · build 19`. The box has no `aapt2` and is not getting one, so
+> `publish-apk.sh` could not read the numbers out of the APK and printed the
+> label `deploy.sh` had passed — a filename stem dressed as a version.
+>
+> The label is `<version>-<code>`, so both numbers were there and simply never
+> taken apart. They are now, which makes the name, the *Publishing* line and the
+> stamp all come from one place, and gives a box with no Android SDK the same
+> output as a machine with one. **The filename is deliberately unchanged** —
+> `deploy.sh`'s "already serving" check compares against
+> `steading-<version>-<code>.apk`, and renaming it would have made every box
+> re-download ninety megabytes on the next tick.
+>
+> `deploy.sh`'s own recovery stamp — the one that reads the symlink when
+> `.version` is missing — got the same split, because two writers of one line on
+> one shelf disagreeing would look like the box had changed its mind about what
+> it was serving. Labels that are not `<version>-<code>` (`nightly`,
+> `0.1.15-rc1`) are still left whole, and the timestamp fallback still produces
+> no stamp at all rather than a number that means nothing.
 
-To build without promoting — a signing fix to prove out — **Actions → APK → Run
-workflow** still works and leaves the shelf alone, deliberately: it is not built
-at a commit any box is serving.
+To build **without** promoting — a signing fix to prove out — **Actions → APK →
+Run workflow** still works and leaves the shelf alone, deliberately: it is not
+built at a commit any box is serving. `v0.1.14+18` is such a build and sits in
+the archive unfetched, which is the proof that rule holds.
 
 The EAS route also still works by hand (`eas build --profile preview-farm`,
 **not** `preview` — the profile carries `EXPO_PUBLIC_API_URL` and `preview`
