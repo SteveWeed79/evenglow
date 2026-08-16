@@ -142,6 +142,41 @@ fi
 
 LABEL="${2:-}"
 
+# ── The label knows the two numbers; read them out of it ────────────────────
+#
+# **Without this the install page said `Version 0.1.15-19`.** The stamp further
+# down renders `Version <version> · build <code>` when `aapt2` supplied both and
+# fell back to printing the label verbatim when it did not — and the box has no
+# Android SDK and is not getting one, so on this box the fallback is the only
+# path there is. A filename stem dressed up as a version number is what a tester
+# actually saw.
+#
+# The label is `<version>-<code>` because that is what `deploy.sh` builds it
+# from, so the two numbers are in there; they were simply never taken apart.
+# Splitting them here rather than at the stamp means the name, the "Publishing"
+# line and the stamp all come from one place, and a caller that passes a label
+# in the documented form gets the same output as a machine with `aapt2` on it.
+#
+# Guarded, and only a label that really is `<version>-<code>` is split: the
+# version must start with a digit and contain a dot, the code must be all
+# digits. Anything else — `nightly`, `for-sarah` — is left whole and still
+# names the file, which is the behaviour that was there before.
+if [ -z "$VERSION" ] && [ -n "$LABEL" ]; then
+  case "$LABEL" in
+    [0-9]*.*-*)
+      MAYBE_VERSION="${LABEL%-*}"
+      MAYBE_CODE="${LABEL##*-}"
+      case "$MAYBE_CODE" in
+        '' | *[!0-9]*) ;;
+        *)
+          VERSION="$MAYBE_VERSION"
+          CODE="$MAYBE_CODE"
+          ;;
+      esac
+      ;;
+  esac
+fi
+
 if [ -n "$VERSION" ] && [ -n "$CODE" ]; then
   NAME="steading-${VERSION}-${CODE}.apk"
   say "Publishing Steading $VERSION (versionCode $CODE)"

@@ -369,12 +369,26 @@ run seven minutes before the build finished printed
 the designed behaviour for "the build is still running", and it has now been
 seen on the real box rather than only in tests.
 
-> **One cosmetic wart, unfixed.** The install page reads
-> `Version 0.1.15-19` where the intended wording is `Version 0.1.15 · build 19`.
-> The box has no `aapt2` and is not getting one, so `publish-apk.sh` cannot read
-> the APK and falls back to the label `deploy.sh` passed — which is the filename
-> stem. Harmless, visible to a tester, and the fix belongs in
-> `publish-apk.sh`'s `STAMP` fallback.
+> **One cosmetic wart, found on the page and fixed.** It read
+> `Version 0.1.15-19` where the wording is meant to be
+> `Version 0.1.15 · build 19`. The box has no `aapt2` and is not getting one, so
+> `publish-apk.sh` could not read the numbers out of the APK and printed the
+> label `deploy.sh` had passed — a filename stem dressed as a version.
+>
+> The label is `<version>-<code>`, so both numbers were there and simply never
+> taken apart. They are now, which makes the name, the *Publishing* line and the
+> stamp all come from one place, and gives a box with no Android SDK the same
+> output as a machine with one. **The filename is deliberately unchanged** —
+> `deploy.sh`'s "already serving" check compares against
+> `steading-<version>-<code>.apk`, and renaming it would have made every box
+> re-download ninety megabytes on the next tick.
+>
+> `deploy.sh`'s own recovery stamp — the one that reads the symlink when
+> `.version` is missing — got the same split, because two writers of one line on
+> one shelf disagreeing would look like the box had changed its mind about what
+> it was serving. Labels that are not `<version>-<code>` (`nightly`,
+> `0.1.15-rc1`) are still left whole, and the timestamp fallback still produces
+> no stamp at all rather than a number that means nothing.
 
 To build **without** promoting — a signing fix to prove out — **Actions → APK →
 Run workflow** still works and leaves the shelf alone, deliberately: it is not

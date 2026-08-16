@@ -241,10 +241,24 @@ if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
   # "Version 20260814-0412" would be a number that means nothing dressed up as
   # one that means something — so a leading digit and a dot are required, which
   # `20260814-0412` has not got.
+  #
+  # Worded the same way `publish-apk.sh` words it, and that is the point of
+  # splitting the code off rather than printing the stem: these two are the only
+  # writers of this line, they render the same shelf, and a recovery path that
+  # said `Version 0.1.15-19` where the ordinary path says
+  # `Version 0.1.15 · build 19` would look like the box had changed its mind
+  # about what it was serving.
   if [ -z "$STAMP" ] && [ -L /var/lib/steading/dist/steading.apk ]; then
     ON_SHELF="$(basename "$(readlink /var/lib/steading/dist/steading.apk)" .apk)"
     ON_SHELF="${ON_SHELF#steading-}"
     case "$ON_SHELF" in
+      [0-9]*.*-*)
+        SHELF_CODE="${ON_SHELF##*-}"
+        case "$SHELF_CODE" in
+          '' | *[!0-9]*) STAMP="Version ${ON_SHELF}" ;;
+          *) STAMP="Version ${ON_SHELF%-*} · build ${SHELF_CODE}" ;;
+        esac
+        ;;
       [0-9]*.*) STAMP="Version ${ON_SHELF}" ;;
     esac
   fi
