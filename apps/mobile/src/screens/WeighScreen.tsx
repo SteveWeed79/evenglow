@@ -2,10 +2,10 @@ import { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import {
   formatMass,
-  gramsToUg,
+  MASS_ENTRY_CHOICES,
+  type MassEntryUnit,
+  massEntryToUg,
   newId,
-  ouncesToUg,
-  poundsToUg,
   type UnitSystem,
 } from '@steading/contracts';
 import { listAnimals } from '@steading/core/read/animals';
@@ -50,32 +50,22 @@ import { FONTS, TYPE } from '../theme/tokens';
  * metric later reads the same records back exactly rather than approximately.
  */
 
-type Unit = 'lb' | 'oz' | 'kg' | 'g';
+/**
+ * The entry units and their conversions moved to `contracts/units.ts`.
+ *
+ * They were defined here first and then wanted by `HarvestScreen`, which had
+ * been written with pounds and ounces hardcoded and no reference to the
+ * setting at all. Two screens is where a table like this stops being one
+ * screen's business — and the reasoning below travelled with it, because it is
+ * the reason the table exists rather than a comment about its shape.
+ */
+type Unit = MassEntryUnit;
 
 const UNIT_LABELS: Record<Unit, string> = {
   lb: 'Pounds',
   oz: 'Ounces',
   kg: 'Kilos',
   g: 'Grams',
-};
-
-/**
- * The two a farm is offered, and which of them it starts on.
- *
- * A metric farm being asked for pounds is the setting failing out loud. The
- * heavier unit leads because it is the answer nine weighings in ten — ounces
- * and grams are for chicks and for fibre off one animal.
- */
-const UNIT_CHOICES: Record<UnitSystem, readonly [Unit, Unit]> = {
-  imperial: ['lb', 'oz'],
-  metric: ['kg', 'g'],
-};
-
-const TO_UG: Record<Unit, (value: number) => number> = {
-  lb: poundsToUg,
-  oz: ouncesToUg,
-  kg: (value) => gramsToUg(value * 1000),
-  g: gramsToUg,
 };
 
 /**
@@ -88,7 +78,7 @@ const TO_UG: Record<Unit, (value: number) => number> = {
  */
 function toMass(raw: string, unit: Unit): number | null {
   const value = Number(raw);
-  return Number.isFinite(value) && value > 0 ? Math.round(TO_UG[unit](value)) : null;
+  return Number.isFinite(value) && value > 0 ? massEntryToUg(value, unit) : null;
 }
 
 type Mode = 'each' | 'queue' | 'averaged';
@@ -179,7 +169,7 @@ export function WeighScreen({ route }: ScreenProps<'Weigh'>): React.ReactElement
 
   const { saving, failure, save } = useSaver(useLeave());
 
-  const choices = UNIT_CHOICES[units];
+  const choices = MASS_ENTRY_CHOICES[units];
   // A tap made before the site read landed could name a unit the farm's system
   // does not offer. Falls back to the heavier of the two rather than showing a
   // picker with nothing selected.

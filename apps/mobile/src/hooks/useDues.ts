@@ -144,7 +144,11 @@ export function useDues(): DuesView {
 
     for (const group of groups) {
       for (const active of withdrawals.get(group.id) ?? []) {
-        rows.push(withdrawalDue(active, group.name));
+        // Null for a course still being dosed: the produce stays held and the
+        // banner says so, but there is no date for a row to point at. See
+        // `withdrawalDue`.
+        const row = withdrawalDue(active, group.name);
+        if (row !== null) rows.push(row);
       }
 
       /**

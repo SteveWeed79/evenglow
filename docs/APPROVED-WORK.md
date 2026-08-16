@@ -27,35 +27,69 @@ is unambiguous and nothing on the reject list gets quietly picked up later.
 Each of these was confirmed by reading the code. Two are in files that comment
 on the exact failure they then permit.
 
-- [ ] **Seed `SiteSetupScreen` from the site record.** **GA**
+- [x] **Seed `SiteSetupScreen` from the site record.** **GA**
       It opens on hardcoded May 15 / Oct 5 and writes them over the farm's real
       frost dates on save, stamped `source: 'entered'`. Silent, and every sow
       window, transplant date, autumn count-back, brooding date and cold-birth
       warning reads those numbers. *Fix before anything else on any list.*
-- [ ] **Hold produce indefinitely on an open treatment course.** **GA**
+- [x] **Hold produce indefinitely on an open treatment course.** **GA**
       `withdrawalClearsAt` counts from the first dose when there is no end date,
       which clears produce while the animal is still being dosed. Safe to do
       because `stillGoing` initialises `false` — only an explicitly-open course
       would hold.
-- [ ] **Ask for the real last-dose date when closing a course.** **GA-c**
+- [x] **Ask for the real last-dose date when closing a course.** **GA-c**
       Not in the assessment. Closing stamps today, so a course finished Tuesday
       and closed Friday invents three days of withdrawal — the safe direction,
       still a wrong number in a record a regulator may read.
-- [ ] **Audit every edit screen for the merge-clearing class.** **GA**
-      `EditGroupScreen` omits nulled fields from its payload and updates merge,
-      so a cleared value persists. `TreatmentScreen` already fixed and
-      documented this; use it as the template and sweep the rest — this is a
-      class, not an instance.
-- [ ] **Filter breeding records by group.** **GA**
+- [x] **Audit every edit screen for the merge-clearing class.** **GA**
+      *Done for the half that can be done, and the audit found the pattern was
+      wrong.* `EditGroupScreen` now always sends `purposes`, so removing the
+      last one works. See the item below for the rest.
+- [ ] **Give the wire a way to say "clear this field".** *(found while fixing
+      the item above)*
+      `TreatmentScreen`'s established fix — name every optional field, with
+      `undefined` where it is now absent — **clears the device and never
+      reaches the server.** `JSON.stringify` drops an `undefined` value, so the
+      mutation arrives at `apply.ts` without the key and its `$set` leaves the
+      old value standing: the device reads cleared, the server reads unchanged,
+      and the next snapshot puts it back. An empty array or string survives the
+      journey, which is why `purposes` was fixable and `breedId`, `bornAt` and
+      `processAtWeeks` were not.
+      **Needs a JSON `null` meaning "clear", mapped to `$unset` in the
+      applier** — a contract change, deliberately not swept in with the defect
+      fixes. Until then those fields keep the conditional spread, because
+      consistently stale beats silently divergent.
+- [x] **Filter breeding records by group.** **GA**
       `names` is built from every animal on the farm, so the filter means "the
       dam exists here" rather than "the dam is in this group".
-- [ ] **Add password recovery.** **GA**
-      None exists; `AccountScreen` says so in a comment. Recovery currently
-      needs a shell on the server, and a lockout hits farms who are paying and
-      doing nothing wrong.
-- [ ] **Verify units on Harvest and reporting.** **GA**
-      The one assessment claim that could not be confirmed either way. Check
-      before assuming it is fine.
+- [ ] **Build the mail sender, and password recovery on top of it.** **GA** —
+      *designed:* [`PASSWORD-RECOVERY.md`](PASSWORD-RECOVERY.md)
+      There is no password reset; `AccountScreen` says so in a comment, and
+      recovery means a shell on the server. **The deliverable is a sender, not
+      one flow** — it also finishes the invite feature, which binds a token to
+      an email address and has never had anything to send it with, and it opens
+      `[148]` and `SUPPORT-LOOP.md` §6. A code the person types, not a link, on
+      phishing and cross-device grounds. Postmark behind a `sendEmail` port.
+      **SPF, DKIM and DMARC are part of the work, not follow-up** — large
+      providers reject unauthenticated mail outright now, so getting the DNS
+      wrong is a farmer who never receives their code.
+- [ ] **Decide what domain Steading's mail comes from.** *(raised by the design
+      above)*
+      The domain is `swbuild.dev` and the app is called Steading. A password
+      reset from a domain the farm has never heard of is indistinguishable from
+      phishing, and ignoring it is the correct user response. Cheaper to settle
+      before the sending DNS exists than after.
+- [ ] **Verify email addresses at signup.** *(raised by the design above)*
+      Password signup accepts whatever is typed; only the Google path carries
+      `email_verified`. Harmless while an address does nothing — and once an
+      address can receive a password reset, a typo at signup is a recovery
+      route that reaches a stranger. Same token machinery, one more route,
+      immediately after the sender exists.
+- [x] **Verify units on Harvest and reporting.** **GA**
+      *Confirmed true and fixed.* `HarvestScreen` offered pounds to everybody
+      and converted with `poundsToUg` whatever the farm had set. The entry
+      units moved to `contracts/units.ts` so `WeighScreen` and this one read
+      one table.
 - [ ] **Finish photo restore re-upload.** `ROADMAP.md` §12c, **GA**
       Restored metadata retains its uploaded flag, so bytes the server does not
       have are never re-sent. Already tracked; the assessment confirms it
@@ -152,12 +186,12 @@ period rather than a task.
 - [ ] **Opt-in local notifications.** **GA**
       Treatment doses, withdrawal clearance, birth and hatch, succession sowing,
       harvest windows, service due, recurring chores. **This corrects
-      `DOMAIN-SCOPE.md` §8.2**, which parks notifications as needing a server —
-      true of push, false of local scheduled ones, which are an OS API that
-      works with the radio off and are the natural output of a due engine that
-      already recomputes locally. Today stays usable without them. Ship
-      inventory reorder alerts last, if at all — an alert nobody can act on from
-      a barn trains people to dismiss the ones they can.
+      `DOMAIN-SCOPE.md` §8.2 twice over** — local scheduled notifications are an
+      OS API that fires with the radio off, *and* the "server dependency" that
+      parked them was never a real constraint, because there is a server. Today
+      stays usable without them. Ship inventory reorder alerts last, if at all —
+      an alert nobody can act on from a barn trains people to dismiss the ones
+      they can.
 - [ ] **Targeted CSV import, bounded to an empty farm.** **GA-c**
       Current animals, equipment, varieties, plantings, inventory. The refusal
       in `COMPETITIVE-ANALYSIS.md` §2.1 rests on three hazards that are all

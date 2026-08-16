@@ -112,7 +112,39 @@ export function EditGroupScreen({ route }: ScreenProps<'EditGroup'>): React.Reac
         payload: {
           name: current.name.trim() || group.name,
           count: current.count,
-          ...(current.purposes.length > 0 ? { purposes: current.purposes } : {}),
+          /**
+           * Always sent, so taking the last purpose off actually takes it off.
+           *
+           * It used to be `purposes.length > 0 ? { purposes } : {}`, and an
+           * update MERGES — `{ ...previous, ...payload }` here, `$set` on the
+           * server — so an omitted field keeps its old value. Clearing every
+           * purpose therefore did nothing at all, and the flock kept a
+           * `meat` it had been told it no longer had, along with the grow-out
+           * countdown that hangs off it.
+           *
+           * An empty array is safe to send where `undefined` is not: it
+           * survives `JSON.stringify`, so the server sets the same thing this
+           * device just projected. See the note below for the fields where
+           * that is not true.
+           */
+          purposes: current.purposes,
+          /**
+           * **These three can be set and changed, and cannot yet be cleared,
+           * and that is a wire limitation rather than a decision.**
+           *
+           * The pattern `TreatmentScreen` uses — name every optional field
+           * explicitly, with `undefined` where it is now absent — clears the
+           * local projection correctly and does not survive the journey:
+           * `JSON.stringify` drops an `undefined` value outright, so the
+           * mutation reaches `apply.ts` without the key and its `$set` leaves
+           * the old value standing. The device would read cleared, the server
+           * would read unchanged, and the next snapshot would put it back.
+           *
+           * Consistently stale beats silently divergent, so these keep the
+           * conditional spread until there is a way to say "clear this" on the
+           * wire — a JSON `null` mapped to `$unset` in the applier, which is a
+           * contract change and wants designing rather than sweeping in here.
+           */
           ...(current.breedId === null ? {} : { breedId: current.breedId }),
           ...(current.bornAt === null ? {} : { bornAt: current.bornAt }),
           ...(current.purposes.includes('meat') && current.processAtWeeks !== null

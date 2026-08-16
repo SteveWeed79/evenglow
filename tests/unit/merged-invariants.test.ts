@@ -240,6 +240,10 @@ describe('a withdrawal on a treatment that names both', () => {
     flockId: 'flock-1',
     animalId: 'animal-1',
     administeredAt: 1_700_000_000_000,
+    // Given and finished the same day. Stated rather than omitted: an absent
+    // end date now means "the course is still running", which holds the
+    // produce indefinitely — correct, and not what these assertions are about.
+    treatmentEndsAt: 1_700_000_000_000,
     withdrawalDays: { milk: 7, meat: 28 },
   };
 

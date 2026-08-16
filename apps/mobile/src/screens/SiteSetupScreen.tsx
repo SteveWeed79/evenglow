@@ -1,7 +1,13 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { isValidMonthDay, monthDay, newId, normaliseZoneValue } from '@steading/contracts';
+import {
+  isValidMonthDay,
+  monthDay,
+  newId,
+  normaliseZoneValue,
+  splitMonthDay,
+} from '@steading/contracts';
 import { readSiteOrBlank } from '@steading/core/read/growing';
 import { describeLogFailure } from '@steading/core/sync/failure';
 import { Body, Panel } from '../components/Panel';
@@ -53,6 +59,12 @@ export function SiteSetupScreen(): React.ReactElement {
    */
   const site = useLive(readSiteOrBlank, 'the farm');
 
+  /**
+   * The defaults are a starting suggestion for a farm that has never answered,
+   * and nothing more. They are overwritten by the record the moment one exists
+   * — see the seeding effect below, without which re-opening this screen
+   * silently proposed mid-May and early October to every farm on earth.
+   */
   const [name, setName] = useState('');
   const [zone, setZone] = useState('');
   const [lastMonth, setLastMonth] = useState(4); // May, zero-indexed
@@ -61,6 +73,46 @@ export function SiteSetupScreen(): React.ReactElement {
   const [firstDay, setFirstDay] = useState('5');
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+
+  /**
+   * Fill the form from the site, once.
+   *
+   * **This screen edits as often as it creates**, and until this existed it
+   * only ever created: the four date fields started at hardcoded constants and
+   * were never told what the farm had already said. A keeper who set 20 April
+   * re-opened the screen, was shown 15 May, and saving wrote that over the
+   * real date — stamped `source: 'entered'`, so everything downstream treated
+   * the app's suggestion as the farmer's own answer. Frost dates drive every
+   * sow window, transplant date and autumn count-back in the app, so the wrong
+   * number here is the wrong number everywhere, silently.
+   *
+   * Guarded on `loaded` rather than on the record's identity, for the reason
+   * `TreatmentScreen` gives: `useLive` re-reads on every engine publish, and
+   * re-seeding on each would discard whatever was being typed the moment
+   * anything else in the app saved.
+   *
+   * A field the site does not carry keeps its default. That is why the
+   * condition is per-field rather than one branch on `site.frost` — a farm
+   * with a position and no frost dates is a real state, and it should meet the
+   * suggestion rather than a blank.
+   */
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    if (loaded || site === null) return;
+    if (site.name !== '') setName(site.name);
+    if (site.zone !== undefined) setZone(site.zone.value);
+    if (site.frost !== undefined) {
+      const last = splitMonthDay(site.frost.lastSpring);
+      const first = splitMonthDay(site.frost.firstAutumn);
+      // `splitMonthDay` speaks the same 1-indexed months `monthDay` takes; the
+      // picker's state is zero-indexed because it indexes MONTHS.
+      setLastMonth(last.month - 1);
+      setLastDay(String(last.day));
+      setFirstMonth(first.month - 1);
+      setFirstDay(String(first.day));
+    }
+    setLoaded(true);
+  }, [loaded, site]);
 
   const lastSpring = monthDay(lastMonth + 1, Number(lastDay) || 0);
   const firstAutumn = monthDay(firstMonth + 1, Number(firstDay) || 0);
@@ -130,6 +182,7 @@ export function SiteSetupScreen(): React.ReactElement {
           day={lastDay}
           onMonth={setLastMonth}
           onDay={setLastDay}
+          testID="frost-last-day"
         />
       </Field>
 
@@ -139,6 +192,7 @@ export function SiteSetupScreen(): React.ReactElement {
           day={firstDay}
           onMonth={setFirstMonth}
           onDay={setFirstDay}
+          testID="frost-first-day"
         />
       </Field>
 
@@ -214,11 +268,22 @@ function DatePick({
   day,
   onMonth,
   onDay,
+  testID,
 }: {
   month: number;
   day: string;
   onMonth: (m: number) => void;
   onDay: (d: string) => void;
+  /**
+   * On the day field, so a test can read what the picker is actually showing.
+   *
+   * The month is a row of chips whose selection is styling and an
+   * `accessibilityState`, and every label renders whatever is chosen — so the
+   * flattened text of this screen says "Jan Feb Mar…" in every state and can
+   * prove nothing about which one is set. That is how a screen proposing the
+   * wrong date to every farm went unnoticed.
+   */
+  testID?: string;
 }) {
   const { colors } = useTheme();
 
@@ -253,6 +318,7 @@ function DatePick({
       </View>
 
       <TextInput
+        {...(testID === undefined ? {} : { testID })}
         value={day}
         onChangeText={(text) => onDay(text.replace(/[^0-9]/g, '').slice(0, 2))}
         keyboardType="number-pad"
