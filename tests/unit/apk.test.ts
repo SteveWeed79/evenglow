@@ -163,35 +163,77 @@ Signer #1 certificate SHA-1 digest: 0123456789abcdef0123456789abcdef01234567
   });
 
   /**
-   * The failure that took the first promote down, thirteen minutes in.
-   *
-   * This was pinned to the literal `Signer #1 certificate SHA-256 digest:`.
-   * Newer build-tools qualify the signer with the SDK range it covers, and the
-   * workflow deliberately takes the **newest** build-tools on the runner — so a
-   * fixed string was always going to drift out from under it. The APK was
-   * signed correctly; nothing could read it.
+   * **The output a real runner really produced**, copied from APK run 2 — the
+   * build that cost thirteen minutes to learn one line. Verbatim on purpose:
+   * every previous version of this parser was written against a guess at the
+   * format, and each guess was wrong in a different way.
    */
-  it('reads the signer line however apksigner qualifies it', () => {
+  it('reads what the runner actually printed', () => {
+    const real =
+      'V3.0 Signer: certificate DN: CN=, OU=, O=, L=, ST=, C=US\n' +
+      'V3.0 Signer: certificate SHA-256 digest: e5cc9f91ba8d6f5ce0afa2482ca765d10efebfd7d2f5fbc111d93247428863cc\n' +
+      'V3.0 Signer: certificate SHA-1 digest: a25ba0bf06d52ed6e109d361ffc1ccb43c5ef4fb\n' +
+      'V3.0 Signer: certificate MD5 digest: e57ad165764850942329018d31af2152\n';
+
+    expect(certificateFrom(real)).toBe(
+      'E5CC9F91BA8D6F5CE0AFA2482CA765D10EFEBFD7D2F5FBC111D93247428863CC',
+    );
+  });
+
+  /**
+   * Three formats in three attempts: the literal `Signer #1`, a guess at the
+   * SDK-range form, and the per-scheme `V3.0 Signer:` that turned out to be
+   * real. The prefix is the part that moves, so the prefix is no longer
+   * matched — only `certificate SHA-256 digest:`, which every version of every
+   * format has agreed on.
+   */
+  it('does not care what the signer is called', () => {
     const digest = 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90';
     const want = digest.toUpperCase();
 
-    for (const signer of [
-      'Signer #1 certificate SHA-256 digest',
-      'Signer #1 (minSdkVersion=24, maxSdkVersion=2147483647) certificate SHA-256 digest',
-      'Signer (minSdkVersion=24, maxSdkVersion=32) #1 certificate SHA-256 digest',
-      'Signer #1 certificate SHA256 digest',
+    for (const prefix of [
+      'Signer #1',
+      'Signer #1 (minSdkVersion=24, maxSdkVersion=2147483647)',
+      'Signer (minSdkVersion=24, maxSdkVersion=32) #1',
+      'V1.0 Signer:',
+      'V2.0 Signer:',
+      'V3.0 Signer:',
+      'V3.1 Signer:',
+      'V4.0 Signer:',
     ]) {
-      expect(certificateFrom(`Verifies\n${signer}: ${digest}\n`), signer).toBe(want);
+      const text = `Verifies\n${prefix} certificate SHA-256 digest: ${digest}\n`;
+      expect(certificateFrom(text), prefix).toBe(want);
     }
   });
 
-  it('does not read the SHA-1 sitting next to it', () => {
-    // The two lines are adjacent and both are real fingerprints, so picking
+  it('reads it without the hyphen too', () => {
+    const digest = 'f'.repeat(64);
+    expect(certificateFrom(`V2.0 Signer: certificate SHA256 digest: ${digest}\n`)).toBe(
+      digest.toUpperCase(),
+    );
+  });
+
+  it('takes the same answer when several schemes each report it', () => {
+    // v1, v2 and v3 all list the one certificate, so any of them is the answer
+    // — but the parser must not stitch two lines into one.
+    const digest = '9'.repeat(64);
+    const text =
+      `V1.0 Signer: certificate SHA-256 digest: ${digest}\n` +
+      `V2.0 Signer: certificate SHA-256 digest: ${digest}\n` +
+      `V3.0 Signer: certificate SHA-256 digest: ${digest}\n`;
+    expect(certificateFrom(text)).toBe(digest.toUpperCase());
+  });
+
+  it('does not read the SHA-1 or the MD5 sitting next to it', () => {
+    // All three are adjacent and all three are real fingerprints, so picking
     // the wrong one compares a genuine digest against a genuine digest of the
-    // wrong kind — a mismatch indistinguishable from a wrong key.
-    const sha1 = '0123456789abcdef0123456789abcdef01234567';
-    const only1 = `Signer #1 certificate DN: CN=Steading\nSigner #1 certificate SHA-1 digest: ${sha1}\n`;
-    expect(certificateFrom(only1)).toBeNull();
+    // wrong kind — a mismatch indistinguishable from a wrong key, which would
+    // send somebody hunting a keystore problem that does not exist.
+    const noSha256 =
+      'V3.0 Signer: certificate DN: CN=, OU=, O=, L=, ST=, C=US\n' +
+      'V3.0 Signer: certificate SHA-1 digest: a25ba0bf06d52ed6e109d361ffc1ccb43c5ef4fb\n' +
+      'V3.0 Signer: certificate MD5 digest: e57ad165764850942329018d31af2152\n';
+    expect(certificateFrom(noSha256)).toBeNull();
   });
 
   it('does not run past the end of its own line', () => {
@@ -205,7 +247,7 @@ Signer #1 certificate SHA-1 digest: 0123456789abcdef0123456789abcdef01234567
     expect(certificateFrom(text)).toBe(digest.toUpperCase());
   });
 
-  it('keeps looking past a signer line with nothing after the colon', () => {
+  it('keeps looking past a digest line with nothing after the colon', () => {
     const digest = 'c'.repeat(64);
     const text = `Signer #1 certificate SHA-256 digest:\nSigner #2 certificate SHA-256 digest: ${digest}\n`;
     expect(certificateFrom(text)).toBe(digest.toUpperCase());
