@@ -350,6 +350,11 @@ something that fails for a reason the other predicted.
 
 ## 4. What to do
 
+**The agreed subset is a checklist: [`APPROVED-WORK.md`](APPROVED-WORK.md).**
+It merges what is adopted here with what was agreed from `UNCONSIDERED.md`,
+marks every line with where it came from, and carries the rejections at its foot
+so nothing refused gets picked up later by accident. What follows is the order.
+
 **Immediately, and none of it is a feature:**
 
 1. **Seed `SiteSetupScreen` from the site record.** One bug, silent, corrupting
