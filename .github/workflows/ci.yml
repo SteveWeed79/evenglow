@@ -437,10 +437,36 @@ jobs:
   # `secrets: inherit` is required: the five signing secrets are the reason the
   # job can produce an APK a farm's tablet will accept as an update rather than
   # as a different app.
+  #
+  # ## `permissions` here is not optional, and leaving it off is a hard failure
+  #
+  # **A called workflow's ceiling is the calling job's own permissions, not the
+  # repository maximum.** That is the difference between this job and `release`
+  # above: `release` asks for `contents: write` and gets it, because a job may
+  # request up to what the repository allows. This job asked for nothing, so it
+  # inherited the workflow-level default — `contents: read` — and that became
+  # the ceiling for everything inside `apk.yml`.
+  #
+  # The result is not a permission error at the moment of publishing. It is
+  #
+  #   The nested job 'publish' is requesting 'contents: write',
+  #   but is only allowed 'contents: read'.
+  #
+  # refusing the **whole file** before any job starts, on every event — so a
+  # push and a pull request that would never have reached this job failed too,
+  # and CI on main went red until it was put back. Checked statically, which is
+  # the one good thing about it: it cannot reach a farm.
+  #
+  # Least privilege survives it. This raises the ceiling; `apk.yml`'s own
+  # `permissions: contents: read` still holds the Gradle and npm job down to
+  # read, and only its `publish` job — which runs no third-party build code —
+  # takes the write.
   app:
     needs: release
     if: inputs.bump != 'none'
     uses: ./.github/workflows/apk.yml
     with:
       ref: ${{ needs.release.outputs.sha }}
+    permissions:
+      contents: write
     secrets: inherit
