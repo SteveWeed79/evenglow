@@ -91,7 +91,29 @@ export function Tabs(): React.ReactElement {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        ...(rail ? { tabBarPosition: 'left', tabBarVariant: 'material' } : {}),
+        ...(rail
+          ? {
+              tabBarPosition: 'left' as const,
+              tabBarVariant: 'material' as const,
+              /**
+               * **The line that makes it a rail instead of a drawer.**
+               *
+               * Reported off the tablet: the sidebar took a third of a
+               * 960dp screen. `BottomTabBar` applies
+               * `getDefaultSidebarWidth()` as a **`minWidth`** whenever the
+               * labels are horizontal, and that default is Material's
+               * navigation *drawer* width — 360dp. A `minWidth` beats the
+               * `width` set in `tabBarStyle`, so the 96 below was simply
+               * never reached and nothing said so.
+               *
+               * `below-icon` makes `shouldUseHorizontalLabels` false, which
+               * drops the minimum to zero and lets the width apply. This bar
+               * has no icons, so "below the icon" only means "stacked", which
+               * is what a rail wants anyway.
+               */
+              tabBarLabelPosition: 'below-icon' as const,
+            }
+          : {}),
         /**
          * The word goes in the LABEL slot, which is the correction.
          *

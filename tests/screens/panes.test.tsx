@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { Text } from 'react-native';
 import { newId } from '@steading/contracts';
-import { LAYOUT } from '../../apps/mobile/src/theme/tokens';
+import { LAYOUT, SPACE } from '../../apps/mobile/src/theme/tokens';
 import { Screen } from '../../apps/mobile/src/components/Screen';
 import { Tally } from '../../apps/mobile/src/components/Tally';
 import { freshStore } from '../support/store';
@@ -162,6 +162,87 @@ describe('the tally steps', () => {
     expect(await order()).toEqual(phone);
   });
 });
+
+/**
+ * The bottom inset, and the thing that stopped reserving it.
+ *
+ * `Screen` read `back ? insets.bottom : 0` on the reasoning that a tab screen
+ * has the bar beneath it and the bar reserves its own inset. True until the
+ * bar became a rail — then nothing at all stood at the bottom of a tab screen
+ * and the content ran under the system navigation. Reported off the tablet in
+ * the first screenshot of the rail, which is the third time in this project a
+ * missing inset has been found by looking rather than by testing.
+ */
+describe('the bottom inset once the bar is a rail', () => {
+  const BOTTOM = 16;
+
+  const paddings = (screen: { tree: { toJSON: () => unknown } }): number[] =>
+    styles(screen.tree.toJSON())
+      .map((s) => s.paddingBottom)
+      .filter((v): v is number => typeof v === 'number');
+
+  it('is reserved on a tab screen at rail width', async () => {
+    seedWindow(TABLET);
+    const screen = await mount(
+      <Screen title="Today">
+        <Text>the tally</Text>
+      </Screen>,
+    );
+
+    // Nothing is standing there, so the content has to leave the room itself.
+    expect(paddings(screen)).toContain(SPACE.xl + BOTTOM);
+    screen.unmount();
+  });
+
+  it('is left to the bar on a phone, where the bar is still at the bottom', async () => {
+    const screen = await mount(
+      <Screen title="Today">
+        <Text>the tally</Text>
+      </Screen>,
+    );
+
+    // Adding it here too would be a second helping of the same gap, and Today
+    // would end in a band of nothing.
+    expect(paddings(screen)).toContain(SPACE.xl);
+    expect(paddings(screen)).not.toContain(SPACE.xl + BOTTOM);
+    screen.unmount();
+  });
+
+  it('is reserved on a pushed screen at every width', async () => {
+    for (const window of [undefined, TABLET]) {
+      seedWindow(window);
+      const screen = await mount(
+        <Screen title="Weigh" back>
+          <Text>a form</Text>
+        </Screen>,
+      );
+      expect(paddings(screen), String(window?.width ?? 'phone')).toContain(SPACE.xl + BOTTOM);
+      screen.unmount();
+    }
+  });
+});
+
+/** Every element's effective style, flattened — same helper as reading-column. */
+function styles(node: unknown, out: Record<string, unknown>[] = []): Record<string, unknown>[] {
+  if (Array.isArray(node)) {
+    node.forEach((n) => styles(n, out));
+    return out;
+  }
+  if (typeof node !== 'object' || node === null) return out;
+
+  const n = node as { props?: { style?: unknown }; children?: unknown };
+  if (n.props?.style !== undefined) {
+    const merged: Record<string, unknown> = {};
+    const walk = (v: unknown): void => {
+      if (Array.isArray(v)) return void v.forEach(walk);
+      if (typeof v === 'object' && v !== null) Object.assign(merged, v);
+    };
+    walk(n.props.style);
+    out.push(merged);
+  }
+  if (n.children !== undefined) styles(n.children, out);
+  return out;
+}
 
 interface Node {
   props?: Record<string, unknown>;
