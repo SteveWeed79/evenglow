@@ -508,6 +508,19 @@ GitHub runner, signs with our own keystore, checks the result, and attaches it
 to a Release. No Expo account is involved at any point; `expo prebuild` is
 local, so the queue and the quota are not in the path.
 
+**Promoting the server builds the app too, and that is the normal route.**
+`ci.yml`'s release job calls this workflow rather than running `eas build`, so
+**Actions → CI → Run workflow** is the one button: it verifies, moves `release`,
+and builds the APK at the promoted commit. Running the APK workflow by hand is
+for a build outside a release — a signing fix to prove out, a rebuild of
+something already shipped. `bump: none` still promotes the server and builds no
+app, exactly as before.
+
+The promote does **not** wait on Gradle. `release` is pushed before the app job
+starts, so the box deploys the server on its next tick regardless; the quarter
+of an hour only keeps the run marked in progress. What is new is that a failed
+app build now shows as a red job instead of the silence #153 was.
+
 **A runner and not the box, and §7's reasons above still stand.** The keystore
 argument is the same wherever the machine is — except that a repository secret
 is materialised for the length of one job, while a box holds what it holds all
@@ -558,18 +571,49 @@ being missing.
   is a normal-looking APK that Android treats as a different app. The job stops
   before the checkout instead.
 
-#### It does not put the APK on the box
+#### It does not put the APK on the box — the box comes and gets it
 
-Nothing above opens an upload route. Download the artefact and run
-`publish-apk.sh <path>` — the local-file form the script has always had — or
-teach the box to pull the Release, which is #153's remaining half.
+Nothing here opens an upload route, and that has not changed: *"a download
+endpoint is a static file and an upload endpoint is a way to put a file on a
+server, and those are not the same risk at all."* The box pulls, exactly as it
+pulls the code.
 
-### A GitHub Release is for the archive
+**How it finds the right one.** `deploy.sh` resolves the commit it is serving to
+a `v<version>+<code>` tag with git — locally, no network — and asks GitHub for
+the APK attached to that release. `scripts/lib/release-apk.mjs` holds every
+decision in that sentence and `tests/unit/release-apk.test.ts` holds that file.
+
+**Why the commit and not "the newest release".** The EAS lookup this replaced
+filtered on `--git-commit-hash`, and its own comment gave the reason: the box
+already knows which commit it just deployed, so nothing has to be handed from
+CI to the box and there is nothing to get out of step. Taking the newest
+release would throw that away — `release` bumps the version, commits it and
+promotes *that* commit, so the newest release is only coincidentally a given
+box's. It is also why `ci.yml` passes the promoted sha to this workflow: the
+tag has to land on the commit the box will be serving, not the one the button
+was pressed against.
+
+A commit with no tag publishes nothing, which is correct — a server-only
+release leaves the shelf holding what it was already holding. A build still
+running finds nothing too, and the next five-minute tick picks it up.
+
+To publish a hand-built APK, the local-file form is unchanged:
+`publish-apk.sh <path>`.
+
+### A GitHub Release is for the archive, and now for the box as well
 
 Attached to a tag, it answers "the build that was on her phone in August" after
-the box has been rebuilt or the file pruned. It is a poor *channel* — no
-install page, and on a public repository it puts the APK in front of anybody,
-the same consideration that keeps `SUPPORT_ACCEPT_RECORDS` off.
+the box has been rebuilt or the file pruned. It is still a poor *channel* to
+send to a person — no install page, and on a public repository it puts the APK
+in front of anybody, the same consideration that keeps `SUPPORT_ACCEPT_RECORDS`
+off — so what a tester is sent is still `https://api.swbuild.dev/app`. The box
+reading the Release is a machine fetching a known artefact by tag, which is a
+different question from what a link in a message should point at.
+
+Being public is what makes the box need no credential: `EXPO_TOKEN` is off it
+entirely, and there is no token on that machine for anything to leak. If this
+repository is ever made private, put a read-only `GITHUB_TOKEN` in
+`/etc/steading/deploy.env` and the lookup honours it.
 
 ---
 

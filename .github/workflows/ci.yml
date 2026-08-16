@@ -285,6 +285,11 @@ jobs:
       # The built-in GITHUB_TOKEN, scoped to this. No secret to create, none to
       # rotate, and it cannot reach anything outside this repository.
       contents: write
+    outputs:
+      # The commit that was actually promoted, which is the version-bump commit
+      # rather than the one this run started on. The app job below builds at it
+      # so the release tag lands where the box will look.
+      sha: ${{ steps.promoted.outputs.sha }}
     steps:
       # Same default ref as `verify` — the branch chosen in the dispatch form —
       # so what was tested and what ships cannot come apart.
@@ -360,55 +365,13 @@ jobs:
       # To go back on purpose, that is a revert commit through the normal route,
       # so what the server runs stays a thing that exists in main's history.
       - name: Move release to this commit
-        run: git push origin HEAD:refs/heads/release
-
-      # ── The app, because promoting the server never rebuilt it ──────────
-      #
-      # **The gap that kept costing us a round trip.** `release` moving updates
-      # the API and the Caddyfile; the phone runs an APK built on Expo's
-      # machines. So a fix to a screen could be merged, promoted and deployed
-      # with the handset still showing the old one — reported more than once as
-      # "none of the changes landed", and correct every time.
-      #
-      # Kicked off here and not waited on: an EAS build is ten to twenty minutes
-      # mostly spent queueing, and holding a runner open for it would buy
-      # nothing. The box asks Expo for the newest finished build on its own
-      # timer and publishes it (`scripts/deploy/deploy.sh`), so the whole
-      # journey from this button to a phone is unattended.
-      #
-      # Needs `EXPO_TOKEN` in the repository secrets. Without one this says so
-      # and the promote still succeeds — a missing app token must not stop the
-      # server shipping.
-      # `none` means nothing new is being cut, so nothing is built.
-      #
-      # A server-only change — a Caddy rule, a deploy script, an API fix — has
-      # no new app in it. Building one anyway mints a version that differs from
-      # the last only in its build number, and the box then pulls ninety
-      # megabytes of an identical app because the artefact url is new. On the
-      # free tier it also spends a queue slot to do it.
-      #
-      # Tied to `bump` rather than given a dropdown of its own, because the two
-      # questions are one question: "am I shipping a new app?" A second control
-      # that could disagree with the first is a second thing to get wrong.
-      - name: Build the app
-        if: inputs.bump != 'none'
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        id: promoted
         run: |
           set -euo pipefail
-          if [ -z "${EXPO_TOKEN:-}" ]; then
-            echo "No EXPO_TOKEN, so no app build was started." >> "$GITHUB_STEP_SUMMARY"
-            echo "Add one in Settings → Secrets → Actions to close the loop." >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          corepack enable
-          pnpm install --frozen-lockfile
-          # `--no-wait` for the reason above. `--non-interactive` because a
-          # prompt on a runner is a job that hangs until it is cancelled.
-          pnpm --filter @steading/mobile exec eas build \
-            --profile preview-farm --platform android --non-interactive --no-wait
-          echo "App build started on EAS. The box publishes it within five minutes of it finishing." \
-            >> "$GITHUB_STEP_SUMMARY"
+          git push origin HEAD:refs/heads/release
+          # Recorded only after the push, so the app job cannot build for a
+          # promote that did not happen.
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Say what shipped
         run: |
@@ -431,3 +394,53 @@ jobs:
           echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "The server picks this up within five minutes." >> "$GITHUB_STEP_SUMMARY"
+
+  # ── The app, because promoting the server never rebuilt it ──────────────────
+  #
+  # **The gap that kept costing us a round trip.** `release` moving updates the
+  # API and the Caddyfile; the phone runs an APK. So a fix to a screen could be
+  # merged, promoted and deployed with the handset still showing the old one —
+  # reported more than once as "none of the changes landed", and correct every
+  # time.
+  #
+  # ## Why this is `apk.yml` and no longer `eas build`
+  #
+  # This step used to start an EAS build and not wait for it. #153 is what that
+  # cost: a promote hit the free tier's monthly Android cap, the build was
+  # refused, and the step that would have said so is the one that skips on
+  # failure — a half-done release with a blank summary. `apk.yml` builds on a
+  # runner with our own keystore and no Expo account in the path, so no quota
+  # can refuse it, and a failure here is a red job rather than a silence.
+  #
+  # ## The commit, which is the whole reason this is a separate job
+  #
+  # `release` above makes the version-bump commit and promotes THAT, so the
+  # commit being shipped does not exist when this workflow starts. The APK has
+  # to be built at it and tagged against it, because `deploy.sh` finds the app
+  # for a box by resolving the commit the box is serving to a release tag. So
+  # the promoted sha is handed over as an output; see `apk.yml`'s `ref` input.
+  #
+  # ## What it costs, and what it deliberately does not
+  #
+  # The promote is already finished when this starts — `release` has been pushed
+  # and the box will deploy the server on its next tick regardless. So a Gradle
+  # build does not stand between a server fix and a farm; it only keeps the run
+  # marked in-progress for another quarter of an hour.
+  #
+  # `none` still means no app, exactly as before: a server-only change has no
+  # new app in it, and building one anyway mints a version differing from the
+  # last only in its build number. Tied to `bump` rather than given a dropdown
+  # of its own, because the two questions are one question — "am I shipping a
+  # new app?" — and a second control that could disagree with the first is a
+  # second thing to get wrong.
+  #
+  # `secrets: inherit` is required: the five signing secrets are the reason the
+  # job can produce an APK a farm's tablet will accept as an update rather than
+  # as a different app.
+  app:
+    needs: release
+    if: inputs.bump != 'none'
+    uses: ./.github/workflows/apk.yml
+    with:
+      ref: ${{ needs.release.outputs.sha }}
+    secrets: inherit

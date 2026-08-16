@@ -38,18 +38,30 @@ export function releaseTag(version, code) {
 }
 
 /**
- * The `versionCode`s already released, newest first, from a list of tags.
+ * The two numbers inside one of our tags, or `null` for anything else.
+ *
+ * The format is written down once, here, because two places now read it:
+ * {@link shippedCodes} deciding the next `versionCode`, and
+ * `release-apk.mjs` deciding which release holds the APK for a commit. A
+ * second regex somewhere else is a second thing to keep in step with
+ * {@link releaseTag}.
  *
  * Anything that is not one of our tags is ignored rather than rejected: the
  * repository is free to carry tags this workflow did not make, and a release
  * process that fell over because somebody tagged `docs-v2` would be a bad
  * trade for the strictness.
  */
+export function parseReleaseTag(tag) {
+  const match = TAG.exec(String(tag).trim());
+  return match === null ? null : { version: match[1], code: Number(match[2]) };
+}
+
+/** The `versionCode`s already released, newest first, from a list of tags. */
 export function shippedCodes(tags) {
   return tags
-    .map((tag) => TAG.exec(String(tag).trim()))
-    .filter((match) => match !== null)
-    .map((match) => Number(match[2]))
+    .map(parseReleaseTag)
+    .filter((parsed) => parsed !== null)
+    .map((parsed) => parsed.code)
     .sort((a, b) => b - a);
 }
 

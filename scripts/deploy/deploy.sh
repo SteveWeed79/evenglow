@@ -32,13 +32,12 @@ REF="${STEADING_REF:-release}"
 
 # ── Which app this box is allowed to serve ──────────────────────────────────
 #
-# The profile CI builds, and the application id `app.json` declares. Both are
-# passed to `eas build:list` below so that the newest *matching* build is
-# fetched rather than the newest build of anything — see the note there for
-# what that used to allow. Overridable in `deploy.env` for a box following a
-# branch that builds a different profile, and never in the ordinary case.
-APP_BUILD_PROFILE="${STEADING_APP_PROFILE:-preview-farm}"
-APP_ID="${STEADING_APP_ID:-com.steading.app}"
+# The application id `app.json` declares. `publish-apk.sh` reads it out of the
+# bytes that actually arrived — the manifest inside the APK — and refuses
+# anything that names a different application. Exported rather than merely set,
+# because that check runs in a child process and a `deploy.env` override that
+# only this script could see would be an override that does nothing.
+export STEADING_APP_ID="${STEADING_APP_ID:-com.steading.app}"
 
 say() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 note() { printf '   %s\n' "$*"; }
@@ -71,7 +70,17 @@ git config --system --get-all safe.directory 2>/dev/null | grep -qxF "$REPO_DIR"
 WAS="$(git rev-parse --short HEAD)"
 
 say "Fetching ($REF)"
-git fetch --quiet origin "$REF" || die "Could not fetch '$REF' from origin.
+# ── `--tags`, which the app half depends on ─────────────────────────────────
+#
+# The APK for a commit is found by resolving that commit to a `v<version>+<code>`
+# tag locally — see the app block near the end of this file for why the commit
+# is the key rather than "the newest release". Without the tags in this
+# checkout there is nothing to resolve, and the box would go on serving the APK
+# it already has while reporting nothing wrong.
+#
+# Cheap: a tag is a ref and a few bytes, and the objects behind it are already
+# here because it points at a commit on the branch just fetched.
+git fetch --quiet --tags origin "$REF" || die "Could not fetch '$REF' from origin.
   If this box has never seen that branch, check the name. CI creates 'release'
   on the first green run on main."
 
@@ -137,9 +146,6 @@ else
 fi
 
 NOW="$(git rev-parse --short HEAD)"
-# The full one as well, because EAS records builds against the full hash and
-# the APK query below asks for the build made from exactly this commit.
-NOW_FULL="$(git rev-parse HEAD)"
 
 # Only when the commit moved. A lockfile that has not changed installs the tree
 # that is already there, and the ownership fix has nothing to fix.
@@ -265,141 +271,125 @@ fi
 # ── The app, which the server half never touched ────────────────────────────
 #
 # **This is the gap that kept catching us.** `release` moving updates the API
-# and the Caddyfile, and the phone runs an APK built on Expo's machines — so a
-# fix to a screen could be merged, promoted, and deployed, and the handset went
-# on showing the old one because nothing anywhere rebuilt it. Every report of
+# and the Caddyfile, and the phone runs an APK built somewhere else — so a fix
+# to a screen could be merged, promoted, and deployed, and the handset went on
+# showing the old one because nothing anywhere rebuilt it. Every report of
 # "none of the changes landed" traced back to this, and the answer was always
 # the same manual two steps that nobody should have had to remember.
 #
 # So the box pulls the app the way it already pulls the code. Same argument the
 # release note makes about not putting an SSH key in GitHub: nothing inbound is
-# opened, and the newest finished build is a question the box can ask Expo.
+# opened, and "what is the app for the commit I am serving" is a question the
+# box can ask on its own.
 #
-# Needs `EXPO_TOKEN` in /etc/steading/deploy.env, which is where the ref
-# override already lives. Without one this is skipped in a sentence rather than
-# failing — a farm server that stops deploying its API because it could not
-# reach Expo would be the tail wagging the dog.
-if [ -n "${EXPO_TOKEN:-}" ]; then
-  say "The app"
+# ── Where the APK comes from now, and why it stopped being EAS ──────────────
+#
+# **This asked EAS, and that was #153's remaining half.** `apk.yml` builds the
+# APK on a GitHub runner precisely so a build quota cannot refuse a release —
+# but the box went on asking `eas build:list`, so a runner-built APK never
+# reached the shelf and the box served the last EAS build for ever, with no
+# error anywhere. The same silent half-done shape as the issue itself.
+#
+# What did NOT change is the thing that made the EAS lookup good: **the commit
+# is the key**. Its comment argued `--git-commit-hash` beat a build id because
+# it needs no channel between CI and this box, and that is still the argument.
+# Git resolves HEAD to a `v<version>+<code>` tag right here, on this machine,
+# with no network and nothing handed over from the promote; only "what is
+# attached to that tag" is asked of GitHub. "Newest GitHub Release" would have
+# thrown that away — `release` bumps the version, commits it and promotes THAT
+# commit, so the newest release is only coincidentally this box's.
+#
+# A commit with no tag finds nothing and publishes nothing, which is correct: a
+# server-only release leaves the shelf holding the APK it was already holding.
+# A build still running finds nothing too, and the next tick picks it up, which
+# is why this block runs before the no-change exit.
+#
+# No token, and that is a property worth naming: `EXPO_TOKEN` is off this box
+# entirely. A public repository's releases are readable by anybody, so there is
+# no longer a credential here for anything to leak. `GITHUB_TOKEN` in
+# `/etc/steading/deploy.env` is honoured if this repository is ever made
+# private, and is not needed otherwise.
+say "The app"
 
-  # ── Which build, exactly (P2-2) ─────────────────────────────────────────
-  #
-  # **This used to ask for the newest finished Android build and take it.** No
-  # constraint on profile, on application id, or on where it came from — so any
-  # cloud build anybody happened to run became the APK served at `/app` on the
-  # next tick. `eas.json` defines a `development` profile precisely so a cloud
-  # dev-client build can be made, and the moment one is, it wins. The damage
-  # lands on whoever downloads the link next: an APK that demands Metro, or a
-  # preview one pointed at nothing.
-  #
-  # Three filters, all applied by EAS rather than checked after the download:
-  #
-  #   --build-profile   the profile CI builds, and no other
-  #   --app-identifier  this application, not a fork or a sibling project
-  #   --git-commit-hash the build made from the commit this box is serving
-  #
-  # The last is what "promote by build id captured from the CI run" was after,
-  # and it is better than a build id: it needs no channel between CI and this
-  # box, because the box already knows which commit it just deployed.
-  #
-  # A commit with no app build finds nothing and publishes nothing, which is
-  # correct — a server-only release leaves the shelf holding the APK it was
-  # already holding. A build still running finds nothing too, and the next tick
-  # picks it up, which is why this block runs before the no-change exit.
-  #
-  # `|| true` throughout: Expo being unreachable, rate limited or mid-outage is
-  # not a reason to fail a deploy that has already restarted the API.
-  ARTIFACT="$(EXPO_TOKEN="$EXPO_TOKEN" pnpm --filter @steading/mobile exec eas build:list \
-    --platform android --status finished \
-    --build-profile "$APP_BUILD_PROFILE" \
-    --app-identifier "$APP_ID" \
-    --git-commit-hash "$NOW_FULL" \
-    --limit 1 --json --non-interactive 2>/dev/null || true)"
+# The decision — which tag, which asset, and every refusal — is in
+# `scripts/lib/release-apk.mjs`, held by `tests/unit/release-apk.test.ts`, for
+# the reason `scripts/lib/apk.mjs` gives about workflow files: it applies about
+# as hard to a shell script running unattended with nobody reading its output.
+#
+# `|| true`: GitHub being unreachable, rate limited or mid-incident is not a
+# reason to fail a deploy that has already restarted the API. The script exits 0
+# on all of those anyway; this is the belt for the case where node itself is
+# missing.
+URL="$(git tag --points-at HEAD --list 'v*' 2>/dev/null \
+  | node "$REPO_DIR/scripts/release-apk.mjs" --remote "$(git remote get-url origin)" \
+  || true)"
 
-  URL="$(printf '%s' "$ARTIFACT" | node -e '
-    let raw = "";
-    process.stdin.on("data", (d) => (raw += d));
-    process.stdin.on("end", () => {
-      // eas-cli prints the array on its own line; anything else on stdout is
-      // noise from the workspace runner and must not be parsed as the answer.
-      const start = raw.indexOf("[");
-      try {
-        const builds = JSON.parse(raw.slice(start === -1 ? 0 : start));
-        const build = builds?.[0];
-        const url = build?.artifacts?.buildUrl ?? build?.artifacts?.applicationArchiveUrl;
-        // The version too, so the publish can be skipped when it is the one
-        // already on the shelf rather than downloading forty megabytes to find
-        // out.
-        if (typeof url === "string" && url !== "") {
-          process.stdout.write(`${url}\t${build?.appVersion ?? ""}\t${build?.appBuildVersion ?? ""}`);
-        }
-      } catch {}
-    });
-  ' 2>/dev/null || true)"
+APK_URL="${URL%%$'\t'*}"
+REST="${URL#*$'\t'}"
+APK_VERSION="${REST%%$'\t'*}"
+APK_CODE="${REST##*$'\t'}"
 
-  APK_URL="${URL%%$'\t'*}"
-  REST="${URL#*$'\t'}"
-  APK_VERSION="${REST%%$'\t'*}"
-  APK_CODE="${REST##*$'\t'}"
+# ── What was fetched last, by the build's own identity ──────────────────────
+#
+# **This guard was a filename, and a filename is not an identity.** The check
+# looked for steading-<version>-<code>.apk; when the version could not be
+# worked out the file was written under a timestamp instead, so the check never
+# matched and the timer downloaded the same ninety megabytes again every six
+# minutes. A box left overnight had five identical copies of one build and had
+# pulled half a gigabyte to get them.
+#
+# The artefact url IS the identity — one build, one url — so remembering it
+# closes the loop whatever the file ends up called, including the case that
+# caused it: no version reported, no name to compare. A release asset url is a
+# constant per build in the same way an EAS artefact url was, so the marker
+# means exactly what it meant before.
+#
+# Outside the repo, because it describes what is on this shelf and a deploy
+# must never be able to `git clean` it away — and outside `dist/`, because
+# Caddy points `file_server` at that directory and a deploy marker is a note to
+# the next deploy rather than something to publish. It sat in `dist/` when it
+# was written, which served the artefact url at /app/.last-artifact to anybody
+# who asked.
+LAST="/var/lib/steading/.last-artifact"
 
-  # ── What was fetched last, by the build's own identity ────────────────────
+# A box that published before the move keeps its marker rather than deciding it
+# has never fetched anything and pulling ninety megabytes to find out.
+if [ ! -f "$LAST" ] && [ -f /var/lib/steading/dist/.last-artifact ]; then
+  mv /var/lib/steading/dist/.last-artifact "$LAST"
+fi
+
+if [ -z "$APK_URL" ]; then
+  # The script above has already said which of the several reasons it was, on
+  # stderr, so this does not guess at one.
+  note "nothing to publish for this commit"
+elif [ -f "$LAST" ] && [ "$(cat "$LAST" 2>/dev/null)" = "$APK_URL" ]; then
+  note "already serving ${APK_VERSION:-that build}"
+elif [ -n "$APK_VERSION" ] && [ -f "/var/lib/steading/dist/steading-${APK_VERSION}-${APK_CODE}.apk" ]; then
+  # Kept as well as the url check: a box that published before this file
+  # existed has the APK and no marker, and should not re-fetch to learn that.
+  printf '%s' "$APK_URL" > "$LAST"
+  note "already serving ${APK_VERSION} (build ${APK_CODE})"
+else
+  note "fetching ${APK_VERSION:-the release for this commit}"
+  # The version is passed, not left to be read out of the file.
   #
-  # **This guard was a filename, and a filename is not an identity.** The check
-  # looked for steading-<version>-<code>.apk; when the version could not be
-  # worked out the file was written under a timestamp instead, so the check
-  # never matched and the timer downloaded the same ninety megabytes again
-  # every six minutes. A box left overnight had five identical copies of one
-  # build and had pulled half a gigabyte from Expo to get them.
+  # `publish-apk.sh` reads it with `aapt2` when there is one — and there is
+  # not, on this box, by its own stated decision: "the box has no Android SDK
+  # and is not getting one". Without a label it therefore fell all the way
+  # through to a timestamp name, steading-20260814-0412.apk, which is unique,
+  # sortable and tells nobody anything — and the install page's version stamp,
+  # guarded on the same read, never appeared at all.
   #
-  # The artefact url IS the identity — one build, one url — so remembering it
-  # closes the loop whatever the file ends up called, including the case that
-  # caused it: no version reported, no name to compare.
-  #
-  # Outside the repo, because it describes what is on this shelf and a deploy
-  # must never be able to `git clean` it away — and outside `dist/`, because
-  # Caddy points `file_server` at that directory and a deploy marker is a note
-  # to the next deploy rather than something to publish. It sat in `dist/` when
-  # it was written, which served the Expo artefact url at /app/.last-artifact to
-  # anybody who asked.
-  LAST="/var/lib/steading/.last-artifact"
-
-  # A box that published before the move keeps its marker rather than deciding
-  # it has never fetched anything and pulling ninety megabytes to find out.
-  if [ ! -f "$LAST" ] && [ -f /var/lib/steading/dist/.last-artifact ]; then
-    mv /var/lib/steading/dist/.last-artifact "$LAST"
-  fi
-
-  if [ -z "$APK_URL" ]; then
-    note "no finished Android build to fetch (or Expo could not be reached)"
-  elif [ -f "$LAST" ] && [ "$(cat "$LAST" 2>/dev/null)" = "$APK_URL" ]; then
-    note "already serving ${APK_VERSION:-that build}"
-  elif [ -n "$APK_VERSION" ] && [ -f "/var/lib/steading/dist/steading-${APK_VERSION}-${APK_CODE}.apk" ]; then
-    # Kept as well as the url check: a box that published before this file
-    # existed has the APK and no marker, and should not re-fetch to learn that.
+  # Both numbers are in the tag, which is where they came from a few lines up;
+  # they are what the "already serving" check compares. The answer is in hand
+  # and the script's own note says to pass one.
+  LABEL="${APK_VERSION:+${APK_VERSION}${APK_CODE:+-$APK_CODE}}"
+  if "${REPO_DIR}/scripts/deploy/publish-apk.sh" "$APK_URL" "$LABEL"; then
+    # Only after it actually landed. Writing this on a failed publish would
+    # make the next run skip a build that is not on the shelf.
     printf '%s' "$APK_URL" > "$LAST"
-    note "already serving ${APK_VERSION} (build ${APK_CODE})"
   else
-    note "fetching ${APK_VERSION:-the newest build}"
-    # The version is passed, not left to be read out of the file.
-    #
-    # `publish-apk.sh` reads it with `aapt2` when there is one — and there is
-    # not, on this box, by its own stated decision: "the box has no Android SDK
-    # and is not getting one". Without a label it therefore fell all the way
-    # through to a timestamp name, steading-20260814-0412.apk, which is unique,
-    # sortable and tells nobody anything — and the install page's version
-    # stamp, guarded on the same read, never appeared at all.
-    #
-    # EAS already told us both numbers a few lines up; they are what the
-    # "already serving" check compares. The answer was in hand and simply not
-    # handed on, and the script's own note says to pass one.
-    LABEL="${APK_VERSION:+${APK_VERSION}${APK_CODE:+-$APK_CODE}}"
-    if "${REPO_DIR}/scripts/deploy/publish-apk.sh" "$APK_URL" "$LABEL"; then
-      # Only after it actually landed. Writing this on a failed publish would
-      # make the next run skip a build that is not on the shelf.
-      printf '%s' "$APK_URL" > "$LAST"
-    else
-      note "could not publish it — the API is unaffected"
-    fi
+    note "could not publish it — the API is unaffected"
   fi
 fi
 
