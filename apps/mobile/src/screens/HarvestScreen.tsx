@@ -1,9 +1,16 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
-import { HARVEST_UNITS, newId, ouncesToUg, poundsToUg } from '@steading/contracts';
+import {
+  HARVEST_UNITS,
+  MASS_ENTRY_CHOICES,
+  type MassEntryUnit,
+  massEntryToUg,
+  newId,
+} from '@steading/contracts';
 import { listPlantings, listVarieties } from '@steading/core/read/growing';
 import { Choice, Failure, Field, NumberField, Primary, TextField, useSaver } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
+import { useUnits } from '../hooks/useUnits';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { Tally } from '../components/Tally';
@@ -37,6 +44,14 @@ const UNIT_LABELS: Record<Unit, string> = {
   bunch: 'By the bunch',
 };
 
+/** Spelled out on the chip, abbreviated on the box — the same split `WeighScreen` uses. */
+const MASS_UNIT_LABELS: Record<MassEntryUnit, string> = {
+  lb: 'Pounds',
+  oz: 'Ounces',
+  kg: 'Kilos',
+  g: 'Grams',
+};
+
 export function HarvestScreen({ route }: ScreenProps<'Harvest'>): React.ReactElement {
   const { plantingId } = route.params;
   const log = useLog();
@@ -46,18 +61,38 @@ export function HarvestScreen({ route }: ScreenProps<'Harvest'>): React.ReactEle
   const varieties = useLive(listVarieties);
   const planting = plantings?.find((p) => p.id === plantingId) ?? null;
 
+  const units = useUnits();
+  /**
+   * The pair this farm types in, heavier first.
+   *
+   * This screen used to offer pounds and ounces to everybody, converting with
+   * `poundsToUg` regardless of the setting — so a metric farm weighing a crate
+   * in kilos either typed a number the app read as pounds, or converted in its
+   * head at the one moment where the rounding becomes a stored integer nothing
+   * downstream can tell from a real weighing.
+   */
+  const [heavy, light] = MASS_ENTRY_CHOICES[units];
+
   const [unit, setUnit] = useState<Unit>('mass');
   const [amount, setAmount] = useState('');
-  const [pounds, setPounds] = useState(true);
+  const [massUnit, setMassUnit] = useState<MassEntryUnit>(heavy);
   const [note, setNote] = useState('');
+
+  /**
+   * Follow the setting when it changes under the screen.
+   *
+   * `useUnits` reads the site record live, so switching to metric in Settings
+   * with this screen behind it would otherwise leave the box labelled `lb`
+   * while everything else on the device had moved.
+   */
+  useEffect(() => {
+    setMassUnit((current) => (current === heavy || current === light ? current : heavy));
+  }, [heavy, light]);
 
   const { saving, failure, save } = useSaver(useLeave());
 
   const value = Number(amount);
-  const massUg =
-    Number.isFinite(value) && value > 0
-      ? Math.round(pounds ? poundsToUg(value) : ouncesToUg(value))
-      : null;
+  const massUg = Number.isFinite(value) && value > 0 ? massEntryToUg(value, massUnit) : null;
 
   const commit = useCallback(
     (count: number | null) => {
@@ -122,7 +157,7 @@ export function HarvestScreen({ route }: ScreenProps<'Harvest'>): React.ReactEle
               value={amount}
               onChangeText={setAmount}
               placeholder="4.5"
-              suffix={pounds ? 'lb' : 'oz'}
+              suffix={massUnit}
               accessibilityLabel="Harvest weight"
               testID="harvest-mass"
             />
@@ -130,10 +165,10 @@ export function HarvestScreen({ route }: ScreenProps<'Harvest'>): React.ReactEle
 
           <Field label="In">
             <Choice
-              options={['lb', 'oz'] as const}
-              value={pounds ? 'lb' : 'oz'}
-              onChange={(next) => setPounds(next === 'lb')}
-              labels={{ lb: 'Pounds', oz: 'Ounces' }}
+              options={[heavy, light] as const}
+              value={massUnit}
+              onChange={setMassUnit}
+              labels={MASS_UNIT_LABELS}
             />
           </Field>
 

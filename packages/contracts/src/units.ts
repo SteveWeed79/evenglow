@@ -118,6 +118,48 @@ export function gramsToUg(grams: number): Micrograms {
   return Math.round(grams * 1_000_000);
 }
 
+/** The mass units a person types into, as opposed to the ones stored. */
+export const MASS_ENTRY_UNITS = ['lb', 'oz', 'kg', 'g'] as const;
+export type MassEntryUnit = (typeof MASS_ENTRY_UNITS)[number];
+
+/**
+ * The two a farm is offered, heavier first, and which of them it starts on.
+ *
+ * A metric farm being asked for pounds is the setting failing out loud, and it
+ * fails at the worst moment — entry, where a person converting in their head
+ * bakes the rounding into a stored integer that nothing downstream can tell
+ * from a real weighing.
+ *
+ * The heavier unit leads because it is the answer nine weighings in ten;
+ * ounces and grams are for chicks and for fibre off one animal.
+ *
+ * Here rather than in a screen because three screens want it and one of them
+ * had already been written twice — `WeighScreen` had this table, `HarvestScreen`
+ * had pounds and ounces hardcoded with no reference to the setting at all.
+ */
+export const MASS_ENTRY_CHOICES: Record<UnitSystem, readonly [MassEntryUnit, MassEntryUnit]> = {
+  imperial: ['lb', 'oz'],
+  metric: ['kg', 'g'],
+};
+
+const MASS_ENTRY_TO_UG: Record<MassEntryUnit, (value: number) => Micrograms> = {
+  lb: poundsToUg,
+  oz: ouncesToUg,
+  kg: (value) => gramsToUg(value * 1000),
+  g: gramsToUg,
+};
+
+/**
+ * A typed number in one of the entry units, as micrograms.
+ *
+ * Rounded here so every caller stores an integer, which is what the whole
+ * micrograms base exists for — a float that reaches SQLite is a float that
+ * sums differently on two devices.
+ */
+export function massEntryToUg(value: number, unit: MassEntryUnit): Micrograms {
+  return Math.round(MASS_ENTRY_TO_UG[unit](value));
+}
+
 /**
  * `productionLog` stores millilitres and grams rather than the finer bases,
  * because it was modelled before them and its rows are already synced.
