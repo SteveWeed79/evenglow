@@ -5,6 +5,8 @@ import type { CachedClaims } from '../auth/session';
 import { useRotation } from '../hooks/useRotation';
 import { AddAnimalScreen } from '../screens/AddAnimalScreen';
 import { AddBedScreen } from '../screens/AddBedScreen';
+import { BedScreen } from '../screens/BedScreen';
+import { VarietyScreen } from '../screens/VarietyScreen';
 import { AddGroupScreen } from '../screens/AddGroupScreen';
 import { AddItemScreen } from '../screens/AddItemScreen';
 import { AdjustStockScreen } from '../screens/AdjustStockScreen';
@@ -189,6 +191,10 @@ export type RootParamList = {
 
   // Growing
   SiteSetup: undefined;
+  /** One bed: what is in it, and what has been in it. */
+  Bed: { bedId: string };
+  /** One variety: what it asks for, and how it has done here. */
+  Variety: { varietyId: string };
   AddBed: { siteId: string };
   Numbers: undefined;
   CropNumbers: undefined;
@@ -281,6 +287,8 @@ export function Root({
 
       <Stack.Screen name="SiteSetup" component={SiteSetupScreen} />
       <Stack.Screen name="AddBed" component={AddBedScreen} />
+      <Stack.Screen name="Bed" component={BedScreen} />
+      <Stack.Screen name="Variety" component={VarietyScreen} />
       <Stack.Screen name="Numbers" component={NumbersScreen} />
       <Stack.Screen name="CropNumbers" component={CropNumbersScreen} />
       <Stack.Screen name="AnimalNumbers" component={AnimalNumbersScreen} />

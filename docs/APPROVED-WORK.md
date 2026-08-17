@@ -261,15 +261,26 @@ period rather than a task.
       screen of its own**, because the farm-wide inventory model below is going
       to reshape what an item is, and a screen built against today's shape would
       be built twice.
-      **Beds and varieties are a different shape, and this is the finding**
-      *(16 August)*. Nothing append-only names a bed or a variety: a `harvest`
-      names its **planting**. So a timeline for either is structurally empty,
-      and the screen they actually want is not this one — it is *what is
-      growing here now, and what grew here before*, which is derived from
-      `planting`, a mutable record rather than an event. Building the timeline
-      shape there would produce two screens that say "nothing logged against
-      this yet" for ever. It wants deciding, not assembling, and it is the last
-      quarter of this item.
+      **Beds and varieties were a different shape, and both are built now**
+      *(16 August)*. The finding stands: nothing append-only names a bed or a
+      variety, because a `harvest` names its **planting**. So neither screen is
+      a timeline with facts on top — each leads with what only `planting` can
+      say, which is a mutable record of state and therefore absent from the
+      history projection by design. A bed shows what is growing in it now and
+      what grew there before, which is the question a bed is actually asked;
+      a variety shows the numbers every planned date in the app is computed
+      from — shown for the first time, since a keeper who disagrees with
+      seventy-five days has to see seventy-five days.
+      **The harvests still reach them, and the way they do is the decision.**
+      `HistoryScope` now takes several subjects, so a bed asks for *itself and
+      its plantings* by name. The rule that an event's `subjects` are what a
+      record names stays exactly as strict; the hop is made on the screen that
+      means it, where *"we took four kilos out of bed three in August"* is
+      plainly true, rather than by a hierarchy walk every timeline in the app
+      would inherit. That is also what keeps a group's timeline free of its
+      animals' weights: nobody passes the animals.
+      Both are reachable: the bed heading on Growing opened nothing before, and
+      a planting now names the bed and the variety it belongs to.
       **Also still to come:** the rest of the shape around every timeline —
       upcoming work, edit and archive — which waits on the same two items named
       above.

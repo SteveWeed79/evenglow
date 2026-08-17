@@ -88,8 +88,11 @@ export interface HistoryEvent {
    *
    * The ids a record *names*, and nothing inferred from them. A group's
    * timeline therefore does not sweep up its animals' weights — that is a walk
-   * up a hierarchy, it is a different question, and it is one to decide when
-   * something actually asks it rather than by accident here.
+   * up a hierarchy, it is a different question, and the answer turned out to
+   * be that **the caller makes the hop**: `HistoryScope` takes several
+   * subjects, so a bed asks for itself and its plantings by name. The rule
+   * here stays exactly as strict, and the decision is visible on the screen
+   * that took it rather than inherited by every timeline in the app.
    *
    * Absent where a row is genuinely about nothing in particular: a predator
    * seen at the fence line is a fact about the farm.
@@ -188,17 +191,49 @@ function subjectsOf(...ids: readonly (string | undefined)[]): readonly string[] 
   return ids.filter((id): id is string => id !== undefined);
 }
 
-/** What a timeline is about, when it is about one thing. */
+/**
+ * The rows a scope wants, or all of them when it wants everything.
+ *
+ * A `Set` rather than repeated `includes`, because a bed with a season of
+ * plantings passes a dozen ids and the whole history is walked once per row.
+ */
+function withinScope(
+  events: readonly HistoryEvent[],
+  subject: string | readonly string[] | undefined,
+): HistoryEvent[] {
+  if (subject === undefined) return [...events];
+
+  const wanted = new Set(typeof subject === 'string' ? [subject] : subject);
+  if (wanted.size === 0) return [];
+
+  return events.filter((event) => event.subjects?.some((id) => wanted.has(id)) === true);
+}
+
+/** What a timeline is about. */
 export interface HistoryScope {
   /**
-   * Only rows naming this id.
+   * Only rows naming this id — or any of these.
    *
    * The reusable detail screen is what this exists for: before it, `listHistory`
    * was farm-wide and `HistoryEvent` carried no subject at all, so nothing in
    * the app could answer *"what has happened to this animal"* and the screens
    * that wanted it filtered a single entity's records by hand.
+   *
+   * ## Several, because a hop is the caller's to make
+   *
+   * `subjects` on an event are the ids a record **names** and nothing inferred,
+   * and that rule stays. But a bed's story genuinely is its plantings' —
+   * a `harvest` names a *planting*, a planting names a bed, and *"we took four
+   * kilos out of bed three in August"* is a true sentence about the bed. So the
+   * hop is made **by the screen that means it**, which knows its own plantings,
+   * rather than by a hierarchy walk buried in here that every timeline would
+   * then inherit.
+   *
+   * That is what keeps a group's timeline free of its animals' weights: nobody
+   * passes the animals. The day a screen wants that, it says so in one line and
+   * the decision is visible where it was taken.
    */
-  subject?: string | undefined;
+  subject?: string | readonly string[] | undefined;
 }
 
 /**
@@ -479,9 +514,7 @@ export async function listHistory(
    * the same cost the farm-wide screen already pays and is a walk over records
    * already in memory.
    */
-  const subject = scope.subject;
-  const wanted =
-    subject === undefined ? all : all.filter((event) => event.subjects?.includes(subject) === true);
+  const wanted = withinScope(all, scope.subject);
 
   return intoDays(wanted, system);
 }

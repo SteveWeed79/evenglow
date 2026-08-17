@@ -16,6 +16,7 @@ import {
   DayPick,
   Failure,
   Primary,
+  Row,
   Secondary,
   useSaver,
 } from '../components/Form';
@@ -175,6 +176,31 @@ export function PlantingScreen({ route }: ScreenProps<'Planting'>): React.ReactE
       <Text style={[styles.label, { color: colors.muted }]}>
         {variety?.crop ?? 'Growing'} · {bed?.name ?? 'a bed'} · season {planting.season}
       </Text>
+
+      {/*
+        The two things this planting belongs to, both of which now have a
+        screen. A planting is one season in a bed's succession and one entry in
+        a variety's record — before these rows, both of those were reachable
+        only by remembering which bed you came from.
+      */}
+      <Panel label="Part of">
+        {bed === undefined ? null : (
+          <Row
+            title={bed.name}
+            detail="What is in it, and what has been"
+            testID="go-bed"
+            onPress={() => nav.navigate('Bed', { bedId: planting.bedId })}
+          />
+        )}
+        {variety === undefined ? null : (
+          <Row
+            title={variety.name}
+            detail="What it asks for, and how it has done here"
+            testID="go-variety"
+            onPress={() => nav.navigate('Variety', { varietyId: planting.varietyId })}
+          />
+        )}
+      </Panel>
 
       <Panel label="Where it is">
         <Body>{describe(planting)}</Body>

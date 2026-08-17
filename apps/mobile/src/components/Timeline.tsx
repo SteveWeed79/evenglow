@@ -53,8 +53,15 @@ export function Timeline({
   subject,
   label = 'What happened',
 }: {
-  /** The record this timeline is about. */
-  subject: string;
+  /**
+   * The record this timeline is about — or the records, when a screen makes a
+   * hop the read deliberately does not.
+   *
+   * A bed passes itself and its plantings, because a `harvest` names a
+   * planting and *"we took four kilos out of bed three in August"* is a true
+   * sentence about the bed. See `HistoryScope`.
+   */
+  subject: string | readonly string[];
   /** The panel's heading, when a screen wants to say it differently. */
   label?: string;
 }): React.ReactElement {
@@ -63,7 +70,17 @@ export function Timeline({
   // Wrapped so it closes over both the farm's units and the subject: a bare
   // module reference would read the whole farm, which is the bug this exists
   // to fix arriving through the back door.
-  const read = useCallback(() => listHistory(units, { subject }), [units, subject]);
+  /**
+   * The subject list, flattened to a string before it becomes a dependency.
+   *
+   * A screen builds `[bedId, ...plantingIds]` fresh on every render, so a
+   * reference comparison would re-subscribe on every engine publish and never
+   * settle — a live read that re-reads because it re-read. The joined key is
+   * the same information by value, and it is split back apart rather than
+   * closing over the array so the two cannot disagree about what was asked.
+   */
+  const key = typeof subject === 'string' ? subject : subject.join(',');
+  const read = useCallback(() => listHistory(units, { subject: key.split(',') }), [units, key]);
   const days = useLive(read, 'what happened here');
 
   if (days === null) return <Loading title={label} />;

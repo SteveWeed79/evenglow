@@ -14,6 +14,8 @@ import { routeProps } from './screen';
 
 import { AddAnimalScreen } from '../../apps/mobile/src/screens/AddAnimalScreen';
 import { AddBedScreen } from '../../apps/mobile/src/screens/AddBedScreen';
+import { BedScreen } from '../../apps/mobile/src/screens/BedScreen';
+import { VarietyScreen } from '../../apps/mobile/src/screens/VarietyScreen';
 import { AddGroupScreen } from '../../apps/mobile/src/screens/AddGroupScreen';
 import { AddItemScreen } from '../../apps/mobile/src/screens/AddItemScreen';
 import { AddMachineScreen } from '../../apps/mobile/src/screens/AddMachineScreen';
@@ -227,6 +229,8 @@ export const SCREENS: [string, () => React.ReactElement][] = [
   ['AddItem', () => <AddItemScreen {...routeProps({})} />],
   ['SiteSetup', () => <SiteSetupScreen />],
   ['AddBed', () => <AddBedScreen {...routeProps({ siteId: SITE })} />],
+  ['Bed', () => <BedScreen {...routeProps({ bedId: BED })} />],
+  ['Variety', () => <VarietyScreen {...routeProps({ varietyId: VARIETY })} />],
   ['PickVariety', () => <PickVarietyScreen {...routeProps({ bedId: BED })} />],
   ['Planting', () => <PlantingScreen {...routeProps({ plantingId: PLANTING })} />],
   ['Harvest', () => <HarvestScreen {...routeProps({ plantingId: PLANTING })} />],
