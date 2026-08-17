@@ -271,6 +271,8 @@ export interface SweeperOptions {
    * is exactly what happened when this was written the other way.
    */
   sweep?: () => Promise<SweepReport>;
+  /** The clock `lastSweep` stamps with, so a test need not use the real one. */
+  now?: () => Date;
 }
 
 /**
@@ -313,12 +315,45 @@ function unref(handle: unknown): void {
   if (typeof fn === 'function') fn.call(handle);
 }
 
+/**
+ * How the last pass went, for anything that wants to look.
+ *
+ * **The sweep's own output went to `console.log` and nowhere a person reads.**
+ * That is fine for the ordinary hour, which says nothing at all — and useless
+ * for the question an operator actually has, which is *did this run, and did it
+ * find anything*. A silent journal and a broken timer look identical.
+ *
+ * Deliberately in memory and lost on restart. It describes this process, and
+ * persisting it would make it a record of the farm rather than a reading of the
+ * server — a row somebody would later have to decide whether to trust after a
+ * deploy. `at` being null means no pass has completed since boot, which on a
+ * freshly restarted server is the truth rather than a fault.
+ */
+export interface SweepStatus {
+  at: Date | null;
+  report: SweepReport | null;
+  /** The message from a pass that threw, so a failing sweeper is visible. */
+  failed: string | null;
+}
+
+let status: SweepStatus = { at: null, report: null, failed: null };
+
+export function lastSweep(): SweepStatus {
+  return status;
+}
+
+/** For a test that needs a process which has not swept yet. */
+export function forgetLastSweep(): void {
+  status = { at: null, report: null, failed: null };
+}
+
 export function startSweeper(options: SweeperOptions = {}): () => void {
   const {
     everyMs = SWEEP_EVERY_MS,
     settleMs = SETTLE_MS,
     report = console.log,
     sweep = sweepAllFarms,
+    now = () => new Date(),
   } = options;
 
   let running = false;
@@ -328,6 +363,7 @@ export function startSweeper(options: SweeperOptions = {}): () => void {
     running = true;
     try {
       const swept = await sweep();
+      status = { at: now(), report: swept, failed: null };
       // Silent on the ordinary hour, which is every hour. A line per pass would
       // bury the one that matters in a log nobody then reads.
       if (swept.found > 0) {
@@ -339,7 +375,9 @@ export function startSweeper(options: SweeperOptions = {}): () => void {
         );
       }
     } catch (error) {
-      report(`sweeper: pass failed — ${error instanceof Error ? error.message : String(error)}`);
+      const why = error instanceof Error ? error.message : String(error);
+      status = { at: now(), report: null, failed: why };
+      report(`sweeper: pass failed — ${why}`);
     } finally {
       running = false;
     }

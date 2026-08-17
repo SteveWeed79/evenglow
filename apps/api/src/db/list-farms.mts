@@ -14,24 +14,41 @@
  * keep it true is for the cross-tenant read to require a shell on the server
  * rather than a token — the same line `promo:new` draws for the same reason.
  *
+ * **The query itself now lives in `db/farms.ts`**, because the operations page
+ * wants these same rows and two implementations of the deliberate cross-tenant
+ * read is the last duplication this codebase should carry. What is left here is
+ * presentation: this file decides how a farm reads down a column, and nothing
+ * else.
+ *
  *   pnpm farm:ls               newest first
  *   pnpm farm:ls --all         past the default 200
  */
 
-import { entitlementOf } from '@steading/contracts';
-import { db } from './client.ts';
-import { listOrgs, listUsersInOrg } from './identity.ts';
+import { farmSyncState } from '../billing/access.ts';
+import { readEnv } from '../env.ts';
+import { listFarmSummaries } from './farms.ts';
 
 const all = process.argv.includes('--all');
 
-const farms = await listOrgs(all ? 10_000 : 200);
+/**
+ * The server's own environment, because the sync column is wrong without it.
+ *
+ * This listing used to read `syncGranted` and the subscription and stop there,
+ * so a farm comped through `FREE_SYNC_ORGS` — testers, and whoever runs the
+ * box — showed as `unsubscribed` while syncing perfectly. Refusing to start
+ * without a readable environment is the right failure: a sync column computed
+ * from half the inputs is a confident wrong answer, and this command exists to
+ * be believed.
+ */
+const env = readEnv(process.env);
+
+const farms = await listFarmSummaries(all ? 10_000 : 200);
 
 if (farms.length === 0) {
   console.log('\n  No farms on this server yet.\n');
   process.exit(0);
 }
 
-const database = await db();
 const now = Date.now();
 
 /** Fixed-width so a column of farms reads down rather than across. */
@@ -45,34 +62,30 @@ function when(at: Date | undefined): string {
   return days === 0 ? 'today' : days === 1 ? 'yesterday' : `${days}d ago`;
 }
 
-console.log(`\n  ${pad('FARM', 24)}${pad('ID', 28)}${pad('WHO', 5)}${pad('RECORDS', 9)}${pad('SYNC', 12)}LAST WRITE`);
-console.log(`  ${'─'.repeat(88)}`);
+/**
+ * What this farm is running, in the width of a column.
+ *
+ * One build is the ordinary case and reads as itself. Several means the farm is
+ * mid-update, which is worth seeing — so the newest is named and the rest are
+ * counted rather than truncated into a list nobody can parse at a glance.
+ */
+function builds(farm: (typeof farms)[number]): string {
+  const [newest, ...rest] = farm.builds;
+  if (newest === undefined) return '—';
+  return rest.length === 0 ? newest.version : `${newest.version} +${rest.length}`;
+}
+
+console.log(
+  `\n  ${pad('FARM', 22)}${pad('ID', 28)}${pad('WHO', 5)}${pad('RECORDS', 9)}` +
+    `${pad('SYNC', 14)}${pad('BUILD', 12)}LAST WRITE`,
+);
+console.log(`  ${'─'.repeat(100)}`);
 
 for (const farm of farms) {
-  const [people, records, latest] = await Promise.all([
-    listUsersInOrg(farm._id),
-    database.collection('mutations').countDocuments({ orgId: farm._id }),
-    database
-      .collection<{ serverTs?: Date }>('mutations')
-      .find({ orgId: farm._id })
-      .sort({ serverTs: -1 })
-      .limit(1)
-      .toArray(),
-  ]);
-
-  /**
-   * What this farm's sync state actually is, in the order the server decides
-   * it — a grant short-circuits the subscription, so showing the subscription
-   * would be showing something that is not being consulted.
-   */
-  const state =
-    farm.syncGranted !== undefined
-      ? 'granted'
-      : (entitlementOf(farm.subscription, now).refusal ?? 'paid');
-
   console.log(
-    `  ${pad(farm.name, 24)}${pad(farm._id, 28)}${pad(String(people.length), 5)}` +
-      `${pad(String(records), 9)}${pad(state, 12)}${when(latest[0]?.serverTs)}`,
+    `  ${pad(farm.org.name, 22)}${pad(farm.org._id, 28)}${pad(String(farm.people), 5)}` +
+      `${pad(String(farm.records), 9)}${pad(farmSyncState(env, farm.org), 14)}` +
+      `${pad(builds(farm), 12)}${when(farm.lastWriteAt)}`,
   );
 }
 

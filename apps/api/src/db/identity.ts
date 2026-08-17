@@ -1,5 +1,5 @@
 import type { Collection } from 'mongodb';
-import type { Role, Subscription } from '@steading/contracts';
+import { parseVersion, type Role, type Subscription } from '@steading/contracts';
 import { db } from './client';
 
 /**
@@ -48,6 +48,28 @@ export interface UserDoc {
    */
   formerEmail?: string;
   formerGoogleSub?: string;
+  /**
+   * The build this account last talked to the server with, and when.
+   *
+   * **The only evidence there is about what is actually installed.** Sideloaded
+   * installs have no updater and no telemetry, so "which builds are in the
+   * field" was a question nothing on this server could answer — the version
+   * header arrived on every sync, decided the 426, and was discarded. Setting
+   * `MINIMUM_CLIENT_VERSION` without knowing what it would lock out is a guess,
+   * and this is what turns it into a reading.
+   *
+   * **Per account rather than per device**, because that is what the wire
+   * actually carries: the token names an account, and nothing identifies a
+   * handset outside a mutation envelope — `/snapshot` has no body at all. A
+   * person with two phones on different builds shows as whichever synced last,
+   * which is a real limit and stated here rather than discovered from a
+   * confusing panel.
+   *
+   * `client` is absent when the build sent no version, or sent one that is not
+   * `major.minor.patch`. See `recordLastSeen` for why that is a parse and not a
+   * store.
+   */
+  lastSeen?: { at: Date; client?: string };
 }
 
 export interface OrgDoc {
@@ -218,6 +240,44 @@ export async function listOrgs(limit = 200): Promise<OrgDoc[]> {
 /** Everyone on one farm, so `farm:show` can say who would be affected. */
 export async function listUsersInOrg(orgId: string): Promise<UserDoc[]> {
   return (await users()).find({ orgId }).sort({ createdAt: 1 }).toArray();
+}
+
+/**
+ * Notes what build an account is running, on a request that already proved who
+ * it is.
+ *
+ * **The version is parsed, not stored as it arrived.** It is a header, which
+ * makes it caller-controlled data reaching the database (invariant 11) — and
+ * this one ends up rendered on an operations page, aggregated into counts, and
+ * compared against a floor. `parseVersion` bounds it to three integers of at
+ * most five digits each, so what lands is a version or nothing: no unbounded
+ * string, no shape a reader has to be careful with, and no way to spread a
+ * version histogram across a thousand invented values.
+ *
+ * An unreadable version still records the *visit*. That distinction carries
+ * real information — a build that predates the header, or something
+ * hand-rolled — and `at` without `client` says exactly that, where dropping the
+ * write entirely would make the account look dormant.
+ *
+ * **Never fails a request.** This is telemetry hanging off the side of sync,
+ * and a farm's morning must not end in a 500 because a bookkeeping write lost a
+ * race. The caller decides nothing on the result, so there is nothing to
+ * report.
+ */
+export async function recordLastSeen(
+  userId: string,
+  reportedVersion: string | undefined,
+  at: Date,
+): Promise<void> {
+  const parsed = reportedVersion === undefined ? null : parseVersion(reportedVersion);
+  const client =
+    parsed === null ? {} : { client: `${parsed.major}.${parsed.minor}.${parsed.patch}` };
+
+  try {
+    await (await users()).updateOne({ _id: userId }, { $set: { lastSeen: { at, ...client } } });
+  } catch {
+    // Deliberately swallowed — see above.
+  }
 }
 
 /** Gives sync away, or takes it back. Null revokes. */

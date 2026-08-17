@@ -1,4 +1,4 @@
-import { type Entitlement, entitlementOf } from '@steading/contracts';
+import { type Entitlement, entitlementOf, type SyncRefusal } from '@steading/contracts';
 import type { Env } from '../env';
 import type { OrgDoc } from '../db/identity';
 
@@ -74,4 +74,41 @@ export function syncAccess(env: Env, org: OrgDoc | null): Entitlement {
    * work to start meaning something on a server with no Play at all.
    */
   return entitlementOf(org?.subscription, Date.now());
+}
+
+/**
+ * Which of the ways through a farm actually came in by, or why it did not.
+ *
+ * `syncAccess` answers the question a request asks — *may this farm write* —
+ * and collapses four different yeses into one `syncing: true`. An operator
+ * asking *what is this farm's situation* needs them apart: a comped farm and a
+ * paying farm are the same to the wire and nothing like each other on a page
+ * about who is subscribed.
+ *
+ * **The branch order is `syncAccess`'s, deliberately duplicated rather than
+ * derived**, and that is the thing to be careful about. A readout that
+ * disagrees with what a farm experiences is worse than no readout, so the
+ * pairing is pinned by a test that walks every combination and asserts this
+ * says a refusal exactly when `syncAccess` says it cannot sync. If somebody
+ * reorders one, that test fails rather than the operations page quietly
+ * describing a farm that does not exist.
+ *
+ * This is what `farm:ls` had wrong. It read `syncGranted` and the subscription
+ * and nothing else, so a farm comped through `FREE_SYNC_ORGS` — the mechanism
+ * for testers and for whoever runs the server, which is to say the farms most
+ * likely to be looked up — listed as `unsubscribed` while syncing perfectly.
+ */
+export type FarmSyncState = 'comped' | 'granted' | 'open' | 'paid' | SyncRefusal;
+
+export function farmSyncState(env: Env, org: OrgDoc): FarmSyncState {
+  /** Comped in the server's own environment, and it wins over everything. */
+  if (env.freeSyncOrgs.has(org._id)) return 'comped';
+
+  /** Comped in the database, by `pnpm farm:grant`. */
+  if (org.syncGranted !== undefined) return 'granted';
+
+  /** A server deliberately run open, which is not the same as a farm paying. */
+  if (env.playConfig === null && env.SYNC_OPEN_TO_ALL) return 'open';
+
+  return entitlementOf(org.subscription, Date.now()).refusal ?? 'paid';
 }

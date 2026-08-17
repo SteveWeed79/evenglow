@@ -576,12 +576,46 @@ period rather than a task.
       There is no timezone handling in this codebase at all. `[34]` is the
       urgent half: a record written today without its zone can never have one
       added.
-- [ ] **An operational control centre on the box.** *(raised in §8 on 17
-      August, decided the same day)*
+- [x] **An operational control centre on the box.** *(raised in §8 on 17
+      August, decided the same day, **built the same day**)*
       One page, its own process, live reads, behind a Caddy site block with a
       password on the existing `admin` role. **Business and operations, not farm
       records** — the point is subscribers, tokens, versions and health, and
       nobody needs a panel telling them how many eggs a farm collected.
+
+      **Built as specified**, with the pieces where the spec put them:
+      `apps/api/src/ops.ts` is the entry (`pnpm ops`), `ops/server.ts` the
+      routes, `ops/page.ts` the page, `ops/actions.ts` the two writes, and
+      `db/board.ts` the reads — in `db/` because that is the only place lint
+      permits a collection handle, which keeps every deliberate cross-tenant
+      read in one directory.
+
+      **Three decisions taken while building, none of them in the spec:**
+      - **The token lives in a variable, not a cookie.** An ambient credential
+        the browser attaches by itself is a CSRF surface needing its own
+        defence; with none there is nothing to forge a request with, and no
+        `@fastify/cookie` dependency to add. The cost is that a refresh signs
+        you out, which for a board somebody opens to answer a question is the
+        right way round.
+      - **Loopback by default.** The API binds `0.0.0.0` because it must be
+        reachable; this binds `127.0.0.1` unless `OPS_HOST` says otherwise, so a
+        box whose Caddy config does not mention the board has no way in from
+        outside — no firewall rule to remember, and none to forget.
+      - **A 403 rather than a 404 for a signed-in non-admin**, which inverts
+        this service's usual rule. Everywhere else an unauthorised read is a 404
+        because distinguishing them discloses that a record exists; the board is
+        a fixed page with nothing to disclose, so telling an owner their role is
+        not enough beats pretending the page is missing. Sign-*in* keeps the
+        single indistinguishable refusal, because that one does enumerate
+        accounts.
+
+      **Verified in a browser, not only by tests.** Playwright drove sign-in as
+      a farmer (refused), as the admin (board drawn), both buttons (a code
+      minted, a farm granted and revoked, a bad id refused), with no console
+      errors. A farm was deliberately named `<img src=x onerror=alert(1)>`: it
+      renders as those characters, `img[onerror]` count zero, no dialog. Every
+      value reaches the DOM through `textContent`, so the correct display and
+      the correct security come from the same line.
 
       **The panels, and what already backs each one.** Everything but the third
       is answerable from the database today:
@@ -593,11 +627,18 @@ period rather than a task.
         and `at`, so minted-versus-spent is exact rather than estimated;
         invites and join codes have the same shape. This is the closest thing
         the server has to a funnel.
-      - **Versions in the field.** *Nothing backs this yet.* `routes/sync.ts`
-        reads `x-steading-client`, decides the 426 with it, and **discards it**
-        — so "which builds are actually out there" has no data behind it. It
-        needs a last-seen version stored per device or per farm, which is a
-        small write and a prerequisite rather than a panel.
+      - **Versions in the field.** ~~*Nothing backs this yet.*~~ **Backed as of
+        17 August.** `users.lastSeen` carries `{ at, client }`, written on both
+        `/sync` and `/snapshot` — the pull route too, because a reinstall
+        restoring a farm reports its build for a while before it writes
+        anything. `listFarmSummaries` tallies accounts per build.
+        **Per account, not per device**, and the panel must not claim otherwise:
+        the token names an account and nothing identifies a handset outside a
+        mutation envelope, so `/snapshot` has no device to name. Somebody with
+        two phones on different builds shows as whichever synced last.
+        The header is **parsed, not stored** — `parseVersion` bounds it to three
+        integers, so a caller-controlled string never reaches the page and a
+        histogram cannot be sprayed across invented values.
       - **Server health.** `ping()`, process uptime, mongod reachable, disk and
         photo bytes from `db:usage`, and the sweeper's last report — which
         currently goes to `console.log` and nowhere a person looks.
@@ -622,9 +663,18 @@ period rather than a task.
       **The buttons call the functions, never a shell.** `createPromoCode` and
       the rest are exported from `apps/api/src/db/`; shelling out to `pnpm …`
       would be a command-injection surface that also depends on a checkout being
-      present. `list-farms.mts` queries inline rather than through a shared
-      function, so that one query wants extracting first — the alternative is
-      two implementations of the only cross-tenant read in the codebase.
+      present. ~~`list-farms.mts` queries inline rather than through a shared
+      function, so that one query wants extracting first~~ — **done 17 August.**
+      `db/farms.ts` owns the cross-tenant read and `list-farms.mts` is
+      presentation, so the board and the command cannot answer differently.
+      **Extracting it found the listing was already wrong.** It read
+      `syncGranted` and the subscription and stopped, so a farm comped through
+      `FREE_SYNC_ORGS` — testers and whoever runs the box, which is to say the
+      farms most likely to be looked up — printed `unsubscribed` while syncing
+      perfectly. `farmSyncState` now mirrors `syncAccess`'s own branch order and
+      names all four ways through (`comped`, `granted`, `open`, `paid`); a test
+      walks every combination and fails if the two ever disagree about whether a
+      farm may sync.
 
       **Auth: a password, on the `admin` role, with three conditions.** From a
       manager and never typed, because the whole thing rests on entropy; its own
