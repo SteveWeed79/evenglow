@@ -758,6 +758,65 @@ decisions are cluster-shaped — one argument settles each group.
 - **Device and platform reach** — `[77]`–`[90]`. Barcode, EID, Bluetooth
   scales, printing, calendar export, foldables, Chromebooks. `[76]`, voice, is
   argued in §6's wet-glove item and is still undecided as work.
+- **A control centre on the box** — *raised 17 August, from neither sweep.*
+  A signed-in page on the server showing what the server knows: which farms
+  exist, which are syncing, what is stuck. Undecided, and the reason it is
+  written down rather than started is that the interesting decisions are all
+  boundary decisions and none of them has been argued.
+
+  **What already exists, and the rule it encodes.** `farm:ls`, `farm:show`,
+  `db:usage`, `db:verify`, `promo:new` and `db:password` are the surface today,
+  and `list-farms.mts` says why they are commands rather than routes: *"It is
+  the one query in the codebase that crosses tenants on purpose. The whole of
+  `scoped()` exists so that no request can do that, and the way to keep it true
+  is for the cross-tenant read to require a shell on the server rather than a
+  token."* Any dashboard has to answer that sentence, not step around it.
+
+  **The answer that costs nothing is to keep the shell.** Bind it to localhost
+  and reach it through an SSH tunnel: a browser UI, no new authentication
+  surface, no new attack surface, and `scoped()`'s guarantee stays literally
+  true because there is still no *route* that crosses tenants. The alternative —
+  a real login on a public admin path — is a second auth system guarding the one
+  thing on this box that can read every farm, and it should not be the first
+  version of anything.
+
+  **Why now rather than six months ago.** Three commits on 17 August generated
+  operational signals that exist nowhere a person can see them. The sweeper's
+  own report — how many rows were undecided, decided, orphaned, unreadable —
+  goes to `console.log` and nothing else. The outcome mix per farm (`rejected`
+  and `conflict` counts) is the shape of a bug nobody will ever report, because
+  the only person who sees the inbox entry is the one who caused it. And feed
+  lag — newest `serverTs` against each device's last pull — answers *"is
+  somebody's phone not syncing"* without asking them, which is the question
+  `DiagnosticsScreen` answers on the handset for the farm and nothing answers
+  here for the person running the box.
+
+  **Read-only first, and the write actions are their own arguments.** Every
+  existing script is read-only by deliberate choice, and the three writes that
+  exist — a password reset, a promo code, a sync grant — each carry a decision
+  that a dashboard would quietly inherit rather than make.
+
+  **The privacy line is the one that gets crossed by accident.** `show-farm.mts`
+  states it: *"What it deliberately does NOT show — any record's contents… Counts
+  and timings answer an operational question; reading somebody's egg tallies
+  over their shoulder does not."* That is `ACCESS-AND-BILLING.md` §5 and the
+  support loop's S2, where a farm's data is taken only when it is asked for and
+  agreed to. A dashboard makes it one careless panel away.
+
+  **The panels that would earn their place**, if it is built: farms with last
+  sync and queue depth; per-farm outcome mix over a window; `pending` rows and
+  their age, with the sweeper's last report; feed lag per device; disk and photo
+  bytes from `db:usage`; and whatever `db:verify` already checks. Every one of
+  those is a count or a timestamp, which is what makes the privacy line easy to
+  hold here rather than a matter of restraint.
+
+  **What is genuinely undecided**, and would need settling before any code:
+  whether localhost-only is acceptable long-term or merely first; whether it
+  reuses the Fastify app or is a separate process, given that a bug in it must
+  not be able to take `/sync` down; whether the panels read live or from a
+  rollup, since a per-farm scan on every page load is a cost that grows with the
+  thing it is measuring; and whether it is one page or the beginning of an admin
+  surface, because those two attract very different amounts of scope.
 
 ---
 
