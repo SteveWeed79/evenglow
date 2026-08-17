@@ -714,6 +714,52 @@ period rather than a task.
       wants a version the shelf can be asked for and a screen to say it on,
       which is its own piece of work — and until it exists the refusal above is
       the only thing that will ever mention it.
+
+      **Scoped 17 August, and it is two builds rather than one.** *Not urgent —
+      the box is the only channel until the Play listing exists, and the box
+      path stays correct forever for self-hosted farms, which have no store to
+      ask.*
+
+      **Phase 1 — ask the box. No new dependency, and it works today.**
+      The shelf already renders a version stamp
+      (`scripts/deploy/render-install-page.sh`), and every release now has a
+      tag and an APK behind it. Serve that stamp as JSON, compare it to
+      `APP_VERSION`, and put a banner with the `/app/` link on the sync screen.
+
+      **Phase 2 — ask Play, once there is a listing.** `AppUpdateManager`'s
+      `IMMEDIATE` flow: Play downloads, installs and restarts, so the
+      self-update policy does not apply. It needs a native module — there is no
+      first-party Expo one — which is a dependency to justify under Style when
+      it is actually reached.
+
+      **Four things settled while scoping it, so they are not re-derived:**
+      - **Play does not force updates.** There is no Console switch for it.
+        Every "you must update" screen is the app choosing to block, with Play
+        supplying the install. This is code either way.
+      - **The app must know which channel installed it**, or it will offer the
+        wrong thing: a Play build may not show an APK link at all — Google
+        Play's Device and Network Abuse policy forbids a Play-distributed app
+        updating itself by any other route. Cheapest honest answer is a
+        build-time stamp beside `EXPO_PUBLIC_BUILD`, set from the EAS profile,
+        since `TESTING-BUILD.md` already defines `production` as the AAB for
+        Play and everything else as APKs we serve. `getInstallSourceInfo()`
+        would be the runtime answer and needs a native module we do not have.
+      - **The box cannot answer for a Play device.** It knows what was
+        published; Play decides what each device may have — staged rollouts,
+        review, an unsupported API level. A nag nobody can act on is worse than
+        silence, so on Play the question goes to Play.
+      - **`MINIMUM_CLIENT_VERSION` becomes dangerous the day Play is the
+        channel.** Today distribution is ours and raising the floor is safe.
+        Raise it during a staged rollout and a farm is refused sync with **no
+        action available** — the app says update, Play says you are current.
+        Rule: only raise the floor for builds old enough that everybody has
+        long since been offered the new one.
+
+      **And it must not lock the app.** The standard pattern blocks the whole
+      UI; that is wrong here and breaks D14. Sync is held — already the right
+      shape, nothing dropped and no attempts counted — while local logging
+      carries on untouched. What is missing is a banner that can be acted on,
+      not a wall.
 - [x] **Guard against a database from the future.** `[151]` — *built 16 August*
       `migrate()` silently no-opped when `user_version` exceeded
       `SCHEMA_VERSION`, reporting the higher number as a success and handing
