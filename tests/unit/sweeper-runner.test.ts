@@ -23,7 +23,7 @@ import {
  * seam the runner genuinely has is better than one a test pretends it has.
  */
 
-const NOTHING: SweepReport = { found: 0, decided: 0, unreadable: 0, orphaned: 0 };
+const NOTHING: SweepReport = { found: 0, decided: 0, unreadable: 0, orphaned: 0, refused: 0 };
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -131,7 +131,7 @@ describe('the sweeper’s timer', () => {
   it('says what it decided when it decided something', async () => {
     const said: string[] = [];
     const stop = startSweeper({
-      sweep: vi.fn().mockResolvedValue({ found: 3, decided: 2, unreadable: 1, orphaned: 0 }),
+      sweep: vi.fn().mockResolvedValue({ found: 3, decided: 2, unreadable: 1, orphaned: 0, refused: 0 }),
       settleMs: 10,
       everyMs: 3_600_000,
       report: (l) => said.push(l),

@@ -1,4 +1,4 @@
-import type { Role } from '@steading/contracts';
+import { canMutate, isUploadStamp, type Role, roleRefusal } from '@steading/contracts';
 import type { SessionClaims } from '../auth/claims';
 import { findUserById, listOrgs } from '../db/identity';
 import type { Scoped } from '../db/scoped';
@@ -78,9 +78,11 @@ export interface SweepReport {
   unreadable: number;
   /** Rows whose author is no longer a member here. */
   orphaned: number;
+  /** Rows the author's current role does not permit. */
+  refused: number;
 }
 
-const NOTHING: SweepReport = { found: 0, decided: 0, unreadable: 0, orphaned: 0 };
+const NOTHING: SweepReport = { found: 0, decided: 0, unreadable: 0, orphaned: 0, refused: 0 };
 
 function add(a: SweepReport, b: Partial<SweepReport>): SweepReport {
   return {
@@ -88,6 +90,7 @@ function add(a: SweepReport, b: Partial<SweepReport>): SweepReport {
     decided: a.decided + (b.decided ?? 0),
     unreadable: a.unreadable + (b.unreadable ?? 0),
     orphaned: a.orphaned + (b.orphaned ?? 0),
+    refused: a.refused + (b.refused ?? 0),
   };
 }
 
@@ -171,6 +174,32 @@ async function sweepOne(
         reason: 'The person who recorded this is no longer on this farm.',
       });
       return { decided: 1, orphaned: 1 };
+    }
+
+    /**
+     * The role gate, which `project()` does not carry.
+     *
+     * **This was missing, and its own test found it.** `decideProjection` takes
+     * an `actor` and consults it for exactly two things — whether a hand may
+     * stamp a photo it just uploaded, and whether somebody may edit a note they
+     * did not write. The general question, *may this role do this at all*, is
+     * `canMutate`, and `applyMutation` asks it **before** the lane and outside
+     * `project()`. A sweeper that goes straight to `project()` therefore applied
+     * every stranded row whatever its author is now allowed to do.
+     *
+     * That is a fail-open on authorization, which invariant 10 forbids outright,
+     * and it is worse here than in a request: nobody is watching, and the row
+     * being swept is by definition one whose author never came back to be told.
+     *
+     * Asked in the same shape as `applyMutation`, `isUploadStamp` included — a
+     * hand's `photo:update` carrying only `uploadedAt` is the one mutation
+     * `canMutate` refuses and the server must still accept, and a sweep that
+     * dropped it would leave a photo on the server invisible to every device.
+     */
+    const { entity, op, payload } = replay.command;
+    if (!canMutate(claims.role, entity, op) && !isUploadStamp(entity, op, payload)) {
+      await stampOutcome(scope, id, { kind: 'rejected', reason: roleRefusal(op, entity) });
+      return { decided: 1, refused: 1 };
     }
 
     const decision = await project(scope, claims, replay.command);
@@ -305,6 +334,7 @@ export function startSweeper(options: SweeperOptions = {}): () => void {
         report(
           `sweeper: ${swept.found} undecided, ${swept.decided} decided` +
             `${swept.orphaned > 0 ? `, ${swept.orphaned} orphaned` : ''}` +
+            `${swept.refused > 0 ? `, ${swept.refused} refused` : ''}` +
             `${swept.unreadable > 0 ? `, ${swept.unreadable} unreadable` : ''}`,
         );
       }

@@ -339,6 +339,16 @@ everybody else.
       **A first pass a minute after boot**, then hourly. A restart is the
       likeliest moment for a stranded row to exist, so waiting a full hour after
       coming back up would wait through it.
+      **The role gate was missing on the first draft, and its own test found
+      it** *(17 August)*. `applyMutation` asks `canMutate` **before** the lane
+      and outside `project()`; `decideProjection`'s `actor` only answers two
+      narrow questions — a hand stamping a photo it uploaded, and who may edit a
+      note. A sweeper that went straight to `project()` therefore applied every
+      stranded row whatever its author may now do, which is a fail-open on
+      authorization (invariant 10) and worse here than in a request: nobody is
+      watching, and the row is by definition one whose author never came back to
+      be told. The gate is asked in the same shape as `applyMutation`,
+      `isUploadStamp` included.
       **CI only for the sweep itself** (`tests/sync/sweeper.test.ts`) — no mongod
       is obtainable here. `tests/unit/sweeper-runner.test.ts` covers the timer
       and does run: overlap, a pass that throws, and what it says.

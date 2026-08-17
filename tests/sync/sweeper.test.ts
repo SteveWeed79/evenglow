@@ -256,7 +256,14 @@ describeDb('the person who recorded it', () => {
     expect(await harness!.db.collection('mutations').countDocuments({})).toBe(1);
   });
 
-  /** A role demoted since the row was queued bites on the sweep too. */
+  /**
+   * A role demoted since the row was queued bites on the sweep too.
+   *
+   * **This one found a real hole.** The sweeper called `project()` directly, and
+   * the general role gate is `canMutate` in `applyMutation`, *outside*
+   * `project()` — `decideProjection`'s `actor` only answers two narrow
+   * questions. So every stranded row was applied whatever its author may now do.
+   */
   it('is judged by the role they hold now, not the one they had', async () => {
     await harness!.db
       .collection('users')
