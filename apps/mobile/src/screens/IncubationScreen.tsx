@@ -14,14 +14,14 @@ import {
 } from '@steading/core/read/breeding';
 import { saidConfirmation } from '@steading/core/voice';
 import { Coming } from '../components/Coming';
-import { Confirmation, Failure, Field, Primary, Stepper, useSaver } from '../components/Form';
+import { Confirmation, Failure, Field, Primary, Row, Stepper, useSaver } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Notes } from '../components/Notes';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
 import { useLog } from '../hooks/useSync';
-import { useLeave } from '../hooks/useNav';
+import { useLeave, useNav } from '../hooks/useNav';
 import type { ScreenProps } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, SPACE, TYPE } from '../theme/tokens';
@@ -70,6 +70,7 @@ export function IncubationScreen({ route }: ScreenProps<'Incubation'>): React.Re
 
 function Detail({ incubation }: { incubation: IncubationEntry }): React.ReactElement {
   const log = useLog();
+  const nav = useNav();
   const { colors } = useTheme();
 
   /**
@@ -244,6 +245,15 @@ function Detail({ incubation }: { incubation: IncubationEntry }): React.ReactEle
         subjectId={incubation.id}
         subject={incubation.label}
       />
+
+      <Panel label="This set">
+        <Row
+          title={`Change ${incubation.label}`}
+          detail="What they are, how many went under, the date, and the counts"
+          testID="go-edit-incubation"
+          onPress={() => nav.navigate('EditIncubation', { incubationId: incubation.id })}
+        />
+      </Panel>
 
       {incubation.hatchedAt === undefined ? (
         <Panel label="The hatch">

@@ -44,6 +44,7 @@ import { LicencesScreen } from '../screens/LicencesScreen';
 import { LogHoursScreen } from '../screens/LogHoursScreen';
 import { LossScreen } from '../screens/LossScreen';
 import { MachineScreen } from '../screens/MachineScreen';
+import { EditIncubationScreen } from '../screens/EditIncubationScreen';
 import { EditMachineScreen } from '../screens/EditMachineScreen';
 import { MembersScreen } from '../screens/MembersScreen';
 import { AddVarietyScreen } from '../screens/AddVarietyScreen';
@@ -185,6 +186,7 @@ export type RootParamList = {
   Incubations: undefined;
   SetEggs: undefined;
   Incubation: { incubationId: string };
+  EditIncubation: { incubationId: string };
 
   // Iron
   AddMachine: undefined;
@@ -291,6 +293,7 @@ export function Root({
 
       <Stack.Screen name="AddMachine" component={AddMachineScreen} />
       <Stack.Screen name="Machine" component={MachineScreen} />
+      <Stack.Screen name="EditIncubation" component={EditIncubationScreen} />
       <Stack.Screen name="EditMachine" component={EditMachineScreen} />
       <Stack.Screen name="LogHours" component={LogHoursScreen} />
       <Stack.Screen name="AddService" component={AddServiceScreen} />

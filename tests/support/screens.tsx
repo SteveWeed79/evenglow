@@ -50,6 +50,7 @@ import { JobsScreen } from '../../apps/mobile/src/screens/JobsScreen';
 import { LogHoursScreen } from '../../apps/mobile/src/screens/LogHoursScreen';
 import { LossScreen } from '../../apps/mobile/src/screens/LossScreen';
 import { MachineScreen } from '../../apps/mobile/src/screens/MachineScreen';
+import { EditIncubationScreen } from '../../apps/mobile/src/screens/EditIncubationScreen';
 import { EditMachineScreen } from '../../apps/mobile/src/screens/EditMachineScreen';
 import { MembersScreen } from '../../apps/mobile/src/screens/MembersScreen';
 import { PickVarietyScreen } from '../../apps/mobile/src/screens/PickVarietyScreen';
@@ -229,6 +230,10 @@ export const SCREENS: [string, () => React.ReactElement][] = [
   ['Incubations', () => <IncubationsScreen />],
   ['SetEggs', () => <SetEggsScreen />],
   ['Incubation', () => <IncubationScreen {...routeProps({ incubationId: INCUBATION })} />],
+  [
+    'EditIncubation',
+    () => <EditIncubationScreen {...routeProps({ incubationId: INCUBATION })} />,
+  ],
   ['AddMachine', () => <AddMachineScreen />],
   ['Machine', () => <MachineScreen {...routeProps({ machineId: MACHINE })} />],
   ['EditMachine', () => <EditMachineScreen {...routeProps({ machineId: MACHINE })} />],

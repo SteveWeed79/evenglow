@@ -324,6 +324,37 @@ period rather than a task.
       zero they do not mean — which puts a use that never happened into the
       adjustment history, and that is worse than an archived item with a number
       on it.
+      **A set of eggs came last** *(17 August)* and broke the pattern the other
+      five had settled into. Everywhere else, archiving leaves what was logged
+      against the record: a retired tractor keeps its hour readings, an archived
+      item keeps its adjustments, because those are separate records that merely
+      name it. **An incubation has no separate records** — set, candled,
+      hatched, and the counts are all fields on itself, which is exactly why the
+      hatch in What happened is built from the record — so archiving one really
+      does take the hatch out of the farm's history. The screen says that in
+      those words instead of implying the usual bargain. It is still *allowed*,
+      where a planting with harvests is refused, and the difference is the
+      point: there the harvests would survive unreachable, saying four kilos of
+      tomatoes happened somewhere nobody can look; here nothing is stranded,
+      because the row and the record are the same thing.
+      **Two of its fields are the app's arithmetic rather than description.**
+      `setAt` and `species` are what both dates count from and `SetEggsScreen`
+      opens on chicken at today, so a duck set entered two days late hatches a
+      week early in the app and nowhere else — and a due row that came and went
+      is not one anybody can tell was wrong. `eggsSet` is the denominator of
+      every rate the detail screen prints: twelve typed as twenty-one makes a
+      good hatch read as 38%, which is the number a keeper diagnoses an
+      incubator by. **And three counts could only ever be written once**, since
+      the forms recording `fertile`, `hatched` and `earlyLosses` vanish the
+      moment they are filled in. They are offered here and only once they
+      exist — correcting what was recorded, never a second place to record it,
+      because a `fertile` of nought from a stepper nobody touched is a claim
+      that every egg was clear.
+      **It also gave `flockId` its first caller.** *"The group the eggs came
+      from, when they came from this farm"* has been in the schema since it was
+      written and the add screen never asked, so the hatch reached What happened
+      and no group's own story — however plainly the hens laid the eggs. Asking
+      on the *add* screen too is the obvious follow-on and is not done.
       **The upcoming-work half closed it** *(17 August)*, and it turned out to
       be a reading of the engine rather than an addition to it. `useDues`
       composes twelve builders into a farm-wide list and exactly one screen had
