@@ -4,7 +4,7 @@
     "slug": "steading",
     "owner": "swbuilds-team",
     "scheme": "steading",
-    "version": "0.2.2",
+    "version": "0.2.3",
     "orientation": "default",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon/steading.png",
