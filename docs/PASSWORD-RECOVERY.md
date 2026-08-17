@@ -1,8 +1,22 @@
 # Password recovery, and the mail sender under it
 
-**Decided, researched, not yet built.** This is the design to transcribe, so
-the implementation is a typing exercise rather than a series of judgement calls
-made at a keyboard.
+**Built, 17 August.** It was largely the typing exercise this document set out
+to make it — the shape, the code length, the timing floor, the two-axis rate
+limit and the three writes all went in as written. Three things came out
+differently and each is recorded below where it belongs, rather than leaving the
+document describing something that is not there:
+
+1. **Two providers behind the port, not one** (§8.1). The port existed so the
+   choice would be a file; taking that seriously costs fifteen lines per
+   provider, and the cost analysis here weighed scale rather than floor.
+2. **Superseded, not deleted** (§7). Deleting the previous row broke the
+   per-account limit in a way only its own test found.
+3. **No `html` part** (§7). Nothing needed one and an unsent branch is an
+   untested path.
+
+**What is still open**: the From domain (§8.2), which is a decision rather than
+code — mail stays off until `EMAIL_FROM` is set, deliberately. And email
+verification at signup (§10), which is the next thing.
 
 **The gap.** There is no password reset. `AccountScreen` says so in a comment:
 recovery needs `pnpm db:password`, which needs a shell on the server. A farm
@@ -183,12 +197,40 @@ collection handle leaves the module, every function purpose-built, and
 Minting replaces whatever that user had live, so somebody who taps twice has
 one working code, and it is the one in the newest email.
 
+> **Superseded rather than deleted, and the first implementation deleted.**
+> A delete-then-insert leaves exactly one row however many times somebody asks
+> — so the per-account limit above, which counts rows, could never fire, and the
+> anti-harassment control §5 calls "the one that is easy to forget" was
+> decorative. Its own test caught it on the first run. `supersededAt` marks the
+> old row instead, `claimResetCode` filters on it, and the retired rows are a
+> better audit trail than none: a run of them is somebody being locked out, or
+> somebody else trying to lock them out.
+
 ## 8. The sender
 
 ### 8.1 The provider
 
-**Postmark**, on deliverability, behind a port so the choice stays a file
-rather than a migration.
+**Both, behind the port, chosen by `EMAIL_PROVIDER`** — and Resend is where to
+start.
+
+> **Corrected while building.** This section chose Postmark on deliverability
+> and dismissed cost with *"volume is a handful a month, so cost-at-scale — the
+> one axis SES wins — does not apply."* That is true and it points at the wrong
+> number: at a handful a month the deciding figure is the **monthly minimum**,
+> not the per-thousand rate. Postmark's free tier is a hundred messages and is
+> described as being for testing; Resend's is three thousand, which is about a
+> hundred times this flow's volume. Against a project whose entire
+> infrastructure is roughly $25 a year and whose farms pay $39
+> (`ACCESS-AND-BILLING.md` §4.1), a paid mail floor is several farms' revenue
+> spent on password resets.
+>
+> Both adapters are one authenticated POST of JSON, so shipping both cost about
+> thirty lines and no dependency. That is not a re-decision of the paragraph
+> below — it is what its own port was for. If inbox placement ever disappoints,
+> Postmark is one environment variable away.
+
+Postmark remains the better answer on deliverability alone, behind a port so the
+choice stays a file rather than a migration.
 
 For the record: Resend has the nicest API and a free tier; Amazon SES is
 cheapest at scale and wants dedicated attention to configure; Postmark keeps

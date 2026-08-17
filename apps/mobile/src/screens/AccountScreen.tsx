@@ -21,6 +21,8 @@ import {
   readBilling,
   redeemPromo,
   readCachedClaims,
+  requestReset,
+  resetPassword,
   signIn,
   SignInError,
 } from '../auth/session';
@@ -166,6 +168,21 @@ export function AccountScreen({
   /** The second box, on the two modes that create a password rather than check one. */
   const [confirm, setConfirm] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  /**
+   * The recovery form, which replaces the sign-in form rather than sitting
+   * beside it.
+   *
+   * `PASSWORD-RECOVERY.md` §9 asks for two steps on one screen: ask for the
+   * address, then take the code and the new password together. One screen,
+   * because the code arrives while the person is still holding the phone and a
+   * second navigation is a place to get lost — and because somebody doing this
+   * is already stuck, which is the worst moment to add a journey.
+   */
+  const [recovering, setRecovering] = useState(false);
+  const [sent, setSent] = useState<string | null>(null);
+  const [resetCode, setResetCode] = useState('');
+  /** Set once, to say the password changed. Cleared as soon as they type again. */
+  const [changed, setChanged] = useState(false);
   const [code, setCode] = useState('');
 
   /**
@@ -308,6 +325,40 @@ export function AccountScreen({
     });
   }, [save, mode, onSignedIn, email, password, name, farmName, code]);
 
+  /** Step one: ask for a code. The answer never says whether the account exists. */
+  const askForCode = useCallback(() => {
+    void save(async () => {
+      try {
+        setSent(await requestReset(email.trim()));
+      } catch (error) {
+        throw error instanceof SignInError
+          ? error
+          : new Error('Could not reach the farm. Check the connection and try again.');
+      }
+    });
+  }, [save, email]);
+
+  /** Step two: spend it. On success this returns to sign-in with the email kept. */
+  const useCode = useCallback(() => {
+    void save(async () => {
+      try {
+        await resetPassword({ email: email.trim(), code: resetCode.trim(), password });
+      } catch (error) {
+        throw error instanceof SignInError
+          ? error
+          : new Error('Could not reach the farm. Check the connection and try again.');
+      }
+      // Only on success: back to sign-in with the address kept, the password
+      // boxes cleared, and one sentence saying what happened.
+      setRecovering(false);
+      setSent(null);
+      setResetCode('');
+      setPassword('');
+      setConfirm('');
+      setChanged(true);
+    });
+  }, [save, email, resetCode, password]);
+
   if (!known) return <Screen title="Your account" back>{null}</Screen>;
 
   if (claims !== null) {
@@ -437,6 +488,139 @@ export function AccountScreen({
             season.
           </Body>
           <Body>It is also what lets a second phone, or a farm hand, see the same records.</Body>
+        </Panel>
+      ) : null}
+
+      {recovering ? (
+        <>
+          {/**
+            * Two steps, one screen, and the second appears once the first has
+            * been done. Nothing here says whether the address has an account —
+            * §5 — so the copy describes what was *done*, not what was found.
+            */}
+          <Panel label="Getting back in">
+            <Body>
+              Type the address the account uses. If it has one, a code comes by email — eight
+              characters, good for twenty minutes. Type it below with the new password.
+            </Body>
+            <Body>
+              Your records are on this phone either way. This restores syncing, not the data.
+            </Body>
+          </Panel>
+
+          <Field label="Email">
+            <TextField
+              value={email}
+              onChangeText={(next) => {
+                setEmail(next);
+                setSent(null);
+              }}
+              placeholder="you@example.com"
+              maxLength={254}
+              keyboardType="email-address"
+              testID="recover-email"
+            />
+          </Field>
+
+          {sent === null ? (
+            <Primary
+              label="Send a code"
+              disabled={saving || email.trim() === ''}
+              onPress={askForCode}
+              testID="recover-send"
+            />
+          ) : (
+            <>
+              <Panel label="Sent">
+                <Body>{sent}</Body>
+              </Panel>
+
+              <Field label="The code from the email" hint="Eight characters.">
+                <TextField
+                  value={resetCode}
+                  onChangeText={setResetCode}
+                  placeholder="K4M9PT2X"
+                  maxLength={40}
+                  caps
+                  testID="recover-code"
+                />
+              </Field>
+
+              <Field
+                label="New password"
+                hint={`At least ${MIN_PASSWORD} characters. Length beats punctuation.`}
+              >
+                <TextField
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="Something only you would say"
+                  maxLength={200}
+                  secret={!showPassword}
+                  testID="recover-password"
+                />
+              </Field>
+
+              <Field label="New password again">
+                <TextField
+                  value={confirm}
+                  onChangeText={setConfirm}
+                  placeholder="The same one"
+                  maxLength={200}
+                  secret={!showPassword}
+                  testID="recover-password-confirm"
+                />
+              </Field>
+
+              {confirm !== '' && password !== confirm ? (
+                <Failure message="Those two do not match." />
+              ) : null}
+
+              <Primary
+                label="Set the new password"
+                disabled={
+                  saving ||
+                  resetCode.trim() === '' ||
+                  password.length < MIN_PASSWORD ||
+                  password !== confirm
+                }
+                onPress={useCode}
+                testID="recover-submit"
+              />
+
+              {/* A code that never arrived, or one that has expired while
+                  somebody looked for it. Cheaper than making them start over. */}
+              <Touch
+                affordance="check"
+                onPress={() => setSent(null)}
+                accessibilityRole="button"
+                testID="recover-again"
+              >
+                <Text style={[styles.revealLabel, { color: colors.muted }]}>
+                  Send another code
+                </Text>
+              </Touch>
+            </>
+          )}
+
+          <Failure message={failure} />
+
+          <Touch
+            affordance="check"
+            onPress={() => {
+              setRecovering(false);
+              setSent(null);
+            }}
+            accessibilityRole="button"
+            testID="recover-cancel"
+          >
+            <Text style={[styles.revealLabel, { color: colors.muted }]}>Back to signing in</Text>
+          </Touch>
+        </>
+      ) : (
+      <>
+      {changed ? (
+        <Panel label="Password changed">
+          <Body>Sign in with the new one. Every other device has been signed out.</Body>
         </Panel>
       ) : null}
 
@@ -610,10 +794,11 @@ export function AccountScreen({
         * told to you immediately, and a second box would be asking somebody to
         * prove they can type something they are about to have checked anyway.
         *
-        * On the other two it is the difference between a farm and a lockout.
-        * There is no password reset in the app — `pnpm db:password` needs a
-        * shell on the server — so a mistyped password at signup is an account
-        * nobody can open, and the records are already on the phone by then.
+        * On the other two it is still worth the second box. There IS a reset
+        * now — the link below sign-in — but it needs the address to be right
+        * and reachable, and a password mistyped at signup is discovered by
+        * somebody who may also have mistyped the email. Catching it here costs
+        * one field; catching it there costs a round trip through an inbox.
         */}
       {mode === 'signin' ? null : (
         <Field label="Password again">
@@ -644,6 +829,29 @@ export function AccountScreen({
       />
 
       {/**
+        * Where somebody discovers they are stuck, which is the only place this
+        * belongs — §9. Offered on sign-in alone: on the other two modes there
+        * is no password yet to have forgotten.
+        */}
+      {mode === 'signin' ? (
+        <Touch
+          affordance="check"
+          onPress={() => {
+            setRecovering(true);
+            setChanged(false);
+            setPassword('');
+            setConfirm('');
+          }}
+          accessibilityRole="button"
+          testID="account-forgot"
+        >
+          <Text style={[styles.revealLabel, { color: colors.muted }]}>
+            Forgotten your password?
+          </Text>
+        </Touch>
+      ) : null}
+
+      {/**
         * Google, and only where the mode makes sense of it (A2.4).
         *
         * Offered for claiming and for signing in, because the server treats
@@ -661,6 +869,8 @@ export function AccountScreen({
       <Text style={[styles.note, { color: colors.inkQuiet }]}>
         Been sent an invitation link? Open it instead — it brings the farm with it.
       </Text>
+      </>
+      )}
     </Screen>
   );
 }

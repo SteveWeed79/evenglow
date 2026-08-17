@@ -1,6 +1,18 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { googleSignInSchema, isUlid, newId, signupSchema } from '@steading/contracts';
+import {
+  FORGOT_ACKNOWLEDGEMENT,
+  forgotSchema,
+  googleSignInSchema,
+  isUlid,
+  newId,
+  NO_MAIL_CONFIGURED,
+  normalizeResetCode,
+  RESET_CODE_TTL_MINUTES,
+  RESET_REFUSAL,
+  resetSchema,
+  signupSchema,
+} from '@steading/contracts';
 import { authorizeCredentials } from '../auth/credentials';
 import { verifyGoogleIdToken } from '../auth/google';
 import { hashPassword } from '../auth/password';
@@ -16,7 +28,17 @@ import {
   linkGoogleSub,
   normalizeEmail,
   orgHasMembers,
+  setPasswordHash,
 } from '../db/identity';
+import {
+  claimResetCode,
+  hashResetCode,
+  mintResetCode,
+  replaceResetCode,
+  resetsSince,
+} from '../db/password-resets';
+import { revokeAllForUser } from '../db/refresh-tokens';
+import { canSendMail, mailerFor, trySend } from '../mail/send';
 import type { Env } from '../env';
 import { errorBody, HttpError } from '../http';
 
@@ -403,4 +425,203 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
     await endSession(parsed.data.refreshToken);
     return reply.status(204).send();
   });
+
+  await recoveryRoutes(app, env);
+}
+
+/**
+ * How long `/auth/forgot` takes, whatever it did.
+ *
+ * **The assertion implementations skip.** A real account does an argon2 hash,
+ * a database write and an HTTP call to a mail provider; an unknown address
+ * returns immediately, and the difference is measurable from outside — which
+ * turns a route built not to enumerate accounts into one that enumerates them
+ * by stopwatch.
+ *
+ * Held to a floor rather than doing fake work: simpler, and it does not spend
+ * the box's CPU on an attacker's behalf. Long enough to cover a slow provider
+ * call on a small instance, short enough that a person waiting on it does not
+ * think the button failed.
+ */
+const FORGOT_FLOOR_MS = 900;
+
+/**
+ * How many codes one account may be sent in an hour.
+ *
+ * **The anti-harassment limit, and the one that is easy to forget.** The
+ * per-IP limiter on this scope stops somebody hammering the route; it does
+ * nothing to stop them filling one farmer's inbox from a phone, a laptop and a
+ * VPN. Three is enough for somebody who genuinely mistyped their address twice.
+ */
+const CODES_PER_ACCOUNT_PER_HOUR = 3;
+
+async function notBefore<T>(floorMs: number, work: () => Promise<T>): Promise<T> {
+  const started = Date.now();
+  try {
+    return await work();
+  } finally {
+    const remaining = floorMs - (Date.now() - started);
+    if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
+  }
+}
+
+/**
+ * Getting back in — `docs/PASSWORD-RECOVERY.md`.
+ *
+ * A code the person types, not a link they click. The security argument is
+ * phishing: an email that trains people to click a reset link trains them to
+ * click *any* link claiming to be one, and a code carried into an app they
+ * already have open cannot be redirected to a lookalike domain. The practical
+ * argument is that email is read on a phone and the farm's records are on the
+ * tablet in the kitchen — a link completes on the device that opened it, and a
+ * code travels.
+ */
+async function recoveryRoutes(app: FastifyInstance, env: Env): Promise<void> {
+  await app.register(async (scope) => {
+    /**
+     * Its own registration, and tighter than sign-in.
+     *
+     * Three a minute per IP: this route sends mail, so an unthrottled one is
+     * both an enumeration oracle and somebody else's mail bill. It fails closed
+     * like every limiter on this file.
+     */
+    await scope.register(import('@fastify/rate-limit'), { max: 3, timeWindow: '1 minute' });
+
+    scope.post('/auth/forgot', async (request, reply) => {
+      /**
+       * A server with no mail says so, and this is the one refusal here that is
+       * allowed to be distinct.
+       *
+       * It describes the *server*, not the account — it is the same answer for
+       * every address, including ones that do not exist — so it discloses
+       * nothing §5 protects. Refused at the edge rather than at send time,
+       * because the alternative is a farmer waiting for mail from a box that
+       * was never going to send any.
+       */
+      if (!canSendMail(env)) {
+        return reply.status(503).send({ error: NO_MAIL_CONFIGURED });
+      }
+
+      await notBefore(FORGOT_FLOOR_MS, async () => {
+        const parsed = forgotSchema.safeParse(request.body);
+        if (!parsed.success) return;
+
+        const user = await findUserByEmail(parsed.data.email);
+        // Unknown address, or an account somebody has removed. Nothing is done
+        // and the answer below is identical.
+        if (!user || user.disabledAt) return;
+
+        /**
+         * Per account, on top of the per-IP limit above, because they stop
+         * different attacks: the IP limit stops a flood, and this stops one
+         * farmer's inbox being filled by somebody who knows their address.
+         */
+        const hour = new Date(Date.now() - 3_600_000);
+        if ((await resetsSince(user._id, hour)) >= CODES_PER_ACCOUNT_PER_HOUR) return;
+
+        const code = mintResetCode();
+        const now = new Date();
+
+        /**
+         * Stored before the send is attempted, so a provider outage leaves a
+         * farmer who waits and asks again rather than a broken row.
+         */
+        await replaceResetCode({
+          _id: hashResetCode(normalizeResetCode(code)),
+          userId: user._id,
+          createdAt: now,
+          expiresAt: new Date(now.getTime() + RESET_CODE_TTL_MINUTES * 60_000),
+          attempts: 0,
+        });
+
+        // The result is deliberately dropped. Surfacing a send failure
+        // differently from a success would reintroduce the enumeration this
+        // whole route is shaped around; `trySend` puts the reason in the
+        // journal, where the person who can fix it will see it.
+        await trySend(mailerFor(env), {
+          to: user.email,
+          subject: 'Your Steading reset code',
+          text: resetEmailText(code, user.name),
+        });
+      });
+
+      /**
+       * 202, always. Same body, same shape, whether or not that address
+       * belongs to anybody — and now the same duration too.
+       */
+      return reply.status(202).send({ ok: true, message: FORGOT_ACKNOWLEDGEMENT });
+    });
+
+    scope.post('/auth/reset', async (request, reply) => {
+      const parsed = resetSchema.safeParse(request.body);
+      // One refusal for every failure, starting with a malformed body: a
+      // password below the bar and a wrong code must not be told apart, or the
+      // route says which half was right.
+      if (!parsed.success) return reply.status(400).send({ error: RESET_REFUSAL });
+
+      const user = await findUserByEmail(parsed.data.email);
+      if (!user || user.disabledAt) return reply.status(400).send({ error: RESET_REFUSAL });
+
+      const now = new Date();
+      const claim = await claimResetCode(
+        hashResetCode(normalizeResetCode(parsed.data.code)),
+        user._id,
+        now,
+      );
+      if (!claim.ok) return reply.status(400).send({ error: RESET_REFUSAL });
+
+      /**
+       * Three writes, and the order is the load-bearing part.
+       *
+       * Sessions die first. A crash after this point signs everybody out of an
+       * account whose password did not change, which is survivable — the owner
+       * signs in again with the old one. A crash the other way round leaves a
+       * live session belonging to whoever prompted the reset, on an account
+       * whose password has just been changed, which is the exact outcome the
+       * reset exists to prevent.
+       *
+       * The code is already marked used by `claimResetCode`, which had to do it
+       * atomically to be single-use at all — so the third write of the design's
+       * three has already happened by the time this runs.
+       */
+      const killed = await revokeAllForUser(user._id, now);
+      await setPasswordHash(user.email, await hashPassword(parsed.data.password));
+
+      console.log(`auth: password reset completed, ${killed} session(s) revoked`);
+
+      /**
+       * 204 and no session. Signing them in here would hand a session to
+       * whoever submitted the form, and the next thing they do is sign in with
+       * the password they just chose — which proves they know it.
+       */
+      return reply.status(204).send();
+    });
+  });
+}
+
+/**
+ * What the email says.
+ *
+ * Short, plain, and it names the app first — `PASSWORD-RECOVERY.md` §8.2 warns
+ * that a reset from a domain the farm has never heard of is indistinguishable
+ * from phishing, and until the sending domain says Steading the body is what
+ * has to carry that. It also says what to do if it was not them, because a
+ * reset code nobody asked for is the only warning an account gets.
+ *
+ * No link, deliberately — see §3. There is nothing in here to click.
+ */
+function resetEmailText(code: string, name: string): string {
+  return [
+    `Hello ${name},`,
+    '',
+    'Someone asked to reset the password on your Steading account.',
+    'Type this code into the app:',
+    '',
+    `    ${code}`,
+    '',
+    `It is good for ${RESET_CODE_TTL_MINUTES} minutes and can be used once.`,
+    '',
+    'If that was not you, nothing has changed and you do not need to do',
+    'anything. Your records are on your phone either way.',
+  ].join('\n');
 }

@@ -122,8 +122,32 @@ on the exact failure they then permit.
 - [x] **Filter breeding records by group.** **GA**
       `names` is built from every animal on the farm, so the filter means "the
       dam exists here" rather than "the dam is in this group".
-- [ ] **Build the mail sender, and password recovery on top of it.** **GA** —
-      *designed:* [`PASSWORD-RECOVERY.md`](PASSWORD-RECOVERY.md)
+- [x] **Build the mail sender, and password recovery on top of it.** **GA** —
+      *designed:* [`PASSWORD-RECOVERY.md`](PASSWORD-RECOVERY.md), *built 17
+      August*
+      `mail/send.ts` is the port, `db/password-resets.ts` the codes,
+      `/auth/forgot` and `/auth/reset` the routes, and the recovery form sits
+      behind a *Forgotten your password?* link on sign-in — two steps on one
+      screen, because somebody doing this is already stuck and a second
+      navigation is a place to get lost.
+      **Three departures from the design, each written into it** rather than
+      left as a difference somebody discovers: two providers behind the port
+      instead of one (the cost analysis weighed scale, not floor, and at a
+      handful of messages a month the monthly minimum is the whole bill);
+      superseded rather than deleted rows; and no `html` part, because nothing
+      needed one and an unsent branch is an untested path.
+      **The supersede change was a real bug its own test found.** Deleting the
+      previous row left exactly one row however many times somebody asked, so
+      the per-account limit — the anti-harassment one §5 calls easy to forget —
+      counted to one and never fired.
+      **The timing assertion was wrong before it was right**, which is worth
+      recording because §11 names it as the one people skip: the first version
+      built a Fastify app per request, so construction swamped the argon2
+      difference and it passed with the floor deleted. It now injects into one
+      app and fails when the floor goes.
+      **Still open and it is yours, not the code's:** `EMAIL_FROM` has no
+      default, so mail is off until the sending identity is decided — see the
+      next item.
       There is no password reset; `AccountScreen` says so in a comment, and
       recovery means a shell on the server. **The deliverable is a sender, not
       one flow** — it also finishes the invite feature, which binds a token to

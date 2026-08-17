@@ -912,6 +912,77 @@ stated rather than inherited from whatever the upload felt like.
 
 ---
 
+## Mail, and the DNS that decides whether it works
+
+Without this there is no password reset: a farm that forgets its password waits
+for somebody to run `pnpm db:password` on the box. It also finishes invites,
+which have been able to mint a token and unable to send it since they were
+built.
+
+**Off until configured, and that is a supported state.** `/auth/forgot` answers
+503 with a plain sentence rather than erroring at send time.
+
+### 1. Decide what the mail comes from — this one is not technical
+
+The domain is `swbuild.dev` and the app is called Steading. **A password reset
+from a domain the farm has never heard of is indistinguishable from phishing,
+and ignoring it is the correct response.** Cheaper to settle before the DNS
+exists than after. Either the address says Steading, or the email body has to
+work harder than any copy should have to.
+
+Use a **dedicated sending subdomain** — `mail.` or `send.` — so a reputation
+problem cannot reach whatever else the apex serves. And a **reachable reply
+address, not `no-reply@`**: replies into a black hole are an engagement signal
+against you, and for a one-person operation the replies are worth reading.
+
+### 2. The provider
+
+```
+EMAIL_PROVIDER=resend           # or postmark
+EMAIL_API_TOKEN=...
+EMAIL_FROM=Steading <hello@mail.example.com>
+EMAIL_REPLY_TO=hello@example.com
+```
+
+Resend to start: its free tier is three thousand messages a month against this
+flow's handful, where Postmark's hundred is described as being for testing.
+Postmark is the better answer on deliverability alone and is one variable away
+if inbox placement ever disappoints — that is what the port is for.
+
+`EMAIL_PROVIDER=log` writes the message to the journal instead of sending it,
+for walking the flow on a box with no provider. It has to be chosen explicitly;
+an unconfigured server refuses rather than pretending.
+
+### 3. SPF, DKIM and DMARC — all three, and not optional
+
+**This is the part that decides whether any of the above works**, and it is
+configuration, so it can be got wrong quietly and discovered by a farmer who
+never received their code. The large mailbox providers now reject
+unauthenticated mail outright rather than filing it in spam. Transactional mail
+is exempt from one-click-unsubscribe; it is **not** exempt from authentication.
+
+Your provider's dashboard gives you the exact records. Three things to get right:
+
+- **DKIM must be signed with your domain, not the provider's.** The classic
+  failure is an ESP signing as `mailer.provider.com` while the From header says
+  yours: DKIM passes, DMARC alignment fails, and the mail is rejected. Use the
+  provider's own domain-verification flow, which publishes the record on your
+  domain.
+- **SPF on the sending subdomain**, not the apex, if you took the advice above.
+- **DMARC** at least `p=none` with a reporting address to start, tightened to
+  `quarantine` once the reports are clean.
+
+Verify before you trust it: send yourself one and check the headers say
+`spf=pass`, `dkim=pass` and `dmarc=pass` — Gmail's *Show original* is enough.
+
+### 4. What is deliberately missing
+
+**Bounce handling.** A hard bounce means the address is wrong or gone, and
+nothing here knows that yet. It is the first thing worth adding once mail has a
+webhook.
+
+---
+
 ## The operations board, if you want one
 
 One page that answers the questions the shell commands answer — who is

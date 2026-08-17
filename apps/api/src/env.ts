@@ -201,6 +201,34 @@ const envSchema = z.object({
    * right, which a caller cannot forge past. Direct-to-internet: leave it
    * unset.
    */
+  /**
+   * Mail, which is off until all three of these are set.
+   *
+   * `PASSWORD-RECOVERY.md` §8.3: a server with no mail refuses at the edge with
+   * a sentence rather than erroring at send time — the same shape
+   * `SUPPORT_GITHUB_TOKEN` and `GOOGLE_PLAY_SERVICE_ACCOUNT` already have, and
+   * the state every development box is in.
+   *
+   * **`EMAIL_FROM` has no default and that is deliberate.** §8.2 leaves the
+   * sending identity an open question and calls it a security one: *"A password
+   * reset arriving from a domain the farm has never heard of is
+   * indistinguishable from phishing, and the correct user response to it is to
+   * ignore it."* A default here would be this file quietly answering a question
+   * that belongs to whoever owns the domain — so mail stays off until somebody
+   * writes the address down.
+   */
+  EMAIL_PROVIDER: z.enum(['resend', 'postmark', 'log']).default('resend'),
+  EMAIL_API_TOKEN: z.string().default(''),
+  EMAIL_FROM: z.string().default(''),
+  /**
+   * Where replies go, and **not a `no-reply@`** (§8.2).
+   *
+   * Replies into a black hole are an engagement signal against the sending
+   * domain, and for a one-person operation the replies are worth reading — it
+   * is the support channel `SUPPORT-LOOP.md` §6 says does not exist. Optional
+   * only because a `From` that already accepts mail needs no second address.
+   */
+  EMAIL_REPLY_TO: z.string().default(''),
   TRUSTED_PROXY_HOPS: z
     .string()
     .default('')
@@ -221,7 +249,43 @@ export type Env = z.infer<typeof envSchema> & {
   freeSyncOrgs: ReadonlySet<string>;
   /** Null when this server takes a batch from any build, which is the default. */
   minimumClientVersion: string | null;
+  /** Null when this server cannot send email, which is the default. */
+  mail: MailConfig | null;
 };
+
+export interface MailConfig {
+  provider: 'resend' | 'postmark' | 'log';
+  token: string;
+  from: string;
+  /** Null when the From address is itself reachable. */
+  replyTo: string | null;
+}
+
+/**
+ * All of it, or none of it.
+ *
+ * A provider with no token, or a token with no From, is a server that will fail
+ * at send time — which is exactly the discovery `PASSWORD-RECOVERY.md` §8.3
+ * says must not happen to a farmer who is already locked out. The `log`
+ * provider is the one exception: it needs no token, because it sends nothing.
+ */
+function readMailConfig(
+  provider: 'resend' | 'postmark' | 'log',
+  token: string,
+  from: string,
+  replyTo: string,
+): MailConfig | null {
+  const needsToken = provider !== 'log';
+  if (from.trim() === '') return null;
+  if (needsToken && token.trim() === '') return null;
+
+  return {
+    provider,
+    token: token.trim(),
+    from: from.trim(),
+    replyTo: replyTo.trim() === '' ? null : replyTo.trim(),
+  };
+}
 
 /**
  * Takes a plain record rather than `NodeJS.ProcessEnv`, which additionally
@@ -254,6 +318,12 @@ export function readEnv(source: Record<string, string | undefined> = process.env
     // Null rather than empty string, so "no floor" is a value the type carries
     // rather than a convention every caller has to remember.
     minimumClientVersion: parsed.data.MINIMUM_CLIENT_VERSION || null,
+    mail: readMailConfig(
+      parsed.data.EMAIL_PROVIDER,
+      parsed.data.EMAIL_API_TOKEN,
+      parsed.data.EMAIL_FROM,
+      parsed.data.EMAIL_REPLY_TO,
+    ),
     supportConfig: readSupportConfig(
       parsed.data.SUPPORT_GITHUB_TOKEN,
       parsed.data.SUPPORT_REPO,

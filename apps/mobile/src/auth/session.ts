@@ -992,3 +992,54 @@ export async function redeemPromo(code: string): Promise<BillingState> {
   if (!res.ok) throw new SignInError('That code does not work.');
   return billingSchema.parse(await res.json());
 }
+
+/**
+ * Asks for a reset code.
+ *
+ * **Answers the same way whether or not the address has an account**, which is
+ * the point — `PASSWORD-RECOVERY.md` §5 — so this returns the server's sentence
+ * rather than a boolean the screen might be tempted to branch on. There is
+ * nothing here to tell a caller apart from a caller who typed a stranger's
+ * address, and that is deliberate.
+ *
+ * A 503 is the one honest exception: a server with no mail configured cannot do
+ * this for anybody, which says nothing about the account.
+ */
+export async function requestReset(email: string): Promise<string> {
+  const res = await fetch(url('/auth/forgot'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+
+  if (!res.ok) throw await refusal(res, 'That could not be sent. Try again in a minute.');
+
+  const body: unknown = await res.json().catch(() => null);
+  const said = (body as { message?: unknown } | null)?.message;
+  return typeof said === 'string' ? said : 'If that email has an account, a code is on its way.';
+}
+
+/**
+ * Spends the code and sets the new password.
+ *
+ * **No session comes back**, on purpose: the server answers 204 and the person
+ * signs in with the password they just chose, which proves they know it. The
+ * screen returns to sign-in with the address still filled in.
+ *
+ * Every failure — wrong code, expired, spent, too many guesses, unknown address
+ * — is one sentence from the server, because telling them apart tells somebody
+ * which of those they achieved.
+ */
+export async function resetPassword(input: {
+  email: string;
+  code: string;
+  password: string;
+}): Promise<void> {
+  const res = await fetch(url('/auth/reset'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+
+  if (!res.ok) throw await refusal(res, 'That code is not right, or it has expired. Ask for another.');
+}
