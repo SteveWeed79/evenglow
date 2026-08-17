@@ -14,6 +14,7 @@ import { WeatherRow } from '../components/WeatherRow';
 import { WeatherAlerts } from '../components/WeatherAlerts';
 import { WeatherWarnings } from '../components/WeatherWarnings';
 import { WithdrawalBanner } from '../components/WithdrawalBanner';
+import { useFinishDue, useOpenDue } from '../hooks/useDueActions';
 import { useDues } from '../hooks/useDues';
 import { useFarmName } from '../hooks/useFarmName';
 import { useGroups } from '../hooks/useGroups';
@@ -21,7 +22,6 @@ import { useNav } from '../hooks/useNav';
 import { useWindow } from '../hooks/useWindow';
 import { useLog } from '../hooks/useSync';
 import { useUnits } from '../hooks/useUnits';
-import { reportTrouble } from '../hooks/useTrouble';
 import { useReveal } from '../theme/motion';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
@@ -129,7 +129,6 @@ export function TodayScreen(): React.ReactElement {
   const { dues } = useDues();
   const { colors } = useTheme();
   const farmName = useFarmName();
-  const nav = useNav();
   /**
    * `bar: true`, because this is a tab screen and the rail stands in its width.
    *
@@ -144,68 +143,13 @@ export function TodayScreen(): React.ReactElement {
   const { panes } = useWindow({ bar: true });
 
   /**
-   * Where a row is discharged.
+   * Where a row is discharged — a service on its schedule, a hatch on its set
+   * of eggs, a husbandry job on its group.
    *
-   * A due row says what is wanted and this says where it happens — a service
-   * on its schedule, a hatch on its set of eggs, a husbandry job on its group.
-   * `subject` is already on every `Due` for exactly this.
-   *
-   * ## Kind before entity, and why the order was wrong
-   *
-   * This read `subject.entity` first and sent every flock row to the group
-   * screen. That is a hub, not a destination: a row whose whole content is a
-   * weight, or a fleece, landed on a summary and made somebody find the
-   * action among eight others and tap again. The row already knew what was
-   * wanted — the app made the person say it a second time.
-   *
-   * So the kinds that name one act go straight to it, and `entity` is the
-   * fallback for the rows that genuinely are "go and look at this thing".
+   * Shared with `Coming`, which draws the same rows on a detail screen. See
+   * `useDueActions` for why the map is not written here any more.
    */
-  const openDue = useCallback(
-    (due: Due): (() => void) | undefined => {
-      const { entity, id } = due.subject;
-
-      if (due.kind === 'candle' || due.kind === 'hatch') {
-        return () => nav.navigate('Incubation', { incubationId: id });
-      }
-      /**
-       * A row about weight opens the scale; a row about fleece opens the
-       * shearing form; a birth opens the breeding book.
-       *
-       * "Roasters reach processing weight" asks one question and there is
-       * exactly one way to answer it. Landing on the group screen made
-       * somebody read a summary, find "Weigh them" among eight other rows and
-       * tap again — for a row whose entire content is a weight. The same was
-       * true of the clip.
-       */
-      if (due.kind === 'processing') return () => nav.navigate('Weigh', { groupId: id });
-      if (due.kind === 'shearing') return () => nav.navigate('Shearing', { groupId: id });
-      if (due.kind === 'birth') return () => nav.navigate('Breeding', { groupId: id });
-      if (entity === 'flock') return () => nav.navigate('Group', { groupId: id });
-      /**
-       * No builder produces an animal subject any more, and this stays
-       * deliberately.
-       *
-       * `birthDue` did, and this branch passed that animal's id into `Animals`
-       * as a `groupId` — which found no group and rendered "That group —
-       * Missing". A dead end on a live row. The due carries the dam's GROUP
-       * now, so it never reaches here.
-       *
-       * Kept because the trap is in the shape rather than in that one builder:
-       * `Animals` takes a groupId, an animal id is the same kind of string,
-       * and nothing would complain. If a future due really is about one
-       * animal, it must carry the group it lives in — not be routed by id
-       * shape and hope.
-       */
-      if (entity === 'animal') return undefined;
-      if (entity === 'equipment') return () => nav.navigate('Machine', { machineId: id });
-      if (entity === 'planting') return () => nav.navigate('Planting', { plantingId: id });
-      // A withdrawal names the medication and there is no medication screen —
-      // the group's banner is where it is read, and the row says which group.
-      return undefined;
-    },
-    [nav],
-  );
+  const openDue = useOpenDue();
 
   const loggable = useMemo<Loggable[]>(
     () =>
@@ -423,45 +367,10 @@ function DueBundleRow({
   open: (due: Due) => (() => void) | undefined;
 }): React.ReactElement {
   const { colors } = useTheme();
-  const log = useLog();
   const [expanded, setExpanded] = useState(false);
 
-  /**
-   * Writes the record the row was waiting for, which is what clears it.
-   *
-   * **Not a completion flag** — see `Due.done`. This enqueues the same
-   * `careLog` the form would have written, so the row disappears on the next
-   * recomputation because the record now exists, and the job shows up in What
-   * happened. There is still nothing anywhere that stores "done".
-   */
-  const finish = useCallback(
-    (due: Due): (() => void) | undefined => {
-      const done = due.done;
-      if (done === undefined) return undefined;
-
-      return () => {
-        /**
-         * A failed write is said out loud, not dropped.
-         *
-         * This was `void log(...)` with nothing after it, so a refused
-         * mutation vanished and the row simply came back — indistinguishable
-         * from never having pressed the button, which is exactly the report
-         * that led here. The press is fire-and-forget by design (R6: a log is
-         * bounded by one SQLite transaction, never by signal), but
-         * fire-and-forget must still mean somebody hears about a fire that did
-         * not light.
-         */
-        void log({
-          entity: done.entity,
-          op: done.op,
-          // A create mints its own id; an update names the row it changes.
-          ...(done.targetId === undefined ? {} : { targetId: done.targetId }),
-          payload: { ...done.payload, [done.stampAs]: Date.now() },
-        }).catch((error: unknown) => reportTrouble(`recording ${done.label.toLowerCase()}`, error));
-      };
-    },
-    [log],
-  );
+  /** The record the row was waiting for — not a completion flag. */
+  const finish = useFinishDue();
 
   const rest = bundle.dues.length - 1;
   if (rest === 0) {

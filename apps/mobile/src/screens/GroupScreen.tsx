@@ -20,6 +20,7 @@ import { Notes } from '../components/Notes';
 import { Photos } from '../components/Photos';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
+import { Coming } from '../components/Coming';
 import { Timeline } from '../components/Timeline';
 import { Touch } from '../components/Touch';
 import { WithdrawalBanner } from '../components/WithdrawalBanner';
@@ -362,6 +363,7 @@ export function GroupBody({ group }: { group: Group }): React.ReactElement {
       {/* What was actually recorded against these animals, under the things
           that can be done to them. Last, because it answers a question people
           ask second — the screen leads with what to do this morning. */}
+      <Coming subject={groupId} here="Group" />
       <Timeline subject={groupId} />
     </>
   );

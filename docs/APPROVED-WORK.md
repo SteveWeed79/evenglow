@@ -227,7 +227,7 @@ period rather than a task.
       completion it is a `delete` of the event, which does. That does not make
       the wire fix optional — the medication fields still need it — but it does
       mean these two items should be sequenced, not done twice.
-- [ ] **One reusable detail-and-timeline screen.** **GA**
+- [x] **One reusable detail-and-timeline screen.** **GA**
       Status, primary actions, upcoming work, full timeline, edit and archive.
       Used for animals, groups, beds, varieties, plantings, machines and
       inventory. *The best single idea from the assessment: several entities
@@ -324,8 +324,40 @@ period rather than a task.
       zero they do not mean — which puts a use that never happened into the
       adjustment history, and that is worse than an archived item with a number
       on it.
-      **Still to come:** the *upcoming work* half of the original line, which
-      wants the due engine on a detail screen and is its own piece of design.
+      **The upcoming-work half closed it** *(17 August)*, and it turned out to
+      be a reading of the engine rather than an addition to it. `useDues`
+      composes twelve builders into a farm-wide list and exactly one screen had
+      ever rendered a row from it — so the app knew a tractor's yearly service
+      was due in November and would not say so on the tractor's own screen,
+      which is the question somebody opens that screen to ask. `Coming` is
+      `Timeline`'s twin: same panel shape, same subject scope, same hop made by
+      the screen that means it, and it sits on all six.
+      **It shows what Today deliberately hides**, and that is the point rather
+      than an oversight being corrected. `todayList` drops `later` rows because
+      a morning's list reaching into November is one nobody finishes; that is a
+      judgement about Today, not about the row, so `duesFor` keeps them —
+      undated meter rows included, since *"at 250 hours"* is a permanent
+      resident on Today and the honest schedule on the machine's own screen.
+      Nothing is capped or bundled either: both exist because Today mixes every
+      group, machine and bed, and a group's seven husbandry rows **are** its
+      routine when read on the group.
+      **`Due.subject` meant two things and now says so.** `birthDue` already
+      carried the confession — *"`subject` is what opens the row, not merely
+      what the row is about"* — because an animal id in a `groupId` slot
+      rendered "That group — Missing" on a live row. Three builders point
+      somewhere other than what they describe: a birth at the dam's group, a
+      withdrawal at the medication the arithmetic came from, a chore at itself.
+      Filtering on `subject` alone gave Bramble's screen nothing to say while
+      "Bramble due" sat on Today. `Due.about` is the second answer — ids only,
+      the same shape and the same reasoning as `HistoryEvent.subjects` — and
+      `subject` goes on doing all the opening.
+      **And the routing map left `TodayScreen`.** `due-routing.test.tsx` exists
+      because that map once read `subject.entity` first and sent every flock row
+      to a hub; a second copy of it on a screen with no test walking every kind
+      is where that class of fault comes back. One `dueDestination`, named
+      rather than performed, so a panel can ask *would this go where I already
+      am* — a service row on its own machine's screen is drawn as text, because
+      a chevron that reloads the screen you are standing on reads as a door.
 
       *The original note, kept:*
       `read/history.ts` is farm-wide and has no notion of a subject:

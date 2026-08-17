@@ -144,6 +144,43 @@ export interface Due {
   projectedAt: number | null;
 
   /**
+   * The other records this row is about, when `subject` is not one of them.
+   *
+   * ## `subject` means two things, and this is the second one
+   *
+   * `birthDue` says it outright: *"`subject` is what opens the row, not merely
+   * what the row is about."* It names the dam's **group**, because the group is
+   * where a birth is discharged and an animal id in a `groupId` slot rendered
+   * "That group — Missing" on a live row. That is the right call for Today,
+   * where a row is a door.
+   *
+   * It is the wrong call for a panel that asks *what is coming for this thing*.
+   * Three rows are about something they do not name:
+   *
+   * - a **birth** is about the dam, and names her group;
+   * - a **withdrawal** is about the group whose produce is held, and names the
+   *   medication, because that is what the arithmetic came from;
+   * - a **task** pinned to a group is about that group, and names itself,
+   *   because a chore is the one authored kind and clears on its own record.
+   *
+   * Filtering on `subject` alone would give Bramble's screen no row about
+   * Bramble while "Bramble due" sat on Today, which is precisely the sort of
+   * near-miss the app is supposed to close.
+   *
+   * ## Ids, with no entity beside them
+   *
+   * The same shape and the same reason as `HistoryEvent.subjects`: ids are
+   * ULIDs and globally unique, so the entity would be a second fact that could
+   * disagree with the first. Nothing routes from this — `subject` still does
+   * all the opening — so an entity here would be decoration.
+   *
+   * Optional, and absent on every row whose `subject` already is what it is
+   * about. A service is about its machine and opens its machine; there is
+   * nothing to add.
+   */
+  about?: readonly string[];
+
+  /**
    * The record one press would write, when a press is honestly enough.
    *
    * **This is not the completion flag property 3 refuses**, and the difference
@@ -241,6 +278,44 @@ export function compareDues(a: Due, b: Due, now: number): number {
 /** What Today shows: visible rows, most pressing first. */
 export function todayList(dues: readonly Due[], now: number): Due[] {
   return dues.filter((d) => isVisible(d, now)).sort((a, b) => compareDues(a, b, now));
+}
+
+/** Whether this row is about a particular record — see `Due.about`. */
+export function concerns(due: Due, id: string): boolean {
+  return due.subject.id === id || (due.about?.includes(id) ?? false);
+}
+
+/**
+ * Everything coming for one set of records, soonest first.
+ *
+ * ## Not filtered by visibility, and that is the whole difference from Today
+ *
+ * `todayList` drops `later` rows because Today is a morning's work and a list
+ * that reaches into November is one nobody finishes. A detail screen is the
+ * opposite question — somebody has opened the tractor *to find out about the
+ * tractor* — and the 250-hour service six weeks out is exactly what they came
+ * for. Hiding it there would leave the screen saying nothing on most days.
+ *
+ * So a row with no date at all survives too. "At 250 hours" on a machine
+ * nobody has read twice is a permanent resident on Today and refused there;
+ * on the machine's own screen it is the schedule, stated honestly.
+ *
+ * ## Several ids, because a screen may make a hop the engine does not
+ *
+ * A bed passes itself and its plantings — nothing is due for a bed, and
+ * *"Sungold in Bed 3 wants sowing"* is plainly about the bed. The same hop
+ * `listHistory` takes, made by the screen that means it rather than by a
+ * hierarchy walk every panel would inherit.
+ */
+export function duesFor(dues: readonly Due[], ids: readonly string[], now: number): Due[] {
+  const wanted = new Set(ids);
+
+  return dues
+    .filter(
+      (due) =>
+        wanted.has(due.subject.id) || (due.about?.some((id) => wanted.has(id)) ?? false),
+    )
+    .sort((a, b) => compareDues(a, b, now));
 }
 
 /**

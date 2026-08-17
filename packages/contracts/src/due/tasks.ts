@@ -77,6 +77,9 @@ export function taskDues(task: TaskRecord, subjectName?: string): Due[] {
       key: `${task.id}:task`,
       kind: 'task',
       subject: { entity: 'task', id: task.id },
+      // A chore names itself, because it clears on its own record rather than
+      // on anything the group does. It is still the group's job to do.
+      ...(task.subjectId === undefined ? {} : { about: [task.subjectId] }),
       title: subjectName === undefined ? task.title : `${task.title} — ${subjectName}`,
       at,
       atReading: null,

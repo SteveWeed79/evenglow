@@ -7,6 +7,7 @@ import { Row } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
+import { Coming } from '../components/Coming';
 import { Timeline } from '../components/Timeline';
 import { useLive } from '../hooks/useLive';
 import { useNav } from '../hooks/useNav';
@@ -175,6 +176,7 @@ export function AnimalScreen({ route }: ScreenProps<'Animal'>): React.ReactEleme
         </Panel>
       )}
 
+      <Coming subject={animalId} here="Animal" />
       <Timeline subject={animalId} label="What happened to her" />
     </Screen>
   );

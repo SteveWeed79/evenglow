@@ -52,6 +52,9 @@ export function withdrawalDue(
     key: `${withdrawal.medicationId}:withdrawal:${withdrawal.kind}`,
     kind: 'withdrawal',
     subject: { entity: 'medication', id: withdrawal.medicationId },
+    // The medication is where the arithmetic came from; the group is what the
+    // sentence is about, and it is the group's screen somebody opens to ask.
+    about: [withdrawal.subjectId],
     title: `${subjectName}: ${withdrawal.kind} clear again after ${withdrawal.medication}`,
     at: withdrawal.clearsAt,
     atReading: null,
@@ -326,6 +329,9 @@ export function birthDue(
       damFlockId === undefined
         ? { entity: 'animal', id: breeding.damId }
         : { entity: 'flock', id: damFlockId },
+    // Which is where it opens. This is who it is about — so her own screen can
+    // say she is due without the group's whole husbandry list coming with it.
+    about: [breeding.damId],
     title: `${damName} due`,
     at: breeding.bredAt + days * DAY_MS,
     atReading: null,

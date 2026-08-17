@@ -24,6 +24,7 @@ import { Loading, Missing } from '../components/Missing';
 import { Notes } from '../components/Notes';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
+import { Coming } from '../components/Coming';
 import { Timeline } from '../components/Timeline';
 import { useLive } from '../hooks/useLive';
 import { useLeave, useNav } from '../hooks/useNav';
@@ -364,6 +365,7 @@ export function PlantingScreen({ route }: ScreenProps<'Planting'>): React.ReactE
         />
       </Panel>
 
+      <Coming subject={plantingId} here="Planting" />
       <Timeline subject={plantingId} />
     </Screen>
   );

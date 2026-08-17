@@ -10,6 +10,7 @@ import { Row } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
+import { Coming } from '../components/Coming';
 import { Timeline } from '../components/Timeline';
 import { useLive } from '../hooks/useLive';
 import { useNav } from '../hooks/useNav';
@@ -142,6 +143,7 @@ export function VarietyScreen({ route }: ScreenProps<'Variety'>): React.ReactEle
         />
       </Panel>
 
+      <Coming subject={subjects} here="Variety" />
       <Timeline subject={subjects} label="What it has given" />
     </Screen>
   );
