@@ -215,7 +215,35 @@ period rather than a task.
 
 ## 4. Structural — the highest-leverage work
 
-- [ ] **Append-only `taskCompletion` and `serviceCompletion` events.** **GA**
+- [x] **Append-only `taskCompletion` and `serviceCompletion` events.** **GA**
+      **Built 17 August.** Two append-only entities, and the schedules stay
+      exactly as mutable as they were — `task` and `maintenance` are still
+      edited, and only the past became immutable. `read/history.ts` had stated
+      the fix in its own words against both entities (*"an append-only
+      completion record — the shape `careLog` already is for animals"*), so
+      this is that. Both notes stay where they are, rewritten: those builders
+      are the legacy path for records written before events existed, and each is
+      silent for a record that has any — or the last completion would be drawn
+      twice on the day it happened.
+      **Nothing reading the old field names had to change**, which is what kept
+      it to one commit. `listTasks` and `listServices` fill `completedAt`,
+      `lastDoneAtDate` and `lastDoneAtHours` from the newest event and fall back
+      to the stored field for a record with none — so `taskDues`, `isSettled`
+      and `serviceDue` did not lose a line between them, and a farm's existing
+      records go on reading exactly as they did. An event wins **outright**
+      rather than being compared with the field: un-completing is a delete, and
+      a stale field that could win afterwards would make a job somebody un-ticked
+      look done again.
+      **One bug found in the writing, by a test asserting what a comment
+      claimed.** `listServices` spread the stored fields and then overrode only
+      the date, so a service recorded on a machine whose meter nobody read left
+      this spring's date beside a reading from two services ago — and
+      `serviceDue` counts the next interval from exactly that reading. An event
+      replaces the pair outright now; an absent reading is the honest answer.
+      **And it closed one of §1's two live clearing symptoms, as predicted.**
+      *Need to redo this* deleted a completion instead of writing
+      `{ completedAt: null }`. The null stays for a job finished by a build that
+      predates this, which is the case the clearing contract was built for.
       Schedules stay mutable; completions become history. Today
       `task.completedAt`, `maintenance.lastDoneAtHours` and `lastDoneAtDate`
       each overwrite, so a machine serviced for six years can show one date —
@@ -227,13 +255,211 @@ period rather than a task.
       completion it is a `delete` of the event, which does. That does not make
       the wire fix optional — the medication fields still need it — but it does
       mean these two items should be sequenced, not done twice.
-- [ ] **One reusable detail-and-timeline screen.** **GA**
+
+      *The original note, kept:*
+- [x] **One reusable detail-and-timeline screen.** **GA**
       Status, primary actions, upcoming work, full timeline, edit and archive.
       Used for animals, groups, beds, varieties, plantings, machines and
       inventory. *The best single idea from the assessment: several entities
       stop at creation and a static list, and this makes almost every other
       item on every list smaller.*
-      **Its first commit is a read, not a screen** *(added 16 August)*.
+      **Its first commit is a read, not a screen** *(added 16 August; the read
+      and the panel are built)*.
+      **Done so far:** `HistoryEvent` carries `subjects` — plural, because a
+      loss names the group it came out of *and* the animal, and a per-animal
+      timeline that picked one would omit the animal's own death — and
+      `listHistory(units, { subject })` filters on it. Subjects are what a
+      record *names* and nothing inferred, so a group's timeline does not climb
+      down to its animals' weights; that walk is a separate question and is
+      asserted rather than left to be discovered.
+      `components/Timeline.tsx` is the reusable half, and it shares
+      `HistoryScreen`'s rows rather than copying them — that screen had already
+      extracted them once, with the reason on it: a list whose rows delete
+      things must behave identically in every container. It is on `Group`,
+      `Machine` and `Planting` now.
+      **`AnimalScreen` is built** — who she is, what she weighs, her matings,
+      the way back to her group, and her own timeline. Animals were the sharpest
+      case: a mating names a dam, so individuals exist in this app *because of*
+      that animal, and hers was the record that could not be read back. It
+      carries no edit and no archive on purpose, and says why: editing is the
+      mutable-entity gap this file holds separately, and an animal leaving the
+      farm is an **outcome** — sold, culled, died, moved — which is §4's own
+      item. Hiding the row here would pre-empt a decision already written down
+      and not yet made.
+      A sack's history is on `AdjustStockScreen`, which is the screen somebody
+      is already on when they wonder how the last two bags went. **Not a detail
+      screen of its own**, because the farm-wide inventory model below is going
+      to reshape what an item is, and a screen built against today's shape would
+      be built twice.
+      **Beds and varieties were a different shape, and both are built now**
+      *(16 August)*. The finding stands: nothing append-only names a bed or a
+      variety, because a `harvest` names its **planting**. So neither screen is
+      a timeline with facts on top — each leads with what only `planting` can
+      say, which is a mutable record of state and therefore absent from the
+      history projection by design. A bed shows what is growing in it now and
+      what grew there before, which is the question a bed is actually asked;
+      a variety shows the numbers every planned date in the app is computed
+      from — shown for the first time, since a keeper who disagrees with
+      seventy-five days has to see seventy-five days.
+      **The harvests still reach them, and the way they do is the decision.**
+      `HistoryScope` now takes several subjects, so a bed asks for *itself and
+      its plantings* by name. The rule that an event's `subjects` are what a
+      record names stays exactly as strict; the hop is made on the screen that
+      means it, where *"we took four kilos out of bed three in August"* is
+      plainly true, rather than by a hierarchy walk every timeline in the app
+      would inherit. That is also what keeps a group's timeline free of its
+      animals' weights: nobody passes the animals.
+      Both are reachable: the bed heading on Growing opened nothing before, and
+      a planting now names the bed and the variety it belongs to.
+      **Edit and archive are built for all three** *(16 August)*. It was the
+      largest gap in the product — `DESIGN-BRIEF.md` §3 counts sixteen mutable
+      entities against a UI that could change one — and the corrections it
+      makes possible are not cosmetic: `possibleDams` reads an animal's sex, so
+      a ram recorded female was offered for breeding for ever, and the frost
+      warning reads `bed.covered`, so a tunnel recorded as open ground raised
+      alarms all spring for plants in no danger. Clearing works on these screens
+      because the wire learned the word for it in §1: a band that came off can
+      be taken off rather than only replaced.
+      **Two judgements worth keeping.** A bed with a crop still in it refuses
+      to be put away and names what to finish first — archiving it would take
+      the planting off every growing screen while it is still in the ground.
+      A variety is a description rather than a place, so dropping one that has
+      been planted is allowed and the plantings read on exactly as before.
+      **And the animal one says what it cannot do:** putting her away records
+      that she is gone and *not why*, in those words, because the app cannot
+      tell a sale from a death and §4's outcome flow is what will ask. Nothing
+      is deleted (P13), so that flow has a record to attach an answer to.
+      **Machines, plantings and inventory items followed** *(17 August)*, and
+      they were not three more field sets. `listMachines` did not carry
+      `serial`, `year` or `note` at all — nothing could show them, so nothing
+      read them — and the serial is the number on the insurance and the bill of
+      sale, which is the whole reason P7 keeps hours and services in the first
+      place. `listPlantings` was missing `quantity` and `note` the same way.
+      Both reads now carry them.
+      **Three more judgements.** A machine's meter toggle is the dangerous
+      control on its screen: `serviceDue` refuses to build a row it cannot
+      evaluate, so an hours interval on a meterless machine produces *nothing*
+      rather than a row stuck on Today — which is right, and means switching the
+      meter off silently stops every hour-based schedule ever asking again. The
+      screen counts those schedules and names them before the toggle is
+      believed. A planting with harvests against it **refuses** to be taken
+      back out and points at *pull it*: a `harvest` names its planting, and beds
+      and varieties reach their harvests *through* plantings, so archiving one
+      would take four kilos of tomatoes out of the bed's story and the
+      variety's while the harvest records sat there untouched and unreachable.
+      A planting that fed somebody is not a row entered by mistake. An
+      inventory item has **no** guard on stock still on the shelf, deliberately:
+      a part the farm no longer stocks may well have three left in the drawer,
+      and refusing until the count reached zero would teach people to type a
+      zero they do not mean — which puts a use that never happened into the
+      adjustment history, and that is worse than an archived item with a number
+      on it.
+      **A set of eggs came last** *(17 August)* and broke the pattern the other
+      five had settled into. Everywhere else, archiving leaves what was logged
+      against the record: a retired tractor keeps its hour readings, an archived
+      item keeps its adjustments, because those are separate records that merely
+      name it. **An incubation has no separate records** — set, candled,
+      hatched, and the counts are all fields on itself, which is exactly why the
+      hatch in What happened is built from the record — so archiving one really
+      does take the hatch out of the farm's history. The screen says that in
+      those words instead of implying the usual bargain. It is still *allowed*,
+      where a planting with harvests is refused, and the difference is the
+      point: there the harvests would survive unreachable, saying four kilos of
+      tomatoes happened somewhere nobody can look; here nothing is stranded,
+      because the row and the record are the same thing.
+      **Two of its fields are the app's arithmetic rather than description.**
+      `setAt` and `species` are what both dates count from and `SetEggsScreen`
+      opens on chicken at today, so a duck set entered two days late hatches a
+      week early in the app and nowhere else — and a due row that came and went
+      is not one anybody can tell was wrong. `eggsSet` is the denominator of
+      every rate the detail screen prints: twelve typed as twenty-one makes a
+      good hatch read as 38%, which is the number a keeper diagnoses an
+      incubator by. **And three counts could only ever be written once**, since
+      the forms recording `fertile`, `hatched` and `earlyLosses` vanish the
+      moment they are filled in. They are offered here and only once they
+      exist — correcting what was recorded, never a second place to record it,
+      because a `fertile` of nought from a stepper nobody touched is a claim
+      that every egg was clear.
+      **It also gave `flockId` its first caller.** *"The group the eggs came
+      from, when they came from this farm"* has been in the schema since it was
+      written and the add screen never asked, so the hatch reached What happened
+      and no group's own story — however plainly the hens laid the eggs.
+      **`SetEggsScreen` asks it now too** *(17 August)*, which is the moment
+      somebody actually knows: the person standing at the incubator with a
+      basket can say which birds these came from, and nobody goes back a
+      fortnight later to. Nothing is preselected even on a farm with one flock,
+      on that screen's own argument about `eggsSet` not opening on a dozen — a
+      default is a claim the app chose and it would be recorded by anyone who
+      pressed *Set them* without looking. Both screens filter the offer to
+      groups of the bird being set, because duck eggs did not come from the
+      goats and a wrong provenance is silent: nothing downstream can tell that a
+      hatch landed on the wrong flock's timeline.
+      **The upcoming-work half closed it** *(17 August)*, and it turned out to
+      be a reading of the engine rather than an addition to it. `useDues`
+      composes twelve builders into a farm-wide list and exactly one screen had
+      ever rendered a row from it — so the app knew a tractor's yearly service
+      was due in November and would not say so on the tractor's own screen,
+      which is the question somebody opens that screen to ask. `Coming` is
+      `Timeline`'s twin: same panel shape, same subject scope, same hop made by
+      the screen that means it, and it sits on all six.
+      **It shows what Today deliberately hides**, and that is the point rather
+      than an oversight being corrected. `todayList` drops `later` rows because
+      a morning's list reaching into November is one nobody finishes; that is a
+      judgement about Today, not about the row, so `duesFor` keeps them —
+      undated meter rows included, since *"at 250 hours"* is a permanent
+      resident on Today and the honest schedule on the machine's own screen.
+      Nothing is capped or bundled either: both exist because Today mixes every
+      group, machine and bed, and a group's seven husbandry rows **are** its
+      routine when read on the group.
+      **`Due.subject` meant two things and now says so.** `birthDue` already
+      carried the confession — *"`subject` is what opens the row, not merely
+      what the row is about"* — because an animal id in a `groupId` slot
+      rendered "That group — Missing" on a live row. Three builders point
+      somewhere other than what they describe: a birth at the dam's group, a
+      withdrawal at the medication the arithmetic came from, a chore at itself.
+      Filtering on `subject` alone gave Bramble's screen nothing to say while
+      "Bramble due" sat on Today. `Due.about` is the second answer — ids only,
+      the same shape and the same reasoning as `HistoryEvent.subjects` — and
+      `subject` goes on doing all the opening.
+      **And the routing map left `TodayScreen`.** `due-routing.test.tsx` exists
+      because that map once read `subject.entity` first and sent every flock row
+      to a hub; a second copy of it on a screen with no test walking every kind
+      is where that class of fault comes back. One `dueDestination`, named
+      rather than performed, so a panel can ask *would this go where I already
+      am* — a service row on its own machine's screen is drawn as text, because
+      a chevron that reloads the screen you are standing on reads as a door.
+      **Incubation and Jobs came last and wanted opposite things** *(17
+      August)*. A set of eggs is a detail screen and took the panel: its two
+      steps are dated, and the screen stated those dates in plain muted prose
+      with no notion of late, so a set four days past its hatch read exactly
+      like one due next week. The form's own sentences **stay** — they are not
+      the same statement, because `incubationDues` produces nothing at all for a
+      species the library has no length for while the panel falls back to
+      twenty-one days, so for a bird the app cannot model the form is the only
+      thing said.
+      **It found a hole while it was there.** `read/history.ts` was blind to
+      incubations entirely, so a hatch — one of the few events on a poultry year
+      anybody remembers the date of — appeared nowhere but that one screen. It
+      lands in What happened now and on the source group's timeline, since the
+      hens laid the eggs. Only the hatch: candling is a step in the middle, and
+      the *set's own* timeline is deliberately absent because nothing else in
+      the projection can ever name an incubation, so the panel's only possible
+      content would restate the two panels above it.
+      **Jobs is the task list itself**, so a panel of the same rows above the
+      same rows is Today with a different heading. What it lacked was the
+      engine's sense of time, which it had been reimplementing worse: the detail
+      line printed "3 September" whether that was next month or three weeks
+      gone, and a weekly chore done yesterday sorted by the Monday it started
+      from rather than by next Thursday. It reads through `taskDues` and
+      `urgencyOf` now, in Today's own words, and an overdue row goes rowan.
+      **And a job can finally say what it is for.** `taskShape.subjectId` has
+      existed since the schema was written, `useDues` reads it, `Due.about`
+      carries it — and nothing in the app could set it, so the path that puts
+      *order the wormer* on the does' own screen beside their worming schedule
+      was reachable only from a test. A builder with no caller, which is the
+      lesson `useDues` already records about itself.
+
+      *The original note, kept:*
       `read/history.ts` is farm-wide and has no notion of a subject:
       `listHistory` takes none, and `HistoryEvent` carries the record's own id
       and its entity but not what the record is *about*. So nothing today can
@@ -350,6 +576,80 @@ period rather than a task.
       There is no timezone handling in this codebase at all. `[34]` is the
       urgent half: a record written today without its zone can never have one
       added.
+- [ ] **An operational control centre on the box.** *(raised in §8 on 17
+      August, decided the same day)*
+      One page, its own process, live reads, behind a Caddy site block with a
+      password on the existing `admin` role. **Business and operations, not farm
+      records** — the point is subscribers, tokens, versions and health, and
+      nobody needs a panel telling them how many eggs a farm collected.
+
+      **The panels, and what already backs each one.** Everything but the third
+      is answerable from the database today:
+      - **Paid, comped and free.** `orgs.subscription` is absent on every farm
+        that never subscribed, `syncGranted` is the comped ones, and the
+        `FREE_SYNC_ORGS` env list still wins over both — so the readout has to
+        show all three or it will disagree with what a farm experiences.
+      - **Tokens claimed.** `promoCodes.redeemedBy[]` carries `orgId`, `userId`
+        and `at`, so minted-versus-spent is exact rather than estimated;
+        invites and join codes have the same shape. This is the closest thing
+        the server has to a funnel.
+      - **Versions in the field.** *Nothing backs this yet.* `routes/sync.ts`
+        reads `x-steading-client`, decides the 426 with it, and **discards it**
+        — so "which builds are actually out there" has no data behind it. It
+        needs a last-seen version stored per device or per farm, which is a
+        small write and a prerequisite rather than a panel.
+      - **Server health.** `ping()`, process uptime, mongod reachable, disk and
+        photo bytes from `db:usage`, and the sweeper's last report — which
+        currently goes to `console.log` and nowhere a person looks.
+      - **Sync trouble.** `pending` rows and their age, the per-farm outcome mix
+        (`rejected` and `conflict` counts), and feed lag per device. A farm
+        quietly generating refusals is a bug nobody will report, because the
+        only person who sees the inbox entry is the one who caused it.
+
+      **Buttons, not just readouts** — that was the point of asking for it. The
+      `.mts` scripts are the action list: `farm:ls`, `farm:show`, `db:usage`,
+      `db:verify` are read-only and safe; `promo:new` and `farm:grant` are
+      writes whose worst case is a spurious code or a comped farm, both
+      reversible by hand.
+      **`db:password` stays on the shell**, and that is the one line worth
+      holding. It sets anybody's password, which makes a button for it an
+      account-takeover primitive — and it is the same risk on localhost as on a
+      public hostname, so it is not an argument about where the panel lives.
+      *This replaces "read-only first"*, which was the wrong rule: the useful
+      version of it is **no credential-changing actions**, and everything else
+      can be a button.
+
+      **The buttons call the functions, never a shell.** `createPromoCode` and
+      the rest are exported from `apps/api/src/db/`; shelling out to `pnpm …`
+      would be a command-injection surface that also depends on a checkout being
+      present. `list-farms.mts` queries inline rather than through a shared
+      function, so that one query wants extracting first — the alternative is
+      two implementations of the only cross-tenant read in the codebase.
+
+      **Auth: a password, on the `admin` role, with three conditions.** From a
+      manager and never typed, because the whole thing rests on entropy; its own
+      `@fastify/rate-limit` registration, since the existing limiters are
+      per-route `scope.register` calls and a new route inherits nothing; and
+      `TRUSTED_PROXY_HOPS=1` verified on the box, because `DEPLOY-THE-SERVER.md`
+      records that with it wrong `request.ip` is `127.0.0.1` for every request
+      and **every limiter in the service shares one bucket** — which would make
+      the rate limiting decorative and reduce this to a password alone.
+      A network filter in front is cheap and optional: Caddy's `remote_ip`
+      matcher costs one line and breaks when the ISP rotates you, a tailnet
+      survives that and is one more daemon. mTLS is the strongest and the most
+      annoying to install on a phone.
+
+      *The stance this replaces, kept because it was wrong in a specific way:*
+      *"A public admin login is a second auth system guarding the one thing on
+      this box that can read every farm, and should not be the first version of
+      anything."* **Both halves overstated it.** It is not a second auth system:
+      `ROLES` already has `owner | admin | hand` and `@fastify/rate-limit` is
+      already scoped onto auth, billing, members and support, so an admin page
+      reuses what exists. And the cross-tenant point is real but worth nothing
+      at one farm — a compromised admin session reaching every farm is a
+      property that matters at twenty, not at one. It was a future constraint
+      presented as a present one.
+
 - [ ] **A minimum client version the server can require**, and an in-app update
       check against the shelf. `[23]`, `[24]`
       **The first half is built** *(16 August)*: the client states its version
@@ -450,13 +750,21 @@ that file was not in this one's source table until 16 August, so the repository'
 highest-severity open work was invisible from the checklist that is supposed to
 say what to do. **The file remains the authority; do not re-argue them here.**
 
-- [ ] **A sweeper for `pending` mutation rows.** P0-2's last open box. The
+- [x] **A sweeper for `pending` mutation rows.** P0-2's last open box. The
       outcome field, the accepted-only feed and the repair have shipped; what
       is missing is the hourly pass over rows whose client never came back,
       running the same stored-envelope re-projection. Until it exists a row
       logged at the moment a device dies stays `pending` for ever, and
       `pending` is withheld from the feed — so that record reaches no other
       device on the farm.
+      **Built 17 August** — `apps/api/src/sync/sweep.ts`, with the runner wired
+      into the entry point rather than into `buildServer`, so importing the
+      module in a test binds no port and starts no timer. It reuses `apply.ts`'s
+      own re-projection rather than copying it; identity comes from the log and
+      the role from `users` as it stands, which is what invariant 8 asks for; and
+      an author who has left the farm is stamped `rejected` rather than swept for
+      ever. The sweep's own suite is CI only (no mongod here), and the timer's —
+      overlap, a throwing pass, what it logs — runs everywhere.
 - [ ] **Mint a fresh ULID in `retryRejected`.** P0-1(b). Reusing the id of a
       refused mutation means the corrected payload meets the duplicate branch
       and is answered as already-done.
@@ -475,6 +783,17 @@ say what to do. **The file remains the authority; do not re-argue them here.**
 - [ ] **The two-device harness**, and the six assertions listed under it. Every
       symptom P0-2 describes is invisible to a suite that runs one device, and
       the fix shipped without a test that could have caught the bug.
+      **The harness is built and three of the assertions with it** *(17
+      August)* — `tests/support/devices.ts`, `tests/offline/two-devices.test.ts`
+      and `tests/sync/two-devices.test.ts`. The box stays open because three
+      remain: two are deliberate deferrals with their reasons written on them in
+      the source file (late-insertion is P0-3, whose restatement is undecided;
+      crash-between-log-and-projection needs a seam that belongs with the
+      sweeper), and the Farm Hand photo round trip is simply not done.
+      **The server-side half is CI only**, like every `tests/sync/*` suite: no
+      mongod is obtainable in the environment it was written in, so it was not
+      watched to fail before it passed. The client-side half needs none and
+      was — it caught a restore bug in `as()` on its first run.
 
 ## 8. Undecided, and not refused
 
@@ -513,7 +832,9 @@ decisions are cluster-shaped — one argument settles each group.
 - **Device and platform reach** — `[77]`–`[90]`. Barcode, EID, Bluetooth
   scales, printing, calendar export, foldables, Chromebooks. `[76]`, voice, is
   argued in §6's wet-glove item and is still undecided as work.
-
+- **A control centre on the box** — *raised here 17 August and decided the same
+  day, so it has moved to §6.* Left as a pointer rather than deleted, because
+  this list is what somebody reads to find out whether a thing was considered.
 ---
 
 ## Rejected, and why

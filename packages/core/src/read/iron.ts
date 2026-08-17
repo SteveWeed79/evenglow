@@ -6,6 +6,7 @@ import {
   type Species,
 } from '@steading/contracts';
 import { localStore } from '../db/store';
+import { newestServiceCompletions } from './completions';
 
 /**
  * Local-first reads for equipment.
@@ -20,6 +21,16 @@ export interface Machine {
   name: string;
   make?: string;
   model?: string;
+  /**
+   * The three the hub never shows, carried so the record can be corrected.
+   *
+   * A serial typed with a digit wrong is the field somebody most wants back —
+   * it is on the insurance and on the bill of sale — and until an edit screen
+   * existed nothing could read these, so nothing could offer them.
+   */
+  serial?: string;
+  year?: number;
+  note?: string;
   hasHourMeter: boolean;
   /** Highest reading recorded on this device. */
   hours: number | null;
@@ -109,6 +120,9 @@ export async function listMachines(): Promise<Machine[]> {
           name: parsed.data.name,
           ...(parsed.data.make === undefined ? {} : { make: parsed.data.make }),
           ...(parsed.data.model === undefined ? {} : { model: parsed.data.model }),
+          ...(parsed.data.serial === undefined ? {} : { serial: parsed.data.serial }),
+          ...(parsed.data.year === undefined ? {} : { year: parsed.data.year }),
+          ...(parsed.data.note === undefined ? {} : { note: parsed.data.note }),
           hasHourMeter: parsed.data.hasHourMeter ?? true,
           hours,
           usagePerDay: usagePerDay(series),
@@ -146,7 +160,19 @@ export interface Service {
 const storedMaintenance = z.object(maintenanceCreateSchema.shape).partial();
 
 export async function listServices(): Promise<Service[]> {
-  const records = await localStore().readRecordsByEntity('maintenance');
+  const [records, done] = await Promise.all([
+    localStore().readRecordsByEntity('maintenance'),
+    /**
+     * When each schedule was last actually discharged.
+     *
+     * `lastDoneAtDate` and `lastDoneAtHours` are filled from the newest
+     * `serviceCompletion`, and from the stored fields only for a schedule with
+     * no events — every one written before completions were events. `serviceDue`
+     * counts its interval from these two names and did not change a line. See
+     * `read/completions.ts`.
+     */
+    newestServiceCompletions(),
+  ]);
 
   return records
     .filter((record) => !record.deleted)
@@ -156,7 +182,19 @@ export async function listServices(): Promise<Service[]> {
         return [];
       }
 
-      const { equipmentId, title, partIds, checks, ...rest } = parsed.data;
+      const {
+        equipmentId,
+        title,
+        partIds,
+        checks,
+        // Pulled out of `rest` rather than overridden after it, because when a
+        // completion event exists it replaces BOTH — see below.
+        lastDoneAtDate,
+        lastDoneAtHours,
+        ...rest
+      } = parsed.data;
+      const event = done.get(record.targetId);
+
       return [
         {
           id: record.targetId,
@@ -165,6 +203,26 @@ export async function listServices(): Promise<Service[]> {
           ...(partIds === undefined ? {} : { partIds: [...partIds] }),
           ...(checks === undefined ? {} : { checks: [...checks] }),
           ...Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined)),
+          /**
+           * The last service — both halves of it, from one service.
+           *
+           * An event replaces the stored pair outright rather than being
+           * merged with it. A date from this spring beside a meter reading from
+           * two services ago is a pair that never happened, and `serviceDue`
+           * counts the next interval from exactly that reading — so a machine
+           * serviced last week would be told its next oil change was due two
+           * hundred hours ago. An absent reading is the honest answer for a
+           * service recorded on a machine whose meter nobody read.
+           */
+          ...(event === undefined
+            ? {
+                ...(lastDoneAtDate === undefined ? {} : { lastDoneAtDate }),
+                ...(lastDoneAtHours === undefined ? {} : { lastDoneAtHours }),
+              }
+            : {
+                lastDoneAtDate: event.completedAt,
+                ...(event.atHours === undefined ? {} : { lastDoneAtHours: event.atHours }),
+              }),
         } satisfies Service,
       ];
     })

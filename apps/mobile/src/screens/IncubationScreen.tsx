@@ -13,14 +13,15 @@ import {
   listIncubations,
 } from '@steading/core/read/breeding';
 import { saidConfirmation } from '@steading/core/voice';
-import { Confirmation, Failure, Field, Primary, Stepper, useSaver } from '../components/Form';
+import { Coming } from '../components/Coming';
+import { Confirmation, Failure, Field, Primary, Row, Stepper, useSaver } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Notes } from '../components/Notes';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
 import { useLog } from '../hooks/useSync';
-import { useLeave } from '../hooks/useNav';
+import { useLeave, useNav } from '../hooks/useNav';
 import type { ScreenProps } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, SPACE, TYPE } from '../theme/tokens';
@@ -37,6 +38,23 @@ import { FONTS, SPACE, TYPE } from '../theme/tokens';
  * rate are different figures, and a keeper diagnosing a bad set needs to know
  * which one moved: eggs that never pipped point at fertility or at the
  * incubator, chicks that died on day two point at brooder temperature.
+ *
+ * ## It gets `Coming` and deliberately not `Timeline`
+ *
+ * The other six detail screens take both halves. This one takes one, and the
+ * asymmetry is a fact about the entity rather than an omission.
+ *
+ * A hatch **does** now land in What happened — `read/history.ts` was blind to
+ * incubations entirely, which meant one of the few events on a poultry year
+ * that anybody remembers the date of appeared nowhere but here. It reaches the
+ * farm's history and the source group's timeline, where it is news.
+ *
+ * On this screen it would not be. Nothing else in the projection can ever name
+ * an incubation, so the panel's only possible content is that single row —
+ * *"Sussex eggs hatched · 8 chicks from 12 eggs set"* — sitting directly under
+ * the identity line and the How it went panel, which already say the count, the
+ * set date and both rates. A panel that can only restate the screen above it is
+ * furniture, and this app's rule is that a component earns its place.
  */
 export function IncubationScreen({ route }: ScreenProps<'Incubation'>): React.ReactElement {
   const { incubationId } = route.params;
@@ -52,6 +70,7 @@ export function IncubationScreen({ route }: ScreenProps<'Incubation'>): React.Re
 
 function Detail({ incubation }: { incubation: IncubationEntry }): React.ReactElement {
   const log = useLog();
+  const nav = useNav();
   const { colors } = useTheme();
 
   /**
@@ -153,6 +172,27 @@ function Detail({ incubation }: { incubation: IncubationEntry }): React.ReactEle
         </Panel>
       )}
 
+      {/**
+        * The two steps, as the engine sees them.
+        *
+        * The panels below each say "Due about 3 September" and that is a date
+        * rather than a verdict: a set four days past its hatch reads exactly
+        * like one due next week. `urgencyOf` is what knows the difference, and
+        * an overdue row here is drawn in rowan and says "4 days ago".
+        *
+        * The dates stay where they are, because they are not the same
+        * statement. `incubationDues` produces nothing at all for a species the
+        * library has no incubation length for, while the panel falls back to
+        * twenty-one days — so for a bird the app cannot model, the sentence in
+        * the form is the only thing said, and it should be.
+        *
+        * `here` drops the tap: a candle row opens the Incubation screen, which
+        * is this one. The row is drawn as text and the form beneath it is where
+        * the step is actually discharged.
+        */}
+      <Coming subject={incubation.id} here="Incubation" />
+
+
       {fertilityPct === null && hatchPct === null ? null : (
         <Panel label="How it went">
           {fertilityPct === null ? null : (
@@ -205,6 +245,15 @@ function Detail({ incubation }: { incubation: IncubationEntry }): React.ReactEle
         subjectId={incubation.id}
         subject={incubation.label}
       />
+
+      <Panel label="This set">
+        <Row
+          title={`Change ${incubation.label}`}
+          detail="What they are, how many went under, the date, and the counts"
+          testID="go-edit-incubation"
+          onPress={() => nav.navigate('EditIncubation', { incubationId: incubation.id })}
+        />
+      </Panel>
 
       {incubation.hatchedAt === undefined ? (
         <Panel label="The hatch">

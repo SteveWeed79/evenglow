@@ -317,8 +317,41 @@ everybody else.
       rejection, so a new no-op status puts every replayed create and every
       repeated delete into a farmer's inbox. Log outcomes and wire statuses are
       two enums.
-- [ ] Add a sweeper for `pending` rows older than about an hour whose client
+- [x] Add a sweeper for `pending` rows older than about an hour whose client
       never came back. It runs the same stored-envelope re-projection.
+      **Built — `apps/api/src/sync/sweep.ts`** *(17 August)*, and it does run the
+      same re-projection: `replayFromLog`, `project` and `stampOutcome` are
+      exported from `apply.ts` for it rather than reimplemented. Both re-validate
+      off disk and both carry the undecided state in their filters; a second copy
+      would be a second place for that subtlety to be got wrong, silently, on a
+      schedule, with nobody watching.
+      **Identity from the log, role from `users`.** `project` takes claims and a
+      timer has no session — but invariant 8 asks for the role to be re-derived,
+      and `project`'s own comment adds that a role revoked since the command was
+      queued must still bite. So *who* comes from the envelope, which cannot
+      change, and *what they may do* from the database now. An author who has
+      left the farm is stamped `rejected` rather than skipped, because leaving it
+      pending puts the row back in the limbo this exists to end; the envelope
+      stays in `mutations`, which is the audit trail.
+      **Only `outcome: pending` exactly**, never the absent-or-null rows written
+      before the field existed — those projected when first applied and replicate
+      today, so sweeping them would re-project a farm's whole history on the hour.
+      **A first pass a minute after boot**, then hourly. A restart is the
+      likeliest moment for a stranded row to exist, so waiting a full hour after
+      coming back up would wait through it.
+      **The role gate was missing on the first draft, and its own test found
+      it** *(17 August)*. `applyMutation` asks `canMutate` **before** the lane
+      and outside `project()`; `decideProjection`'s `actor` only answers two
+      narrow questions — a hand stamping a photo it uploaded, and who may edit a
+      note. A sweeper that went straight to `project()` therefore applied every
+      stranded row whatever its author may now do, which is a fail-open on
+      authorization (invariant 10) and worse here than in a request: nobody is
+      watching, and the row is by definition one whose author never came back to
+      be told. The gate is asked in the same shape as `applyMutation`,
+      `isUploadStamp` included.
+      **CI only for the sweep itself** (`tests/sync/sweeper.test.ts`) — no mongod
+      is obtainable here. `tests/unit/sweeper-runner.test.ts` covers the timer
+      and does run: overlap, a pass that throws, and what it says.
 - [x] Filter `readSnapshotPage` to accepted effects only. The watermark must
       still advance past the excluded rows, the way the unknown-entity skip at
       `snapshot.ts:99-104` already does.
@@ -1806,6 +1839,34 @@ same reason.
       it-back case. Four of the eight fail without the revert, checked by
       disabling it.
 
+### The order the farmer deals with it in decides the outcome, 17 August
+
+Pinned across two real devices in `tests/sync/two-devices.test.ts`, and worth
+stating because it is the one part of this design that is not the same in every
+telling.
+
+The rejection reverts nothing by itself — that is the decision above, taken for
+`retryRejected`'s sake. What the discard can then do depends on whether anything
+touched the record while the refusal sat in the inbox, because `after` restores
+only over a row nothing has moved since:
+
+- **Discard, then pull.** The pre-image lands, the name goes back to what the
+  farm holds, and the archive arrives on top. Both phones converge exactly.
+- **Pull, then discard.** The archive is newer than `after`, so `restoreBefore`
+  stands down and the refused name stays on the record.
+
+The residue in the second case is a name on an **archived** record, on the one
+phone whose user typed it and was told it was refused. It appears in no live
+list, reaches no other device, and the server never held it — all three
+asserted. The alternative is a discard that restores over a value the farm has
+moved past, which is the fault `after` exists to prevent, so the trade is taken
+knowingly rather than tightened.
+
+**This is where the suite had it wrong.** Its first version asserted the first
+outcome while performing the second sequence — no discard at all — and expected
+the revert to happen at rejection time, which is precisely what N-1 refuses to
+do. CI caught it; both orders are now tests.
+
 ## N-2 · One `undefined` from `expo-network` stops automatic sync for the life of the process — **P1**
 
 > **Fixed.** The listener now reports only what the OS actually said, so a
@@ -2352,19 +2413,55 @@ to express "two devices disagree".
 
 Add, alongside the existing sync tests:
 
-- [ ] **A two-device harness first.** `openSqliteStore(driver, ids)` is already
+- [x] **A two-device harness first.** `openSqliteStore(driver, ids)` is already
       callable directly with an independent driver, so the pieces exist; what is
       missing is a second `DEVICE_ID`, a per-device `seq`, and a way to drive two
       stores without the module global. Four of the tests below depend on it.
-- [ ] Duplicate ID carrying a changed payload → projection unchanged, log
+      **Built — `tests/support/devices.ts`** *(17 August)*. `twoDevices()` gives
+      two stores over two files, each minting its own `deviceId` and keeping its
+      own `clientSeq`, and `device.as(work)` installs one for the length of a
+      block and restores whatever was there. A block runs to completion under one
+      store deliberately: `runFlush` captures `storeGeneration()` before its
+      first await and refuses if it moved, so a device is not something you
+      become halfway through sending. Interleaving is expressed as a sequence of
+      blocks, which is the granularity that actually interleaves.
+      **The store stays a module global.** Threading a handle through `enqueue`,
+      `flushOnce` and `pullOnce` is a production change made for a test, and
+      `db/store.ts` argues against exactly that.
+      **`tests/offline/two-devices.test.ts` tests the harness**, needs no mongod,
+      and earned its place immediately: `as()` restored the device's own store
+      rather than the previous one, so a nested `b.as()` left B installed and A's
+      next enqueue landed on B. Every downstream assertion about what B holds
+      would have been measuring work A thought it was doing.
+- [x] Duplicate ID carrying a changed payload → projection unchanged, log
       unchanged. **Use the hour-reading or `update` shape, not an append-only
-      create.**
-- [ ] A rejected mutation observed from a **second** device → absent, not applied.
-- [ ] A conflicted update against an archived record → stays archived everywhere.
+      create.** `tests/sync/two-devices.test.ts`, in the `update` shape as
+      instructed.
+- [x] A rejected mutation observed from a **second** device → absent, not applied.
+      Same file — a mistyped hour meter reading, asserted against device B's own
+      SQLite rather than against the feed.
+- [x] A conflicted update against an archived record → stays archived everywhere.
+      Same file, and this is the one the harness was built for: `outcome.test.ts`
+      could only assert that the feed withholds the conflicted update, and the
+      symptom was `projectOne` on the *client* clearing the deleted flag on any
+      pulled `update`. Both ends now.
+      **CI only.** Like every other `tests/sync/*` suite these need a mongod, and
+      the environment they were written in cannot obtain one — `fastdl.mongodb.org`
+      is refused by policy. They were not watched to fail before they passed,
+      which is the same caveat `membership-races.test.ts` carries and it should
+      be read the same way.
 - [ ] Late insertion behind an advanced cursor → still delivered.
+      **Deliberately not written with the harness** *(17 August)*: this is P0-3,
+      the verification pass refused the original prescription, and the
+      restatement is the open item above. A test written now would encode a rule
+      nobody has settled and would have to be rewritten to match whatever is
+      decided — which is worse than no test, because it would look like coverage.
 - [ ] Projection order reversed against log order → server and clean replay agree.
 - [ ] Crash between log write and projection → repaired, not duplicated. **Needs
       a seam that does not exist**: `applyMutation` takes no clock and no hook.
+      Still true, and it belongs with the `pending` sweeper above — the sweeper
+      is the thing that does the repairing, so the seam it needs and the test
+      that proves it are one piece of work rather than two.
 - [ ] Farm Hand photo, end to end, across two devices.
 - [x] N-1: hand creates a group, server rejects, hand discards → record gone.
       `tests/offline/refused-create.test.ts`, which also covers the residue now:

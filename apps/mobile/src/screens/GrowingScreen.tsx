@@ -88,6 +88,7 @@ export function GrowingScreen(): React.ReactElement {
               plantings={occupants(plantings, bed.id)}
               names={varietyNames}
               maturity={maturity}
+              onOpenBed={() => nav.navigate('Bed', { bedId: bed.id })}
               onPlant={() => nav.navigate('PickVariety', { bedId: bed.id })}
               onOpen={(plantingId) => nav.navigate('Planting', { plantingId })}
             />
@@ -111,6 +112,7 @@ function BedCard({
   maturity,
   onPlant,
   onOpen,
+  onOpenBed,
 }: {
   bed: Bed;
   plantings: Planting[];
@@ -118,17 +120,28 @@ function BedCard({
   maturity: Map<string, number>;
   onPlant: () => void;
   onOpen: (plantingId: string) => void;
+  onOpenBed: () => void;
 }): React.ReactElement {
   const { colors } = useTheme();
 
   return (
     <View style={[styles.card, { backgroundColor: colors.raised, borderColor: colors.border }]}>
-      <View style={styles.head}>
+      {/* The heading opens the bed itself, which is where what grew here
+          before lives. The card shows what is in it now; a bed's other half is
+          its succession, and that had nowhere to be read. */}
+      <Touch
+        affordance="chevron"
+        onPress={onOpenBed}
+        accessibilityRole="button"
+        testID={`bed-${bed.id}`}
+        style={({ pressed }) => [styles.head, { opacity: pressed ? 0.7 : 1 }]}
+      >
         <Text style={[styles.bedName, { color: colors.ink }]}>{bed.name}</Text>
         {bed.covered ? (
           <Text style={[styles.label, { color: colors.lanternInk }]}>Covered</Text>
         ) : null}
-      </View>
+        <Icon name="forward" size={20} color={colors.muted} />
+      </Touch>
 
       {/* Occupancy is DERIVED — a planting that went in and has not been
           removed. Nothing stores "what is in this bed", because it would be

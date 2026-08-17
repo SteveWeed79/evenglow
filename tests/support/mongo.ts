@@ -26,8 +26,33 @@ export interface TestDb {
   stop: () => Promise<void>;
 }
 
+/**
+ * Stops mongod narrating every connection.
+ *
+ * **Test infrastructure that exists to make a failure readable.** A CI job with
+ * a mongod service container has that container's whole log appended to the end
+ * of the job log, and at default verbosity mongod writes two lines per
+ * connection — with a suite that opens one per file, that is thousands of lines
+ * of `Connection accepted` / `Connection ended` sitting between anybody reading
+ * the log and the test output they came for. Three separate attempts to
+ * diagnose one failing run were defeated by exactly that.
+ *
+ * `quiet` is a runtime-settable server parameter and suppresses precisely that
+ * chatter, leaving warnings and errors alone. Best-effort: a server that
+ * refuses it (an older build, a managed instance with the command locked down)
+ * is not a reason to fail a test run, so this swallows the refusal and leaves
+ * the logs as noisy as they were.
+ */
+async function hush(client: MongoClient): Promise<void> {
+  await client
+    .db('admin')
+    .command({ setParameter: 1, quiet: true })
+    .catch(() => undefined);
+}
+
 async function connect(uri: string, dbName: string, onStop: () => Promise<void>): Promise<TestDb> {
   const client = await new MongoClient(uri).connect();
+  await hush(client);
   const db = client.db(dbName);
 
   return {
@@ -100,8 +125,16 @@ export async function startTestDb(dbName = DEFAULT_DB_NAME): Promise<TestDb | nu
         '',
         `  ${detail.split('\n')[0]}`,
         '',
-        '  Fix by either:',
-        '    • setting MONGODB_TEST_URI to a reachable MongoDB, or',
+        '  Fix by any of:',
+        '    • setting MONGODB_TEST_URI to a reachable MongoDB;',
+        '    • running one in a container, which needs no egress to MongoDB at',
+        '      all and is the quickest way back to a green suite:',
+        '',
+        '        docker run -d -p 27017:27017 mongo:8',
+        '        MONGODB_TEST_URI=mongodb://localhost:27017 pnpm test',
+        '',
+        '      (behind a proxy that blocks Docker Hub blobs, mirror.gcr.io',
+        '      carries the same image: mirror.gcr.io/library/mongo:8);',
         '    • allowing egress to fastdl.mongodb.org so mongodb-memory-server',
         '      can download a binary.',
         '',

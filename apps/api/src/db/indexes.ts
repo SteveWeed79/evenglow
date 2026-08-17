@@ -133,6 +133,18 @@ export const INDEXES: Record<CollectionName, IndexDescription[]> = {
    * ever shared one.
    */
   notes: [{ key: { orgId: 1, subjectEntity: 1, subjectId: 1, occurredAt: -1 } }],
+  /**
+   * The one query either of these answers: every time this schedule was
+   * discharged, newest first.
+   *
+   * Newest-first matters more than it looks. The reads take the newest event as
+   * the schedule's `completedAt`, so the ordinary lookup wants one document and
+   * the index gives it without a sort — and the full descending scan is the
+   * service record somebody hands over with a tractor, which is the whole
+   * reason these entities exist.
+   */
+  taskCompletions: [{ key: { orgId: 1, taskId: 1, completedAt: -1 } }],
+  serviceCompletions: [{ key: { orgId: 1, serviceId: 1, completedAt: -1 } }],
 };
 
 /** Identity collections are not tenant-scoped; they need their own uniqueness rules. */

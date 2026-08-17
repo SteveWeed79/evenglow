@@ -10,6 +10,7 @@ import { memberRoutes } from './routes/members';
 import { photoRoutes } from './routes/photos';
 import { supportRoutes } from './routes/support';
 import { syncRoutes } from './routes/sync';
+import { startSweeper } from './sync/sweep';
 
 /**
  * The Fastify service (D10).
@@ -119,6 +120,16 @@ if (isEntryPoint()) {
   const app = await buildServer(env);
   await app.listen({ port: env.PORT, host: '0.0.0.0' });
   console.log(`steading api listening on :${env.PORT}`);
+
+  /**
+   * Here rather than in `buildServer`, so importing this module in a test binds
+   * no port and starts no timer — the same reason the listen itself is here.
+   *
+   * A record logged at the moment a phone dies is stamped `pending`, and
+   * `pending` is withheld from the feed, so without this it reaches no other
+   * device on the farm for ever. See `sync/sweep.ts`.
+   */
+  startSweeper();
 
   /**
    * Stop when asked, rather than being killed for not answering.

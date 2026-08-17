@@ -22,7 +22,16 @@ const DAY_MS = 86_400_000;
  * Days, never a timestamp. Nobody standing in a yard needs to know a service
  * is due at 09:14 — they need to know it is Thursday, or that it was last
  * week and nobody noticed.
+ *
+ * Exported because the Jobs screen says the same thing about the same rows in
+ * a different container. It used to print a bare date there — so a job three
+ * weeks late and one due next month read identically — and the fix is these
+ * words rather than a second set that would drift from them.
  */
+export function dueWhen(due: Due, now: number): string {
+  return when(due, now);
+}
+
 function when(due: Due, now: number): string {
   const at = dueDate(due);
   if (at === null) {

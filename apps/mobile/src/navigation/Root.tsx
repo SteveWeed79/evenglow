@@ -5,11 +5,18 @@ import type { CachedClaims } from '../auth/session';
 import { useRotation } from '../hooks/useRotation';
 import { AddAnimalScreen } from '../screens/AddAnimalScreen';
 import { AddBedScreen } from '../screens/AddBedScreen';
+import { BedScreen } from '../screens/BedScreen';
+import { EditBedScreen } from '../screens/EditBedScreen';
+import { VarietyScreen } from '../screens/VarietyScreen';
+import { EditVarietyScreen } from '../screens/EditVarietyScreen';
 import { AddGroupScreen } from '../screens/AddGroupScreen';
 import { AddItemScreen } from '../screens/AddItemScreen';
 import { AdjustStockScreen } from '../screens/AdjustStockScreen';
+import { EditItemScreen } from '../screens/EditItemScreen';
 import { AddMachineScreen } from '../screens/AddMachineScreen';
 import { AddServiceScreen } from '../screens/AddServiceScreen';
+import { AnimalScreen } from '../screens/AnimalScreen';
+import { EditAnimalScreen } from '../screens/EditAnimalScreen';
 import { AnimalsScreen } from '../screens/AnimalsScreen';
 import { BackupScreen } from '../screens/BackupScreen';
 import { BreedingScreen } from '../screens/BreedingScreen';
@@ -37,6 +44,8 @@ import { LicencesScreen } from '../screens/LicencesScreen';
 import { LogHoursScreen } from '../screens/LogHoursScreen';
 import { LossScreen } from '../screens/LossScreen';
 import { MachineScreen } from '../screens/MachineScreen';
+import { EditIncubationScreen } from '../screens/EditIncubationScreen';
+import { EditMachineScreen } from '../screens/EditMachineScreen';
 import { MembersScreen } from '../screens/MembersScreen';
 import { AddVarietyScreen } from '../screens/AddVarietyScreen';
 import { NumbersScreen } from '../screens/NumbersScreen';
@@ -45,6 +54,7 @@ import { CropNumbersScreen } from '../screens/CropNumbersScreen';
 import { MachineNumbersScreen } from '../screens/MachineNumbersScreen';
 import { PickVarietyScreen } from '../screens/PickVarietyScreen';
 import { PlantingScreen } from '../screens/PlantingScreen';
+import { EditPlantingScreen } from '../screens/EditPlantingScreen';
 import { ProduceScreen } from '../screens/ProduceScreen';
 import { ShearingScreen } from '../screens/ShearingScreen';
 import { ServiceDoneScreen } from '../screens/ServiceDoneScreen';
@@ -145,6 +155,9 @@ export type RootParamList = {
   Group: { groupId: string };
   EditGroup: { groupId: string };
   Animals: { groupId: string };
+  /** One named animal: who she is, and what has happened to her. */
+  Animal: { animalId: string };
+  EditAnimal: { animalId: string };
   AddAnimal: { groupId: string };
   /**
    * The form, for a new treatment or an existing one.
@@ -173,19 +186,28 @@ export type RootParamList = {
   Incubations: undefined;
   SetEggs: undefined;
   Incubation: { incubationId: string };
+  EditIncubation: { incubationId: string };
 
   // Iron
   AddMachine: undefined;
   Machine: { machineId: string };
+  EditMachine: { machineId: string };
   LogHours: { machineId: string };
   AddService: { machineId: string };
   ServiceDone: { serviceId: string };
   Inventory: undefined;
   AddItem: { equipmentId?: string };
   AdjustStock: { itemId: string };
+  EditItem: { itemId: string };
 
   // Growing
   SiteSetup: undefined;
+  /** One bed: what is in it, and what has been in it. */
+  Bed: { bedId: string };
+  EditBed: { bedId: string };
+  /** One variety: what it asks for, and how it has done here. */
+  Variety: { varietyId: string };
+  EditVariety: { varietyId: string };
   AddBed: { siteId: string };
   Numbers: undefined;
   CropNumbers: undefined;
@@ -194,6 +216,7 @@ export type RootParamList = {
   PickVariety: { bedId: string };
   AddVariety: { bedId: string; crop?: string };
   Planting: { plantingId: string };
+  EditPlanting: { plantingId: string };
   Harvest: { plantingId: string };
 };
 
@@ -249,6 +272,8 @@ export function Root({
       <Stack.Screen name="Group" component={GroupScreen} />
       <Stack.Screen name="EditGroup" component={EditGroupScreen} />
       <Stack.Screen name="Animals" component={AnimalsScreen} />
+      <Stack.Screen name="Animal" component={AnimalScreen} />
+      <Stack.Screen name="EditAnimal" component={EditAnimalScreen} />
       <Stack.Screen name="AddAnimal" component={AddAnimalScreen} />
       <Stack.Screen name="Treatment" component={TreatmentScreen} />
       <Stack.Screen name="Treatments" component={TreatmentsScreen} />
@@ -268,15 +293,22 @@ export function Root({
 
       <Stack.Screen name="AddMachine" component={AddMachineScreen} />
       <Stack.Screen name="Machine" component={MachineScreen} />
+      <Stack.Screen name="EditIncubation" component={EditIncubationScreen} />
+      <Stack.Screen name="EditMachine" component={EditMachineScreen} />
       <Stack.Screen name="LogHours" component={LogHoursScreen} />
       <Stack.Screen name="AddService" component={AddServiceScreen} />
       <Stack.Screen name="ServiceDone" component={ServiceDoneScreen} />
       <Stack.Screen name="Inventory" component={InventoryScreen} />
       <Stack.Screen name="AddItem" component={AddItemScreen} />
       <Stack.Screen name="AdjustStock" component={AdjustStockScreen} />
+      <Stack.Screen name="EditItem" component={EditItemScreen} />
 
       <Stack.Screen name="SiteSetup" component={SiteSetupScreen} />
       <Stack.Screen name="AddBed" component={AddBedScreen} />
+      <Stack.Screen name="Bed" component={BedScreen} />
+      <Stack.Screen name="EditBed" component={EditBedScreen} />
+      <Stack.Screen name="Variety" component={VarietyScreen} />
+      <Stack.Screen name="EditVariety" component={EditVarietyScreen} />
       <Stack.Screen name="Numbers" component={NumbersScreen} />
       <Stack.Screen name="CropNumbers" component={CropNumbersScreen} />
       <Stack.Screen name="AnimalNumbers" component={AnimalNumbersScreen} />
@@ -284,6 +316,7 @@ export function Root({
       <Stack.Screen name="PickVariety" component={PickVarietyScreen} />
       <Stack.Screen name="AddVariety" component={AddVarietyScreen} />
       <Stack.Screen name="Planting" component={PlantingScreen} />
+      <Stack.Screen name="EditPlanting" component={EditPlantingScreen} />
       <Stack.Screen name="Harvest" component={HarvestScreen} />
     </Stack.Navigator>
   );

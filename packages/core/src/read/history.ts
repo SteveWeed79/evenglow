@@ -10,6 +10,9 @@ import {
   gramsToUg,
   harvestCreateSchema,
   hourReadingCreateSchema,
+  incubationCreateSchema,
+  serviceCompletionCreateSchema,
+  taskCompletionCreateSchema,
   maintenanceStoredSchema,
   mlToUl,
   mortalityCreateSchema,
@@ -25,8 +28,10 @@ import {
 import { localStore } from '../db/store';
 import { listAnimals } from './animals';
 import { listGroups } from './groups';
+import { listServiceCompletions, listTaskCompletions } from './completions';
 import { listPlantings, listVarieties } from './growing';
-import { listInventory, listMachines } from './iron';
+import { listInventory, listMachines, listServices } from './iron';
+import { listTasks } from './tasks';
 
 /**
  * What happened, in the order it happened.
@@ -78,6 +83,26 @@ export interface HistoryEvent {
   entity: Entity;
   /** When the farm says it happened. */
   at: number;
+  /**
+   * What this row is *about* — the group, the animal, the machine, the sack.
+   *
+   * **Plural, because a row can honestly be about two things.** A loss names
+   * the group it came out of and, when somebody said which, the animal that
+   * died; both timelines should show it, and picking one would mean a
+   * per-animal history that silently omits the animal's own death.
+   *
+   * The ids a record *names*, and nothing inferred from them. A group's
+   * timeline therefore does not sweep up its animals' weights — that is a walk
+   * up a hierarchy, it is a different question, and the answer turned out to
+   * be that **the caller makes the hop**: `HistoryScope` takes several
+   * subjects, so a bed asks for itself and its plantings by name. The rule
+   * here stays exactly as strict, and the decision is visible on the screen
+   * that took it rather than inherited by every timeline in the app.
+   *
+   * Absent where a row is genuinely about nothing in particular: a predator
+   * seen at the fence line is a fact about the farm.
+   */
+  subjects?: readonly string[];
   /** One line, already in the farm's words. */
   title: string;
   /** The rest, wanted only once a day has been opened. */
@@ -155,8 +180,72 @@ const storedTask = taskCreateSchema.partial();
  */
 const storedService = maintenanceStoredSchema;
 
+/** A set of eggs mid-flight: created, then candled, then hatched by update. */
+const storedIncubation = incubationCreateSchema.partial();
+
+const storedTaskCompletion = taskCompletionCreateSchema.partial();
+const storedServiceCompletion = serviceCompletionCreateSchema.partial();
+
 const plural = (n: number, one: string, many = `${one}s`): string =>
   `${n} ${n === 1 ? one : many}`;
+
+/**
+ * The ids a record names, with the absent ones dropped.
+ *
+ * Every builder calls this rather than assembling an array of its own, so
+ * "which of these fields was set" is answered once. A record that names
+ * nothing gets an empty list rather than `undefined`, because a row about the
+ * farm at large and a row whose subject nobody filled in are the same thing to
+ * a filter and should not be two shapes.
+ */
+function subjectsOf(...ids: readonly (string | undefined)[]): readonly string[] {
+  return ids.filter((id): id is string => id !== undefined);
+}
+
+/**
+ * The rows a scope wants, or all of them when it wants everything.
+ *
+ * A `Set` rather than repeated `includes`, because a bed with a season of
+ * plantings passes a dozen ids and the whole history is walked once per row.
+ */
+function withinScope(
+  events: readonly HistoryEvent[],
+  subject: string | readonly string[] | undefined,
+): HistoryEvent[] {
+  if (subject === undefined) return [...events];
+
+  const wanted = new Set(typeof subject === 'string' ? [subject] : subject);
+  if (wanted.size === 0) return [];
+
+  return events.filter((event) => event.subjects?.some((id) => wanted.has(id)) === true);
+}
+
+/** What a timeline is about. */
+export interface HistoryScope {
+  /**
+   * Only rows naming this id — or any of these.
+   *
+   * The reusable detail screen is what this exists for: before it, `listHistory`
+   * was farm-wide and `HistoryEvent` carried no subject at all, so nothing in
+   * the app could answer *"what has happened to this animal"* and the screens
+   * that wanted it filtered a single entity's records by hand.
+   *
+   * ## Several, because a hop is the caller's to make
+   *
+   * `subjects` on an event are the ids a record **names** and nothing inferred,
+   * and that rule stays. But a bed's story genuinely is its plantings' —
+   * a `harvest` names a *planting*, a planting names a bed, and *"we took four
+   * kilos out of bed three in August"* is a true sentence about the bed. So the
+   * hop is made **by the screen that means it**, which knows its own plantings,
+   * rather than by a hierarchy walk buried in here that every timeline would
+   * then inherit.
+   *
+   * That is what keeps a group's timeline free of its animals' weights: nobody
+   * passes the animals. The day a screen wants that, it says so in one line and
+   * the decision is visible where it was taken.
+   */
+  subject?: string | readonly string[] | undefined;
+}
 
 /**
  * Everything that happened, newest day first.
@@ -174,15 +263,43 @@ const STOCK_WORDS: Record<StockReason, string> = {
   other: 'Adjusted',
 };
 
-export async function listHistory(system: UnitSystem = 'metric'): Promise<HistoryDay[]> {
-  const [groups, animals, machines, plantings, varieties, stock] = await Promise.all([
-    listGroups(),
-    listAnimals(),
-    listMachines(),
-    listPlantings(),
-    listVarieties(),
-    listInventory(),
+export async function listHistory(
+  system: UnitSystem = 'metric',
+  scope: HistoryScope = {},
+): Promise<HistoryDay[]> {
+  const [groups, animals, machines, plantings, varieties, stock, jobs, schedules] =
+    await Promise.all([
+      listGroups(),
+      listAnimals(),
+      listMachines(),
+      listPlantings(),
+      listVarieties(),
+      listInventory(),
+      // A completion event names its schedule and not the words on it, so the
+      // title has to come from the schedule the way a group's name does.
+      listTasks(),
+      listServices(),
+    ]);
+
+  /**
+   * Which records have a completion event of their own.
+   *
+   * The legacy `task` and `maintenance` builders below read a field that each
+   * completion overwrote, and they still run — a farm's existing records are
+   * the only place those completions exist. What they must not do is emit a
+   * SECOND row for a record whose completions are now events, which would show
+   * the last one twice on the day it happened. So each of them is silent for a
+   * record that has any.
+   */
+  const [taskEvents, serviceEvents] = await Promise.all([
+    listTaskCompletions(),
+    listServiceCompletions(),
   ]);
+  const jobsWithEvents = new Set(taskEvents.map((event) => event.taskId));
+  const schedulesWithEvents = new Set(serviceEvents.map((event) => event.serviceId));
+
+  const jobTitle = new Map(jobs.map((job) => [job.id, job.title]));
+  const scheduleOf = new Map(schedules.map((schedule) => [schedule.id, schedule]));
 
   /** Names, so a row reads "The hens" rather than an id nobody can pronounce. */
   const groupName = new Map(groups.map((g) => [g.id, g.name]));
@@ -213,6 +330,7 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
         id,
         entity: 'eggLog',
         at: v.occurredAt,
+        subjects: subjectsOf(v.flockId, v.birdId),
         title: `${plural(v.count, 'egg')} — ${named(groupName, v.flockId ?? v.birdId, 'a group')}`,
         tally: { key: 'eggs', amount: v.count, unit: 'egg' },
         ...(v.withdrawalAcknowledged === true
@@ -224,6 +342,7 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
         id,
         entity: 'productionLog',
         at: v.occurredAt,
+        subjects: subjectsOf(v.flockId, v.animalId),
         title: `${v.amount} ${v.unit} ${v.label ?? v.kind} — ${named(
           groupName,
           v.flockId,
@@ -236,6 +355,7 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
         id,
         entity: 'feedLog',
         at: v.occurredAt,
+        subjects: subjectsOf(v.flockId),
         title: `Fed ${named(groupName, v.flockId, 'a group')}`,
         detail: `${formatMass(gramsToUg(v.amountGrams), system)}${
           v.feedType === undefined ? '' : ` · ${v.feedType}`
@@ -247,6 +367,9 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
         id,
         entity: 'mortality',
         at: v.occurredAt,
+        // Both, and this is the row the plural exists for: a death belongs to
+        // the group it came out of and to the animal, when somebody said which.
+        subjects: subjectsOf(v.flockId, v.animalId),
         title: `Lost ${v.count} — ${named(groupName, v.flockId, 'a group')}`,
         detail: `Cause: ${v.cause}`,
         tally: { key: 'losses', amount: v.count, unit: 'loss', },
@@ -277,20 +400,26 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
        * So a finished job lands in What happened, which is what lets the Jobs
        * screen let go of it overnight instead of accumulating a graveyard.
        *
-       * **What this cannot do, stated:** a recurring job overwrites its own
-       * `completedAt` each time, so history shows the LAST time it was done
-       * rather than every time. A one-off — which is what most written-down
-       * jobs are — is exact. Recording every occurrence would want an
-       * append-only completion record, which is a bigger change than the
-       * problem currently justifies.
+       * **This is the legacy path now**, and the limitation it used to state is
+       * why. It read: *"a recurring job overwrites its own `completedAt` each
+       * time, so history shows the LAST time it was done rather than every
+       * time… recording every occurrence would want an append-only completion
+       * record."* That record exists — `taskCompletion`, below — so a job
+       * finished today leaves an event and this builder is silent for it.
+       *
+       * It stays because a farm's records written before that change have the
+       * field and no event, and they are still what happened. Silent for any
+       * task that has events, or the last completion would be drawn twice.
        */
       eventsFrom('task', storedTask, (v, id) =>
-        v.completedAt === undefined || v.title === undefined
+        v.completedAt === undefined || v.title === undefined || jobsWithEvents.has(id)
           ? null
           : {
               id,
               entity: 'task',
               at: v.completedAt,
+              // What the chore was about, when it was hung on something.
+              subjects: subjectsOf(v.subjectId),
               title: v.title,
               detail: 'Job done',
               tally: { key: 'jobs', amount: 1, unit: 'job' },
@@ -308,26 +437,30 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
        * field on the schedule rather than a record of its own, because the
        * schedule is the thing that recurs. `lastDoneAtDate` is the moment.
        *
-       * **What this cannot do, stated:** the field is overwritten every time,
-       * so history shows the LAST service on each schedule and not the ones
-       * before it. That is the same limitation `task` carries and it costs
-       * more here, because a machine's service record is exactly the kind of
-       * thing somebody wants three years of. Fixing it properly wants an
-       * append-only completion record — the shape `careLog` already is for
-       * animals — which is a schema change rather than a reader change, so it
-       * is named here rather than half-done.
+       * **The legacy path, for the same reason as `task` above.** What it used
+       * to state — *"the field is overwritten every time, so history shows the
+       * LAST service on each schedule and not the ones before it… fixing it
+       * properly wants an append-only completion record, the shape `careLog`
+       * already is for animals"* — is what `serviceCompletion` below is. It
+       * cost more here than it did there, because a machine's service record is
+       * exactly the thing somebody wants three years of and hands over with the
+       * machine.
+       *
+       * Silent for a schedule that has events, and kept for the ones written
+       * before they existed.
        *
        * The hours are the detail, because on an hours-based schedule they are
        * the whole fact: the date says when somebody was under the machine, the
        * reading says what the next interval counts from.
        */
       eventsFrom('maintenance', storedService, (v, id) =>
-        v.lastDoneAtDate === undefined || v.title === undefined
+        v.lastDoneAtDate === undefined || v.title === undefined || schedulesWithEvents.has(id)
           ? null
           : {
               id,
               entity: 'maintenance',
               at: v.lastDoneAtDate,
+              subjects: subjectsOf(v.equipmentId),
               title: `${v.title} — ${named(machineName, v.equipmentId, 'a machine')}`,
               ...(v.lastDoneAtHours === undefined
                 ? { detail: 'Service done' }
@@ -336,10 +469,134 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
             },
       ),
 
+      /**
+       * A set of eggs, on the day it hatched.
+       *
+       * **A hatch was invisible in What happened**, which is a strange hole in
+       * a poultry app: it is one of the few events on the year a keeper
+       * remembers the date of, and the only place it appeared was the set's own
+       * screen. Twelve eggs going in and eight chicks coming out is exactly the
+       * shape of thing this projection is for.
+       *
+       * Mutable, like `task` and `maintenance` above and for the same reason —
+       * the milestone is a field on the record rather than a log of its own,
+       * because the record is the thing that runs for three weeks. `hatchedAt`
+       * is the moment.
+       *
+       * **And unlike those two, deleting this row means what it says.** A
+       * `maintenance` row is one service and archiving it takes the whole
+       * recurring schedule; here the record and the event are the same thing —
+       * one set of eggs, one hatch — so "take this back out" removes precisely
+       * what the row describes.
+       *
+       * **The subject is the record itself**, which is the first time that
+       * happens here. Everywhere else a subject is a foreign key, because the
+       * event is a log naming something else; a hatch is a field on the very
+       * record its screen is about. The source group comes too when the eggs
+       * came from this farm — *"the hens' eggs hatched"* is true of the hens.
+       *
+       * Only the hatch, not the candling. Both are on the record and only one
+       * of them is what happened *to* it: candling is a step in the middle of a
+       * running set and the set's own screen states it, where a hatch is the
+       * end of the story and belongs in the farm's.
+       */
+      eventsFrom('incubation', storedIncubation, (v, id) =>
+        v.hatchedAt === undefined || v.label === undefined
+          ? null
+          : {
+              id,
+              entity: 'incubation',
+              at: v.hatchedAt,
+              subjects: subjectsOf(id, v.flockId),
+              title: `${v.label} eggs hatched`,
+              detail: [
+                v.hatched === undefined ? null : plural(v.hatched, 'chick'),
+                v.eggsSet === undefined ? null : `from ${plural(v.eggsSet, 'egg')} set`,
+                v.earlyLosses === undefined || v.earlyLosses === 0
+                  ? null
+                  : `${v.earlyLosses} lost in the first days`,
+              ]
+                .filter((part): part is string => part !== null)
+                .join(' · '),
+            },
+      ),
+
+      /**
+       * A job done, and this time every time it was done.
+       *
+       * The `task` builder above states the limitation this removes: *"a
+       * recurring job overwrites its own `completedAt` each time, so history
+       * shows the LAST time it was done rather than every time."* A weekly
+       * chore finished fifty times a year left one row behind. It leaves fifty
+       * now, because each finishing is its own record.
+       *
+       * The title comes from the task rather than from the event, so renaming a
+       * chore renames its history — which is right: the row is about the job
+       * that was done, and a job is what its schedule says it is. A task since
+       * archived still names itself honestly rather than rendering a blank, the
+       * rule this file already states about an archived group.
+       */
+      eventsFrom('taskCompletion', storedTaskCompletion, (v, id) =>
+        v.completedAt === undefined || v.taskId === undefined
+          ? null
+          : {
+              id,
+              entity: 'taskCompletion',
+              at: v.completedAt,
+              // The task, and whatever the task was hung on. Both, so a chore
+              // pinned to a group shows on the group's timeline as well.
+              subjects: subjectsOf(
+                v.taskId,
+                jobs.find((job) => job.id === v.taskId)?.subjectId,
+              ),
+              title: named(jobTitle, v.taskId, 'A job'),
+              detail: v.note ?? 'Job done',
+              tally: { key: 'jobs', amount: 1, unit: 'job' },
+            },
+      ),
+
+      /**
+       * A service, every time — which is the record somebody hands over with a
+       * tractor.
+       *
+       * `Steading-Masterplan.md` advertises a full service history for resale
+       * and the `maintenance` builder above says why it could not be produced:
+       * one overwritten field per schedule. Six springs of oil changes are six
+       * rows now.
+       *
+       * The hours are the detail for the same reason as before: on an
+       * hours-based schedule the date says when somebody was under the machine
+       * and the reading says what the next interval counts from.
+       */
+      eventsFrom('serviceCompletion', storedServiceCompletion, (v, id) => {
+        if (v.completedAt === undefined || v.serviceId === undefined) return null;
+
+        const schedule = scheduleOf.get(v.serviceId);
+
+        return {
+          id,
+          entity: 'serviceCompletion',
+          at: v.completedAt,
+          // The machine, not the schedule: a machine's timeline is the thing
+          // somebody reads, and `hourReading` already hangs on the same id.
+          subjects: subjectsOf(schedule?.equipmentId),
+          title: `${schedule?.title ?? 'A service'} — ${named(
+            machineName,
+            schedule?.equipmentId,
+            'a machine',
+          )}`,
+          detail:
+            v.note ??
+            (v.atHours === undefined ? 'Service done' : `Service done at ${v.atHours} hours`),
+          tally: { key: 'jobs', amount: 1, unit: 'job' },
+        };
+      }),
+
       eventsFrom('careLog', careLogCreateSchema, (v, id) => ({
         id,
         entity: 'careLog',
         at: v.occurredAt,
+        subjects: subjectsOf(v.flockId, v.animalId),
         title: `${CARE_KIND_LABELS[v.kind] ?? v.kind} — ${named(
           groupName,
           v.flockId,
@@ -353,6 +610,7 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
         id,
         entity: 'weight',
         at: v.occurredAt,
+        subjects: subjectsOf(v.flockId, v.animalId),
         title: `Weighed ${named(animalName, v.animalId, named(groupName, v.flockId, 'a group'))}`,
         detail: `${formatMass(v.massUg, system)}${v.sampled === true ? ' (a sample)' : ''}`,
       })),
@@ -361,6 +619,7 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
         id,
         entity: 'shearing',
         at: v.occurredAt,
+        subjects: subjectsOf(v.flockId, v.animalId),
         title: `Shorn — ${named(
           groupName,
           v.flockId,
@@ -375,6 +634,7 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
         id,
         entity: 'stockAdjustment',
         at: v.occurredAt,
+        subjects: subjectsOf(v.itemId),
         /**
          * The reason leads, because the reason is the whole point of the row.
          * A shelf quantity could always be changed; what it could not do was
@@ -392,6 +652,7 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
         id,
         entity: 'hourReading',
         at: v.occurredAt,
+        subjects: subjectsOf(v.equipmentId),
         title: `${named(machineName, v.equipmentId, 'A machine')} — ${v.hours} hours`,
       })),
 
@@ -399,6 +660,7 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
         id,
         entity: 'harvest',
         at: v.occurredAt,
+        subjects: subjectsOf(v.plantingId),
         title: `Harvested ${named(plantingName, v.plantingId, 'a planting')}`,
         detail:
           v.massUg === undefined
@@ -408,7 +670,19 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
     ])
   ).flat();
 
-  return intoDays(all, system);
+  /**
+   * Filtered after the readers rather than inside them.
+   *
+   * Each reader knows one entity and nothing about scoping, and thirteen
+   * filters would be thirteen chances for one to be forgotten — which would
+   * show up as a timeline quietly missing a kind of event rather than as a
+   * failure. The cost is reading the whole history to show part of it, which is
+   * the same cost the farm-wide screen already pays and is a walk over records
+   * already in memory.
+   */
+  const wanted = withinScope(all, scope.subject);
+
+  return intoDays(wanted, system);
 }
 
 /**

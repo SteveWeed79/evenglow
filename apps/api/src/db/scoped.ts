@@ -54,6 +54,8 @@ export const COLLECTIONS = [
   'feedPlans',
   'careLogs',
   'notes',
+  'taskCompletions',
+  'serviceCompletions',
 ] as const;
 
 export type CollectionName = (typeof COLLECTIONS)[number];

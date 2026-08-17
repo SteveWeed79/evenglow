@@ -16,6 +16,7 @@ import {
   DayPick,
   Failure,
   Primary,
+  Row,
   Secondary,
   useSaver,
 } from '../components/Form';
@@ -23,6 +24,8 @@ import { Loading, Missing } from '../components/Missing';
 import { Notes } from '../components/Notes';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
+import { Coming } from '../components/Coming';
+import { Timeline } from '../components/Timeline';
 import { useLive } from '../hooks/useLive';
 import { useLeave, useNav } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
@@ -175,6 +178,31 @@ export function PlantingScreen({ route }: ScreenProps<'Planting'>): React.ReactE
         {variety?.crop ?? 'Growing'} · {bed?.name ?? 'a bed'} · season {planting.season}
       </Text>
 
+      {/*
+        The two things this planting belongs to, both of which now have a
+        screen. A planting is one season in a bed's succession and one entry in
+        a variety's record — before these rows, both of those were reachable
+        only by remembering which bed you came from.
+      */}
+      <Panel label="Part of">
+        {bed === undefined ? null : (
+          <Row
+            title={bed.name}
+            detail="What is in it, and what has been"
+            testID="go-bed"
+            onPress={() => nav.navigate('Bed', { bedId: planting.bedId })}
+          />
+        )}
+        {variety === undefined ? null : (
+          <Row
+            title={variety.name}
+            detail="What it asks for, and how it has done here"
+            testID="go-variety"
+            onPress={() => nav.navigate('Variety', { varietyId: planting.varietyId })}
+          />
+        )}
+      </Panel>
+
       <Panel label="Where it is">
         <Body>{describe(planting)}</Body>
         {/**
@@ -325,6 +353,20 @@ export function PlantingScreen({ route }: ScreenProps<'Planting'>): React.ReactE
           }
         />
       </Panel>
+
+      {/* Every harvest off this planting, dated. The bed's own story, which
+          until now was only ever a total. */}
+      <Panel label="This planting">
+        <Row
+          title="Change what was recorded"
+          detail="How many went in, the note, and taking a row back out"
+          testID="go-edit-planting"
+          onPress={() => nav.navigate('EditPlanting', { plantingId })}
+        />
+      </Panel>
+
+      <Coming subject={plantingId} here="Planting" />
+      <Timeline subject={plantingId} />
     </Screen>
   );
 }

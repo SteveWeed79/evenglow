@@ -51,12 +51,23 @@ import { clearTrouble, reportTrouble } from './useTrouble';
  */
 
 export interface DuesView {
+  /** What Today shows: near enough to be worth saying, most pressing first. */
   dues: Due[];
+  /**
+   * Every row the farm produced, near or far, in the same order.
+   *
+   * Today wants the visible ones and a detail screen wants all of them — see
+   * `duesFor`. Both come off one pass rather than two, because a second hook
+   * recomputing the same twelve builders on every engine publish is the same
+   * arithmetic done twice on a phone, with two chances to disagree about what
+   * is due for a machine.
+   */
+  all: Due[];
   loading: boolean;
 }
 
 export function useDues(): DuesView {
-  const [view, setView] = useState<DuesView>({ dues: [], loading: true });
+  const [view, setView] = useState<DuesView>({ dues: [], all: [], loading: true });
 
   const refresh = useCallback(async () => {
     const now = Date.now();
@@ -332,7 +343,7 @@ export function useDues(): DuesView {
       rows.push(...taskDues(task, groupName.get(task.subjectId ?? '')));
     }
 
-    setView({ dues: todayList(rows, now), loading: false });
+    setView({ dues: todayList(rows, now), all: rows, loading: false });
     clearTrouble();
   }, []);
 
