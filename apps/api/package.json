@@ -18,7 +18,8 @@
     "farm:show": "tsx --env-file-if-exists=../../.env.local src/db/show-farm.mts",
     "promo:new": "tsx --env-file-if-exists=../../.env.local src/db/new-promo.mts",
     "start": "tsx --env-file-if-exists=../../.env.local src/server.ts",
-    "serve": "tsx src/server.ts"
+    "serve": "tsx src/server.ts",
+    "ops": "tsx --env-file-if-exists=../../.env.local src/ops.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.0.1",

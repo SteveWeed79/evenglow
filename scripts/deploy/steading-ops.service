@@ -1,0 +1,68 @@
+# The operations board, as a service the farm API does not depend on.
+#
+#   sudo cp scripts/deploy/steading-ops.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now steading-ops
+#
+# **A separate unit on purpose.** The board reads every farm on the box; the API
+# serves the handsets. Keeping them apart means the board can be restarted,
+# stopped, or never enabled at all without touching the thing farms are syncing
+# to — and `systemctl disable --now steading-ops` is a complete answer to "take
+# the admin surface off this machine".
+
+[Unit]
+Description=Steading operations board
+Documentation=https://github.com/SteveWeed79/steading/blob/main/docs/DEPLOY-THE-SERVER.md
+After=network-online.target
+Wants=network-online.target
+
+# Same guard as the API: five restarts inside a minute stops it and leaves the
+# reason in `systemctl status` rather than in a scrolling log.
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+[Service]
+Type=simple
+User=steading
+Group=steading
+
+WorkingDirectory=/opt/steading/apps/api
+ExecStart=/usr/bin/node /opt/steading/node_modules/tsx/dist/cli.mjs src/ops.ts
+
+# The same file the API reads. AUTH_SECRET has to match or a token minted by one
+# is not accepted by the other, and MONGODB_URI has to be the same database or
+# the board is describing a server nobody is using.
+EnvironmentFile=/etc/steading/api.env
+
+Restart=always
+RestartSec=5s
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=steading-ops
+
+# ── hardening ───────────────────────────────────────────────────────────────
+#
+# Identical to the API's, and read the comments there before changing any of it
+# — particularly AF_NETLINK, whose absence killed the first real deployment in a
+# way that looks like a crash in the app rather than a policy denial.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+
+# `ops.ts` binds 127.0.0.1 unless OPS_HOST says otherwise, so nothing outside
+# this box can reach the board until Caddy is told to proxy it. That default is
+# the security property; this unit does not override it.
+
+[Install]
+WantedBy=multi-user.target

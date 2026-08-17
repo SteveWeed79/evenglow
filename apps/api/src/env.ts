@@ -33,6 +33,22 @@ const envSchema = z.object({
     .transform((value) => (value.trim() === '' ? 'steading' : value.trim())),
   PORT: z.coerce.number().int().positive().default(3001),
   /**
+   * Where the operations board listens, and it is a **different port on
+   * purpose**.
+   *
+   * The board is the one thing on this box that reads every farm. Serving it
+   * beside the app's own traffic would mean it shares a hostname and a CORS
+   * policy with the surface every handset talks to, and that taking it off the
+   * internet is a code change rather than a line of Caddy. On its own port it
+   * is its own site block, and the safe deployment — bound to loopback, or
+   * behind a `remote_ip` matcher, or on a tailnet — is a decision made in the
+   * proxy where such decisions belong.
+   *
+   * Nothing listens on it unless `ops.ts` is started, so a box that never runs
+   * the board has no board.
+   */
+  OPS_PORT: z.coerce.number().int().positive().default(3002),
+  /**
    * Comma-separated. The Capacitor client is not a browser origin in the usual
    * sense, so this stays explicit rather than defaulting to `*` — a wildcard
    * with credentials is the mistake this field exists to prevent.

@@ -912,6 +912,91 @@ stated rather than inherited from whatever the upload felt like.
 
 ---
 
+## The operations board, if you want one
+
+One page that answers the questions the shell commands answer — who is
+subscribed, which codes have been claimed, what builds are in the field, whether
+the server is healthy, and which farms are quietly generating refusals — plus
+buttons for `promo:new` and `farm:grant`.
+
+**It is optional and it is off until you turn it on.** Nothing listens for it
+unless the unit is running, and even then it binds `127.0.0.1`, so a box that
+never adds the Caddy block below has no admin surface reachable from anywhere.
+
+### An admin account
+
+The board admits `role: 'admin'` and nobody else — an owner's token is valid,
+signed by this server, and still refused. Promote an existing account:
+
+```
+mongosh "$MONGODB_URI" --eval '
+  db.getSiblingDB("steading").users.updateOne(
+    { email: "you@example.com" }, { $set: { role: "admin" } })'
+```
+
+**Its password comes out of a password manager and is never typed.** The whole
+control rests on that entropy: the rate limiter bounds guessing, and the
+`admin` role bounds what a farmer's account can reach, but neither helps against
+a password somebody chose.
+
+### The unit
+
+```
+sudo cp /opt/steading/scripts/deploy/steading-ops.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now steading-ops
+curl -s localhost:3002/health          # {"ok":true}
+```
+
+It reads the same `/etc/steading/api.env`, which it must: a token minted against
+a different `AUTH_SECRET` is not one this process will accept, and a different
+`MONGODB_URI` would have it describing a server nobody uses.
+
+### Reaching it
+
+The honest default is **not to publish it at all** — `ssh -L 3002:127.0.0.1:3002
+steading-box` and open `http://localhost:3002`. No certificate, no hostname, no
+public port, and the board is reachable exactly by people who can already log
+into the box.
+
+If you would rather have a URL, it is its own site block on its own name:
+
+```
+ops.example.com {
+	# Optional and cheap. Breaks when your ISP rotates you, which is the
+	# trade — a tailnet survives that and is one more daemon to run.
+	@notme not remote_ip 203.0.113.4
+	respond @notme 404
+
+	reverse_proxy 127.0.0.1:3002
+	encode zstd gzip
+}
+```
+
+**`TRUSTED_PROXY_HOPS=1` has to be right for this to mean anything.** With it
+wrong, `request.ip` is `127.0.0.1` for every request and every limiter in the
+service shares one bucket — which makes the sign-in limiter decorative and
+reduces the board to a password alone. It is the same variable the API needs, so
+a box that got it right already has it right here.
+
+A separate hostname also means a separate certificate, which shows up in
+Certificate Transparency logs the moment it is issued. `ops.` is a name worth
+thinking about for that reason; the SSH tunnel avoids the question entirely.
+
+### What it will not do
+
+**No credential-changing actions.** `db:password` sets any account's password,
+which makes a button for it an account-takeover primitive — equally true on
+localhost, so it is not an argument about where the page is served from. It
+stays on the shell, and the board says so on the page.
+
+It also shows **counts and timings, never contents**: farm names and ids so you
+can address one, and beyond that only numbers and dates. Nothing a farm wrote
+reaches it, which is asserted rather than intended — see
+`tests/isolation/ops-board.test.ts`.
+
+---
+
 ## Keeping it going
 
 ```

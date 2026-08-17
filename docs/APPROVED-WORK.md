@@ -576,12 +576,46 @@ period rather than a task.
       There is no timezone handling in this codebase at all. `[34]` is the
       urgent half: a record written today without its zone can never have one
       added.
-- [ ] **An operational control centre on the box.** *(raised in §8 on 17
-      August, decided the same day)*
+- [x] **An operational control centre on the box.** *(raised in §8 on 17
+      August, decided the same day, **built the same day**)*
       One page, its own process, live reads, behind a Caddy site block with a
       password on the existing `admin` role. **Business and operations, not farm
       records** — the point is subscribers, tokens, versions and health, and
       nobody needs a panel telling them how many eggs a farm collected.
+
+      **Built as specified**, with the pieces where the spec put them:
+      `apps/api/src/ops.ts` is the entry (`pnpm ops`), `ops/server.ts` the
+      routes, `ops/page.ts` the page, `ops/actions.ts` the two writes, and
+      `db/board.ts` the reads — in `db/` because that is the only place lint
+      permits a collection handle, which keeps every deliberate cross-tenant
+      read in one directory.
+
+      **Three decisions taken while building, none of them in the spec:**
+      - **The token lives in a variable, not a cookie.** An ambient credential
+        the browser attaches by itself is a CSRF surface needing its own
+        defence; with none there is nothing to forge a request with, and no
+        `@fastify/cookie` dependency to add. The cost is that a refresh signs
+        you out, which for a board somebody opens to answer a question is the
+        right way round.
+      - **Loopback by default.** The API binds `0.0.0.0` because it must be
+        reachable; this binds `127.0.0.1` unless `OPS_HOST` says otherwise, so a
+        box whose Caddy config does not mention the board has no way in from
+        outside — no firewall rule to remember, and none to forget.
+      - **A 403 rather than a 404 for a signed-in non-admin**, which inverts
+        this service's usual rule. Everywhere else an unauthorised read is a 404
+        because distinguishing them discloses that a record exists; the board is
+        a fixed page with nothing to disclose, so telling an owner their role is
+        not enough beats pretending the page is missing. Sign-*in* keeps the
+        single indistinguishable refusal, because that one does enumerate
+        accounts.
+
+      **Verified in a browser, not only by tests.** Playwright drove sign-in as
+      a farmer (refused), as the admin (board drawn), both buttons (a code
+      minted, a farm granted and revoked, a bad id refused), with no console
+      errors. A farm was deliberately named `<img src=x onerror=alert(1)>`: it
+      renders as those characters, `img[onerror]` count zero, no dialog. Every
+      value reaches the DOM through `textContent`, so the correct display and
+      the correct security come from the same line.
 
       **The panels, and what already backs each one.** Everything but the third
       is answerable from the database today:
