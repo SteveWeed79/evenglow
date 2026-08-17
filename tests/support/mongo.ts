@@ -26,8 +26,33 @@ export interface TestDb {
   stop: () => Promise<void>;
 }
 
+/**
+ * Stops mongod narrating every connection.
+ *
+ * **Test infrastructure that exists to make a failure readable.** A CI job with
+ * a mongod service container has that container's whole log appended to the end
+ * of the job log, and at default verbosity mongod writes two lines per
+ * connection — with a suite that opens one per file, that is thousands of lines
+ * of `Connection accepted` / `Connection ended` sitting between anybody reading
+ * the log and the test output they came for. Three separate attempts to
+ * diagnose one failing run were defeated by exactly that.
+ *
+ * `quiet` is a runtime-settable server parameter and suppresses precisely that
+ * chatter, leaving warnings and errors alone. Best-effort: a server that
+ * refuses it (an older build, a managed instance with the command locked down)
+ * is not a reason to fail a test run, so this swallows the refusal and leaves
+ * the logs as noisy as they were.
+ */
+async function hush(client: MongoClient): Promise<void> {
+  await client
+    .db('admin')
+    .command({ setParameter: 1, quiet: true })
+    .catch(() => undefined);
+}
+
 async function connect(uri: string, dbName: string, onStop: () => Promise<void>): Promise<TestDb> {
   const client = await new MongoClient(uri).connect();
+  await hush(client);
   const db = client.db(dbName);
 
   return {
