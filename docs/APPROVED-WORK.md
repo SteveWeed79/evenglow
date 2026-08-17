@@ -358,6 +358,36 @@ period rather than a task.
       rather than performed, so a panel can ask *would this go where I already
       am* — a service row on its own machine's screen is drawn as text, because
       a chevron that reloads the screen you are standing on reads as a door.
+      **Incubation and Jobs came last and wanted opposite things** *(17
+      August)*. A set of eggs is a detail screen and took the panel: its two
+      steps are dated, and the screen stated those dates in plain muted prose
+      with no notion of late, so a set four days past its hatch read exactly
+      like one due next week. The form's own sentences **stay** — they are not
+      the same statement, because `incubationDues` produces nothing at all for a
+      species the library has no length for while the panel falls back to
+      twenty-one days, so for a bird the app cannot model the form is the only
+      thing said.
+      **It found a hole while it was there.** `read/history.ts` was blind to
+      incubations entirely, so a hatch — one of the few events on a poultry year
+      anybody remembers the date of — appeared nowhere but that one screen. It
+      lands in What happened now and on the source group's timeline, since the
+      hens laid the eggs. Only the hatch: candling is a step in the middle, and
+      the *set's own* timeline is deliberately absent because nothing else in
+      the projection can ever name an incubation, so the panel's only possible
+      content would restate the two panels above it.
+      **Jobs is the task list itself**, so a panel of the same rows above the
+      same rows is Today with a different heading. What it lacked was the
+      engine's sense of time, which it had been reimplementing worse: the detail
+      line printed "3 September" whether that was next month or three weeks
+      gone, and a weekly chore done yesterday sorted by the Monday it started
+      from rather than by next Thursday. It reads through `taskDues` and
+      `urgencyOf` now, in Today's own words, and an overdue row goes rowan.
+      **And a job can finally say what it is for.** `taskShape.subjectId` has
+      existed since the schema was written, `useDues` reads it, `Due.about`
+      carries it — and nothing in the app could set it, so the path that puts
+      *order the wormer* on the does' own screen beside their worming schedule
+      was reachable only from a test. A builder with no caller, which is the
+      lesson `useDues` already records about itself.
 
       *The original note, kept:*
       `read/history.ts` is farm-wide and has no notion of a subject:

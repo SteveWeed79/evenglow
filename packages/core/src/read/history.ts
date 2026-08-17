@@ -10,6 +10,7 @@ import {
   gramsToUg,
   harvestCreateSchema,
   hourReadingCreateSchema,
+  incubationCreateSchema,
   maintenanceStoredSchema,
   mlToUl,
   mortalityCreateSchema,
@@ -174,6 +175,9 @@ const storedTask = taskCreateSchema.partial();
  * carry a `null` meaning *cleared* — a value a stored row never holds.
  */
 const storedService = maintenanceStoredSchema;
+
+/** A set of eggs mid-flight: created, then candled, then hatched by update. */
+const storedIncubation = incubationCreateSchema.partial();
 
 const plural = (n: number, one: string, many = `${one}s`): string =>
   `${n} ${n === 1 ? one : many}`;
@@ -423,6 +427,58 @@ export async function listHistory(
                 ? { detail: 'Service done' }
                 : { detail: `Service done at ${v.lastDoneAtHours} hours` }),
               tally: { key: 'jobs', amount: 1, unit: 'job' },
+            },
+      ),
+
+      /**
+       * A set of eggs, on the day it hatched.
+       *
+       * **A hatch was invisible in What happened**, which is a strange hole in
+       * a poultry app: it is one of the few events on the year a keeper
+       * remembers the date of, and the only place it appeared was the set's own
+       * screen. Twelve eggs going in and eight chicks coming out is exactly the
+       * shape of thing this projection is for.
+       *
+       * Mutable, like `task` and `maintenance` above and for the same reason —
+       * the milestone is a field on the record rather than a log of its own,
+       * because the record is the thing that runs for three weeks. `hatchedAt`
+       * is the moment.
+       *
+       * **And unlike those two, deleting this row means what it says.** A
+       * `maintenance` row is one service and archiving it takes the whole
+       * recurring schedule; here the record and the event are the same thing —
+       * one set of eggs, one hatch — so "take this back out" removes precisely
+       * what the row describes.
+       *
+       * **The subject is the record itself**, which is the first time that
+       * happens here. Everywhere else a subject is a foreign key, because the
+       * event is a log naming something else; a hatch is a field on the very
+       * record its screen is about. The source group comes too when the eggs
+       * came from this farm — *"the hens' eggs hatched"* is true of the hens.
+       *
+       * Only the hatch, not the candling. Both are on the record and only one
+       * of them is what happened *to* it: candling is a step in the middle of a
+       * running set and the set's own screen states it, where a hatch is the
+       * end of the story and belongs in the farm's.
+       */
+      eventsFrom('incubation', storedIncubation, (v, id) =>
+        v.hatchedAt === undefined || v.label === undefined
+          ? null
+          : {
+              id,
+              entity: 'incubation',
+              at: v.hatchedAt,
+              subjects: subjectsOf(id, v.flockId),
+              title: `${v.label} eggs hatched`,
+              detail: [
+                v.hatched === undefined ? null : plural(v.hatched, 'chick'),
+                v.eggsSet === undefined ? null : `from ${plural(v.eggsSet, 'egg')} set`,
+                v.earlyLosses === undefined || v.earlyLosses === 0
+                  ? null
+                  : `${v.earlyLosses} lost in the first days`,
+              ]
+                .filter((part): part is string => part !== null)
+                .join(' · '),
             },
       ),
 

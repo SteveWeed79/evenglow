@@ -616,6 +616,7 @@ export function Row({
   onPress,
   testID,
   mark = 'forward',
+  tone = 'plain',
 }: {
   title: string;
   detail?: string;
@@ -631,6 +632,16 @@ export function Row({
    * instead. The affordance has to match the act.
    */
   mark?: IconName;
+  /**
+   * Whether the detail line is ordinary or a warning.
+   *
+   * `DueRow` tints an overdue row rowan, and the Jobs list needed the same
+   * signal for the same rows: a job three weeks late in the same muted grey as
+   * one due next month is a list that has stopped telling you anything. Only
+   * the detail line moves — the title stays ink, because the job itself is not
+   * an emergency, its date is.
+   */
+  tone?: 'plain' | 'alert';
 }): React.ReactElement {
   const { colors } = useTheme();
 
@@ -648,7 +659,11 @@ export function Row({
       <View style={styles.rowWords}>
         <Text style={[styles.rowTitle, { color: colors.ink }]}>{title}</Text>
         {detail === undefined ? null : (
-          <Text style={[styles.rowDetail, { color: colors.muted }]}>{detail}</Text>
+          <Text
+            style={[styles.rowDetail, { color: tone === 'alert' ? colors.rowan : colors.muted }]}
+          >
+            {detail}
+          </Text>
         )}
       </View>
       <Icon name={mark} size={20} color={colors.muted} />

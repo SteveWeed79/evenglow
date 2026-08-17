@@ -1,8 +1,11 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { newId, TASK_RECURRENCES } from '@steading/contracts';
+import { type Due, newId, TASK_RECURRENCES, taskDues, urgencyOf } from '@steading/contracts';
+import { listGroups } from '@steading/core/read/groups';
+import { listMachines } from '@steading/core/read/iron';
 import { isSettled, listTasks, type Task } from '@steading/core/read/tasks';
-import { Choice, Confirm, DayPick, Failure, Field, Primary, Row, TextField, Toggle, useSaver } from '../components/Form';
+import { dueWhen } from '../components/DueRow';
+import { Chip, Choice, Confirm, DayPick, Failure, Field, Primary, Row, TextField, Toggle, useSaver } from '../components/Form';
 import { Icon } from '../components/Icon';
 import { Loading } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
@@ -31,6 +34,35 @@ import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
  * never nags — *replace the shed roof* is a note, not a job for this morning,
  * and putting it on Today for ever is how a list stops being read. See
  * `taskDues`.
+ *
+ * ## The engine reads this list too, and now the list reads back
+ *
+ * This screen is the one place a due row could not be given a `Coming` panel,
+ * because it *is* the task list — a panel of the same rows above the same rows
+ * is Today with a different heading. What it lacked was the engine's sense of
+ * time, which it had been quietly reimplementing worse:
+ *
+ * - **A date is not a verdict.** The detail line printed "3 September"
+ *   whether that was next month or three weeks ago, so a job nobody had done
+ *   looked exactly like one nobody needed to do yet. `urgencyOf` knows the
+ *   difference and `dueWhen` has the words for it — the same words Today uses,
+ *   shared rather than written twice.
+ * - **A recurring job sorted by the wrong date.** `listTasks` orders by
+ *   `dueAtDate`, which for a weekly chore done yesterday is the Monday it
+ *   started from rather than next Thursday. `taskDues` already computes the
+ *   next occurrence, so the list sorts on that.
+ *
+ * ## And a job can finally say what it is for
+ *
+ * `taskShape.subjectId` has existed since the schema was written — *"links a
+ * chore to the machine or flock it concerns"* — `useDues` reads it to put the
+ * group's name on the row, and **nothing in this app could set it.** A builder
+ * with no caller, the lesson `useDues` already records about itself.
+ *
+ * It costs more now than it did. `Coming` shows a group its own chores through
+ * `Due.about`, so *order the wormer* can sit on the does' screen beside their
+ * worming schedule — and without a way to pin one, that path was reachable only
+ * from a test.
  */
 
 const RECURRENCE_LABELS: Record<string, string> = {
@@ -42,6 +74,8 @@ const RECURRENCE_LABELS: Record<string, string> = {
 
 export function JobsScreen(): React.ReactElement {
   const tasks = useLive(listTasks, 'your jobs');
+  const groups = useLive(listGroups);
+  const machines = useLive(listMachines);
   const log = useLog();
   const { colors } = useTheme();
 
@@ -50,6 +84,8 @@ export function JobsScreen(): React.ReactElement {
   const [recurrence, setRecurrence] = useState<(typeof TASK_RECURRENCES)[number]>('none');
   const [dated, setDated] = useState(true);
   const [dueAtDate, setDueAtDate] = useState(() => startOfDay(Date.now()));
+  /** What the job is about, or null for one that belongs to the farm at large. */
+  const [subjectId, setSubjectId] = useState<string | null>(null);
 
   const { saving, failure, save } = useSaver(
     useCallback(() => {
@@ -57,6 +93,7 @@ export function JobsScreen(): React.ReactElement {
       setTitle('');
       setRecurrence('none');
       setDated(true);
+      setSubjectId(null);
     }, []),
   );
 
@@ -70,10 +107,11 @@ export function JobsScreen(): React.ReactElement {
           title: title.trim(),
           recurrence,
           ...(dated ? { dueAtDate } : {}),
+          ...(subjectId === null ? {} : { subjectId }),
         },
       });
     });
-  }, [save, log, title, recurrence, dated, dueAtDate]);
+  }, [save, log, title, recurrence, dated, dueAtDate, subjectId]);
 
   /**
    * Finishing from here rather than from Today.
@@ -104,7 +142,42 @@ export function JobsScreen(): React.ReactElement {
 
   if (tasks === null) return <Loading title="Jobs" />;
 
-  const open = tasks.filter((task) => !isSettled(task));
+  const now = Date.now();
+
+  /**
+   * What each job is pinned to, named.
+   *
+   * Groups and machines together, because `subjectId` is one field and a chore
+   * is hung on whichever of them it concerns. A name that no longer resolves —
+   * an archived group — is not blanked: hiding a group must not silently
+   * rewrite what a job was for (invariant 13, the rule `listHistory` states).
+   */
+  const subjectNames = new Map<string, string>([
+    ...(groups ?? []).map((group): [string, string] => [group.id, group.name]),
+    ...(machines ?? []).map((machine): [string, string] => [machine.id, machine.name]),
+  ]);
+  const nameOf = (id: string): string => subjectNames.get(id) ?? 'something no longer listed';
+
+  /**
+   * The due row a job produces, keyed by the job.
+   *
+   * The engine's answer rather than the screen's: a recurring job's next
+   * occurrence counts from when it was last done, and a job with no date
+   * produces nothing at all — which is exactly the "stays here and never nags"
+   * behaviour this screen is built around, so an absent row is not a gap.
+   */
+  const dueOf = new Map<string, Due>();
+  for (const task of tasks) {
+    const [due] = taskDues(task);
+    if (due !== undefined) dueOf.set(task.id, due);
+  }
+
+  const open = tasks
+    .filter((task) => !isSettled(task))
+    // Soonest first, and the undated ones last: they are notes rather than
+    // work, and a list that opens on "replace the shed roof" is one that has
+    // buried this morning's job.
+    .sort((a, b) => (dueOf.get(a.id)?.at ?? Infinity) - (dueOf.get(b.id)?.at ?? Infinity));
 
   /**
    * Only what was finished today, and that is the change.
@@ -139,24 +212,30 @@ export function JobsScreen(): React.ReactElement {
         </Panel>
       ) : null}
 
-      {open.map((task) => (
-        <View key={task.id} style={styles.job}>
-          <Row
-            title={task.title}
-            detail={detailOf(task)}
-            // A tick, not a chevron: pressing this finishes the job rather
-            // than opening anything, and the mark is the promise.
-            mark="check"
-            testID={`job-${task.id}`}
-            onPress={() => finish(task)}
-          />
-          <Confirm
-            label="Remove it"
-            armedLabel="Tap again to remove"
-            onConfirm={() => remove(task)}
-          />
-        </View>
-      ))}
+      {open.map((task) => {
+        const due = dueOf.get(task.id);
+        const late = due !== undefined && urgencyOf(due, now) === 'overdue';
+
+        return (
+          <View key={task.id} style={styles.job}>
+            <Row
+              title={task.title}
+              detail={detailOf(task, due, now, nameOf)}
+              // A tick, not a chevron: pressing this finishes the job rather
+              // than opening anything, and the mark is the promise.
+              mark="check"
+              tone={late ? 'alert' : 'plain'}
+              testID={`job-${task.id}`}
+              onPress={() => finish(task)}
+            />
+            <Confirm
+              label="Remove it"
+              armedLabel="Tap again to remove"
+              onConfirm={() => remove(task)}
+            />
+          </View>
+        );
+      })}
 
       {adding ? (
         <Panel label="A new job">
@@ -196,6 +275,42 @@ export function JobsScreen(): React.ReactElement {
               <DayPick value={dueAtDate} onChange={setDueAtDate} />
             </Field>
           ) : null}
+
+          {/**
+            * What it is for, which is what puts it on that thing's screen.
+            *
+            * Offered only when the farm has something to pin a job to — on a
+            * farm with no groups and no machines this is a field with one chip
+            * saying "the farm", which is a question with no second answer.
+            *
+            * Groups and machines in one row rather than two fields, because
+            * `subjectId` is one field and asking "is it about an animal or a
+            * machine" first would be a tap spent narrowing a list of four.
+            */}
+          {subjectNames.size === 0 ? null : (
+            <Field
+              label="What is it for?"
+              hint="A job pinned to something shows up on that thing’s own screen."
+            >
+              <View style={styles.subjects}>
+                <Chip
+                  label="The farm"
+                  selected={subjectId === null}
+                  testID="job-for-farm"
+                  onPress={() => setSubjectId(null)}
+                />
+                {[...subjectNames].map(([id, name]) => (
+                  <Chip
+                    key={id}
+                    label={name}
+                    selected={subjectId === id}
+                    testID={`job-for-${id}`}
+                    onPress={() => setSubjectId(id)}
+                  />
+                ))}
+              </View>
+            </Field>
+          )}
 
           <Failure message={failure} />
 
@@ -276,20 +391,44 @@ export function JobsScreen(): React.ReactElement {
   );
 }
 
-/** What a job's row says under its title. */
-function detailOf(task: Task): string {
+/**
+ * What a job's row says under its title.
+ *
+ * ## The date used to be all it said, and a date is not a verdict
+ *
+ * "3 September" is the same eleven characters whether it is next month or three
+ * weeks gone, so the row that most needed reading looked exactly like the one
+ * that did not. `dueWhen` is Today's own phrasing — "5 days ago", "tomorrow",
+ * "in 3 weeks" — and the row goes rowan when `urgencyOf` calls it overdue.
+ *
+ * The absolute date is not lost: `dueWhen` widens to weeks and months as it
+ * goes out, which is the resolution somebody actually plans at, and the exact
+ * day is on the picker that set it.
+ *
+ * `due` is absent for a job with no date, and that is the designed state rather
+ * than a missing value — such a job stays here and never nags.
+ */
+function detailOf(
+  task: Task,
+  due: Due | undefined,
+  now: number,
+  nameOf: (id: string) => string,
+): string {
   const every =
     task.recurrence === 'none' ? null : (RECURRENCE_LABELS[task.recurrence] ?? 'Repeating');
+  // Said last, because what a job is FOR matters less than when it is wanted.
+  const about = task.subjectId === undefined ? '' : ` · ${nameOf(task.subjectId)}`;
 
-  if (task.dueAtDate === undefined) {
-    return every === null ? 'No date — tap when it is done' : `${every} — no date yet`;
+  if (due === undefined) {
+    const base = every === null ? 'No date — tap when it is done' : `${every} — no date yet`;
+    return `${base}${about}`;
   }
 
-  const when = new Date(task.dueAtDate).toLocaleDateString(undefined, {
-    day: 'numeric',
-    month: 'long',
-  });
-  return every === null ? `${when} — tap when it is done` : `${when}, then ${every.toLowerCase()}`;
+  const when =
+    urgencyOf(due, now) === 'overdue' ? `Was due ${dueWhen(due, now)}` : `Due ${dueWhen(due, now)}`;
+
+  const base = every === null ? `${when} — tap when it is done` : `${when}, then ${every.toLowerCase()}`;
+  return `${base}${about}`;
 }
 
 /** "at 8:52am", or the date if a clock has crossed midnight mid-render. */
@@ -310,6 +449,7 @@ function startOfDay(at: number): number {
 
 const styles = StyleSheet.create({
   job: { gap: SPACE.xs },
+  subjects: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
   done: {
     flexDirection: 'row',
     alignItems: 'center',
