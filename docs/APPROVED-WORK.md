@@ -247,11 +247,32 @@ period rather than a task.
       extracted them once, with the reason on it: a list whose rows delete
       things must behave identically in every container. It is on `Group`,
       `Machine` and `Planting` now.
-      **Still to come:** the screens for the four entities that have no detail
-      route at all — animals, beds, varieties and inventory items — and the
-      rest of the shape (status, primary actions, upcoming work, edit and
-      archive). The timeline is the half that was missing everywhere; the other
-      half is a screen per entity and wants designing rather than assembling.
+      **`AnimalScreen` is built** — who she is, what she weighs, her matings,
+      the way back to her group, and her own timeline. Animals were the sharpest
+      case: a mating names a dam, so individuals exist in this app *because of*
+      that animal, and hers was the record that could not be read back. It
+      carries no edit and no archive on purpose, and says why: editing is the
+      mutable-entity gap this file holds separately, and an animal leaving the
+      farm is an **outcome** — sold, culled, died, moved — which is §4's own
+      item. Hiding the row here would pre-empt a decision already written down
+      and not yet made.
+      A sack's history is on `AdjustStockScreen`, which is the screen somebody
+      is already on when they wonder how the last two bags went. **Not a detail
+      screen of its own**, because the farm-wide inventory model below is going
+      to reshape what an item is, and a screen built against today's shape would
+      be built twice.
+      **Beds and varieties are a different shape, and this is the finding**
+      *(16 August)*. Nothing append-only names a bed or a variety: a `harvest`
+      names its **planting**. So a timeline for either is structurally empty,
+      and the screen they actually want is not this one — it is *what is
+      growing here now, and what grew here before*, which is derived from
+      `planting`, a mutable record rather than an event. Building the timeline
+      shape there would produce two screens that say "nothing logged against
+      this yet" for ever. It wants deciding, not assembling, and it is the last
+      quarter of this item.
+      **Also still to come:** the rest of the shape around every timeline —
+      upcoming work, edit and archive — which waits on the same two items named
+      above.
 
       *The original note, kept:*
       `read/history.ts` is farm-wide and has no notion of a subject:

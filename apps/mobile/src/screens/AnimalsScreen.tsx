@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import { formatMass, SPECIES_TRAITS } from '@steading/contracts';
 import { inGroup, listAnimals } from '@steading/core/read/animals';
 import { latestWeightBySubject, listWeights } from '@steading/core/read/breeding';
@@ -7,6 +7,7 @@ import { Primary } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
+import { Touch } from '../components/Touch';
 import { useLive } from '../hooks/useLive';
 import { useNav } from '../hooks/useNav';
 import { useUnits } from '../hooks/useUnits';
@@ -69,15 +70,32 @@ export function AnimalsScreen({ route }: ScreenProps<'Animals'>): React.ReactEle
             .join(' · ');
 
           return (
-            <View
+            /**
+             * The card opens her now, and until it did this list was the end of
+             * the road: a name, a tag and a last weight, with the weights, the
+             * worming, the treatments and the matings all recorded against her
+             * id and nowhere to read any of it back.
+             */
+            <Touch
+              affordance="chevron"
               key={animal.id}
-              style={[styles.card, { backgroundColor: colors.raised, borderColor: colors.border }]}
+              accessibilityRole="button"
+              testID={`animal-${animal.id}`}
+              onPress={() => nav.navigate('Animal', { animalId: animal.id })}
+              style={({ pressed }) => [
+                styles.card,
+                {
+                  backgroundColor: colors.raised,
+                  borderColor: colors.border,
+                  opacity: pressed ? 0.75 : 1,
+                },
+              ]}
             >
               <Text style={[styles.name, { color: colors.ink }]}>{animal.name}</Text>
               {detail === '' ? null : (
                 <Text style={[styles.detail, { color: colors.muted }]}>{detail}</Text>
               )}
-            </View>
+            </Touch>
           );
         })
       )}

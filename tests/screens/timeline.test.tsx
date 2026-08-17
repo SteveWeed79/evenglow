@@ -7,6 +7,7 @@ import { mount, routeProps } from '../support/screen';
 import { Timeline } from '../../apps/mobile/src/components/Timeline';
 import { GroupScreen } from '../../apps/mobile/src/screens/GroupScreen';
 import { MachineScreen } from '../../apps/mobile/src/screens/MachineScreen';
+import { AdjustStockScreen } from '../../apps/mobile/src/screens/AdjustStockScreen';
 
 /**
  * The half that makes a detail screen worth opening.
@@ -145,6 +146,37 @@ describe('the screens it appears on', () => {
     const screen = await mount(<MachineScreen {...routeProps({ machineId: MACHINE })} />);
 
     expect(screen.text()).toContain('240 hours');
+    screen.unmount();
+  });
+});
+
+/**
+ * The sack, on the screen where somebody is already asking about it.
+ *
+ * `stockAdjustment` exists because changing a quantity said nothing — a sack
+ * that went from ten to six left no trace of whether it was fed out, sold,
+ * spilled or eaten by something. The reasons were being kept and there was
+ * nowhere to read them.
+ */
+describe('what happened to a sack', () => {
+  it('is under the form for recording the next thing', async () => {
+    const item = newId();
+    await enqueue({
+      entity: 'inventory',
+      op: 'create',
+      targetId: item,
+      payload: { name: 'Layers pellets', kind: 'feed', quantity: 10, unit: 'bag' },
+    });
+    await enqueue({
+      entity: 'stockAdjustment',
+      op: 'create',
+      targetId: newId(),
+      payload: { itemId: item, delta: -2, reason: 'spoiled', occurredAt: Date.now() - DAY },
+    });
+
+    const screen = await mount(<AdjustStockScreen {...routeProps({ itemId: item })} />);
+
+    expect(screen.text()).toContain('Spoiled 2');
     screen.unmount();
   });
 });

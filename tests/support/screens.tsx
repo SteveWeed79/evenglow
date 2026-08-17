@@ -19,6 +19,7 @@ import { AddItemScreen } from '../../apps/mobile/src/screens/AddItemScreen';
 import { AddMachineScreen } from '../../apps/mobile/src/screens/AddMachineScreen';
 import { AddServiceScreen } from '../../apps/mobile/src/screens/AddServiceScreen';
 import { AccountScreen } from '../../apps/mobile/src/screens/AccountScreen';
+import { AnimalScreen } from '../../apps/mobile/src/screens/AnimalScreen';
 import { AnimalsScreen } from '../../apps/mobile/src/screens/AnimalsScreen';
 import { BackupScreen } from '../../apps/mobile/src/screens/BackupScreen';
 import { BreedingScreen } from '../../apps/mobile/src/screens/BreedingScreen';
@@ -203,6 +204,7 @@ export const SCREENS: [string, () => React.ReactElement][] = [
   ['Group', () => <GroupScreen {...routeProps({ groupId: GROUP })} />],
   ['EditGroup', () => <EditGroupScreen {...routeProps({ groupId: GROUP })} />],
   ['Animals', () => <AnimalsScreen {...routeProps({ groupId: GROUP })} />],
+  ['Animal', () => <AnimalScreen {...routeProps({ animalId: ANIMAL })} />],
   ['AddAnimal', () => <AddAnimalScreen {...routeProps({ groupId: GROUP })} />],
   ['Treatment', () => <TreatmentScreen {...routeProps({ groupId: GROUP })} />],
   ['Treatments', () => <TreatmentsScreen {...routeProps({ groupId: GROUP })} />],

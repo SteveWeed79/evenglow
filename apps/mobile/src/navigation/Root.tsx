@@ -10,6 +10,7 @@ import { AddItemScreen } from '../screens/AddItemScreen';
 import { AdjustStockScreen } from '../screens/AdjustStockScreen';
 import { AddMachineScreen } from '../screens/AddMachineScreen';
 import { AddServiceScreen } from '../screens/AddServiceScreen';
+import { AnimalScreen } from '../screens/AnimalScreen';
 import { AnimalsScreen } from '../screens/AnimalsScreen';
 import { BackupScreen } from '../screens/BackupScreen';
 import { BreedingScreen } from '../screens/BreedingScreen';
@@ -145,6 +146,8 @@ export type RootParamList = {
   Group: { groupId: string };
   EditGroup: { groupId: string };
   Animals: { groupId: string };
+  /** One named animal: who she is, and what has happened to her. */
+  Animal: { animalId: string };
   AddAnimal: { groupId: string };
   /**
    * The form, for a new treatment or an existing one.
@@ -249,6 +252,7 @@ export function Root({
       <Stack.Screen name="Group" component={GroupScreen} />
       <Stack.Screen name="EditGroup" component={EditGroupScreen} />
       <Stack.Screen name="Animals" component={AnimalsScreen} />
+      <Stack.Screen name="Animal" component={AnimalScreen} />
       <Stack.Screen name="AddAnimal" component={AddAnimalScreen} />
       <Stack.Screen name="Treatment" component={TreatmentScreen} />
       <Stack.Screen name="Treatments" component={TreatmentsScreen} />
