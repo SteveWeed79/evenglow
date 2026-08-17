@@ -2006,6 +2006,81 @@ individual animals.
       counts as absent in both, because clearing a field arrives as `undefined`
       and the driver stores it as null.
 
+## N-4 · The feed walked past a `pending` row, so the sweeper repaired records that still reached nobody — **P0**
+
+> **Fixed, 17 August.** `readSnapshotPage` now ends the page at an undecided
+> row instead of skipping it. Found by the two-device harness, on the first
+> assertion written against the sweeper from the far end.
+
+**Found by a test rather than by reading.** `tests/sync/crash-recovery.test.ts`
+was written to close the harness box's *"crash between log write and
+projection"* item, whose deferral — *"needs a seam that belongs with the
+sweeper"* — expired when the sweeper shipped. It failed immediately, and not in
+the way it was written to fail.
+
+`readSnapshotPage` skips three kinds of row and advanced the watermark past all
+three alike. The reasoning is written on the code and is correct for two of
+them: *"a query filter would leave the cursor parked before a run of refused
+rows and rescan them on every pull."* A refusal is a decision the server has
+taken and will not retake; an entity this build cannot model it will never
+model. **`pending` is neither.** It means *logged, not decided yet*, and the
+sweeper exists to decide it up to an hour later.
+
+So the sequence that loses a record needs nothing exotic:
+
+1. A phone dies between the log write and the projection. The row is `pending`.
+2. Any device pulls. The row is withheld — correctly — and the cursor moves
+   past it anyway.
+3. The sweeper decides it an hour later and it becomes replicable.
+4. Every device that pulled in step 2 is already beyond it. A cursor never
+   looks back.
+
+The server's own projection is repaired and **the record reaches no other phone
+on the farm, for ever** — which is the exact harm P0-2's last box was closing.
+The sweeper was doing its half correctly the whole time.
+
+**Why no existing test saw it.** `sweeper.test.ts` reads the feed through a
+helper named `feed()`, commented *"what a second device would receive"*, and it
+reads from `since: 0` every time — a device that has never pulled. The loss only
+exists for a device that has. That is the distinction `tests/sync/two-devices.test.ts`
+was created on, stated in its own header as *what a second device would receive
+is not what a second device ends up holding*, and this is the first time it has
+caught something rather than confirmed something.
+
+**The fix, and what it costs.** `isUndecided` splits the one non-terminal skip
+out of the other two, and the page ends there rather than stepping over it. The
+log's order is preserved exactly, so nothing here touches P0-3.
+
+The cost is real and is not hidden: rows behind an undecided one wait with it.
+In the ordinary case that is milliseconds — the client that got no answer
+resends and the duplicate branch decides the row. In the pathological case — a
+handset that never comes back — it is bounded by the sweep interval, so a farm's
+feed can be held up to an hour behind one dead phone. That is the right way
+round, a bounded wait for a record that arrives against a fast page that
+silently drops one, but it is a genuine availability trade and worth revisiting
+if a farm ever feels it.
+
+**The alternative was rejected for a stated reason.** Having the sweeper
+re-stamp `serverTs` on decision would avoid the wait entirely, since the row
+would enter the feed as new work. It also makes a decided row arrive out of log
+order relative to the same device's later mutations — which is P0-3, whose
+restatement *"as a property of visible order"* is explicitly open. Taking the
+option that needs P0-3 settled, in order to avoid a bounded delay, would be
+settling P0-3 by side effect.
+
+**To do**
+
+- [x] Split `isUndecided` from `shouldReplicate` and end the page at it.
+      `apps/api/src/sync/outcome.ts`, `apps/api/src/sync/snapshot.ts`.
+- [x] Assert it from both ends: the record reaches device B after a sweep, and
+      a device that pulled during the window is not carried past it. Both fail
+      without the change, checked by reverting it.
+- [x] Assert the split is specific — a refusal is still stepped over, or one
+      forbidden action would park the whole farm's feed behind it.
+- [ ] **Revisit if the wait is ever felt.** The measurement that would justify
+      re-opening it is a farm whose feed stalls on a dead handset for long
+      enough to notice; the answer then is P0-3's restatement, not a patch here.
+
 ## Checked and found sound
 
 Recorded so nobody re-walks them:

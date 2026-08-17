@@ -96,3 +96,30 @@ export function shouldReplicate(raw: unknown): boolean {
   if (!isStoredOutcome(raw)) return false;
   return REPLICATES[raw];
 }
+
+/**
+ * Whether a withheld row might still become a replicating one.
+ *
+ * **The distinction the feed was missing.** `readSnapshotPage` skips three
+ * kinds of row and used to advance the watermark past all three alike, with the
+ * reasoning written on it: a query filter *"would leave the cursor parked
+ * before a run of refused rows and rescan them on every pull"*. That is right
+ * for two of the three. A refusal is a decision the server has taken and will
+ * not retake, and an entity this build cannot model is one it will never model,
+ * so skipping either is permanent and moving past it loses nothing.
+ *
+ * `pending` is the one that changes its mind. It means *logged, not decided
+ * yet*, and the sweeper exists precisely to decide it later — so a watermark
+ * that moved past it has moved past a row that is about to start replicating,
+ * and a cursor never looks back. The record is then repaired on the server and
+ * reaches no other device on the farm, for ever, which is the exact harm P0-2's
+ * last box was closing.
+ *
+ * An outcome this build does not recognise is deliberately NOT undecided. It
+ * can only come from a newer deploy that has since been rolled back, and
+ * treating it as pending would stall a farm's feed behind a row this build will
+ * never be able to classify. Withheld and moved past, as before.
+ */
+export function isUndecided(raw: unknown): boolean {
+  return raw === PENDING;
+}

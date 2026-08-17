@@ -7,7 +7,7 @@ import {
 } from '@steading/contracts';
 import type { Scoped, Tenanted } from '../db/scoped';
 import { HttpError } from '../http';
-import { shouldReplicate } from './outcome';
+import { isUndecided, shouldReplicate } from './outcome';
 
 /**
  * Hydration, as a function of a scope and a cursor.
@@ -97,11 +97,44 @@ export async function readSnapshotPage(
     .col<MutationDoc>('mutations')
     .findMany(cursor, { limit: PULL_PAGE_SIZE + 1, sort: { serverTs: 1, _id: 1 } });
 
-  const more = docs.length > PULL_PAGE_SIZE;
-  const page = more ? docs.slice(0, PULL_PAGE_SIZE) : docs;
+  const hasMore = docs.length > PULL_PAGE_SIZE;
+  const page = hasMore ? docs.slice(0, PULL_PAGE_SIZE) : docs;
 
   const mutations: PulledMutation[] = [];
+
+  /**
+   * How far the watermark has earned the right to move — rows this page is
+   * *finished with*, rather than rows it read.
+   *
+   * Every skip below is permanent except one, and the exception is what this
+   * counter exists for. See `isUndecided`.
+   */
+  let consumed = 0;
+  let stalled = false;
+
   for (const doc of page) {
+    /**
+     * Stop, rather than skip.
+     *
+     * A row whose client died between the log write and the projection is
+     * `pending` until it resends or the sweeper decides it. Skipping it moves
+     * the cursor past a row that is about to start replicating, and every
+     * device that pulled during that window then misses the record
+     * permanently — the server repairs its own projection and the farm's other
+     * phones never hear about it.
+     *
+     * Ending the page here holds the log's order instead. The cost is that
+     * rows behind an undecided one wait with it, bounded by the sweep interval
+     * in the worst case and by the client's own resend — milliseconds — in the
+     * ordinary one. That is the right way round: a bounded wait for a record
+     * that arrives, rather than a fast page that silently drops one.
+     */
+    if (isUndecided(doc.outcome)) {
+      stalled = true;
+      break;
+    }
+    consumed += 1;
+
     /**
      * The log records every command that was ATTEMPTED. The feed carries only
      * the ones that changed something.
@@ -140,14 +173,24 @@ export async function readSnapshotPage(
     });
   }
 
-  // The watermark comes from the last row read, not the last row kept, so a
-  // page made entirely of skipped rows still makes progress.
-  const last = page[page.length - 1];
+  // The watermark comes from the last row CONSUMED, not the last row kept, so
+  // a page made entirely of permanently-skipped rows still makes progress —
+  // and a page that stopped at an undecided row does not move past it.
+  const last = page[consumed - 1];
 
   return {
     mutations,
     through: last ? last.serverTs.getTime() : since,
     throughId: last ? last._id : sinceId,
-    more,
+    /**
+     * `false` when stalled, though there are certainly more rows on disk.
+     *
+     * `more` drives the client's paging loop, and the honest answer to the
+     * question it actually asks — *is there another page I can have now* — is
+     * no. Saying yes would spend a round trip re-reading up to the same
+     * undecided row and stopping in the same place. The next ordinary pull
+     * picks up whatever has been decided by then.
+     */
+    more: stalled ? false : hasMore,
   };
 }
