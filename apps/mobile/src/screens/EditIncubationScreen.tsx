@@ -146,6 +146,15 @@ export function EditIncubationScreen({
   const breeds = breedsForSpecies(current.species);
   const days = INCUBATION_DAYS[current.species] ?? 21;
 
+  /**
+   * The farm's own groups of this bird, and nothing else.
+   *
+   * Duck eggs did not come from the goats. `SetEggsScreen` filters the same
+   * way, and the two must agree — a group offered here and not there is a
+   * provenance the add screen cannot reproduce.
+   */
+  const layingGroups = (groups ?? []).filter((group) => group.species === current.species);
+
   const commit = (): void => {
     void save(async () => {
       await log({
@@ -215,9 +224,28 @@ export function EditIncubationScreen({
           options={layers}
           value={current.species}
           onChange={(species) =>
-            // A duck breed left set on a set of chicken eggs would be invisible
-            // — the chip that showed it is gone with the species.
-            change({ species, breedId: null })
+            change({
+              species,
+              // A duck breed left set on a set of chicken eggs would be
+              // invisible — the chip that showed it is gone with the species.
+              breedId: null,
+              /**
+               * And the flock, but only when it stops being possible.
+               *
+               * Blanket-clearing would drop a correct answer: somebody fixing
+               * a duck set recorded as chicken has the ducks already selected,
+               * and they laid the eggs either way. Dropped only if the group
+               * that is selected is not of the new species — which is the case
+               * where leaving it would hide a wrong provenance behind a chip
+               * that is no longer drawn.
+               */
+              ...(current.flockId !== null &&
+              (groups ?? []).some(
+                (group) => group.id === current.flockId && group.species === species,
+              )
+                ? {}
+                : { flockId: null }),
+            })
           }
           labels={Object.fromEntries(layers.map((s) => [s, SPECIES_TRAITS[s].label]))}
         />
@@ -284,7 +312,7 @@ export function EditIncubationScreen({
         * on a farm with no groups for the same reason the Jobs pin is: a
         * question with one answer is not a question.
         */}
-      {current.source === 'own' && (groups ?? []).length > 0 ? (
+      {current.source === 'own' && layingGroups.length > 0 ? (
         <Field
           label="Which of yours laid them?"
           hint="The hatch shows up on that group’s own story as well as the farm’s."
@@ -296,7 +324,7 @@ export function EditIncubationScreen({
               testID="edit-incubation-flock-none"
               onPress={() => change({ flockId: null })}
             />
-            {(groups ?? []).map((group) => (
+            {layingGroups.map((group) => (
               <Chip
                 key={group.id}
                 label={group.name}

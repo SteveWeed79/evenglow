@@ -7,6 +7,7 @@ import { freshStore } from '../support/store';
 import { mount, routeProps } from '../support/screen';
 import { EditIncubationScreen } from '../../apps/mobile/src/screens/EditIncubationScreen';
 import { GroupScreen } from '../../apps/mobile/src/screens/GroupScreen';
+import { SetEggsScreen } from '../../apps/mobile/src/screens/SetEggsScreen';
 
 /**
  * Correcting a set of eggs, and taking one back out.
@@ -245,5 +246,95 @@ describe('taking a set back out', () => {
     expect(await listIncubations()).toEqual([]);
     const days = await listHistory();
     expect(days.flatMap((day) => day.events).some((e) => e.entity === 'incubation')).toBe(false);
+  });
+});
+
+/**
+ * And the same question at the moment somebody actually knows the answer.
+ *
+ * The edit screen could set `flockId` from the day it existed, which is the
+ * wrong moment: the person standing at the incubator with a basket knows which
+ * birds these came from, and nobody goes back a fortnight later to say. The two
+ * screens have to agree about what may be offered, or a provenance the edit
+ * screen allows is one the add screen cannot reproduce.
+ */
+describe('setting a lot of eggs', () => {
+  it('records which of the farm’s own birds laid them', async () => {
+    await theHens();
+
+    const screen = await mount(<SetEggsScreen />);
+    await screen.type('incubation-label', 'Sussex');
+    await screen.press('step-plus-12');
+    await screen.press(`incubation-flock-${GROUP}`);
+    await screen.press('save-incubation');
+    screen.unmount();
+
+    expect((await theSet()).flockId).toBe(GROUP);
+  });
+
+  /**
+   * The same argument `eggsSet` makes about not opening on a dozen: a default
+   * is a claim the app chose, and it would be recorded by anyone who pressed
+   * Set them without looking. A wrong provenance is worse than an absent one.
+   */
+  it('preselects nothing, even on a farm with one flock', async () => {
+    await theHens();
+
+    const screen = await mount(<SetEggsScreen />);
+    await screen.type('incubation-label', 'Sussex');
+    await screen.press('step-plus-12');
+    await screen.press('save-incubation');
+    screen.unmount();
+
+    expect((await theSet()).flockId).toBeUndefined();
+  });
+
+  it('does not ask about a box of eggs somebody bought', async () => {
+    await theHens();
+
+    const screen = await mount(<SetEggsScreen />);
+    expect(screen.has(`incubation-flock-${GROUP}`)).toBe(true);
+    await screen.pressLabel('Bought');
+    expect(screen.has(`incubation-flock-${GROUP}`)).toBe(false);
+    screen.unmount();
+  });
+
+  /** Duck eggs did not come from the goats. */
+  it('offers only groups of the bird being set', async () => {
+    await theHens();
+    await enqueue({
+      entity: 'flock',
+      op: 'create',
+      targetId: newId(),
+      payload: { name: 'The goats', species: 'goat', count: 3 },
+    });
+
+    const screen = await mount(<SetEggsScreen />);
+
+    expect(screen.text()).toContain('The hens');
+    expect(screen.text()).not.toContain('The goats');
+    screen.unmount();
+  });
+
+  /**
+   * A flock left selected under a species it does not belong to would be a
+   * wrong provenance hidden behind a chip that is no longer drawn — the same
+   * trap the breed chips already guard against, and worse, because nothing
+   * downstream can tell that a hatch landed on the wrong timeline.
+   */
+  it('drops a flock the species no longer allows', async () => {
+    await theHens();
+
+    const screen = await mount(<SetEggsScreen />);
+    await screen.type('incubation-label', 'Sussex');
+    await screen.press('step-plus-12');
+    await screen.press(`incubation-flock-${GROUP}`);
+    await screen.pressLabel('Ducks');
+    await screen.press('save-incubation');
+    screen.unmount();
+
+    const set = await theSet();
+    expect(set.species).toBe('duck');
+    expect(set.flockId).toBeUndefined();
   });
 });

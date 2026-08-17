@@ -353,8 +353,17 @@ period rather than a task.
       **It also gave `flockId` its first caller.** *"The group the eggs came
       from, when they came from this farm"* has been in the schema since it was
       written and the add screen never asked, so the hatch reached What happened
-      and no group's own story — however plainly the hens laid the eggs. Asking
-      on the *add* screen too is the obvious follow-on and is not done.
+      and no group's own story — however plainly the hens laid the eggs.
+      **`SetEggsScreen` asks it now too** *(17 August)*, which is the moment
+      somebody actually knows: the person standing at the incubator with a
+      basket can say which birds these came from, and nobody goes back a
+      fortnight later to. Nothing is preselected even on a farm with one flock,
+      on that screen's own argument about `eggsSet` not opening on a dozen — a
+      default is a claim the app chose and it would be recorded by anyone who
+      pressed *Set them* without looking. Both screens filter the offer to
+      groups of the bird being set, because duck eggs did not come from the
+      goats and a wrong provenance is silent: nothing downstream can tell that a
+      hatch landed on the wrong flock's timeline.
       **The upcoming-work half closed it** *(17 August)*, and it turned out to
       be a reading of the engine rather than an addition to it. `useDues`
       composes twelve builders into a farm-wide list and exactly one screen had

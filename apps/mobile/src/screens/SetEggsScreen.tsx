@@ -11,6 +11,7 @@ import {
   SPECIES_TRAITS,
   type Species,
 } from '@steading/contracts';
+import { listGroups } from '@steading/core/read/groups';
 import {
   Chip,
   Choice,
@@ -24,6 +25,7 @@ import {
 } from '../components/Form';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
+import { useLive } from '../hooks/useLive';
 import { useLeave } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import { SPACE } from '../theme/tokens';
@@ -35,6 +37,25 @@ import { SPACE } from '../theme/tokens';
  * reason `navigation/Root.tsx` gives at length: a screen that draws a back
  * arrow has to have one that works, and on Android the hardware button has to
  * agree with it. A half-filled form is exactly where that matters.
+ *
+ * ## Whose eggs, asked at the moment somebody knows
+ *
+ * `flockId` — *"the group the eggs came from, when they came from this farm"* —
+ * has been in the schema since it was written and this screen did not ask, so
+ * it could only be filled in afterwards on the edit screen. That is the wrong
+ * moment: the person standing at the incubator with a basket knows exactly
+ * which birds these came from, and nobody goes back a fortnight later to say.
+ *
+ * It decides whose story the hatch appears in. `read/history.ts` builds the
+ * hatch row from the record and hangs it on the source group as well as the
+ * set, so *"the Sussex eggs hatched — 8 chicks"* lands on the hens' own
+ * timeline. Without this it reached What happened and no group at all.
+ *
+ * **Nothing is preselected, even on a farm with one flock.** The same argument
+ * `eggsSet` makes below about not opening on a dozen: a default is a number —
+ * here a claim — that the app chose, and it would be recorded by anyone who
+ * pressed Set them without looking. Saying which birds laid a set is a fact
+ * about provenance, and a wrong one is worse than an absent one.
  */
 
 const SOURCE_LABELS = { own: 'My own', bought: 'Bought', gifted: 'Given' } as const;
@@ -42,6 +63,7 @@ const METHOD_LABELS = { incubator: 'Incubator', broody: 'Under a broody' } as co
 
 export function SetEggsScreen(): React.ReactElement {
   const log = useLog();
+  const groups = useLive(listGroups);
 
   const [label, setLabel] = useState('');
   const [species, setSpecies] = useState<Species>('chicken');
@@ -58,6 +80,8 @@ export function SetEggsScreen(): React.ReactElement {
   const [source, setSource] = useState<(typeof EGG_SOURCES)[number]>('own');
   const [method, setMethod] = useState<(typeof INCUBATION_METHODS)[number]>('incubator');
   const [breedId, setBreedId] = useState<string | null>(null);
+  /** Which of the farm's own birds laid them, when somebody says. */
+  const [flockId, setFlockId] = useState<string | null>(null);
 
   const { saving, failure, save } = useSaver(useLeave());
 
@@ -75,10 +99,13 @@ export function SetEggsScreen(): React.ReactElement {
           source,
           method,
           ...(breedId === null ? {} : { breedId }),
+          // Only for an own set: a bought box came from somebody else's birds,
+          // and the chips for this are gone the moment the source changes.
+          ...(flockId === null || source !== 'own' ? {} : { flockId }),
         },
       });
     });
-  }, [save, log, species, label, setAt, eggsSet, source, method, breedId]);
+  }, [save, log, species, label, setAt, eggsSet, source, method, breedId, flockId]);
 
   /** Only the birds. A goat cannot be set under a broody. */
   const layers = (Object.keys(SPECIES_TRAITS) as Species[]).filter(
@@ -95,6 +122,16 @@ export function SetEggsScreen(): React.ReactElement {
    */
   const breeds = breedsForSpecies(species);
 
+  /**
+   * The farm's own groups of this bird, and nothing else.
+   *
+   * Duck eggs did not come from the goats, and offering every group would make
+   * that a tap away. Filtered rather than merely sorted, because a wrong
+   * provenance is silent — nothing downstream can tell that the hatch landed on
+   * the wrong flock's timeline.
+   */
+  const layingGroups = (groups ?? []).filter((group) => group.species === species);
+
   return (
     <Screen title="Set some eggs" back>
       <Field label="What are they?">
@@ -106,6 +143,9 @@ export function SetEggsScreen(): React.ReactElement {
             // A duck breed left set on a set of chicken eggs would be
             // invisible — the chip that showed it is gone with the species.
             setBreedId(null);
+            // And the same trap for the flock, which is worse because nothing
+            // downstream can tell that a hatch landed on the wrong timeline.
+            setFlockId(null);
           }}
           labels={Object.fromEntries(layers.map((s) => [s, SPECIES_TRAITS[s].label]))}
         />
@@ -151,6 +191,31 @@ export function SetEggsScreen(): React.ReactElement {
       <Field label="Where did they come from?">
         <Choice options={EGG_SOURCES} value={source} onChange={setSource} labels={SOURCE_LABELS} />
       </Field>
+
+      {source === 'own' && layingGroups.length > 0 ? (
+        <Field
+          label="Which of yours laid them?"
+          hint="The hatch shows up on that group’s own story as well as the farm’s."
+        >
+          <View style={styles.chips}>
+            <Chip
+              label="Not saying"
+              selected={flockId === null}
+              testID="incubation-flock-none"
+              onPress={() => setFlockId(null)}
+            />
+            {layingGroups.map((group) => (
+              <Chip
+                key={group.id}
+                label={group.name}
+                selected={flockId === group.id}
+                testID={`incubation-flock-${group.id}`}
+                onPress={() => setFlockId(flockId === group.id ? null : group.id)}
+              />
+            ))}
+          </View>
+        </Field>
+      ) : null}
 
       <Field label="Under what?">
         <Choice
