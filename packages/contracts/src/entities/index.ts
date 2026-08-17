@@ -23,6 +23,10 @@ import {
   maintenanceUpdateSchema,
 } from './iron';
 import { careLogCreateSchema } from './care';
+import {
+  serviceCompletionCreateSchema,
+  taskCompletionCreateSchema,
+} from './completions';
 import { noteCreateSchema, noteUpdateSchema } from './notes';
 import {
   breedingCreateSchema,
@@ -56,6 +60,7 @@ import {
   taskUpdateSchema,
 } from './ops';
 
+export * from './completions';
 export * from './livestock';
 export * from './produces';
 export * from './iron';
@@ -185,6 +190,16 @@ export const PAYLOAD_SCHEMAS: Partial<Record<PayloadKey, z.ZodType>> = {
   'shearing:delete': deleteSchema,
   'careLog:create': careLogCreateSchema,
   'careLog:delete': deleteSchema,
+
+  /**
+   * A completion is an observation about the past, so it is append-only like
+   * the rest of them — and its delete is what un-completes a job. See
+   * `completions.ts` for why the schedule stays mutable and only this moves.
+   */
+  'taskCompletion:create': taskCompletionCreateSchema,
+  'taskCompletion:delete': deleteSchema,
+  'serviceCompletion:create': serviceCompletionCreateSchema,
+  'serviceCompletion:delete': deleteSchema,
 };
 
 /** Returns the schema for an entity+op pair, or undefined if the op is forbidden. */

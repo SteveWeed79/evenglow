@@ -45,6 +45,8 @@ export const ENTITY_COLLECTIONS: Record<Entity, CollectionName> = {
   feedPlan: 'feedPlans',
   careLog: 'careLogs',
   note: 'notes',
+  taskCompletion: 'taskCompletions',
+  serviceCompletion: 'serviceCompletions',
 };
 
 /**

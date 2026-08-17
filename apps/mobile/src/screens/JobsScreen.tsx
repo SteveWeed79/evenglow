@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { type Due, newId, TASK_RECURRENCES, taskDues, urgencyOf } from '@steading/contracts';
+import { listTaskCompletions } from '@steading/core/read/completions';
 import { listGroups } from '@steading/core/read/groups';
 import { listMachines } from '@steading/core/read/iron';
 import { isSettled, listTasks, type Task } from '@steading/core/read/tasks';
@@ -116,18 +117,70 @@ export function JobsScreen(): React.ReactElement {
   /**
    * Finishing from here rather than from Today.
    *
-   * The same write the Done button on Today makes — `completedAt` on the task
-   * — because a chore is the one kind with nothing else to log. See the note
-   * on `taskDues` for why a completion flag is right here and nowhere else.
+   * The same write the Done button on Today makes — a `taskCompletion` event —
+   * because a chore is the one kind with nothing else to log. It used to be
+   * `completedAt` on the task itself, which each finishing overwrote, so a
+   * weekly job done fifty times a year left one date behind. See
+   * `entities/completions.ts`.
    */
   const finish = useCallback(
     (task: Task) => {
       void log({
-        entity: 'task',
-        op: 'update',
-        targetId: task.id,
-        payload: { completedAt: Date.now() },
+        entity: 'taskCompletion',
+        op: 'create',
+        targetId: newId(),
+        payload: { taskId: task.id, completedAt: Date.now() },
       });
+    },
+    [log],
+  );
+
+  /**
+   * Putting a job back, which is a delete now rather than a clear.
+   *
+   * ## The bug this used to be, and why it is gone rather than fixed
+   *
+   * This wrote `{ completedAt: null }` — `APPROVED-WORK.md` §1 names it as one
+   * of the two live symptoms of the clearing defect, and before the wire had a
+   * word for clearing it sent `undefined`, which `JSON.stringify` dropped: the
+   * tick came off this handset and every other device on the farm went on
+   * showing the job done.
+   *
+   * Against an event there is nothing to clear. Un-finishing is deleting the
+   * completion, which is an ordinary append-only take-back and has crossed the
+   * wire since the day append-only entities learned to accept a delete. The
+   * newest one, because a recurring job has several and putting one back means
+   * the one just done.
+   *
+   * **The old field is still cleared when it is the only thing there is.** A
+   * job finished by a build that predates this has a stored `completedAt` and
+   * no event, and it must still be possible to put back — which is exactly the
+   * case the clearing contract was built for, so the null stays for it.
+   */
+  const reopen = useCallback(
+    (task: Task) => {
+      void (async () => {
+        const newest = (await listTaskCompletions()).find(
+          (event) => event.taskId === task.id,
+        );
+
+        if (newest === undefined) {
+          await log({
+            entity: 'task',
+            op: 'update',
+            targetId: task.id,
+            payload: { completedAt: null },
+          });
+          return;
+        }
+
+        await log({
+          entity: 'taskCompletion',
+          op: 'delete',
+          targetId: newest.id,
+          payload: {},
+        });
+      })();
     },
     [log],
   );
@@ -358,24 +411,15 @@ export function JobsScreen(): React.ReactElement {
                 </View>
               </View>
 
-              {/* `null`, not `undefined`. This button wrote `undefined` until
-                  the wire had a word for clearing a field, and the tick came
-                  off this handset and nowhere else: `JSON.stringify` dropped
-                  the key, the server's `$set` left `completedAt` standing, and
-                  every other device on the farm went on showing the job done.
-                  See `contracts/clearing.ts`. */}
+              {/* Deletes the completion event rather than clearing a field.
+                  See `reopen` above for the bug that used to live here, and
+                  why an append-only completion makes it impossible rather than
+                  fixed. */}
               <Confirm
                 label="Need to redo this"
                 armedLabel="Tap again to put it back"
                 testID={`job-redo-${task.id}`}
-                onConfirm={() =>
-                  void log({
-                    entity: 'task',
-                    op: 'update',
-                    targetId: task.id,
-                    payload: { completedAt: null },
-                  })
-                }
+                onConfirm={() => reopen(task)}
               />
             </View>
           ))}

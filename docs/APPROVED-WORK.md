@@ -215,7 +215,35 @@ period rather than a task.
 
 ## 4. Structural — the highest-leverage work
 
-- [ ] **Append-only `taskCompletion` and `serviceCompletion` events.** **GA**
+- [x] **Append-only `taskCompletion` and `serviceCompletion` events.** **GA**
+      **Built 17 August.** Two append-only entities, and the schedules stay
+      exactly as mutable as they were — `task` and `maintenance` are still
+      edited, and only the past became immutable. `read/history.ts` had stated
+      the fix in its own words against both entities (*"an append-only
+      completion record — the shape `careLog` already is for animals"*), so
+      this is that. Both notes stay where they are, rewritten: those builders
+      are the legacy path for records written before events existed, and each is
+      silent for a record that has any — or the last completion would be drawn
+      twice on the day it happened.
+      **Nothing reading the old field names had to change**, which is what kept
+      it to one commit. `listTasks` and `listServices` fill `completedAt`,
+      `lastDoneAtDate` and `lastDoneAtHours` from the newest event and fall back
+      to the stored field for a record with none — so `taskDues`, `isSettled`
+      and `serviceDue` did not lose a line between them, and a farm's existing
+      records go on reading exactly as they did. An event wins **outright**
+      rather than being compared with the field: un-completing is a delete, and
+      a stale field that could win afterwards would make a job somebody un-ticked
+      look done again.
+      **One bug found in the writing, by a test asserting what a comment
+      claimed.** `listServices` spread the stored fields and then overrode only
+      the date, so a service recorded on a machine whose meter nobody read left
+      this spring's date beside a reading from two services ago — and
+      `serviceDue` counts the next interval from exactly that reading. An event
+      replaces the pair outright now; an absent reading is the honest answer.
+      **And it closed one of §1's two live clearing symptoms, as predicted.**
+      *Need to redo this* deleted a completion instead of writing
+      `{ completedAt: null }`. The null stays for a job finished by a build that
+      predates this, which is the case the clearing contract was built for.
       Schedules stay mutable; completions become history. Today
       `task.completedAt`, `maintenance.lastDoneAtHours` and `lastDoneAtDate`
       each overwrite, so a machine serviced for six years can show one date —
@@ -227,6 +255,8 @@ period rather than a task.
       completion it is a `delete` of the event, which does. That does not make
       the wire fix optional — the medication fields still need it — but it does
       mean these two items should be sequenced, not done twice.
+
+      *The original note, kept:*
 - [x] **One reusable detail-and-timeline screen.** **GA**
       Status, primary actions, upcoming work, full timeline, edit and archive.
       Used for animals, groups, beds, varieties, plantings, machines and

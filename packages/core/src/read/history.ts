@@ -11,6 +11,8 @@ import {
   harvestCreateSchema,
   hourReadingCreateSchema,
   incubationCreateSchema,
+  serviceCompletionCreateSchema,
+  taskCompletionCreateSchema,
   maintenanceStoredSchema,
   mlToUl,
   mortalityCreateSchema,
@@ -26,8 +28,10 @@ import {
 import { localStore } from '../db/store';
 import { listAnimals } from './animals';
 import { listGroups } from './groups';
+import { listServiceCompletions, listTaskCompletions } from './completions';
 import { listPlantings, listVarieties } from './growing';
-import { listInventory, listMachines } from './iron';
+import { listInventory, listMachines, listServices } from './iron';
+import { listTasks } from './tasks';
 
 /**
  * What happened, in the order it happened.
@@ -179,6 +183,9 @@ const storedService = maintenanceStoredSchema;
 /** A set of eggs mid-flight: created, then candled, then hatched by update. */
 const storedIncubation = incubationCreateSchema.partial();
 
+const storedTaskCompletion = taskCompletionCreateSchema.partial();
+const storedServiceCompletion = serviceCompletionCreateSchema.partial();
+
 const plural = (n: number, one: string, many = `${one}s`): string =>
   `${n} ${n === 1 ? one : many}`;
 
@@ -260,14 +267,39 @@ export async function listHistory(
   system: UnitSystem = 'metric',
   scope: HistoryScope = {},
 ): Promise<HistoryDay[]> {
-  const [groups, animals, machines, plantings, varieties, stock] = await Promise.all([
-    listGroups(),
-    listAnimals(),
-    listMachines(),
-    listPlantings(),
-    listVarieties(),
-    listInventory(),
+  const [groups, animals, machines, plantings, varieties, stock, jobs, schedules] =
+    await Promise.all([
+      listGroups(),
+      listAnimals(),
+      listMachines(),
+      listPlantings(),
+      listVarieties(),
+      listInventory(),
+      // A completion event names its schedule and not the words on it, so the
+      // title has to come from the schedule the way a group's name does.
+      listTasks(),
+      listServices(),
+    ]);
+
+  /**
+   * Which records have a completion event of their own.
+   *
+   * The legacy `task` and `maintenance` builders below read a field that each
+   * completion overwrote, and they still run — a farm's existing records are
+   * the only place those completions exist. What they must not do is emit a
+   * SECOND row for a record whose completions are now events, which would show
+   * the last one twice on the day it happened. So each of them is silent for a
+   * record that has any.
+   */
+  const [taskEvents, serviceEvents] = await Promise.all([
+    listTaskCompletions(),
+    listServiceCompletions(),
   ]);
+  const jobsWithEvents = new Set(taskEvents.map((event) => event.taskId));
+  const schedulesWithEvents = new Set(serviceEvents.map((event) => event.serviceId));
+
+  const jobTitle = new Map(jobs.map((job) => [job.id, job.title]));
+  const scheduleOf = new Map(schedules.map((schedule) => [schedule.id, schedule]));
 
   /** Names, so a row reads "The hens" rather than an id nobody can pronounce. */
   const groupName = new Map(groups.map((g) => [g.id, g.name]));
@@ -368,15 +400,19 @@ export async function listHistory(
        * So a finished job lands in What happened, which is what lets the Jobs
        * screen let go of it overnight instead of accumulating a graveyard.
        *
-       * **What this cannot do, stated:** a recurring job overwrites its own
-       * `completedAt` each time, so history shows the LAST time it was done
-       * rather than every time. A one-off — which is what most written-down
-       * jobs are — is exact. Recording every occurrence would want an
-       * append-only completion record, which is a bigger change than the
-       * problem currently justifies.
+       * **This is the legacy path now**, and the limitation it used to state is
+       * why. It read: *"a recurring job overwrites its own `completedAt` each
+       * time, so history shows the LAST time it was done rather than every
+       * time… recording every occurrence would want an append-only completion
+       * record."* That record exists — `taskCompletion`, below — so a job
+       * finished today leaves an event and this builder is silent for it.
+       *
+       * It stays because a farm's records written before that change have the
+       * field and no event, and they are still what happened. Silent for any
+       * task that has events, or the last completion would be drawn twice.
        */
       eventsFrom('task', storedTask, (v, id) =>
-        v.completedAt === undefined || v.title === undefined
+        v.completedAt === undefined || v.title === undefined || jobsWithEvents.has(id)
           ? null
           : {
               id,
@@ -401,21 +437,24 @@ export async function listHistory(
        * field on the schedule rather than a record of its own, because the
        * schedule is the thing that recurs. `lastDoneAtDate` is the moment.
        *
-       * **What this cannot do, stated:** the field is overwritten every time,
-       * so history shows the LAST service on each schedule and not the ones
-       * before it. That is the same limitation `task` carries and it costs
-       * more here, because a machine's service record is exactly the kind of
-       * thing somebody wants three years of. Fixing it properly wants an
-       * append-only completion record — the shape `careLog` already is for
-       * animals — which is a schema change rather than a reader change, so it
-       * is named here rather than half-done.
+       * **The legacy path, for the same reason as `task` above.** What it used
+       * to state — *"the field is overwritten every time, so history shows the
+       * LAST service on each schedule and not the ones before it… fixing it
+       * properly wants an append-only completion record, the shape `careLog`
+       * already is for animals"* — is what `serviceCompletion` below is. It
+       * cost more here than it did there, because a machine's service record is
+       * exactly the thing somebody wants three years of and hands over with the
+       * machine.
+       *
+       * Silent for a schedule that has events, and kept for the ones written
+       * before they existed.
        *
        * The hours are the detail, because on an hours-based schedule they are
        * the whole fact: the date says when somebody was under the machine, the
        * reading says what the next interval counts from.
        */
       eventsFrom('maintenance', storedService, (v, id) =>
-        v.lastDoneAtDate === undefined || v.title === undefined
+        v.lastDoneAtDate === undefined || v.title === undefined || schedulesWithEvents.has(id)
           ? null
           : {
               id,
@@ -481,6 +520,77 @@ export async function listHistory(
                 .join(' · '),
             },
       ),
+
+      /**
+       * A job done, and this time every time it was done.
+       *
+       * The `task` builder above states the limitation this removes: *"a
+       * recurring job overwrites its own `completedAt` each time, so history
+       * shows the LAST time it was done rather than every time."* A weekly
+       * chore finished fifty times a year left one row behind. It leaves fifty
+       * now, because each finishing is its own record.
+       *
+       * The title comes from the task rather than from the event, so renaming a
+       * chore renames its history — which is right: the row is about the job
+       * that was done, and a job is what its schedule says it is. A task since
+       * archived still names itself honestly rather than rendering a blank, the
+       * rule this file already states about an archived group.
+       */
+      eventsFrom('taskCompletion', storedTaskCompletion, (v, id) =>
+        v.completedAt === undefined || v.taskId === undefined
+          ? null
+          : {
+              id,
+              entity: 'taskCompletion',
+              at: v.completedAt,
+              // The task, and whatever the task was hung on. Both, so a chore
+              // pinned to a group shows on the group's timeline as well.
+              subjects: subjectsOf(
+                v.taskId,
+                jobs.find((job) => job.id === v.taskId)?.subjectId,
+              ),
+              title: named(jobTitle, v.taskId, 'A job'),
+              detail: v.note ?? 'Job done',
+              tally: { key: 'jobs', amount: 1, unit: 'job' },
+            },
+      ),
+
+      /**
+       * A service, every time — which is the record somebody hands over with a
+       * tractor.
+       *
+       * `Steading-Masterplan.md` advertises a full service history for resale
+       * and the `maintenance` builder above says why it could not be produced:
+       * one overwritten field per schedule. Six springs of oil changes are six
+       * rows now.
+       *
+       * The hours are the detail for the same reason as before: on an
+       * hours-based schedule the date says when somebody was under the machine
+       * and the reading says what the next interval counts from.
+       */
+      eventsFrom('serviceCompletion', storedServiceCompletion, (v, id) => {
+        if (v.completedAt === undefined || v.serviceId === undefined) return null;
+
+        const schedule = scheduleOf.get(v.serviceId);
+
+        return {
+          id,
+          entity: 'serviceCompletion',
+          at: v.completedAt,
+          // The machine, not the schedule: a machine's timeline is the thing
+          // somebody reads, and `hourReading` already hangs on the same id.
+          subjects: subjectsOf(schedule?.equipmentId),
+          title: `${schedule?.title ?? 'A service'} — ${named(
+            machineName,
+            schedule?.equipmentId,
+            'a machine',
+          )}`,
+          detail:
+            v.note ??
+            (v.atHours === undefined ? 'Service done' : `Service done at ${v.atHours} hours`),
+          tally: { key: 'jobs', amount: 1, unit: 'job' },
+        };
+      }),
 
       eventsFrom('careLog', careLogCreateSchema, (v, id) => ({
         id,

@@ -106,7 +106,7 @@ export const mutationSchema = z.object({
   schemaVersion: z.number().int().positive(),
   id: z.string().length(26),        // ULID — idempotency key, becomes _id
   targetId: z.string().length(26),  // ULID — entity id, minted offline
-  entity: entitySchema,             // ENTITIES in contracts/mutation.ts — 26 of them
+  entity: entitySchema,             // ENTITIES in contracts/mutation.ts — 28 of them
   op: z.enum(['create', 'update', 'delete']),
   payload: z.unknown(),             // validated per-entity in sync/apply.ts
   deviceId: z.string().uuid(),
@@ -117,9 +117,11 @@ export const mutationSchema = z.object({
 
 **The entity list lives in `contracts/mutation.ts` and is not repeated here.** It was, and it went stale: this section named fourteen entities long after there were twenty-six, so everything growing, `breeding`, `incubation`, `weight`, `shearing`, `feedPlan`, `careLog`, `stockAdjustment` and `note` were invisible to anyone starting from this file. Widening the list is additive and does not bump `MUTATION_SCHEMA_VERSION` — the server ships first, because an old server answers 400 for an entity it does not know, and an old client skips a row it cannot model and keeps the rest.
 
-**Append-only entities** — `eggLog`, `productionLog`, `feedLog`, `mortality`, `predator`, `hourReading`, `harvest`, `weight`, `shearing`, `careLog`, `stockAdjustment` — accept `create` and `delete`; `update` on them is a 400. They cannot conflict. `APPEND_ONLY_ENTITIES` is the list, and `isAppendOnly()` is how to ask. **Delete is allowed on all of them:** a mistyped hour meter reading cannot be corrected by recording a better one, because the meter's own rule refuses anything lower.
+**Append-only entities** — `eggLog`, `productionLog`, `feedLog`, `mortality`, `predator`, `hourReading`, `harvest`, `weight`, `shearing`, `careLog`, `stockAdjustment`, `taskCompletion`, `serviceCompletion` — accept `create` and `delete`; `update` on them is a 400. They cannot conflict. `APPEND_ONLY_ENTITIES` is the list, and `isAppendOnly()` is how to ask. **Delete is allowed on all of them:** a mistyped hour meter reading cannot be corrected by recording a better one, because the meter's own rule refuses anything lower.
 
 **Every other entity is mutable**, supports update and delete, and needs conflict handling. They are **archived, never deleted** — `delete` sets `archivedAt` (P13).
+
+**A schedule is mutable and doing it is not.** `task` and `maintenance` are edited — a title, a date, an interval — while `taskCompletion` and `serviceCompletion` record each time one was discharged. They were fields (`task.completedAt`, `maintenance.lastDoneAtDate`) that every completion overwrote, so a machine serviced for six years showed one date. **Nothing reading those field names changed:** `listTasks` and `listServices` fill them from the newest event and fall back to the stored field for records written before, so `taskDues`, `isSettled` and `serviceDue` are untouched. See `entities/completions.ts`.
 
 **A cleared field is `null` on the wire** (`contracts/clearing.ts`). An update merges on both sides, so an omitted key keeps its old value; `undefined` cannot say otherwise because `JSON.stringify` drops it. Null maps to `$unset` on the server and to key removal in the client projection — so a stored record never holds one. Only optional fields accept it, only at the top level of an update, and never on a create.
 

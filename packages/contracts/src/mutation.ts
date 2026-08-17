@@ -75,6 +75,14 @@ export const ENTITIES = [
    * thing rather than a chat.
    */
   'note',
+
+  /**
+   * Doing a job, as an event rather than a field on the schedule. The
+   * schedules stay mutable; what was done becomes history. See
+   * `entities/completions.ts`.
+   */
+  'taskCompletion',
+  'serviceCompletion',
 ] as const;
 
 export const entitySchema = z.enum(ENTITIES);
@@ -113,6 +121,8 @@ export const APPEND_ONLY_ENTITIES = new Set<Entity>([
   'shearing',
   'careLog',
   'stockAdjustment',
+  'taskCompletion',
+  'serviceCompletion',
 ]);
 
 export function isAppendOnly(entity: Entity): boolean {
@@ -329,6 +339,10 @@ export const ENTITY_NOUNS: Record<Entity, string> = {
   feedPlan: 'ration',
   careLog: 'job done',
   note: 'note',
+  // Both read as the doing rather than as the record, because that is what a
+  // refusal is about: "your role cannot create a job done" is the sentence.
+  taskCompletion: 'finished job',
+  serviceCompletion: 'service done',
 };
 
 export function entityNoun(entity: Entity): string {

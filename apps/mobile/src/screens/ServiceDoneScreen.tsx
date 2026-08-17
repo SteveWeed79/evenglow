@@ -89,14 +89,25 @@ export function ServiceDoneScreen({ route }: ScreenProps<'ServiceDone'>): React.
       Number.isFinite(typed) && typed > 0 ? typed : (machine?.hours ?? null);
 
     void save(async () => {
+      /**
+       * An event, not a field on the schedule.
+       *
+       * This wrote `lastDoneAtDate` onto the `maintenance` record, which every
+       * service overwrote — so a tractor serviced every spring for six years
+       * carried one date, and the resale service record `Steading-Masterplan.md`
+       * advertises could not be produced from it. `listServices` still shows
+       * `lastDoneAtDate` and `lastDoneAtHours`, filled from the newest of these,
+       * so the panel above and `serviceDue` read exactly what they always did.
+       */
       await log({
-        entity: 'maintenance',
-        op: 'update',
-        targetId: service.id,
+        entity: 'serviceCompletion',
+        op: 'create',
+        targetId: newId(),
         payload: {
-          lastDoneAtDate: Date.now(),
+          serviceId: service.id,
+          completedAt: Date.now(),
           ...(service.intervalHours !== undefined && reading !== null && reading > 0
-            ? { lastDoneAtHours: reading }
+            ? { atHours: reading }
             : {}),
         },
       });

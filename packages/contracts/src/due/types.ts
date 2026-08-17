@@ -87,7 +87,7 @@ export type Urgency = (typeof URGENCIES)[number];
  */
 export interface DueDone {
   /** See the note on `Due.done` for why the list is this short. */
-  entity: 'careLog' | 'task';
+  entity: 'careLog' | 'task' | 'taskCompletion';
   op: 'create' | 'update';
   /** The row to change. Absent on a create, where the id is minted. */
   targetId?: string;

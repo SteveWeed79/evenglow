@@ -668,7 +668,14 @@ describe('iron', () => {
     expect(due?.atReading).toBe(210);
   });
 
-  /** And it lands in What happened, which is the other half of the report. */
+  /**
+   * And it lands in What happened, which is the other half of the report.
+   *
+   * `serviceCompletion` rather than `maintenance`: the schedule is still the
+   * mutable thing somebody edits, and the doing of it is an append-only event,
+   * so six springs of oil changes are six rows rather than one overwritten
+   * date. See `entities/completions.ts`.
+   */
   it('puts a finished service in history', async () => {
     const add = await mount(<AddMachineScreen />);
     await add.type('machine-name', 'The tractor');
@@ -684,10 +691,18 @@ describe('iron', () => {
     await done.press('save-done');
 
     const events = (await listHistory()).flatMap((day) => day.events);
-    const serviced = events.find((event) => event.entity === 'maintenance');
+    const serviced = events.find((event) => event.entity === 'serviceCompletion');
 
     expect(serviced?.title).toBe('Oil and filter — The tractor');
     expect(serviced?.detail).toContain('Service done');
+
+    // The reason it is an event: doing it again leaves both, where the old
+    // field left only the second.
+    const again = await mount(<ServiceDoneScreen {...routeProps({ serviceId: schedule!.id })} />);
+    await again.press('save-done');
+
+    const after = (await listHistory()).flatMap((day) => day.events);
+    expect(after.filter((event) => event.entity === 'serviceCompletion')).toHaveLength(2);
   });
 
   /**

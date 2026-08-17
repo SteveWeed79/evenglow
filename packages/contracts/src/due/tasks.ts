@@ -92,12 +92,17 @@ export function taskDues(task: TaskRecord, subjectName?: string): Due[] {
        * would have collected? — is trivially passed here: the form collects a
        * title and a date, both of which already exist. There is nothing left
        * to ask.
+       *
+       * **A create against `taskCompletion`, not an update of the task.** It
+       * was the latter, which overwrote the one field the chore had for
+       * remembering it had been done — so a weekly job finished fifty times a
+       * year left one date behind. `entities/completions.ts` has the argument;
+       * the press is the same press and writes the same moment.
        */
       done: {
-        entity: 'task',
-        op: 'update',
-        targetId: task.id,
-        payload: {},
+        entity: 'taskCompletion',
+        op: 'create',
+        payload: { taskId: task.id },
         stampAs: 'completedAt',
         label: 'Done',
       },
