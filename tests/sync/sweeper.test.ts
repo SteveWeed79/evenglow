@@ -30,6 +30,27 @@ import { startTestDb } from '../support/mongo';
  */
 
 const harness = await startTestDb('steading_sweeper');
+
+/**
+ * The app's own client, pointed at this suite's database.
+ *
+ * **Required here and not in the sibling two-device suite**, and the difference
+ * is worth stating. Everything on the apply path takes an injected `Scoped`, so
+ * a test can hand it `scopedOn(harness.db, ORG)` and nothing reaches for a
+ * global. The sweeper cannot: `project()` needs claims, a timer has no session,
+ * and the role is re-derived through `findUserById` — which is identity rather
+ * than tenant data and goes through `db()`.
+ *
+ * So the fixtures went into `steading_sweeper` while the sweeper looked in
+ * whatever `db()` resolved to, found no user, and stamped every row `rejected`
+ * as an author who had left the farm. Correct behaviour, wrong database. Every
+ * other suite that touches identity sets these two the same way.
+ */
+if (harness) {
+  process.env.MONGODB_URI = harness.uri;
+  process.env.MONGODB_DB = 'steading_sweeper';
+}
+
 const describeDb = harness ? describe : describe.skip;
 
 const ORG = ulid();
