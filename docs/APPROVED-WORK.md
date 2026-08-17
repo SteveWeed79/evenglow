@@ -763,8 +763,12 @@ say what to do. **The file remains the authority; do not re-argue them here.**
       own re-projection rather than copying it; identity comes from the log and
       the role from `users` as it stands, which is what invariant 8 asks for; and
       an author who has left the farm is stamped `rejected` rather than swept for
-      ever. The sweep's own suite is CI only (no mongod here), and the timer's —
-      overlap, a throwing pass, what it logs — runs everywhere.
+      ever.
+      **It did not close the box on its own, and a second device is what showed
+      that.** The sweeper decided stranded rows correctly from the first commit,
+      but the feed walked its watermark past a `pending` row — so a repaired
+      record still reached no other phone, which is the harm the box is about.
+      See N-4. Both halves are needed and both are now in.
 - [ ] **Mint a fresh ULID in `retryRejected`.** P0-1(b). Reusing the id of a
       refused mutation means the corrected payload meets the duplicate branch
       and is answered as already-done.
@@ -783,17 +787,25 @@ say what to do. **The file remains the authority; do not re-argue them here.**
 - [ ] **The two-device harness**, and the six assertions listed under it. Every
       symptom P0-2 describes is invisible to a suite that runs one device, and
       the fix shipped without a test that could have caught the bug.
-      **The harness is built and three of the assertions with it** *(17
-      August)* — `tests/support/devices.ts`, `tests/offline/two-devices.test.ts`
-      and `tests/sync/two-devices.test.ts`. The box stays open because three
-      remain: two are deliberate deferrals with their reasons written on them in
-      the source file (late-insertion is P0-3, whose restatement is undecided;
-      crash-between-log-and-projection needs a seam that belongs with the
-      sweeper), and the Farm Hand photo round trip is simply not done.
-      **The server-side half is CI only**, like every `tests/sync/*` suite: no
-      mongod is obtainable in the environment it was written in, so it was not
-      watched to fail before it passed. The client-side half needs none and
-      was — it caught a restore bug in `as()` on its first run.
+      **The harness is built and five of the six assertions with it** *(17
+      August)* — `tests/support/devices.ts`, `tests/offline/two-devices.test.ts`,
+      `tests/sync/two-devices.test.ts`, `tests/sync/photo-round-trip.test.ts`
+      and `tests/sync/crash-recovery.test.ts`. The sixth is late-insertion
+      behind an advanced cursor, which is P0-3 and stays deferred while its
+      restatement is undecided — a test written now would encode a rule nobody
+      has settled.
+      **It paid for itself on the fifth.** The crash assertion, unblocked when
+      the sweeper shipped, found N-4: the feed advanced the watermark past a
+      `pending` row, so every device that pulled before the sweep missed that
+      record permanently. The sweeper had been repairing records that reached
+      nobody. Nothing but a second device could express it — the sweeper's own
+      suite reads the feed from `since: 0`, which is a phone that has never
+      pulled.
+      **Every one of them was watched to fail**, which the first version of this
+      note said was impossible here. It was not: a mongod in a container needs no
+      egress to MongoDB, and `tests/support/mongo.ts` now says so in the message
+      it prints when it cannot find one. The earlier claim that these suites were
+      CI-only was what let a broken assertion reach CI in the first place.
 
 ## 8. Undecided, and not refused
 
