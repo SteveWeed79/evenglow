@@ -23,6 +23,7 @@ import { Loading, Missing } from '../components/Missing';
 import { Notes } from '../components/Notes';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
+import { Timeline } from '../components/Timeline';
 import { useLive } from '../hooks/useLive';
 import { useLeave, useNav } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
@@ -325,6 +326,10 @@ export function PlantingScreen({ route }: ScreenProps<'Planting'>): React.ReactE
           }
         />
       </Panel>
+
+      {/* Every harvest off this planting, dated. The bed's own story, which
+          until now was only ever a total. */}
+      <Timeline subject={plantingId} />
     </Screen>
   );
 }

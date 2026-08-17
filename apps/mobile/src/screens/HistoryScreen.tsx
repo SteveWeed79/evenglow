@@ -3,19 +3,17 @@ import { Animated, StyleSheet, Text, View } from 'react-native';
 import {
   intoMonths,
   type HistoryDay,
-  type HistoryEvent,
   type HistoryMonth,
   listHistory,
 } from '@steading/core/read/history';
-import { Confirm, Failure, useSaver } from '../components/Form';
 import { Icon } from '../components/Icon';
+import { DayEvents } from '../components/Timeline';
 import { Loading } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { Touch } from '../components/Touch';
 import { useLive } from '../hooks/useLive';
 import { useWindow } from '../hooks/useWindow';
-import { useLog } from '../hooks/useSync';
 import { useUnits } from '../hooks/useUnits';
 import { useReveal } from '../theme/motion';
 import { useTheme } from '../theme/ThemeProvider';
@@ -181,39 +179,6 @@ function DayRecords({ day }: { day: HistoryDay }): React.ReactElement {
 }
 
 /**
- * The rows themselves, wherever they are being drawn.
- *
- * Extracted so the pane and the expanded day cannot drift: taking a record
- * back has to behave identically whichever container it happens to be in, and
- * two copies of a list whose rows delete things is two chances to get exactly
- * that wrong.
- */
-function DayEvents({ day }: { day: HistoryDay }): React.ReactElement {
-  /**
-   * Which row is showing its options, if any.
-   *
-   * Per day rather than per app, because only one day is open at a time — and
-   * held here rather than in the row so that opening a second row shuts the
-   * first. Two armed delete buttons on screen at once is how somebody taps the
-   * wrong one.
-   */
-  const [selected, setSelected] = useState<string | null>(null);
-
-  return (
-    <>
-      {day.events.map((event) => (
-        <EventRow
-          key={event.id}
-          event={event}
-          selected={selected === event.id}
-          onSelect={() => setSelected(selected === event.id ? null : event.id)}
-        />
-      ))}
-    </>
-  );
-}
-
-/**
  * A month, and the days in it.
  *
  * Closed it is one line — the month, how many days had something, and what came
@@ -341,98 +306,6 @@ function DayBlock({
         <Animated.View style={[styles.events, reveal]}>
           <DayEvents day={day} />
         </Animated.View>
-      ) : null}
-    </View>
-  );
-}
-
-/**
- * One record, and the way back out of it.
- *
- * The row is the control — the same shape as a note. Tapping shows what can be
- * done with it rather than doing anything, because a list where a tap on the
- * wrong line destroys a record is a list nobody scrolls with gloves on.
- *
- * **Taking one back removes the record, it does not edit it.** These are
- * append-only observations: what a record says never changes, which is what
- * lets two devices hold the same one without arguing about it. Correcting a
- * count is removing the wrong record and logging the right one, and that is
- * the whole of it — see `APPEND_ONLY_ENTITIES` in contracts.
- */
-function EventRow({
-  event,
-  selected,
-  onSelect,
-}: {
-  event: HistoryEvent;
-  selected: boolean;
-  onSelect: () => void;
-}): React.ReactElement {
-  const { colors } = useTheme();
-  const log = useLog();
-  const removed = useSaver(useCallback(() => undefined, []));
-
-  const remove = useCallback(() => {
-    void removed.save(async () => {
-      /**
-       * Archived, never deleted (P13) — the row leaves every reader, the
-       * record stays. Idempotent on the server, so a delete that syncs twice
-       * archives once and the second is a no-op rather than an error.
-       */
-      await log({ entity: event.entity, op: 'delete', targetId: event.id, payload: {} });
-      // No `onDone`: the reader drops the record on the next publish, so the
-      // row unmounts itself. Nothing to navigate away from.
-    });
-  }, [removed, log, event.entity, event.id]);
-
-  const when = new Date(event.at).toLocaleTimeString(undefined, {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-
-  return (
-    <View style={styles.record}>
-      <Touch
-        affordance="disclose"
-        onPress={onSelect}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: selected }}
-        // The time is part of the sentence read aloud: "8:04. 12 eggs" is the
-        // row, and the title alone cannot be told from the one below it.
-        accessibilityLabel={`${when}. ${event.title}. ${
-          selected ? 'Showing options.' : 'Tap for options.'
-        }`}
-        testID={`event-${event.id}`}
-        style={({ pressed }) => [styles.event, { opacity: pressed ? 0.7 : 1 }]}
-      >
-        <Text style={[styles.time, { color: colors.muted }]}>{when}</Text>
-        <View style={styles.name}>
-          <Text style={[styles.title, { color: colors.ink }]}>{event.title}</Text>
-          {event.detail === undefined ? null : (
-            <Text style={[styles.detail, { color: colors.muted }]}>{event.detail}</Text>
-          )}
-        </View>
-        <Icon name={selected ? 'minus' : 'more'} size={16} color={colors.muted} />
-      </Touch>
-
-      {selected ? (
-        <View style={styles.actions}>
-          {/* What it costs, before the second tap rather than after it. A
-              record leaving history takes its share of every total with it,
-              and somebody expecting the line to merely be tidied away should
-              find that out here. */}
-          <Text style={[styles.detail, { color: colors.muted }]}>
-            Logged in error? Take it back out — the day&rsquo;s totals and every average
-            it counted towards will change to match.
-          </Text>
-          <Confirm
-            label="Take this back"
-            armedLabel="Tap again to remove it"
-            onConfirm={remove}
-            testID={`event-remove-${event.id}`}
-          />
-          <Failure message={removed.failure} />
-        </View>
       ) : null}
     </View>
   );

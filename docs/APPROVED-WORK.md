@@ -233,7 +233,27 @@ period rather than a task.
       inventory. *The best single idea from the assessment: several entities
       stop at creation and a static list, and this makes almost every other
       item on every list smaller.*
-      **Its first commit is a read, not a screen** *(added 16 August)*.
+      **Its first commit is a read, not a screen** *(added 16 August; the read
+      and the panel are built)*.
+      **Done so far:** `HistoryEvent` carries `subjects` — plural, because a
+      loss names the group it came out of *and* the animal, and a per-animal
+      timeline that picked one would omit the animal's own death — and
+      `listHistory(units, { subject })` filters on it. Subjects are what a
+      record *names* and nothing inferred, so a group's timeline does not climb
+      down to its animals' weights; that walk is a separate question and is
+      asserted rather than left to be discovered.
+      `components/Timeline.tsx` is the reusable half, and it shares
+      `HistoryScreen`'s rows rather than copying them — that screen had already
+      extracted them once, with the reason on it: a list whose rows delete
+      things must behave identically in every container. It is on `Group`,
+      `Machine` and `Planting` now.
+      **Still to come:** the screens for the four entities that have no detail
+      route at all — animals, beds, varieties and inventory items — and the
+      rest of the shape (status, primary actions, upcoming work, edit and
+      archive). The timeline is the half that was missing everywhere; the other
+      half is a screen per entity and wants designing rather than assembling.
+
+      *The original note, kept:*
       `read/history.ts` is farm-wide and has no notion of a subject:
       `listHistory` takes none, and `HistoryEvent` carries the record's own id
       and its entity but not what the record is *about*. So nothing today can

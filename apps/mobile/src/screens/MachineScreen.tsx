@@ -7,6 +7,7 @@ import { Notes } from '../components/Notes';
 import { Photos } from '../components/Photos';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
+import { Timeline } from '../components/Timeline';
 import { useLive } from '../hooks/useLive';
 import { useNav } from '../hooks/useNav';
 import type { ScreenProps } from '../navigation/Root';
@@ -148,6 +149,11 @@ export function MachineBody({ machine }: { machine: Machine }): React.ReactEleme
         onPress={() => nav.navigate('AddService', { machineId })}
         testID="add-service"
       />
+
+      {/* The readings and the services, in the order they happened. This is
+          most of what P7 means by the history you hand over with a tractor,
+          and the machine screen was the one place it could not be seen. */}
+      <Timeline subject={machineId} />
     </>
   );
 }

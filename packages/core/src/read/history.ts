@@ -78,6 +78,23 @@ export interface HistoryEvent {
   entity: Entity;
   /** When the farm says it happened. */
   at: number;
+  /**
+   * What this row is *about* — the group, the animal, the machine, the sack.
+   *
+   * **Plural, because a row can honestly be about two things.** A loss names
+   * the group it came out of and, when somebody said which, the animal that
+   * died; both timelines should show it, and picking one would mean a
+   * per-animal history that silently omits the animal's own death.
+   *
+   * The ids a record *names*, and nothing inferred from them. A group's
+   * timeline therefore does not sweep up its animals' weights — that is a walk
+   * up a hierarchy, it is a different question, and it is one to decide when
+   * something actually asks it rather than by accident here.
+   *
+   * Absent where a row is genuinely about nothing in particular: a predator
+   * seen at the fence line is a fact about the farm.
+   */
+  subjects?: readonly string[];
   /** One line, already in the farm's words. */
   title: string;
   /** The rest, wanted only once a day has been opened. */
@@ -159,6 +176,32 @@ const plural = (n: number, one: string, many = `${one}s`): string =>
   `${n} ${n === 1 ? one : many}`;
 
 /**
+ * The ids a record names, with the absent ones dropped.
+ *
+ * Every builder calls this rather than assembling an array of its own, so
+ * "which of these fields was set" is answered once. A record that names
+ * nothing gets an empty list rather than `undefined`, because a row about the
+ * farm at large and a row whose subject nobody filled in are the same thing to
+ * a filter and should not be two shapes.
+ */
+function subjectsOf(...ids: readonly (string | undefined)[]): readonly string[] {
+  return ids.filter((id): id is string => id !== undefined);
+}
+
+/** What a timeline is about, when it is about one thing. */
+export interface HistoryScope {
+  /**
+   * Only rows naming this id.
+   *
+   * The reusable detail screen is what this exists for: before it, `listHistory`
+   * was farm-wide and `HistoryEvent` carried no subject at all, so nothing in
+   * the app could answer *"what has happened to this animal"* and the screens
+   * that wanted it filtered a single entity's records by hand.
+   */
+  subject?: string | undefined;
+}
+
+/**
  * Everything that happened, newest day first.
  *
  * `system` decides whether a weight reads in kilos or pounds — the farm's own
@@ -174,7 +217,10 @@ const STOCK_WORDS: Record<StockReason, string> = {
   other: 'Adjusted',
 };
 
-export async function listHistory(system: UnitSystem = 'metric'): Promise<HistoryDay[]> {
+export async function listHistory(
+  system: UnitSystem = 'metric',
+  scope: HistoryScope = {},
+): Promise<HistoryDay[]> {
   const [groups, animals, machines, plantings, varieties, stock] = await Promise.all([
     listGroups(),
     listAnimals(),
@@ -213,6 +259,7 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
         id,
         entity: 'eggLog',
         at: v.occurredAt,
+        subjects: subjectsOf(v.flockId, v.birdId),
         title: `${plural(v.count, 'egg')} — ${named(groupName, v.flockId ?? v.birdId, 'a group')}`,
         tally: { key: 'eggs', amount: v.count, unit: 'egg' },
         ...(v.withdrawalAcknowledged === true
@@ -224,6 +271,7 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
         id,
         entity: 'productionLog',
         at: v.occurredAt,
+        subjects: subjectsOf(v.flockId, v.animalId),
         title: `${v.amount} ${v.unit} ${v.label ?? v.kind} — ${named(
           groupName,
           v.flockId,
@@ -236,6 +284,7 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
         id,
         entity: 'feedLog',
         at: v.occurredAt,
+        subjects: subjectsOf(v.flockId),
         title: `Fed ${named(groupName, v.flockId, 'a group')}`,
         detail: `${formatMass(gramsToUg(v.amountGrams), system)}${
           v.feedType === undefined ? '' : ` · ${v.feedType}`
@@ -247,6 +296,9 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
         id,
         entity: 'mortality',
         at: v.occurredAt,
+        // Both, and this is the row the plural exists for: a death belongs to
+        // the group it came out of and to the animal, when somebody said which.
+        subjects: subjectsOf(v.flockId, v.animalId),
         title: `Lost ${v.count} — ${named(groupName, v.flockId, 'a group')}`,
         detail: `Cause: ${v.cause}`,
         tally: { key: 'losses', amount: v.count, unit: 'loss', },
@@ -291,6 +343,8 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
               id,
               entity: 'task',
               at: v.completedAt,
+              // What the chore was about, when it was hung on something.
+              subjects: subjectsOf(v.subjectId),
               title: v.title,
               detail: 'Job done',
               tally: { key: 'jobs', amount: 1, unit: 'job' },
@@ -328,6 +382,7 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
               id,
               entity: 'maintenance',
               at: v.lastDoneAtDate,
+              subjects: subjectsOf(v.equipmentId),
               title: `${v.title} — ${named(machineName, v.equipmentId, 'a machine')}`,
               ...(v.lastDoneAtHours === undefined
                 ? { detail: 'Service done' }
@@ -340,6 +395,7 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
         id,
         entity: 'careLog',
         at: v.occurredAt,
+        subjects: subjectsOf(v.flockId, v.animalId),
         title: `${CARE_KIND_LABELS[v.kind] ?? v.kind} — ${named(
           groupName,
           v.flockId,
@@ -353,6 +409,7 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
         id,
         entity: 'weight',
         at: v.occurredAt,
+        subjects: subjectsOf(v.flockId, v.animalId),
         title: `Weighed ${named(animalName, v.animalId, named(groupName, v.flockId, 'a group'))}`,
         detail: `${formatMass(v.massUg, system)}${v.sampled === true ? ' (a sample)' : ''}`,
       })),
@@ -361,6 +418,7 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
         id,
         entity: 'shearing',
         at: v.occurredAt,
+        subjects: subjectsOf(v.flockId, v.animalId),
         title: `Shorn — ${named(
           groupName,
           v.flockId,
@@ -375,6 +433,7 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
         id,
         entity: 'stockAdjustment',
         at: v.occurredAt,
+        subjects: subjectsOf(v.itemId),
         /**
          * The reason leads, because the reason is the whole point of the row.
          * A shelf quantity could always be changed; what it could not do was
@@ -392,6 +451,7 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
         id,
         entity: 'hourReading',
         at: v.occurredAt,
+        subjects: subjectsOf(v.equipmentId),
         title: `${named(machineName, v.equipmentId, 'A machine')} — ${v.hours} hours`,
       })),
 
@@ -399,6 +459,7 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
         id,
         entity: 'harvest',
         at: v.occurredAt,
+        subjects: subjectsOf(v.plantingId),
         title: `Harvested ${named(plantingName, v.plantingId, 'a planting')}`,
         detail:
           v.massUg === undefined
@@ -408,7 +469,21 @@ export async function listHistory(system: UnitSystem = 'metric'): Promise<Histor
     ])
   ).flat();
 
-  return intoDays(all, system);
+  /**
+   * Filtered after the readers rather than inside them.
+   *
+   * Each reader knows one entity and nothing about scoping, and thirteen
+   * filters would be thirteen chances for one to be forgotten — which would
+   * show up as a timeline quietly missing a kind of event rather than as a
+   * failure. The cost is reading the whole history to show part of it, which is
+   * the same cost the farm-wide screen already pays and is a walk over records
+   * already in memory.
+   */
+  const subject = scope.subject;
+  const wanted =
+    subject === undefined ? all : all.filter((event) => event.subjects?.includes(subject) === true);
+
+  return intoDays(wanted, system);
 }
 
 /**

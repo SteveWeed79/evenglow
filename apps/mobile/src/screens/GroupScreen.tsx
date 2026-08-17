@@ -20,6 +20,7 @@ import { Notes } from '../components/Notes';
 import { Photos } from '../components/Photos';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
+import { Timeline } from '../components/Timeline';
 import { Touch } from '../components/Touch';
 import { WithdrawalBanner } from '../components/WithdrawalBanner';
 import { growOutWindow, layOnsetWindow } from '../hooks/useDues';
@@ -357,6 +358,11 @@ export function GroupBody({ group }: { group: Group }): React.ReactElement {
           />
         </View>
       ) : null}
+
+      {/* What was actually recorded against these animals, under the things
+          that can be done to them. Last, because it answers a question people
+          ask second — the screen leads with what to do this morning. */}
+      <Timeline subject={groupId} />
     </>
   );
 }
