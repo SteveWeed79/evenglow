@@ -15,13 +15,16 @@ import { routeProps } from './screen';
 import { AddAnimalScreen } from '../../apps/mobile/src/screens/AddAnimalScreen';
 import { AddBedScreen } from '../../apps/mobile/src/screens/AddBedScreen';
 import { BedScreen } from '../../apps/mobile/src/screens/BedScreen';
+import { EditBedScreen } from '../../apps/mobile/src/screens/EditBedScreen';
 import { VarietyScreen } from '../../apps/mobile/src/screens/VarietyScreen';
+import { EditVarietyScreen } from '../../apps/mobile/src/screens/EditVarietyScreen';
 import { AddGroupScreen } from '../../apps/mobile/src/screens/AddGroupScreen';
 import { AddItemScreen } from '../../apps/mobile/src/screens/AddItemScreen';
 import { AddMachineScreen } from '../../apps/mobile/src/screens/AddMachineScreen';
 import { AddServiceScreen } from '../../apps/mobile/src/screens/AddServiceScreen';
 import { AccountScreen } from '../../apps/mobile/src/screens/AccountScreen';
 import { AnimalScreen } from '../../apps/mobile/src/screens/AnimalScreen';
+import { EditAnimalScreen } from '../../apps/mobile/src/screens/EditAnimalScreen';
 import { AnimalsScreen } from '../../apps/mobile/src/screens/AnimalsScreen';
 import { BackupScreen } from '../../apps/mobile/src/screens/BackupScreen';
 import { BreedingScreen } from '../../apps/mobile/src/screens/BreedingScreen';
@@ -207,6 +210,7 @@ export const SCREENS: [string, () => React.ReactElement][] = [
   ['EditGroup', () => <EditGroupScreen {...routeProps({ groupId: GROUP })} />],
   ['Animals', () => <AnimalsScreen {...routeProps({ groupId: GROUP })} />],
   ['Animal', () => <AnimalScreen {...routeProps({ animalId: ANIMAL })} />],
+  ['EditAnimal', () => <EditAnimalScreen {...routeProps({ animalId: ANIMAL })} />],
   ['AddAnimal', () => <AddAnimalScreen {...routeProps({ groupId: GROUP })} />],
   ['Treatment', () => <TreatmentScreen {...routeProps({ groupId: GROUP })} />],
   ['Treatments', () => <TreatmentsScreen {...routeProps({ groupId: GROUP })} />],
@@ -230,7 +234,9 @@ export const SCREENS: [string, () => React.ReactElement][] = [
   ['SiteSetup', () => <SiteSetupScreen />],
   ['AddBed', () => <AddBedScreen {...routeProps({ siteId: SITE })} />],
   ['Bed', () => <BedScreen {...routeProps({ bedId: BED })} />],
+  ['EditBed', () => <EditBedScreen {...routeProps({ bedId: BED })} />],
   ['Variety', () => <VarietyScreen {...routeProps({ varietyId: VARIETY })} />],
+  ['EditVariety', () => <EditVarietyScreen {...routeProps({ varietyId: VARIETY })} />],
   ['PickVariety', () => <PickVarietyScreen {...routeProps({ bedId: BED })} />],
   ['Planting', () => <PlantingScreen {...routeProps({ plantingId: PLANTING })} />],
   ['Harvest', () => <HarvestScreen {...routeProps({ plantingId: PLANTING })} />],

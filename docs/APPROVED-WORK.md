@@ -281,9 +281,28 @@ period rather than a task.
       animals' weights: nobody passes the animals.
       Both are reachable: the bed heading on Growing opened nothing before, and
       a planting now names the bed and the variety it belongs to.
-      **Also still to come:** the rest of the shape around every timeline —
-      upcoming work, edit and archive — which waits on the same two items named
-      above.
+      **Edit and archive are built for all three** *(16 August)*. It was the
+      largest gap in the product — `DESIGN-BRIEF.md` §3 counts sixteen mutable
+      entities against a UI that could change one — and the corrections it
+      makes possible are not cosmetic: `possibleDams` reads an animal's sex, so
+      a ram recorded female was offered for breeding for ever, and the frost
+      warning reads `bed.covered`, so a tunnel recorded as open ground raised
+      alarms all spring for plants in no danger. Clearing works on these screens
+      because the wire learned the word for it in §1: a band that came off can
+      be taken off rather than only replaced.
+      **Two judgements worth keeping.** A bed with a crop still in it refuses
+      to be put away and names what to finish first — archiving it would take
+      the planting off every growing screen while it is still in the ground.
+      A variety is a description rather than a place, so dropping one that has
+      been planted is allowed and the plantings read on exactly as before.
+      **And the animal one says what it cannot do:** putting her away records
+      that she is gone and *not why*, in those words, because the app cannot
+      tell a sale from a death and §4's outcome flow is what will ask. Nothing
+      is deleted (P13), so that flow has a record to attach an answer to.
+      **Still to come:** edit and archive for machines, plantings and inventory
+      items, which are the same pattern against three more field sets; and the
+      *upcoming work* half of the original line, which wants the due engine on
+      a detail screen and is its own piece of design.
 
       *The original note, kept:*
       `read/history.ts` is farm-wide and has no notion of a subject:

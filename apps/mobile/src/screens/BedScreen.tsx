@@ -45,11 +45,10 @@ import { FONTS, SPACE, TYPE } from '../theme/tokens';
  *
  * ## What it does not do yet
  *
- * No edit, no archive, and no rotation advice. The bed's own facts are set at
- * creation and changing them is the mutable-entity gap the checklist carries;
- * `useRotation` already answers what should follow what, and putting it here
- * before it has been designed onto a screen would be guessing at a feature
- * that has a plan of its own.
+ * No rotation advice. `useRotation` already answers what should follow what,
+ * and putting it here before it has been designed onto a screen would be
+ * guessing at a feature that has a plan of its own. Changing the bed and
+ * taking it out of use are one row down, on `EditBedScreen`.
  */
 export function BedScreen({ route }: ScreenProps<'Bed'>): React.ReactElement {
   const { bedId } = route.params;
@@ -133,6 +132,15 @@ export function BedScreen({ route }: ScreenProps<'Bed'>): React.ReactElement {
           ))}
         </Panel>
       )}
+
+      <Panel label="This bed">
+        <Row
+          title={`Change ${bed.name}`}
+          detail="Its name, whether it is under cover, and taking it out of use"
+          testID="go-edit-bed"
+          onPress={() => nav.navigate('EditBed', { bedId })}
+        />
+      </Panel>
 
       <Timeline subject={subjects} label="What came out of it" />
     </Screen>

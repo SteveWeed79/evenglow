@@ -37,15 +37,17 @@ import { FONTS, SPACE, TYPE } from '../theme/tokens';
  * timeline is last because it answers the second question: the top of the
  * screen is for telling her apart from the other three does in the pen.
  *
- * ## What it deliberately does not do yet
+ * ## Changing her, and putting her away
  *
- * **No edit and no archive.** Editing is the mutable-entity gap that
- * `APPROVED-WORK.md` carries separately, and archiving an animal is not a
- * tidying action — an animal that leaves the farm has *an outcome*: sold,
- * culled, died, moved. §4's adaptable outcome flow is where that belongs, and
- * hiding the row here would pre-empt a decision that is already written down
- * and not yet made. A screen that quietly removed a doe with four kiddings
- * behind her would be doing the wrong thing quickly.
+ * Both live on `EditAnimalScreen`, one row down. They are not here because
+ * this screen is read at arm's length in a pen and the two acts that alter a
+ * record should take a deliberate turn rather than sit under a thumb.
+ *
+ * **Putting her away records that she is gone and not why.** §4's adaptable
+ * outcome flow — sold, culled, died, moved — is what will ask, and because
+ * nothing is deleted (P13) the record is still there for it to attach an
+ * answer to. Until then a farm that cannot remove a sold doe keeps her on the
+ * list for ever, which is the worse of the two silences.
  */
 export function AnimalScreen({ route }: ScreenProps<'Animal'>): React.ReactElement {
   const { animalId } = route.params;
@@ -134,6 +136,15 @@ export function AnimalScreen({ route }: ScreenProps<'Animal'>): React.ReactEleme
           />
         </Panel>
       )}
+
+      <Panel label="Her record">
+        <Row
+          title={`Change ${animal.name}`}
+          detail="Her name, tag, breed, sex and birth"
+          testID="go-edit-animal"
+          onPress={() => nav.navigate('EditAnimal', { animalId })}
+        />
+      </Panel>
 
       {/*
         Matings, when there are any.

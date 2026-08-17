@@ -6,13 +6,16 @@ import { useRotation } from '../hooks/useRotation';
 import { AddAnimalScreen } from '../screens/AddAnimalScreen';
 import { AddBedScreen } from '../screens/AddBedScreen';
 import { BedScreen } from '../screens/BedScreen';
+import { EditBedScreen } from '../screens/EditBedScreen';
 import { VarietyScreen } from '../screens/VarietyScreen';
+import { EditVarietyScreen } from '../screens/EditVarietyScreen';
 import { AddGroupScreen } from '../screens/AddGroupScreen';
 import { AddItemScreen } from '../screens/AddItemScreen';
 import { AdjustStockScreen } from '../screens/AdjustStockScreen';
 import { AddMachineScreen } from '../screens/AddMachineScreen';
 import { AddServiceScreen } from '../screens/AddServiceScreen';
 import { AnimalScreen } from '../screens/AnimalScreen';
+import { EditAnimalScreen } from '../screens/EditAnimalScreen';
 import { AnimalsScreen } from '../screens/AnimalsScreen';
 import { BackupScreen } from '../screens/BackupScreen';
 import { BreedingScreen } from '../screens/BreedingScreen';
@@ -150,6 +153,7 @@ export type RootParamList = {
   Animals: { groupId: string };
   /** One named animal: who she is, and what has happened to her. */
   Animal: { animalId: string };
+  EditAnimal: { animalId: string };
   AddAnimal: { groupId: string };
   /**
    * The form, for a new treatment or an existing one.
@@ -193,8 +197,10 @@ export type RootParamList = {
   SiteSetup: undefined;
   /** One bed: what is in it, and what has been in it. */
   Bed: { bedId: string };
+  EditBed: { bedId: string };
   /** One variety: what it asks for, and how it has done here. */
   Variety: { varietyId: string };
+  EditVariety: { varietyId: string };
   AddBed: { siteId: string };
   Numbers: undefined;
   CropNumbers: undefined;
@@ -259,6 +265,7 @@ export function Root({
       <Stack.Screen name="EditGroup" component={EditGroupScreen} />
       <Stack.Screen name="Animals" component={AnimalsScreen} />
       <Stack.Screen name="Animal" component={AnimalScreen} />
+      <Stack.Screen name="EditAnimal" component={EditAnimalScreen} />
       <Stack.Screen name="AddAnimal" component={AddAnimalScreen} />
       <Stack.Screen name="Treatment" component={TreatmentScreen} />
       <Stack.Screen name="Treatments" component={TreatmentsScreen} />
@@ -288,7 +295,9 @@ export function Root({
       <Stack.Screen name="SiteSetup" component={SiteSetupScreen} />
       <Stack.Screen name="AddBed" component={AddBedScreen} />
       <Stack.Screen name="Bed" component={BedScreen} />
+      <Stack.Screen name="EditBed" component={EditBedScreen} />
       <Stack.Screen name="Variety" component={VarietyScreen} />
+      <Stack.Screen name="EditVariety" component={EditVarietyScreen} />
       <Stack.Screen name="Numbers" component={NumbersScreen} />
       <Stack.Screen name="CropNumbers" component={CropNumbersScreen} />
       <Stack.Screen name="AnimalNumbers" component={AnimalNumbersScreen} />

@@ -133,6 +133,15 @@ export function VarietyScreen({ route }: ScreenProps<'Variety'>): React.ReactEle
         )}
       </Panel>
 
+      <Panel label="This variety">
+        <Row
+          title={`Change ${variety.name}`}
+          detail="Its name, the crop, and how long it takes"
+          testID="go-edit-variety"
+          onPress={() => nav.navigate('EditVariety', { varietyId })}
+        />
+      </Panel>
+
       <Timeline subject={subjects} label="What it has given" />
     </Screen>
   );
