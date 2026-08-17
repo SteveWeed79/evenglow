@@ -2352,19 +2352,55 @@ to express "two devices disagree".
 
 Add, alongside the existing sync tests:
 
-- [ ] **A two-device harness first.** `openSqliteStore(driver, ids)` is already
+- [x] **A two-device harness first.** `openSqliteStore(driver, ids)` is already
       callable directly with an independent driver, so the pieces exist; what is
       missing is a second `DEVICE_ID`, a per-device `seq`, and a way to drive two
       stores without the module global. Four of the tests below depend on it.
-- [ ] Duplicate ID carrying a changed payload → projection unchanged, log
+      **Built — `tests/support/devices.ts`** *(17 August)*. `twoDevices()` gives
+      two stores over two files, each minting its own `deviceId` and keeping its
+      own `clientSeq`, and `device.as(work)` installs one for the length of a
+      block and restores whatever was there. A block runs to completion under one
+      store deliberately: `runFlush` captures `storeGeneration()` before its
+      first await and refuses if it moved, so a device is not something you
+      become halfway through sending. Interleaving is expressed as a sequence of
+      blocks, which is the granularity that actually interleaves.
+      **The store stays a module global.** Threading a handle through `enqueue`,
+      `flushOnce` and `pullOnce` is a production change made for a test, and
+      `db/store.ts` argues against exactly that.
+      **`tests/offline/two-devices.test.ts` tests the harness**, needs no mongod,
+      and earned its place immediately: `as()` restored the device's own store
+      rather than the previous one, so a nested `b.as()` left B installed and A's
+      next enqueue landed on B. Every downstream assertion about what B holds
+      would have been measuring work A thought it was doing.
+- [x] Duplicate ID carrying a changed payload → projection unchanged, log
       unchanged. **Use the hour-reading or `update` shape, not an append-only
-      create.**
-- [ ] A rejected mutation observed from a **second** device → absent, not applied.
-- [ ] A conflicted update against an archived record → stays archived everywhere.
+      create.** `tests/sync/two-devices.test.ts`, in the `update` shape as
+      instructed.
+- [x] A rejected mutation observed from a **second** device → absent, not applied.
+      Same file — a mistyped hour meter reading, asserted against device B's own
+      SQLite rather than against the feed.
+- [x] A conflicted update against an archived record → stays archived everywhere.
+      Same file, and this is the one the harness was built for: `outcome.test.ts`
+      could only assert that the feed withholds the conflicted update, and the
+      symptom was `projectOne` on the *client* clearing the deleted flag on any
+      pulled `update`. Both ends now.
+      **CI only.** Like every other `tests/sync/*` suite these need a mongod, and
+      the environment they were written in cannot obtain one — `fastdl.mongodb.org`
+      is refused by policy. They were not watched to fail before they passed,
+      which is the same caveat `membership-races.test.ts` carries and it should
+      be read the same way.
 - [ ] Late insertion behind an advanced cursor → still delivered.
+      **Deliberately not written with the harness** *(17 August)*: this is P0-3,
+      the verification pass refused the original prescription, and the
+      restatement is the open item above. A test written now would encode a rule
+      nobody has settled and would have to be rewritten to match whatever is
+      decided — which is worse than no test, because it would look like coverage.
 - [ ] Projection order reversed against log order → server and clean replay agree.
 - [ ] Crash between log write and projection → repaired, not duplicated. **Needs
       a seam that does not exist**: `applyMutation` takes no clock and no hook.
+      Still true, and it belongs with the `pending` sweeper above — the sweeper
+      is the thing that does the repairing, so the seam it needs and the test
+      that proves it are one piece of work rather than two.
 - [ ] Farm Hand photo, end to end, across two devices.
 - [x] N-1: hand creates a group, server rejects, hand discards → record gone.
       `tests/offline/refused-create.test.ts`, which also covers the residue now:

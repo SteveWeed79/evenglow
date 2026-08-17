@@ -701,6 +701,17 @@ say what to do. **The file remains the authority; do not re-argue them here.**
 - [ ] **The two-device harness**, and the six assertions listed under it. Every
       symptom P0-2 describes is invisible to a suite that runs one device, and
       the fix shipped without a test that could have caught the bug.
+      **The harness is built and three of the assertions with it** *(17
+      August)* — `tests/support/devices.ts`, `tests/offline/two-devices.test.ts`
+      and `tests/sync/two-devices.test.ts`. The box stays open because three
+      remain: two are deliberate deferrals with their reasons written on them in
+      the source file (late-insertion is P0-3, whose restatement is undecided;
+      crash-between-log-and-projection needs a seam that belongs with the
+      sweeper), and the Farm Hand photo round trip is simply not done.
+      **The server-side half is CI only**, like every `tests/sync/*` suite: no
+      mongod is obtainable in the environment it was written in, so it was not
+      watched to fail before it passed. The client-side half needs none and
+      was — it caught a restore bug in `as()` on its first run.
 
 ## 8. Undecided, and not refused
 
