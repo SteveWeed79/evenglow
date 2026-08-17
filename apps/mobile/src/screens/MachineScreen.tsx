@@ -150,6 +150,15 @@ export function MachineBody({ machine }: { machine: Machine }): React.ReactEleme
         testID="add-service"
       />
 
+      <Panel label="This machine">
+        <Row
+          title={`Change ${machine.name}`}
+          detail="Its make, model, serial, year and meter"
+          testID="go-edit-machine"
+          onPress={() => nav.navigate('EditMachine', { machineId })}
+        />
+      </Panel>
+
       {/* The readings and the services, in the order they happened. This is
           most of what P7 means by the history you hand over with a tractor,
           and the machine screen was the one place it could not be seen. */}

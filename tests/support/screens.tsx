@@ -20,6 +20,8 @@ import { VarietyScreen } from '../../apps/mobile/src/screens/VarietyScreen';
 import { EditVarietyScreen } from '../../apps/mobile/src/screens/EditVarietyScreen';
 import { AddGroupScreen } from '../../apps/mobile/src/screens/AddGroupScreen';
 import { AddItemScreen } from '../../apps/mobile/src/screens/AddItemScreen';
+import { AdjustStockScreen } from '../../apps/mobile/src/screens/AdjustStockScreen';
+import { EditItemScreen } from '../../apps/mobile/src/screens/EditItemScreen';
 import { AddMachineScreen } from '../../apps/mobile/src/screens/AddMachineScreen';
 import { AddServiceScreen } from '../../apps/mobile/src/screens/AddServiceScreen';
 import { AccountScreen } from '../../apps/mobile/src/screens/AccountScreen';
@@ -48,9 +50,11 @@ import { JobsScreen } from '../../apps/mobile/src/screens/JobsScreen';
 import { LogHoursScreen } from '../../apps/mobile/src/screens/LogHoursScreen';
 import { LossScreen } from '../../apps/mobile/src/screens/LossScreen';
 import { MachineScreen } from '../../apps/mobile/src/screens/MachineScreen';
+import { EditMachineScreen } from '../../apps/mobile/src/screens/EditMachineScreen';
 import { MembersScreen } from '../../apps/mobile/src/screens/MembersScreen';
 import { PickVarietyScreen } from '../../apps/mobile/src/screens/PickVarietyScreen';
 import { PlantingScreen } from '../../apps/mobile/src/screens/PlantingScreen';
+import { EditPlantingScreen } from '../../apps/mobile/src/screens/EditPlantingScreen';
 import { ProduceScreen } from '../../apps/mobile/src/screens/ProduceScreen';
 import { ServiceDoneScreen } from '../../apps/mobile/src/screens/ServiceDoneScreen';
 import { SetEggsScreen } from '../../apps/mobile/src/screens/SetEggsScreen';
@@ -80,6 +84,7 @@ import { WeighScreen } from '../../apps/mobile/src/screens/WeighScreen';
 const GROUP = newId();
 const ANIMAL = newId();
 const MACHINE = newId();
+const ITEM = newId();
 const SERVICE = newId();
 const SITE = newId();
 const BED = newId();
@@ -133,7 +138,7 @@ export async function stockTheFarm(): Promise<void> {
   await enqueue({
     entity: 'inventory',
     op: 'create',
-    targetId: newId(),
+    targetId: ITEM,
     payload: { name: 'Oil filter', kind: 'part', unit: 'each', quantity: 0, reorderBelow: 1 },
   });
   await enqueue({
@@ -226,11 +231,14 @@ export const SCREENS: [string, () => React.ReactElement][] = [
   ['Incubation', () => <IncubationScreen {...routeProps({ incubationId: INCUBATION })} />],
   ['AddMachine', () => <AddMachineScreen />],
   ['Machine', () => <MachineScreen {...routeProps({ machineId: MACHINE })} />],
+  ['EditMachine', () => <EditMachineScreen {...routeProps({ machineId: MACHINE })} />],
   ['LogHours', () => <LogHoursScreen {...routeProps({ machineId: MACHINE })} />],
   ['AddService', () => <AddServiceScreen {...routeProps({ machineId: MACHINE })} />],
   ['ServiceDone', () => <ServiceDoneScreen {...routeProps({ serviceId: SERVICE })} />],
   ['Inventory', () => <InventoryScreen />],
   ['AddItem', () => <AddItemScreen {...routeProps({})} />],
+  ['AdjustStock', () => <AdjustStockScreen {...routeProps({ itemId: ITEM })} />],
+  ['EditItem', () => <EditItemScreen {...routeProps({ itemId: ITEM })} />],
   ['SiteSetup', () => <SiteSetupScreen />],
   ['AddBed', () => <AddBedScreen {...routeProps({ siteId: SITE })} />],
   ['Bed', () => <BedScreen {...routeProps({ bedId: BED })} />],
@@ -239,6 +247,7 @@ export const SCREENS: [string, () => React.ReactElement][] = [
   ['EditVariety', () => <EditVarietyScreen {...routeProps({ varietyId: VARIETY })} />],
   ['PickVariety', () => <PickVarietyScreen {...routeProps({ bedId: BED })} />],
   ['Planting', () => <PlantingScreen {...routeProps({ plantingId: PLANTING })} />],
+  ['EditPlanting', () => <EditPlantingScreen {...routeProps({ plantingId: PLANTING })} />],
   ['Harvest', () => <HarvestScreen {...routeProps({ plantingId: PLANTING })} />],
 ];
 

@@ -20,6 +20,16 @@ export interface Machine {
   name: string;
   make?: string;
   model?: string;
+  /**
+   * The three the hub never shows, carried so the record can be corrected.
+   *
+   * A serial typed with a digit wrong is the field somebody most wants back —
+   * it is on the insurance and on the bill of sale — and until an edit screen
+   * existed nothing could read these, so nothing could offer them.
+   */
+  serial?: string;
+  year?: number;
+  note?: string;
   hasHourMeter: boolean;
   /** Highest reading recorded on this device. */
   hours: number | null;
@@ -109,6 +119,9 @@ export async function listMachines(): Promise<Machine[]> {
           name: parsed.data.name,
           ...(parsed.data.make === undefined ? {} : { make: parsed.data.make }),
           ...(parsed.data.model === undefined ? {} : { model: parsed.data.model }),
+          ...(parsed.data.serial === undefined ? {} : { serial: parsed.data.serial }),
+          ...(parsed.data.year === undefined ? {} : { year: parsed.data.year }),
+          ...(parsed.data.note === undefined ? {} : { note: parsed.data.note }),
           hasHourMeter: parsed.data.hasHourMeter ?? true,
           hours,
           usagePerDay: usagePerDay(series),

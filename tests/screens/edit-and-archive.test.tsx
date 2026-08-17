@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { newId } from '@steading/contracts';
 import { listAnimals } from '@steading/core/read/animals';
 import { listBeds, listPlantings, listVarieties } from '@steading/core/read/growing';
+import { listInventory, listMachines } from '@steading/core/read/iron';
 import { localStore } from '@steading/core/db/store';
 import { enqueue } from '@steading/core/sync/queue';
 import { freshStore } from '../support/store';
@@ -9,6 +10,9 @@ import { mount, routeProps } from '../support/screen';
 import { EditAnimalScreen } from '../../apps/mobile/src/screens/EditAnimalScreen';
 import { EditBedScreen } from '../../apps/mobile/src/screens/EditBedScreen';
 import { EditVarietyScreen } from '../../apps/mobile/src/screens/EditVarietyScreen';
+import { EditMachineScreen } from '../../apps/mobile/src/screens/EditMachineScreen';
+import { EditItemScreen } from '../../apps/mobile/src/screens/EditItemScreen';
+import { EditPlantingScreen } from '../../apps/mobile/src/screens/EditPlantingScreen';
 
 /**
  * Changing a record after it exists, and taking it out of the lists.
@@ -256,6 +260,179 @@ describe('changing a variety', () => {
     screen.unmount();
 
     expect(await listVarieties()).toEqual([]);
+    expect(await listPlantings()).toHaveLength(1);
+  });
+});
+
+const MACHINE = newId();
+const ITEM = newId();
+const PLANTING = newId();
+
+async function ironAndShelf(): Promise<void> {
+  await enqueue({
+    entity: 'equipment',
+    op: 'create',
+    targetId: MACHINE,
+    payload: { name: 'The tractor', make: 'Kubota', serial: 'ABC123', hasHourMeter: true },
+  });
+  await enqueue({
+    entity: 'inventory',
+    op: 'create',
+    targetId: ITEM,
+    payload: { name: 'Oil filter', kind: 'part', unit: 'each', quantity: 2 },
+  });
+}
+
+describe('changing a machine', () => {
+  /**
+   * The field that goes on the bill of sale, and the reason the read had to
+   * grow: nothing could show a serial, so nothing could offer to fix one.
+   */
+  it('corrects a serial typed with a digit wrong', async () => {
+    await ironAndShelf();
+
+    const screen = await mount(<EditMachineScreen {...routeProps({ machineId: MACHINE })} />);
+    await screen.type('edit-machine-serial', 'ABC124');
+    await screen.press('save-machine');
+    screen.unmount();
+
+    expect((await listMachines())[0]?.serial).toBe('ABC124');
+  });
+
+  /**
+   * `serviceDue` refuses to build a row it cannot evaluate, so an hours
+   * interval on a meterless machine produces nothing at all. Taking the meter
+   * off silently stops every hour-based schedule asking — which is how a pump
+   * ended up with a 100-hour oil change nobody was ever reminded about.
+   */
+  it('says which schedules would go quiet before the meter comes off', async () => {
+    await ironAndShelf();
+    await enqueue({
+      entity: 'maintenance',
+      op: 'create',
+      targetId: newId(),
+      payload: { equipmentId: MACHINE, title: 'Oil and filter', intervalHours: 100 },
+    });
+
+    const screen = await mount(<EditMachineScreen {...routeProps({ machineId: MACHINE })} />);
+
+    expect(screen.text()).not.toContain('would silence');
+    await screen.pressLabel('It has an hour meter');
+
+    expect(screen.text()).toContain('Oil and filter');
+    // The harness joins string nodes with a space, so the interpolated
+    // singular/plural words leave double gaps in the rendered sentence.
+    expect(screen.text().replace(/\s+/g, ' ')).toContain('stops asking');
+    screen.unmount();
+  });
+
+  it('retires it, and everything recorded stays', async () => {
+    await ironAndShelf();
+    await enqueue({
+      entity: 'hourReading',
+      op: 'create',
+      targetId: newId(),
+      payload: { occurredAt: Date.now(), equipmentId: MACHINE, hours: 240 },
+    });
+
+    const screen = await mount(<EditMachineScreen {...routeProps({ machineId: MACHINE })} />);
+    await screen.press('archive-machine');
+    await screen.press('archive-machine');
+    screen.unmount();
+
+    expect(await listMachines()).toEqual([]);
+    const readings = await localStore().readRecordsByEntity('hourReading');
+    expect(readings.filter((r) => !r.deleted)).toHaveLength(1);
+  });
+});
+
+describe('changing something on the shelf', () => {
+  it('corrects the unit it is counted in', async () => {
+    await ironAndShelf();
+
+    const screen = await mount(<EditItemScreen {...routeProps({ itemId: ITEM })} />);
+    await screen.pressLabel('bag');
+    await screen.press('save-item');
+    screen.unmount();
+
+    expect((await listInventory())[0]?.unit).toBe('bag');
+  });
+
+  /**
+   * No guard on a quantity still on the shelf. A part the farm no longer
+   * stocks may well have three left in the drawer, and refusing until the
+   * count reached zero would teach people to type a zero they do not mean.
+   */
+  it('takes it off with stock still on it, rather than asking for a false zero', async () => {
+    await ironAndShelf();
+
+    const screen = await mount(<EditItemScreen {...routeProps({ itemId: ITEM })} />);
+    await screen.press('archive-item');
+    await screen.press('archive-item');
+    screen.unmount();
+
+    expect(await listInventory()).toEqual([]);
+  });
+});
+
+describe('changing a planting', () => {
+  async function aRow(): Promise<void> {
+    await enqueue({
+      entity: 'planting',
+      op: 'create',
+      targetId: PLANTING,
+      payload: { bedId: BED, varietyId: VARIETY, season: YEAR, status: 'in-ground' },
+    });
+  }
+
+  it('records how many went in', async () => {
+    await aRow();
+
+    const screen = await mount(<EditPlantingScreen {...routeProps({ plantingId: PLANTING })} />);
+    await screen.type('edit-planting-quantity', '24');
+    await screen.press('save-planting');
+    screen.unmount();
+
+    expect((await listPlantings())[0]?.quantity).toBe(24);
+  });
+
+  it('takes a row back out that should not have been recorded', async () => {
+    await aRow();
+
+    const screen = await mount(<EditPlantingScreen {...routeProps({ plantingId: PLANTING })} />);
+    await screen.press('archive-planting');
+    await screen.press('archive-planting');
+    screen.unmount();
+
+    expect(await listPlantings()).toEqual([]);
+  });
+
+  /**
+   * The guard that matters most on this screen. A `harvest` names its planting,
+   * and the bed and variety screens reach their harvests *through* the
+   * plantings — so archiving one takes four kilos of tomatoes out of the bed's
+   * story while the harvest records sit there untouched and unreachable.
+   */
+  it('refuses once something has been harvested off it, and says to pull it instead', async () => {
+    await aRow();
+    await enqueue({
+      entity: 'harvest',
+      op: 'create',
+      targetId: newId(),
+      payload: {
+        occurredAt: Date.now(),
+        plantingId: PLANTING,
+        unit: 'mass',
+        massUg: 4_000_000_000,
+      },
+    });
+
+    const screen = await mount(<EditPlantingScreen {...routeProps({ plantingId: PLANTING })} />);
+
+    expect(screen.has('archive-planting')).toBe(false);
+    expect(screen.text()).toContain('pull it');
+    screen.unmount();
+
     expect(await listPlantings()).toHaveLength(1);
   });
 });

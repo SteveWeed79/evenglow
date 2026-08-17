@@ -12,6 +12,7 @@ import { EditVarietyScreen } from '../screens/EditVarietyScreen';
 import { AddGroupScreen } from '../screens/AddGroupScreen';
 import { AddItemScreen } from '../screens/AddItemScreen';
 import { AdjustStockScreen } from '../screens/AdjustStockScreen';
+import { EditItemScreen } from '../screens/EditItemScreen';
 import { AddMachineScreen } from '../screens/AddMachineScreen';
 import { AddServiceScreen } from '../screens/AddServiceScreen';
 import { AnimalScreen } from '../screens/AnimalScreen';
@@ -43,6 +44,7 @@ import { LicencesScreen } from '../screens/LicencesScreen';
 import { LogHoursScreen } from '../screens/LogHoursScreen';
 import { LossScreen } from '../screens/LossScreen';
 import { MachineScreen } from '../screens/MachineScreen';
+import { EditMachineScreen } from '../screens/EditMachineScreen';
 import { MembersScreen } from '../screens/MembersScreen';
 import { AddVarietyScreen } from '../screens/AddVarietyScreen';
 import { NumbersScreen } from '../screens/NumbersScreen';
@@ -51,6 +53,7 @@ import { CropNumbersScreen } from '../screens/CropNumbersScreen';
 import { MachineNumbersScreen } from '../screens/MachineNumbersScreen';
 import { PickVarietyScreen } from '../screens/PickVarietyScreen';
 import { PlantingScreen } from '../screens/PlantingScreen';
+import { EditPlantingScreen } from '../screens/EditPlantingScreen';
 import { ProduceScreen } from '../screens/ProduceScreen';
 import { ShearingScreen } from '../screens/ShearingScreen';
 import { ServiceDoneScreen } from '../screens/ServiceDoneScreen';
@@ -186,12 +189,14 @@ export type RootParamList = {
   // Iron
   AddMachine: undefined;
   Machine: { machineId: string };
+  EditMachine: { machineId: string };
   LogHours: { machineId: string };
   AddService: { machineId: string };
   ServiceDone: { serviceId: string };
   Inventory: undefined;
   AddItem: { equipmentId?: string };
   AdjustStock: { itemId: string };
+  EditItem: { itemId: string };
 
   // Growing
   SiteSetup: undefined;
@@ -209,6 +214,7 @@ export type RootParamList = {
   PickVariety: { bedId: string };
   AddVariety: { bedId: string; crop?: string };
   Planting: { plantingId: string };
+  EditPlanting: { plantingId: string };
   Harvest: { plantingId: string };
 };
 
@@ -285,12 +291,14 @@ export function Root({
 
       <Stack.Screen name="AddMachine" component={AddMachineScreen} />
       <Stack.Screen name="Machine" component={MachineScreen} />
+      <Stack.Screen name="EditMachine" component={EditMachineScreen} />
       <Stack.Screen name="LogHours" component={LogHoursScreen} />
       <Stack.Screen name="AddService" component={AddServiceScreen} />
       <Stack.Screen name="ServiceDone" component={ServiceDoneScreen} />
       <Stack.Screen name="Inventory" component={InventoryScreen} />
       <Stack.Screen name="AddItem" component={AddItemScreen} />
       <Stack.Screen name="AdjustStock" component={AdjustStockScreen} />
+      <Stack.Screen name="EditItem" component={EditItemScreen} />
 
       <Stack.Screen name="SiteSetup" component={SiteSetupScreen} />
       <Stack.Screen name="AddBed" component={AddBedScreen} />
@@ -305,6 +313,7 @@ export function Root({
       <Stack.Screen name="PickVariety" component={PickVarietyScreen} />
       <Stack.Screen name="AddVariety" component={AddVarietyScreen} />
       <Stack.Screen name="Planting" component={PlantingScreen} />
+      <Stack.Screen name="EditPlanting" component={EditPlantingScreen} />
       <Stack.Screen name="Harvest" component={HarvestScreen} />
     </Stack.Navigator>
   );

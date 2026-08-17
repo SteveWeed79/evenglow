@@ -80,6 +80,15 @@ export interface Planting {
   transplantedAt?: number;
   startedIndoorsAt?: number;
   removedAt?: number;
+  /**
+   * How many went in, and what somebody wrote about it.
+   *
+   * Carried so the record can be corrected. Neither is read by the due engine
+   * — a count and a note decide nothing — which is exactly why they were never
+   * exposed, and exactly why they could be typed wrong and stay wrong.
+   */
+  quantity?: number;
+  note?: string;
 }
 
 const storedSite = siteCreateSchema.partial();

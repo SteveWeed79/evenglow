@@ -355,6 +355,15 @@ export function PlantingScreen({ route }: ScreenProps<'Planting'>): React.ReactE
 
       {/* Every harvest off this planting, dated. The bed's own story, which
           until now was only ever a total. */}
+      <Panel label="This planting">
+        <Row
+          title="Change what was recorded"
+          detail="How many went in, the note, and taking a row back out"
+          testID="go-edit-planting"
+          onPress={() => nav.navigate('EditPlanting', { plantingId })}
+        />
+      </Panel>
+
       <Timeline subject={plantingId} />
     </Screen>
   );

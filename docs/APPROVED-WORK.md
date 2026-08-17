@@ -299,10 +299,33 @@ period rather than a task.
       that she is gone and *not why*, in those words, because the app cannot
       tell a sale from a death and §4's outcome flow is what will ask. Nothing
       is deleted (P13), so that flow has a record to attach an answer to.
-      **Still to come:** edit and archive for machines, plantings and inventory
-      items, which are the same pattern against three more field sets; and the
-      *upcoming work* half of the original line, which wants the due engine on
-      a detail screen and is its own piece of design.
+      **Machines, plantings and inventory items followed** *(17 August)*, and
+      they were not three more field sets. `listMachines` did not carry
+      `serial`, `year` or `note` at all — nothing could show them, so nothing
+      read them — and the serial is the number on the insurance and the bill of
+      sale, which is the whole reason P7 keeps hours and services in the first
+      place. `listPlantings` was missing `quantity` and `note` the same way.
+      Both reads now carry them.
+      **Three more judgements.** A machine's meter toggle is the dangerous
+      control on its screen: `serviceDue` refuses to build a row it cannot
+      evaluate, so an hours interval on a meterless machine produces *nothing*
+      rather than a row stuck on Today — which is right, and means switching the
+      meter off silently stops every hour-based schedule ever asking again. The
+      screen counts those schedules and names them before the toggle is
+      believed. A planting with harvests against it **refuses** to be taken
+      back out and points at *pull it*: a `harvest` names its planting, and beds
+      and varieties reach their harvests *through* plantings, so archiving one
+      would take four kilos of tomatoes out of the bed's story and the
+      variety's while the harvest records sat there untouched and unreachable.
+      A planting that fed somebody is not a row entered by mistake. An
+      inventory item has **no** guard on stock still on the shelf, deliberately:
+      a part the farm no longer stocks may well have three left in the drawer,
+      and refusing until the count reached zero would teach people to type a
+      zero they do not mean — which puts a use that never happened into the
+      adjustment history, and that is worse than an archived item with a number
+      on it.
+      **Still to come:** the *upcoming work* half of the original line, which
+      wants the due engine on a detail screen and is its own piece of design.
 
       *The original note, kept:*
       `read/history.ts` is farm-wide and has no notion of a subject:

@@ -1,13 +1,22 @@
 import { useCallback, useState } from 'react';
 import { STOCK_REASONS, newId, type StockReason } from '@steading/contracts';
 import { listInventory } from '@steading/core/read/iron';
-import { Choice, Failure, Field, Primary, Stepper, TextField, useSaver } from '../components/Form';
+import {
+  Choice,
+  Failure,
+  Field,
+  Primary,
+  Row,
+  Stepper,
+  TextField,
+  useSaver,
+} from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { Timeline } from '../components/Timeline';
 import { useLive } from '../hooks/useLive';
-import { useLeave } from '../hooks/useNav';
+import { useLeave, useNav } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import type { ScreenProps } from '../navigation/Root';
 
@@ -70,6 +79,7 @@ const ADDS: Record<StockReason, boolean | null> = {
 };
 
 export function AdjustStockScreen({ route }: ScreenProps<'AdjustStock'>): React.ReactElement {
+  const nav = useNav();
   const { itemId } = route.params;
   const log = useLog();
 
@@ -207,6 +217,15 @@ export function AdjustStockScreen({ route }: ScreenProps<'AdjustStock'>): React.
         kinds, and movements linked to the event that consumed them — and a
         detail screen built against today's shape would be built twice.
       */}
+      <Panel label="This item">
+        <Row
+          title={`Change ${item.name}`}
+          detail="What it is called, how it is counted, and when to be told"
+          testID="go-edit-item"
+          onPress={() => nav.navigate('EditItem', { itemId })}
+        />
+      </Panel>
+
       <Timeline subject={itemId} label="What happened to it" />
     </Screen>
   );
