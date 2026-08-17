@@ -1839,6 +1839,34 @@ same reason.
       it-back case. Four of the eight fail without the revert, checked by
       disabling it.
 
+### The order the farmer deals with it in decides the outcome, 17 August
+
+Pinned across two real devices in `tests/sync/two-devices.test.ts`, and worth
+stating because it is the one part of this design that is not the same in every
+telling.
+
+The rejection reverts nothing by itself — that is the decision above, taken for
+`retryRejected`'s sake. What the discard can then do depends on whether anything
+touched the record while the refusal sat in the inbox, because `after` restores
+only over a row nothing has moved since:
+
+- **Discard, then pull.** The pre-image lands, the name goes back to what the
+  farm holds, and the archive arrives on top. Both phones converge exactly.
+- **Pull, then discard.** The archive is newer than `after`, so `restoreBefore`
+  stands down and the refused name stays on the record.
+
+The residue in the second case is a name on an **archived** record, on the one
+phone whose user typed it and was told it was refused. It appears in no live
+list, reaches no other device, and the server never held it — all three
+asserted. The alternative is a discard that restores over a value the farm has
+moved past, which is the fault `after` exists to prevent, so the trade is taken
+knowingly rather than tightened.
+
+**This is where the suite had it wrong.** Its first version asserted the first
+outcome while performing the second sequence — no discard at all — and expected
+the revert to happen at rejection time, which is precisely what N-1 refuses to
+do. CI caught it; both orders are now tests.
+
 ## N-2 · One `undefined` from `expo-network` stops automatic sync for the life of the process — **P1**
 
 > **Fixed.** The listener now reports only what the OS actually said, so a

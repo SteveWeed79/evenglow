@@ -6,6 +6,7 @@ import { applyBatch } from '@steading/api/sync/apply';
 import { newId } from '@steading/contracts';
 import { localStore } from '@steading/core/db/store';
 import { flushOnce } from '@steading/core/sync/flush';
+import { discardRejected, listRejected } from '@steading/core/sync/inbox';
 import { pullOnce } from '@steading/core/sync/pull';
 import { enqueue } from '@steading/core/sync/queue';
 import { type Farm, twoDevices } from '../support/devices';
@@ -88,6 +89,11 @@ afterAll(async () => {
 /** Every projected record of one entity on one device. */
 async function recordsOn(device: Farm['a'], entity: string) {
   return device.as(() => localStore().readRecordsByEntity(entity as never));
+}
+
+/** The whole inbox dealt with, as a farmer clearing "Needs a look" does. */
+async function discardAll(): Promise<void> {
+  for (const refusal of await listRejected()) await discardRejected(refusal.id);
 }
 
 describeDb('a record made on one phone', () => {
@@ -181,7 +187,9 @@ describeDb('a refusal the server issued', () => {
    * clears the flag. The archive was not merely un-re-applied; it was undone.
    *
    * The editing device is the one that already knows, from its own inbox. This
-   * asserts the state it is left holding once it has heard back and caught up.
+   * asserts the state it is left holding once it has heard back and caught up:
+   * the group is archived on both phones, and the refusal is sitting where
+   * somebody will see it.
    */
   it('leaves an archived group archived on the phone that tried to edit it', async () => {
     const group = newId();
@@ -199,18 +207,114 @@ describeDb('a refusal the server issued', () => {
     });
 
     // B edits the group it still believes is live, then gets signal back.
+    const refused = await farm.b.as(async () => {
+      await enqueue({ entity: 'flock', op: 'update', targetId: group, payload: { name: 'Renamed' } });
+      const outcome = await flushOnce(wire.push);
+      await pullOnce(wire.pull);
+      return { outcome, inbox: await listRejected() };
+    });
+
+    expect(refused.outcome.rejected).toBe(1);
+    expect(refused.inbox.map((m) => m.op)).toEqual(['update']);
+
+    const [onB] = await recordsOn(farm.b, 'flock');
+    expect(onB?.deleted).toBe(true);
+
+    const [onA] = await recordsOn(farm.a, 'flock');
+    expect(onA?.deleted).toBe(true);
+  });
+});
+
+/**
+ * What the edit itself leaves behind on the phone that made it — which is a
+ * different question from whether it replicated, and has a settled answer that
+ * this file had wrong.
+ *
+ * **A refusal does not revert anything on its own.** N-1 in
+ * `SYNC-INTEGRITY-TODO.md` decided that deliberately: *"a rejected mutation is
+ * a decision the user has not made yet, so hiding the record leaves them
+ * reading an inbox entry about a group they can no longer see, and
+ * `retryRejected` would have nothing left to re-project."* The pre-image in
+ * `record_undo` is spent by `discardRejected`, not by the rejection.
+ *
+ * So the optimistic name survives the flush, and whether it survives past the
+ * discard depends on **what else touched the record in between** — `after`
+ * only restores over a row nothing has moved since. Both orders happen on a
+ * real farm and they end in different places, so both are pinned here. The
+ * original version of this suite asserted the second one's outcome while
+ * performing the first one's sequence, which is what CI caught.
+ */
+describeDb('the refused edit on the phone that made it', () => {
+  /** A retires the group, B renames it offline. Shared by both orders below. */
+  async function upTo(group: string): Promise<void> {
+    await farm.a.as(async () => {
+      await enqueue({ entity: 'flock', op: 'create', targetId: group, payload: flock() });
+      await flushOnce(wire.push);
+    });
+    await farm.b.as(() => pullOnce(wire.pull));
+
+    await farm.a.as(async () => {
+      await enqueue({ entity: 'flock', op: 'delete', targetId: group, payload: {} });
+      await flushOnce(wire.push);
+    });
+
     await farm.b.as(async () => {
       await enqueue({ entity: 'flock', op: 'update', targetId: group, payload: { name: 'Renamed' } });
       await flushOnce(wire.push);
+    });
+  }
+
+  /** Discarded before anything else lands, the pre-image puts the name back. */
+  it('is taken back cleanly when the farmer deals with the inbox first', async () => {
+    const group = newId();
+    await upTo(group);
+
+    await farm.b.as(async () => {
+      await discardAll();
+
+      const [restored] = await localStore().readRecordsByEntity('flock' as never);
+      expect((restored?.value as { name?: string }).name).toBe('Alpha');
+      expect(restored?.deleted).toBe(false);
+
       await pullOnce(wire.pull);
+    });
+
+    // And then it converges on exactly what A holds.
+    const [onA] = await recordsOn(farm.a, 'flock');
+    const [onB] = await recordsOn(farm.b, 'flock');
+    expect(onB?.deleted).toBe(true);
+    expect((onB?.value as { name?: string }).name).toBe('Alpha');
+    expect((onA?.value as { name?: string }).name).toBe('Alpha');
+  });
+
+  /**
+   * Pulled first, the archive is newer than the pre-image's `after`, so the
+   * discard stands down rather than restoring over it — *"newer wins"*.
+   *
+   * The residue that leaves is the name on an **archived** record, on the one
+   * phone whose user typed it and was told it was refused. It shows in no live
+   * list and reaches no other device; the alternative is a discard that can
+   * resurrect a value the farm has moved past, which `restoreBefore` exists to
+   * prevent. Pinned so the trade is visible rather than discovered.
+   */
+  it('is left in place when an archive from elsewhere has already landed on it', async () => {
+    const group = newId();
+    await upTo(group);
+
+    await farm.b.as(async () => {
+      await pullOnce(wire.pull);
+      await discardAll();
     });
 
     const [onB] = await recordsOn(farm.b, 'flock');
     expect(onB?.deleted).toBe(true);
-    expect((onB?.value as { name?: string }).name).toBe('Alpha');
+    expect((onB?.value as { name?: string }).name).toBe('Renamed');
 
+    // The farm at large never heard of it, which is the part that matters.
     const [onA] = await recordsOn(farm.a, 'flock');
-    expect(onA?.deleted).toBe(true);
+    expect((onA?.value as { name?: string }).name).toBe('Alpha');
+    const server = await harness!.db.collection('flocks').findOne({ _id: group as never });
+    expect(server?.name).toBe('Alpha');
   });
 });
 
