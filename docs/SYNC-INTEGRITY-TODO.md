@@ -317,8 +317,31 @@ everybody else.
       rejection, so a new no-op status puts every replayed create and every
       repeated delete into a farmer's inbox. Log outcomes and wire statuses are
       two enums.
-- [ ] Add a sweeper for `pending` rows older than about an hour whose client
+- [x] Add a sweeper for `pending` rows older than about an hour whose client
       never came back. It runs the same stored-envelope re-projection.
+      **Built — `apps/api/src/sync/sweep.ts`** *(17 August)*, and it does run the
+      same re-projection: `replayFromLog`, `project` and `stampOutcome` are
+      exported from `apply.ts` for it rather than reimplemented. Both re-validate
+      off disk and both carry the undecided state in their filters; a second copy
+      would be a second place for that subtlety to be got wrong, silently, on a
+      schedule, with nobody watching.
+      **Identity from the log, role from `users`.** `project` takes claims and a
+      timer has no session — but invariant 8 asks for the role to be re-derived,
+      and `project`'s own comment adds that a role revoked since the command was
+      queued must still bite. So *who* comes from the envelope, which cannot
+      change, and *what they may do* from the database now. An author who has
+      left the farm is stamped `rejected` rather than skipped, because leaving it
+      pending puts the row back in the limbo this exists to end; the envelope
+      stays in `mutations`, which is the audit trail.
+      **Only `outcome: pending` exactly**, never the absent-or-null rows written
+      before the field existed — those projected when first applied and replicate
+      today, so sweeping them would re-project a farm's whole history on the hour.
+      **A first pass a minute after boot**, then hourly. A restart is the
+      likeliest moment for a stranded row to exist, so waiting a full hour after
+      coming back up would wait through it.
+      **CI only for the sweep itself** (`tests/sync/sweeper.test.ts`) — no mongod
+      is obtainable here. `tests/unit/sweeper-runner.test.ts` covers the timer
+      and does run: overlap, a pass that throws, and what it says.
 - [x] Filter `readSnapshotPage` to accepted effects only. The watermark must
       still advance past the excluded rows, the way the unknown-entity skip at
       `snapshot.ts:99-104` already does.

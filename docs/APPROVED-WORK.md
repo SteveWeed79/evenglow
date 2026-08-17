@@ -676,13 +676,21 @@ that file was not in this one's source table until 16 August, so the repository'
 highest-severity open work was invisible from the checklist that is supposed to
 say what to do. **The file remains the authority; do not re-argue them here.**
 
-- [ ] **A sweeper for `pending` mutation rows.** P0-2's last open box. The
+- [x] **A sweeper for `pending` mutation rows.** P0-2's last open box. The
       outcome field, the accepted-only feed and the repair have shipped; what
       is missing is the hourly pass over rows whose client never came back,
       running the same stored-envelope re-projection. Until it exists a row
       logged at the moment a device dies stays `pending` for ever, and
       `pending` is withheld from the feed — so that record reaches no other
       device on the farm.
+      **Built 17 August** — `apps/api/src/sync/sweep.ts`, with the runner wired
+      into the entry point rather than into `buildServer`, so importing the
+      module in a test binds no port and starts no timer. It reuses `apply.ts`'s
+      own re-projection rather than copying it; identity comes from the log and
+      the role from `users` as it stands, which is what invariant 8 asks for; and
+      an author who has left the farm is stamped `rejected` rather than swept for
+      ever. The sweep's own suite is CI only (no mongod here), and the timer's —
+      overlap, a throwing pass, what it logs — runs everywhere.
 - [ ] **Mint a fresh ULID in `retryRejected`.** P0-1(b). Reusing the id of a
       refused mutation means the corrected payload meets the duplicate branch
       and is answered as already-done.

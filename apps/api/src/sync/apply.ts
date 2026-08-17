@@ -57,7 +57,7 @@ import {
 /** A device offline across two deploys must still sync: accept N and N−1. */
 const MIN_ACCEPTED_SCHEMA_VERSION = MUTATION_SCHEMA_VERSION - 1;
 
-interface MutationDoc extends Tenanted {
+export interface MutationDoc extends Tenanted {
   targetId: string;
   entity: string;
   op: string;
@@ -256,7 +256,22 @@ async function applyMutation(
   });
 }
 
-type Replay =
+/**
+ * Three of this module's internals are exported, and only for `sweep.ts`.
+ *
+ * The sweeper is not a second implementation of applying a mutation — it is
+ * *this* implementation, triggered by a clock instead of by a request, for the
+ * rows whose client never came back to trigger it themselves. P0-2's own remedy
+ * says so: *"it runs the same stored-envelope re-projection."*
+ *
+ * A copy would be the worse kind of duplication. `replayFromLog` re-validates
+ * every field off disk rather than trusting the typed document (invariant 11),
+ * and `stampOutcome`'s filter carries the undecided state so a racing replay
+ * cannot overwrite a terminal answer. Both are subtle, both are load-bearing,
+ * and a sweeper that reimplemented either would be a second place for the
+ * subtlety to be got wrong — silently, on a schedule, with nobody watching.
+ */
+export type Replay =
   /** Logged but undecided: re-project it, from the log rather than the request. */
   | { kind: 'replay'; command: Command }
   /** Decided already. The stored answer is the answer. */
@@ -271,7 +286,7 @@ type Replay =
  * an older deploy, a newer one, or a hand-edited row are all possible, and the
  * cast that would paper over them is the thing the invariant exists to ban.
  */
-async function replayFromLog(scope: Scoped, id: string): Promise<Replay> {
+export async function replayFromLog(scope: Scoped, id: string): Promise<Replay> {
   const stored = await scope.col<MutationDoc>('mutations').findOne({ _id: id });
 
   // Gone between the upsert and this read. Not reachable through any code path
@@ -357,7 +372,7 @@ function decidedResult(id: string, stored: MutationDoc): MutationResult {
  * whose field is absent, which is how a pre-outcome row gets stamped the first
  * time it is replayed.
  */
-async function stampOutcome(
+export async function stampOutcome(
   scope: Scoped,
   id: string,
   decision: ProjectionDecision,
@@ -407,7 +422,7 @@ export function updateFor(
 }
 
 /** Writes the derived read model for one command. */
-async function project(
+export async function project(
   scope: Scoped,
   claims: SessionClaims,
   command: Command,
