@@ -1,8 +1,8 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { CLIENT_VERSION_HEADER, isClientTooOld, syncRefusalMessage } from '@steading/contracts';
 import { requireClaims, requireMutationClaims } from '../auth/require';
 import { syncAccess } from '../billing/access';
-import { findOrgById } from '../db/identity';
+import { findOrgById, recordLastSeen } from '../db/identity';
 import { scoped } from '../db/scoped';
 import type { Env } from '../env';
 import { handleSyncBatch } from '../sync/batch';
@@ -22,10 +22,44 @@ import { parseSnapshotCursor, readSnapshotPage } from '../sync/snapshot';
  * throttled sync loses a farm's morning; the batch cap, the token, the role
  * check and Zod are the controls here.
  */
+/**
+ * What build said this, as a header and nothing more.
+ *
+ * A repeated header arrives as an array. Two answers to "which build is this"
+ * is not one this server should pick between, and an array is not a version —
+ * both the floor and the record read that as no version at all.
+ */
+function reportedVersion(request: FastifyRequest): string | undefined {
+  const said = request.headers[CLIENT_VERSION_HEADER];
+  return typeof said === 'string' ? said : undefined;
+}
+
+/**
+ * Writes down what is running out there, on the two routes the fleet uses.
+ *
+ * **Not awaited, and that is the whole design.** A farm's sync must not wait on
+ * bookkeeping, and it must not fail on it either; `recordLastSeen` swallows its
+ * own errors and this drops the promise on purpose. Nothing downstream reads
+ * the result, so there is nothing to sequence.
+ *
+ * Both routes rather than just `/sync`, because a device that is only pulling
+ * is still a device in the field — a reinstall restoring a farm reports its
+ * build for a while before it writes anything, and that is exactly the moment
+ * somebody would want to know what it is running.
+ */
+function noteClientVersion(request: FastifyRequest, userId: string): void {
+  void recordLastSeen(userId, reportedVersion(request), new Date());
+}
+
 export async function syncRoutes(app: FastifyInstance, env: Env): Promise<void> {
   app.post('/sync', async (request, reply) => {
     // Identity, org and role are re-derived before anything is read.
     const claims = await requireMutationClaims(request.headers.authorization, env.AUTH_SECRET);
+
+    // After the token is verified and before anything can turn the request
+    // away: a build refused for being too old is precisely one worth having a
+    // record of, and a farm held at a 402 is still a farm running something.
+    noteClientVersion(request, claims.userId);
 
     /**
      * What a subscription buys, and this is the only place it is spent (D13).
@@ -81,11 +115,7 @@ export async function syncRoutes(app: FastifyInstance, env: Env): Promise<void> 
      * does, so the client holds the batch through machinery that already
      * exists rather than a second path that has to agree with it.
      */
-    // A repeated header arrives as an array. Two answers to "which build is
-    // this" is not one this server should pick between, and an array is not a
-    // version — `isClientTooOld` reads that as too old, which is right.
-    const said = request.headers[CLIENT_VERSION_HEADER];
-    if (isClientTooOld(typeof said === 'string' ? said : undefined, env.minimumClientVersion)) {
+    if (isClientTooOld(reportedVersion(request), env.minimumClientVersion)) {
       return reply
         .status(426)
         .send({ error: syncRefusalMessage('appTooOld'), refusal: 'appTooOld' });
@@ -128,6 +158,8 @@ export async function syncRoutes(app: FastifyInstance, env: Env): Promise<void> 
     // Read-only, so the token alone is enough — there is no mutation here to
     // re-derive a role for. Tenancy is the scoped layer's job, as always.
     const claims = await requireClaims(request.headers.authorization, env.AUTH_SECRET);
+    noteClientVersion(request, claims.userId);
+
     const scope = await scoped(claims.orgId);
 
     const query = request.query as Record<string, string | undefined>;

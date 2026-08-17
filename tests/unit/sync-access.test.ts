@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { subscriptionFromPromo } from '@steading/contracts';
-import { syncAccess } from '@steading/api/billing/access';
+import { SYNC_REFUSALS, subscriptionFromPromo } from '@steading/contracts';
+import { type FarmSyncState, farmSyncState, syncAccess } from '@steading/api/billing/access';
 import { readEnv } from '@steading/api/env';
 import type { OrgDoc } from '@steading/api/db/identity';
 
@@ -203,5 +203,81 @@ describe('the minimum client version', () => {
       '0.1.18',
     );
     expect(readEnv({ ...base, MINIMUM_CLIENT_VERSION: '' }).minimumClientVersion).toBeNull();
+  });
+});
+
+/**
+ * The same decision, told apart rather than collapsed — and held to the first.
+ *
+ * `syncAccess` answers *may this farm write*, which is one bit. An operations
+ * page needs the four yeses apart, because "comped because I put them in an env
+ * var" and "paying" are the same to the wire and nothing like each other on a
+ * page about subscribers. `farmSyncState` splits them, and splitting means a
+ * second copy of the branch order.
+ *
+ * **So the two are pinned to each other here.** The states walked below are
+ * every way through and every way not, and each one asserts that
+ * `farmSyncState` names a refusal exactly when `syncAccess` refuses. Reorder
+ * either function and this fails, rather than the page quietly describing a
+ * farm that is not the farm.
+ */
+describe('what an operator is shown about a farm', () => {
+  const REFUSALS: string[] = [...SYNC_REFUSALS];
+  const active = { state: 'active' as const, expiresAt: Date.now() + 86_400_000 };
+  const expired = { state: 'active' as const, expiresAt: Date.now() - 86_400_000 };
+
+  const cases: { what: string; env: Record<string, string>; org: OrgDoc; state: FarmSyncState }[] = [
+    {
+      what: 'comped in the environment',
+      env: { ...withPlay, FREE_SYNC_ORGS: ORG },
+      org: farm(),
+      state: 'comped',
+    },
+    {
+      what: 'comped in the database by farm:grant',
+      env: withPlay,
+      org: farm({ syncGranted: { at: new Date() } }),
+      state: 'granted',
+    },
+    {
+      what: 'on a server deliberately run open',
+      env: { ...base, SYNC_OPEN_TO_ALL: '1' },
+      org: farm(),
+      state: 'open',
+    },
+    { what: 'paying', env: withPlay, org: farm({ subscription: active }), state: 'paid' },
+    { what: 'never subscribed', env: withPlay, org: farm(), state: 'unsubscribed' },
+    {
+      what: 'lapsed',
+      env: withPlay,
+      org: farm({ subscription: expired }),
+      state: 'lapsed',
+    },
+  ];
+
+  for (const { what, env, org, state } of cases) {
+    it(`says ${state} for a farm ${what}`, () => {
+      expect(farmSyncState(readEnv(env), org)).toBe(state);
+    });
+
+    it(`agrees with what the wire does for a farm ${what}`, () => {
+      const shown = farmSyncState(readEnv(env), org);
+      const wire = syncAccess(readEnv(env), org);
+
+      expect(REFUSALS.includes(shown)).toBe(!wire.syncing);
+    });
+  }
+
+  /**
+   * The bug this function exists to fix, kept as its own assertion because it
+   * is the one a person actually hit. `farm:ls` read the grant and the
+   * subscription and stopped, so the farms most likely to be looked up — the
+   * comped ones — were listed as unsubscribed while syncing perfectly.
+   */
+  it('does not call a comped farm unsubscribed', () => {
+    const env = readEnv({ ...withPlay, FREE_SYNC_ORGS: ORG });
+
+    expect(syncAccess(env, farm()).syncing).toBe(true);
+    expect(farmSyncState(env, farm())).not.toBe('unsubscribed');
   });
 });

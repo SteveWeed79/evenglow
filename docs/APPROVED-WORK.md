@@ -593,11 +593,18 @@ period rather than a task.
         and `at`, so minted-versus-spent is exact rather than estimated;
         invites and join codes have the same shape. This is the closest thing
         the server has to a funnel.
-      - **Versions in the field.** *Nothing backs this yet.* `routes/sync.ts`
-        reads `x-steading-client`, decides the 426 with it, and **discards it**
-        — so "which builds are actually out there" has no data behind it. It
-        needs a last-seen version stored per device or per farm, which is a
-        small write and a prerequisite rather than a panel.
+      - **Versions in the field.** ~~*Nothing backs this yet.*~~ **Backed as of
+        17 August.** `users.lastSeen` carries `{ at, client }`, written on both
+        `/sync` and `/snapshot` — the pull route too, because a reinstall
+        restoring a farm reports its build for a while before it writes
+        anything. `listFarmSummaries` tallies accounts per build.
+        **Per account, not per device**, and the panel must not claim otherwise:
+        the token names an account and nothing identifies a handset outside a
+        mutation envelope, so `/snapshot` has no device to name. Somebody with
+        two phones on different builds shows as whichever synced last.
+        The header is **parsed, not stored** — `parseVersion` bounds it to three
+        integers, so a caller-controlled string never reaches the page and a
+        histogram cannot be sprayed across invented values.
       - **Server health.** `ping()`, process uptime, mongod reachable, disk and
         photo bytes from `db:usage`, and the sweeper's last report — which
         currently goes to `console.log` and nowhere a person looks.
@@ -622,9 +629,18 @@ period rather than a task.
       **The buttons call the functions, never a shell.** `createPromoCode` and
       the rest are exported from `apps/api/src/db/`; shelling out to `pnpm …`
       would be a command-injection surface that also depends on a checkout being
-      present. `list-farms.mts` queries inline rather than through a shared
-      function, so that one query wants extracting first — the alternative is
-      two implementations of the only cross-tenant read in the codebase.
+      present. ~~`list-farms.mts` queries inline rather than through a shared
+      function, so that one query wants extracting first~~ — **done 17 August.**
+      `db/farms.ts` owns the cross-tenant read and `list-farms.mts` is
+      presentation, so the board and the command cannot answer differently.
+      **Extracting it found the listing was already wrong.** It read
+      `syncGranted` and the subscription and stopped, so a farm comped through
+      `FREE_SYNC_ORGS` — testers and whoever runs the box, which is to say the
+      farms most likely to be looked up — printed `unsubscribed` while syncing
+      perfectly. `farmSyncState` now mirrors `syncAccess`'s own branch order and
+      names all four ways through (`comped`, `granted`, `open`, `paid`); a test
+      walks every combination and fails if the two ever disagree about whether a
+      farm may sync.
 
       **Auth: a password, on the `admin` role, with three conditions.** From a
       manager and never typed, because the whole thing rests on entropy; its own
