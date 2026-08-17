@@ -576,6 +576,80 @@ period rather than a task.
       There is no timezone handling in this codebase at all. `[34]` is the
       urgent half: a record written today without its zone can never have one
       added.
+- [ ] **An operational control centre on the box.** *(raised in §8 on 17
+      August, decided the same day)*
+      One page, its own process, live reads, behind a Caddy site block with a
+      password on the existing `admin` role. **Business and operations, not farm
+      records** — the point is subscribers, tokens, versions and health, and
+      nobody needs a panel telling them how many eggs a farm collected.
+
+      **The panels, and what already backs each one.** Everything but the third
+      is answerable from the database today:
+      - **Paid, comped and free.** `orgs.subscription` is absent on every farm
+        that never subscribed, `syncGranted` is the comped ones, and the
+        `FREE_SYNC_ORGS` env list still wins over both — so the readout has to
+        show all three or it will disagree with what a farm experiences.
+      - **Tokens claimed.** `promoCodes.redeemedBy[]` carries `orgId`, `userId`
+        and `at`, so minted-versus-spent is exact rather than estimated;
+        invites and join codes have the same shape. This is the closest thing
+        the server has to a funnel.
+      - **Versions in the field.** *Nothing backs this yet.* `routes/sync.ts`
+        reads `x-steading-client`, decides the 426 with it, and **discards it**
+        — so "which builds are actually out there" has no data behind it. It
+        needs a last-seen version stored per device or per farm, which is a
+        small write and a prerequisite rather than a panel.
+      - **Server health.** `ping()`, process uptime, mongod reachable, disk and
+        photo bytes from `db:usage`, and the sweeper's last report — which
+        currently goes to `console.log` and nowhere a person looks.
+      - **Sync trouble.** `pending` rows and their age, the per-farm outcome mix
+        (`rejected` and `conflict` counts), and feed lag per device. A farm
+        quietly generating refusals is a bug nobody will report, because the
+        only person who sees the inbox entry is the one who caused it.
+
+      **Buttons, not just readouts** — that was the point of asking for it. The
+      `.mts` scripts are the action list: `farm:ls`, `farm:show`, `db:usage`,
+      `db:verify` are read-only and safe; `promo:new` and `farm:grant` are
+      writes whose worst case is a spurious code or a comped farm, both
+      reversible by hand.
+      **`db:password` stays on the shell**, and that is the one line worth
+      holding. It sets anybody's password, which makes a button for it an
+      account-takeover primitive — and it is the same risk on localhost as on a
+      public hostname, so it is not an argument about where the panel lives.
+      *This replaces "read-only first"*, which was the wrong rule: the useful
+      version of it is **no credential-changing actions**, and everything else
+      can be a button.
+
+      **The buttons call the functions, never a shell.** `createPromoCode` and
+      the rest are exported from `apps/api/src/db/`; shelling out to `pnpm …`
+      would be a command-injection surface that also depends on a checkout being
+      present. `list-farms.mts` queries inline rather than through a shared
+      function, so that one query wants extracting first — the alternative is
+      two implementations of the only cross-tenant read in the codebase.
+
+      **Auth: a password, on the `admin` role, with three conditions.** From a
+      manager and never typed, because the whole thing rests on entropy; its own
+      `@fastify/rate-limit` registration, since the existing limiters are
+      per-route `scope.register` calls and a new route inherits nothing; and
+      `TRUSTED_PROXY_HOPS=1` verified on the box, because `DEPLOY-THE-SERVER.md`
+      records that with it wrong `request.ip` is `127.0.0.1` for every request
+      and **every limiter in the service shares one bucket** — which would make
+      the rate limiting decorative and reduce this to a password alone.
+      A network filter in front is cheap and optional: Caddy's `remote_ip`
+      matcher costs one line and breaks when the ISP rotates you, a tailnet
+      survives that and is one more daemon. mTLS is the strongest and the most
+      annoying to install on a phone.
+
+      *The stance this replaces, kept because it was wrong in a specific way:*
+      *"A public admin login is a second auth system guarding the one thing on
+      this box that can read every farm, and should not be the first version of
+      anything."* **Both halves overstated it.** It is not a second auth system:
+      `ROLES` already has `owner | admin | hand` and `@fastify/rate-limit` is
+      already scoped onto auth, billing, members and support, so an admin page
+      reuses what exists. And the cross-tenant point is real but worth nothing
+      at one farm — a compromised admin session reaching every farm is a
+      property that matters at twenty, not at one. It was a future constraint
+      presented as a present one.
+
 - [ ] **A minimum client version the server can require**, and an in-app update
       check against the shelf. `[23]`, `[24]`
       **The first half is built** *(16 August)*: the client states its version
@@ -758,66 +832,9 @@ decisions are cluster-shaped — one argument settles each group.
 - **Device and platform reach** — `[77]`–`[90]`. Barcode, EID, Bluetooth
   scales, printing, calendar export, foldables, Chromebooks. `[76]`, voice, is
   argued in §6's wet-glove item and is still undecided as work.
-- **A control centre on the box** — *raised 17 August, from neither sweep.*
-  A signed-in page on the server showing what the server knows: which farms
-  exist, which are syncing, what is stuck. Undecided, and the reason it is
-  written down rather than started is that the interesting decisions are all
-  boundary decisions and none of them has been argued.
-
-  **What already exists, and the rule it encodes.** `farm:ls`, `farm:show`,
-  `db:usage`, `db:verify`, `promo:new` and `db:password` are the surface today,
-  and `list-farms.mts` says why they are commands rather than routes: *"It is
-  the one query in the codebase that crosses tenants on purpose. The whole of
-  `scoped()` exists so that no request can do that, and the way to keep it true
-  is for the cross-tenant read to require a shell on the server rather than a
-  token."* Any dashboard has to answer that sentence, not step around it.
-
-  **The answer that costs nothing is to keep the shell.** Bind it to localhost
-  and reach it through an SSH tunnel: a browser UI, no new authentication
-  surface, no new attack surface, and `scoped()`'s guarantee stays literally
-  true because there is still no *route* that crosses tenants. The alternative —
-  a real login on a public admin path — is a second auth system guarding the one
-  thing on this box that can read every farm, and it should not be the first
-  version of anything.
-
-  **Why now rather than six months ago.** Three commits on 17 August generated
-  operational signals that exist nowhere a person can see them. The sweeper's
-  own report — how many rows were undecided, decided, orphaned, unreadable —
-  goes to `console.log` and nothing else. The outcome mix per farm (`rejected`
-  and `conflict` counts) is the shape of a bug nobody will ever report, because
-  the only person who sees the inbox entry is the one who caused it. And feed
-  lag — newest `serverTs` against each device's last pull — answers *"is
-  somebody's phone not syncing"* without asking them, which is the question
-  `DiagnosticsScreen` answers on the handset for the farm and nothing answers
-  here for the person running the box.
-
-  **Read-only first, and the write actions are their own arguments.** Every
-  existing script is read-only by deliberate choice, and the three writes that
-  exist — a password reset, a promo code, a sync grant — each carry a decision
-  that a dashboard would quietly inherit rather than make.
-
-  **The privacy line is the one that gets crossed by accident.** `show-farm.mts`
-  states it: *"What it deliberately does NOT show — any record's contents… Counts
-  and timings answer an operational question; reading somebody's egg tallies
-  over their shoulder does not."* That is `ACCESS-AND-BILLING.md` §5 and the
-  support loop's S2, where a farm's data is taken only when it is asked for and
-  agreed to. A dashboard makes it one careless panel away.
-
-  **The panels that would earn their place**, if it is built: farms with last
-  sync and queue depth; per-farm outcome mix over a window; `pending` rows and
-  their age, with the sweeper's last report; feed lag per device; disk and photo
-  bytes from `db:usage`; and whatever `db:verify` already checks. Every one of
-  those is a count or a timestamp, which is what makes the privacy line easy to
-  hold here rather than a matter of restraint.
-
-  **What is genuinely undecided**, and would need settling before any code:
-  whether localhost-only is acceptable long-term or merely first; whether it
-  reuses the Fastify app or is a separate process, given that a bug in it must
-  not be able to take `/sync` down; whether the panels read live or from a
-  rollup, since a per-farm scan on every page load is a cost that grows with the
-  thing it is measuring; and whether it is one page or the beginning of an admin
-  surface, because those two attract very different amounts of scope.
-
+- **A control centre on the box** — *raised here 17 August and decided the same
+  day, so it has moved to §6.* Left as a pointer rather than deleted, because
+  this list is what somebody reads to find out whether a thing was considered.
 ---
 
 ## Rejected, and why
