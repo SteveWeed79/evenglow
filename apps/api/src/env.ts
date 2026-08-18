@@ -49,9 +49,14 @@ const envSchema = z.object({
    */
   OPS_PORT: z.coerce.number().int().positive().default(3002),
   /**
-   * Comma-separated. The Capacitor client is not a browser origin in the usual
-   * sense, so this stays explicit rather than defaulting to `*` — a wildcard
-   * with credentials is the mistake this field exists to prevent.
+   * Comma-separated, and **explicit rather than `*`** — a wildcard with
+   * credentials is the mistake this field exists to prevent.
+   *
+   * The React Native client sends no `Origin` at all, so none of this applies
+   * to a handset; what it governs is a browser, which today means a local
+   * development tool and nothing else. The default is a development port for
+   * that reason, and a deployment that has no browser client should set this to
+   * nothing rather than leave it.
    */
   CORS_ORIGINS: z.string().default('http://localhost:5173'),
   /**
@@ -81,6 +86,22 @@ const envSchema = z.object({
   GOOGLE_PLAY_SERVICE_ACCOUNT: z.string().default(''),
   /** The package the purchase must belong to. `com.steading.app`. */
   GOOGLE_PLAY_PACKAGE: z.string().default(''),
+  /**
+   * What a Pub/Sub push token must be addressed to, if push tokens are on.
+   *
+   * **No default, deliberately, for `EMAIL_FROM`'s reason.** The value is
+   * whatever the operator typed into the push subscription's OIDC settings —
+   * usually the API's own URL — and this file cannot guess it. A default would
+   * be a check that passes without proving anything, which is worse than the
+   * check being off.
+   *
+   * Unset, `/billing/notifications` keeps working: it is rate limited, it
+   * checks the package, and it still asks Google before believing a word of the
+   * payload. What the audience buys is that a stranger cannot make the server
+   * do the asking. See `billing/pubsub.ts` for why that is a cost control
+   * rather than an authorization gate.
+   */
+  GOOGLE_PUBSUB_AUDIENCE: z.string().default(''),
 
   /**
    * Where support tickets are filed (`docs/SUPPORT-LOOP.md`).
@@ -243,6 +264,8 @@ export type Env = z.infer<typeof envSchema> & {
   googleClientIds: string[];
   /** Null when this server takes no payments, which is a supported state. */
   playConfig: PlayConfig | null;
+  /** Null when store notifications are not checked for a push token. */
+  pubsubAudience: string | null;
   /** Null when this server has nowhere to file a support ticket. */
   supportConfig: SupportConfig | null;
   /** Farms that sync free regardless of subscription. Usually empty. */
@@ -315,6 +338,9 @@ export function readEnv(source: Record<string, string | undefined> = process.env
       parsed.data.GOOGLE_PLAY_PACKAGE || undefined,
     ),
     freeSyncOrgs: readFreeSyncOrgs(parsed.data.FREE_SYNC_ORGS),
+    // Null rather than empty string, so "not checked" is a value the type
+    // carries rather than a convention every caller has to remember.
+    pubsubAudience: parsed.data.GOOGLE_PUBSUB_AUDIENCE.trim() || null,
     // Null rather than empty string, so "no floor" is a value the type carries
     // rather than a convention every caller has to remember.
     minimumClientVersion: parsed.data.MINIMUM_CLIENT_VERSION || null,

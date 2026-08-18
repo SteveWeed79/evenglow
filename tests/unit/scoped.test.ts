@@ -84,6 +84,51 @@ describe('assertSafeUpdate', () => {
     );
   });
 
+  /**
+   * **The half the guard was not looking at.**
+   *
+   * Every other operator names what it writes in its keys, so checking keys was
+   * checking everything — until `$rename`, whose keys are what it reads and
+   * whose values are what it writes. `{ $rename: { name: 'orgId' } }` passed
+   * cleanly and would have moved the document to whatever that farm called
+   * itself.
+   *
+   * Nothing builds a `$rename` in this service today, which is the reason to
+   * close it rather than note it: this function exists so tenancy is a
+   * mechanism and not a rule to remember, and whoever writes the first
+   * `$rename` will trust it.
+   */
+  it('refuses a $rename that writes orgId, not just one that reads it', () => {
+    expect(() => assertSafeUpdate<Doc>({ $rename: { name: 'orgId' } as never })).toThrow(
+      TenancyViolationError,
+    );
+  });
+
+  it('refuses a $rename that writes _id', () => {
+    expect(() => assertSafeUpdate<Doc>({ $rename: { name: '_id' } as never })).toThrow(
+      TenancyViolationError,
+    );
+  });
+
+  it('refuses a $rename whose destination is a dotted path into orgId', () => {
+    expect(() => assertSafeUpdate<Doc>({ $rename: { name: 'orgId.x' } as never })).toThrow(
+      TenancyViolationError,
+    );
+  });
+
+  /** Both halves, so the fix did not simply move the blind spot. */
+  it('refuses a $rename that reads orgId as well', () => {
+    expect(() => assertSafeUpdate<Doc>({ $rename: { orgId: 'name' } as never })).toThrow(
+      TenancyViolationError,
+    );
+  });
+
+  it('still allows a $rename between two ordinary fields', () => {
+    expect(() =>
+      assertSafeUpdate<Doc>({ $rename: { name: 'label' } as never }),
+    ).not.toThrow();
+  });
+
   it('catches tenancy fields under any operator, not just $set', () => {
     expect(() => assertSafeUpdate<Doc>({ $setOnInsert: { orgId: 'org-b' } as never })).toThrow(
       TenancyViolationError,

@@ -4,9 +4,12 @@ import type { SessionClaims } from './claims';
 import { bearerFrom, verifyAccessToken } from './tokens';
 
 /**
- * The two gates, mirroring what the Next handlers do — deliberately, because
- * both servers are live and a difference here is a difference in who may write
- * what.
+ * The two gates: one for reading, one for writing.
+ *
+ * They mirrored the Next handlers when both servers were live, and that
+ * justification outlived the Next app — it is deleted, and this is the only
+ * server. What the pairing is actually for is stated below: a read may be
+ * decided by a signature, and a write may not.
  */
 
 /**

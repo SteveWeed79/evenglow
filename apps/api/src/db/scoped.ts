@@ -88,23 +88,56 @@ export function guardFilter<T extends Tenanted>(orgId: string, filter: Filter<T>
   return { ...filter, orgId } as Filter<T>;
 }
 
+/** The first path segment of a dotted field, which is what the guard judges. */
+function root(field: string): string | undefined {
+  return field.split('.')[0];
+}
+
 /**
  * Rejects updates that would move a document between tenants or rewrite its
  * identity. guardFilter stops you from *reaching* another org's document;
  * this stops you from *pushing* one of yours into another org, which the
  * filter guard alone does not cover.
+ *
+ * ## Both halves of a `$rename`, and the second half was missing
+ *
+ * Every other operator names the fields it writes in its **keys**, so checking
+ * keys was checking everything — until `$rename`, whose keys are the fields it
+ * reads and whose *values* are the fields it writes. `{ $rename: { name:
+ * 'orgId' } }` passed this guard cleanly and would have moved a document to
+ * whatever that farm happened to call itself.
+ *
+ * Nothing in this service builds a `$rename` today, and that is exactly why it
+ * is worth fixing rather than noting. This function exists so tenancy is a
+ * mechanism instead of a rule somebody has to remember — the same argument
+ * `scoped()` makes about filters — and a mechanism with a gap where nobody
+ * currently walks is a mechanism that will be trusted by whoever walks there
+ * first.
  */
 export function assertSafeUpdate<T extends Tenanted>(update: UpdateFilter<T>): void {
   for (const [operator, operand] of Object.entries(update)) {
     if (!operator.startsWith('$')) continue;
     if (operand === null || typeof operand !== 'object') continue;
 
-    for (const field of Object.keys(operand as Record<string, unknown>)) {
-      const root = field.split('.')[0];
-      if (root !== undefined && IMMUTABLE_FIELDS.has(root)) {
+    const fields = Object.entries(operand as Record<string, unknown>);
+
+    for (const [field, value] of fields) {
+      const written = root(field);
+      if (written !== undefined && IMMUTABLE_FIELDS.has(written)) {
         throw new TenancyViolationError(
           `${operator} may not modify "${field}" — orgId and _id are immutable once written.`,
         );
+      }
+
+      // `$rename` writes its destination, which is the value. Read as unknown
+      // and checked for a string rather than assumed: this is a caller's object.
+      if (operator === '$rename' && typeof value === 'string') {
+        const destination = root(value);
+        if (destination !== undefined && IMMUTABLE_FIELDS.has(destination)) {
+          throw new TenancyViolationError(
+            `$rename may not write "${value}" — orgId and _id are immutable once written.`,
+          );
+        }
       }
     }
   }

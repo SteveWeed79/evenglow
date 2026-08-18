@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { canMutate, MAX_PHOTO_BYTES } from '@steading/contracts';
 import { requireClaims, requireMutationClaims } from '../auth/require';
 import { blobsFor } from '../db/blobs';
+import { ACCEPTED_IMAGE_TYPES, isImageType, sniffImageType } from './image-bytes';
 import { scoped, type Tenanted } from '../db/scoped';
 import type { Env } from '../env';
 
@@ -13,6 +14,8 @@ interface PhotoRecord extends Tenanted {
   contentType?: string;
   /** Set by a `photo:update` mutation once the bytes have landed. */
   uploadedAt?: number;
+  /** Set by a `photo:delete`. The record survives; the bytes do not. */
+  archivedAt?: Date | null;
 }
 
 /**
@@ -68,7 +71,12 @@ interface PhotoRecord extends Tenanted {
  */
 const MAX_BYTES = MAX_PHOTO_BYTES;
 
-const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp'] as const;
+/**
+ * The types this route takes, from one declaration shared with the sniffer —
+ * a second list here is a second thing to keep in step with what the bytes are
+ * actually checked against.
+ */
+const ACCEPTED = ACCEPTED_IMAGE_TYPES;
 
 export async function photoRoutes(app: FastifyInstance, env: Env): Promise<void> {
   /**
@@ -129,14 +137,47 @@ export async function photoRoutes(app: FastifyInstance, env: Env): Promise<void>
         return reply.status(403).send({ error: 'Your role cannot change this photo.' });
       }
 
+      /**
+       * What the bytes are, rather than what anybody said they were.
+       *
+       * **Nothing looked at them before.** The declared content type chose the
+       * parser and the record's content type chose what came back out, so the
+       * store held whatever a farm account cared to send, filed as an image.
+       * With a React Native `Image` reading it that is close to harmless, and
+       * that is the reason to fix it now rather than the reason not to: the day
+       * a photo URL is opened in a WebView or a browser, the bytes decide and
+       * the label does not.
+       */
+      const actual = sniffImageType(bytes);
+      if (actual === null) {
+        return reply.status(415).send({ error: 'That file is not an image this app can store.' });
+      }
+
+      /**
+       * The record's type has to agree, and a mismatch is refused rather than
+       * quietly corrected.
+       *
+       * Storing PNG bytes under the JPEG the record claims would leave the
+       * farm's own record disagreeing with its image — and the record is what
+       * every other device reads. A client whose two halves disagree has a bug
+       * worth being told about; re-labelling silently would hide it and leave
+       * the second device to find out.
+       *
+       * A record with no type, or one written before this existed, is taken at
+       * the bytes' word: there is nothing to disagree with.
+       */
+      const claimed = record.contentType;
+      if (isImageType(claimed) && claimed !== actual) {
+        return reply
+          .status(415)
+          .send({ error: 'Those bytes are not the kind of image that photo says it is.' });
+      }
+
       const store = await blobsFor(claims.orgId);
 
-      const contentType =
-        typeof record.contentType === 'string' && ACCEPTED.includes(record.contentType as never)
-          ? record.contentType
-          : 'image/jpeg';
-
-      await store.put(request.params.id, bytes, contentType);
+      // The sniffed type, not the claimed one: it is the only one of the two
+      // that has been checked against anything.
+      await store.put(request.params.id, bytes, actual);
 
       /**
        * 200 on a repeat, not 409.
@@ -164,16 +205,39 @@ export async function photoRoutes(app: FastifyInstance, env: Env): Promise<void>
     }
 
     const found = await (await blobsFor(claims.orgId)).get(request.params.id);
-    // The record exists and the bytes have not arrived yet. A real state —
-    // the record syncs first — and not an error on either side.
     if (!found) {
-      return reply.status(404).send({ error: 'That photo has not been uploaded yet.' });
+      /**
+       * Two different absences, told apart.
+       *
+       * A record whose bytes have not arrived is an ordinary state — the
+       * record syncs first — and the gallery says honestly that this device
+       * does not have the image. A record that was **deleted** has had its
+       * bytes removed on purpose, and the image is not coming. Answering
+       * "not uploaded yet" for that one sends a farm looking for a phone
+       * that still holds it, which is a search that cannot end.
+       */
+      return reply.status(404).send({
+        error:
+          record.archivedAt === undefined || record.archivedAt === null
+            ? 'That photo has not been uploaded yet.'
+            : 'That photo was deleted.',
+      });
     }
 
     return reply
       .status(200)
       .header('content-type', found.blob.contentType)
       .header('content-length', String(found.blob.byteSize))
+      /**
+       * Never sniffed, whatever the bytes look like.
+       *
+       * The PUT checks the leading bytes against the type it is told, so what
+       * is stored is an image — this is the second half of that, and it is the
+       * half that survives a record written before the check existed. A browser
+       * or a WebView that guesses at a content type is how stored bytes become
+       * executable, and the guess is what this turns off.
+       */
+      .header('x-content-type-options', 'nosniff')
       // A photo never changes: the id is a ULID minted for these exact bytes,
       // and a replace is the same picture re-encoded. Immutable saves every
       // second device re-fetching what it already holds.

@@ -1,9 +1,11 @@
+import { hostname } from 'node:os';
 import { canMutate, isUploadStamp, type Role, roleRefusal } from '@steading/contracts';
 import type { SessionClaims } from '../auth/claims';
-import { findUserById, listOrgs } from '../db/identity';
+import { findUserById, listOrgIds } from '../db/identity';
 import type { Scoped } from '../db/scoped';
 import { scopedOn } from '../db/scoped';
 import { db } from '../db/client';
+import { recordSweep } from '../db/sweep-status';
 import { inCommitOrder } from './commit-order';
 import { PENDING } from './outcome';
 import { type MutationDoc, project, replayFromLog, stampOutcome } from './apply';
@@ -69,6 +71,32 @@ import { type MutationDoc, project, replayFromLog, stampOutcome } from './apply'
 /** An hour, in the units `Date` counts in. */
 export const SWEEP_AFTER_MS = 60 * 60 * 1000;
 
+/**
+ * How many stranded rows one query asks for.
+ *
+ * **`findMany` caps at 200 when nothing says otherwise, and nothing did.** A
+ * farm with three hundred stranded rows therefore had a hundred of them left
+ * untouched every pass, silently — which is the same class of defect
+ * `sweepAllFarms` writes a loop to avoid one level up, and it was sitting in
+ * the default argument of the call underneath. Paging is the fix; the number is
+ * just how much is held in memory at a time.
+ */
+const SWEEP_PAGE = 200;
+
+/**
+ * The most rows one farm gets in one pass, so a pass is bounded.
+ *
+ * A ceiling rather than no ceiling because this runs on a timer and shares a
+ * box with the service farms are syncing to: a backlog of a hundred thousand
+ * rows should be worked through over several hours rather than in one pass that
+ * holds a farm's write lane, row by row, for as long as it takes.
+ *
+ * Reaching it is not a loss — every unswept row is still `pending`, and the
+ * next pass starts where this one stopped. It is reported through `capped` so
+ * that "stopped early" and "found everything" are not the same silence.
+ */
+export const SWEEP_CEILING = 5_000;
+
 export interface SweepReport {
   /** Rows that were old enough to look at. */
   found: number;
@@ -80,9 +108,24 @@ export interface SweepReport {
   orphaned: number;
   /** Rows the author's current role does not permit. */
   refused: number;
+  /**
+   * True when a farm hit `SWEEP_CEILING` with rows still waiting.
+   *
+   * **Reported rather than left silent**, which is the whole reason it exists:
+   * a pass that quietly stops short and a pass that found everything look
+   * identical in a log, and the second is the one an operator will assume.
+   */
+  capped: boolean;
 }
 
-const NOTHING: SweepReport = { found: 0, decided: 0, unreadable: 0, orphaned: 0, refused: 0 };
+const NOTHING: SweepReport = {
+  found: 0,
+  decided: 0,
+  unreadable: 0,
+  orphaned: 0,
+  refused: 0,
+  capped: false,
+};
 
 function add(a: SweepReport, b: Partial<SweepReport>): SweepReport {
   return {
@@ -91,6 +134,7 @@ function add(a: SweepReport, b: Partial<SweepReport>): SweepReport {
     unreadable: a.unreadable + (b.unreadable ?? 0),
     orphaned: a.orphaned + (b.orphaned ?? 0),
     refused: a.refused + (b.refused ?? 0),
+    capped: a.capped || (b.capped ?? false),
   };
 }
 
@@ -129,20 +173,62 @@ export async function sweepFarm(
   now: number,
   olderThanMs: number = SWEEP_AFTER_MS,
 ): Promise<SweepReport> {
-  const stale = await scope
-    .col<MutationDoc>('mutations')
-    .findMany(
-      { outcome: PENDING, serverTs: { $lt: new Date(now - olderThanMs) } },
-      { sort: { serverTs: 1, _id: 1 } },
+  const cutoff = new Date(now - olderThanMs);
+  let report = { ...NOTHING };
+
+  /**
+   * Where the last page ended, as the same `(serverTs, _id)` pair the feed
+   * seeks on.
+   *
+   * **Not simply re-running the query**, which looks like it would work: a
+   * swept row stops being `pending`, so the next call would return the next
+   * rows on its own — until it met an `unreadable` one, which is left `pending`
+   * on purpose for a newer build to read. That row would come back at the head
+   * of every page for ever and the loop would never finish. Seeking past what
+   * has been looked at terminates whatever each row turned out to be.
+   */
+  let after: { serverTs: Date; _id: string } | null = null;
+
+  while (report.found < SWEEP_CEILING) {
+    const page = await scope.col<MutationDoc>('mutations').findMany(
+      after === null
+        ? { outcome: PENDING, serverTs: { $lt: cutoff } }
+        : {
+            outcome: PENDING,
+            $and: [
+              { serverTs: { $lt: cutoff } },
+              {
+                $or: [
+                  { serverTs: { $gt: after.serverTs } },
+                  { serverTs: after.serverTs, _id: { $gt: after._id } },
+                ],
+              },
+            ],
+          },
+      { limit: SWEEP_PAGE, sort: { serverTs: 1, _id: 1 } },
     );
 
-  let report = { ...NOTHING, found: stale.length };
+    if (page.length === 0) return report;
 
-  for (const row of stale) {
-    report = add(report, await sweepOne(scope, row._id, row.userId));
+    report = add(report, { found: page.length });
+    for (const row of page) {
+      report = add(report, await sweepOne(scope, row._id, row.userId));
+    }
+
+    const last = page[page.length - 1];
+    if (last === undefined) return report;
+    after = { serverTs: last.serverTs, _id: last._id };
+
+    // A short page is the end of the set, so there is nothing to seek past.
+    if (page.length < SWEEP_PAGE) return report;
   }
 
-  return report;
+  /**
+   * Stopped at the ceiling with rows still behind it. Said out loud through
+   * `capped`, and the next pass picks up where this one left off — the rows are
+   * still `pending`, which is the only state this whole mechanism reads.
+   */
+  return add(report, { capped: true });
 }
 
 async function sweepOne(
@@ -213,9 +299,15 @@ async function sweepOne(
  *
  * The deployment is one API process per farm — `org-lane.ts` states that
  * assumption and both the lane and `commit-order.ts` already rest on it — so in
- * practice this loop has one entry. It is written as a loop anyway because
- * `listOrgs` is what exists and a sweeper that silently covered one farm on a
- * box holding two would be the quietest possible bug.
+ * practice this loop has one entry. It is written as a loop anyway because *"a
+ * sweeper that silently covered one farm on a box holding two would be the
+ * quietest possible bug"*.
+ *
+ * **It was that bug, at two hundred.** The loop ran over `listOrgs()`, whose
+ * limit defaults to 200 and which sorts newest first — so on a box with more
+ * farms than that, the oldest were never swept, and the loop written to prevent
+ * exactly this outcome produced it with a different number in it. `listOrgIds`
+ * is unbounded and returns ids only, which is all this needs.
  */
 export async function sweepAllFarms(
   now: number = Date.now(),
@@ -224,8 +316,8 @@ export async function sweepAllFarms(
   const database = await db();
   let report = NOTHING;
 
-  for (const org of await listOrgs()) {
-    report = add(report, await sweepFarm(scopedOn(database, org._id), now, olderThanMs));
+  for (const orgId of await listOrgIds()) {
+    report = add(report, await sweepFarm(scopedOn(database, orgId), now, olderThanMs));
   }
 
   return report;
@@ -273,6 +365,13 @@ export interface SweeperOptions {
   sweep?: () => Promise<SweepReport>;
   /** The clock `lastSweep` stamps with, so a test need not use the real one. */
   now?: () => Date;
+  /**
+   * Where the durable record goes. A seam for the same reason `sweep` is one —
+   * a test of scheduling should not need a database to run.
+   */
+  persist?: (record: Parameters<typeof recordSweep>[0]) => Promise<void>;
+  /** When this process started, for the row that says which process wrote it. */
+  bootedAt?: Date;
 }
 
 /**
@@ -323,11 +422,18 @@ function unref(handle: unknown): void {
  * for the question an operator actually has, which is *did this run, and did it
  * find anything*. A silent journal and a broken timer look identical.
  *
- * Deliberately in memory and lost on restart. It describes this process, and
- * persisting it would make it a record of the farm rather than a reading of the
- * server — a row somebody would later have to decide whether to trust after a
- * deploy. `at` being null means no pass has completed since boot, which on a
- * freshly restarted server is the truth rather than a fault.
+ * In memory and lost on restart, which is right for what this is: a reading of
+ * **this process**. `at` being null means no pass has completed since boot,
+ * which on a freshly restarted server is the truth rather than a fault.
+ *
+ * **It is not what the operations board reads, and it never could have been.**
+ * The board is a separate systemd unit in a separate process, so a module
+ * variable written here was invisible to it — the panel built because *"a
+ * silent journal and a broken timer look identical"* reported "no pass since
+ * boot" for ever, on every box. `db/sweep-status.ts` is the durable mirror the
+ * board reads; this stays because it is the cheaper and more immediate answer
+ * for anything inside this process, and because the two say different things:
+ * one is what this process did, the other is what any process last did.
  */
 export interface SweepStatus {
   at: Date | null;
@@ -354,6 +460,8 @@ export function startSweeper(options: SweeperOptions = {}): () => void {
     report = console.log,
     sweep = sweepAllFarms,
     now = () => new Date(),
+    persist = recordSweep,
+    bootedAt = new Date(Date.now() - Math.floor(process.uptime() * 1000)),
   } = options;
 
   let running = false;
@@ -363,7 +471,9 @@ export function startSweeper(options: SweeperOptions = {}): () => void {
     running = true;
     try {
       const swept = await sweep();
-      status = { at: now(), report: swept, failed: null };
+      const at = now();
+      status = { at, report: swept, failed: null };
+      await persist({ at, host: hostname(), startedAt: bootedAt, report: swept });
       // Silent on the ordinary hour, which is every hour. A line per pass would
       // bury the one that matters in a log nobody then reads.
       if (swept.found > 0) {
@@ -371,12 +481,15 @@ export function startSweeper(options: SweeperOptions = {}): () => void {
           `sweeper: ${swept.found} undecided, ${swept.decided} decided` +
             `${swept.orphaned > 0 ? `, ${swept.orphaned} orphaned` : ''}` +
             `${swept.refused > 0 ? `, ${swept.refused} refused` : ''}` +
-            `${swept.unreadable > 0 ? `, ${swept.unreadable} unreadable` : ''}`,
+            `${swept.unreadable > 0 ? `, ${swept.unreadable} unreadable` : ''}` +
+            `${swept.capped ? ', stopped at the ceiling with more to do' : ''}`,
         );
       }
     } catch (error) {
       const why = error instanceof Error ? error.message : String(error);
-      status = { at: now(), report: null, failed: why };
+      const at = now();
+      status = { at, report: null, failed: why };
+      await persist({ at, host: hostname(), startedAt: bootedAt, failed: why });
       report(`sweeper: pass failed — ${why}`);
     } finally {
       running = false;

@@ -66,6 +66,7 @@ async function put(
   user: TestUser,
   id: string,
   bytes: Buffer = BYTES,
+  declared = 'image/jpeg',
 ): Promise<{ status: number }> {
   const app = await buildApp();
   const res = await app.inject({
@@ -73,7 +74,7 @@ async function put(
     url: `/photos/${id}`,
     headers: {
       authorization: `Bearer ${await tokenFor(user)}`,
-      'content-type': 'image/jpeg',
+      'content-type': declared,
     },
     payload: bytes,
   });
@@ -81,7 +82,10 @@ async function put(
   return { status: res.statusCode };
 }
 
-async function get(user: TestUser, id: string): Promise<{ status: number; body: Buffer }> {
+async function get(
+  user: TestUser,
+  id: string,
+): Promise<{ status: number; body: Buffer; headers: Record<string, unknown> }> {
   const app = await buildApp();
   const res = await app.inject({
     method: 'GET',
@@ -89,7 +93,7 @@ async function get(user: TestUser, id: string): Promise<{ status: number; body: 
     headers: { authorization: `Bearer ${await tokenFor(user)}` },
   });
   await app.close();
-  return { status: res.statusCode, body: res.rawPayload };
+  return { status: res.statusCode, body: res.rawPayload, headers: res.headers };
 }
 
 const users = () => harness!.db.collection<UserDoc>('users');
@@ -332,5 +336,191 @@ describeDb('photo bytes', () => {
       expect(read.statusCode).toBe(401);
       expect(write.statusCode).toBe(401);
     });
+  });
+});
+
+/**
+ * What the bytes actually are, which nothing used to ask.
+ *
+ * The route took a body under three declared content types and stored it, and
+ * the GET served it back under the type from the **record**. Nothing anywhere
+ * looked at the bytes, so the store held whatever a farm account cared to send,
+ * filed as an image and served with an image's content type.
+ *
+ * With a React Native `Image` on the other end that is close to harmless, which
+ * is the reason to fix it now rather than the reason not to: the day one photo
+ * URL is opened in a WebView, a browser, or a support tool, the bytes decide
+ * what happens and the label does not.
+ */
+describeDb('what may be stored as a photo', () => {
+  const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00]);
+  const WEBP = Buffer.concat([
+    Buffer.from('RIFF'),
+    Buffer.from([0x1a, 0x00, 0x00, 0x00]),
+    Buffer.from('WEBPVP8 '),
+  ]);
+  const NOT_AN_IMAGE = Buffer.from('<script>alert(1)</script>', 'utf8');
+
+  beforeEach(async () => {
+    await users().deleteMany({});
+    await photos().deleteMany({});
+    await harness!.db.collection('photoBytes.files').deleteMany({});
+    await harness!.db.collection('photoBytes.chunks').deleteMany({});
+    await users().insertMany(
+      Object.values(USERS).map((u) => ({
+        _id: u._id,
+        email: `${u._id}@example.test`,
+        passwordHash: 'unused-in-this-suite',
+        name: 'Test User',
+        orgId: u.orgId,
+        role: u.role,
+        createdAt: new Date(),
+      })) as never,
+    );
+  });
+
+  it('refuses bytes that are not an image at all', async () => {
+    const id = ulid();
+    await record(id, ORG_A);
+
+    expect((await put(USERS.ownerA, id, NOT_AN_IMAGE)).status).toBe(415);
+    // And nothing was stored, which is the half that matters.
+    expect(await harness!.db.collection('photoBytes.files').countDocuments({})).toBe(0);
+  });
+
+  /**
+   * A record and its bytes disagreeing is a client bug worth surfacing, not one
+   * to paper over: the record is what every other device on the farm reads, and
+   * silently re-labelling would leave the second device to find out.
+   */
+  it('refuses bytes whose kind is not the kind the record claims', async () => {
+    const id = ulid();
+    await record(id, ORG_A); // contentType: image/jpeg
+
+    expect((await put(USERS.ownerA, id, PNG, 'image/png')).status).toBe(415);
+  });
+
+  it('takes a PNG when the record says PNG', async () => {
+    const id = ulid();
+    await photos().insertOne({
+      _id: id as never,
+      orgId: ORG_A,
+      subjectId: ulid(),
+      contentType: 'image/png',
+      byteSize: PNG.byteLength,
+      capturedAt: Date.now(),
+    });
+
+    expect((await put(USERS.ownerA, id, PNG, 'image/png')).status).toBe(200);
+    expect((await get(USERS.ownerA, id)).headers['content-type']).toBe('image/png');
+  });
+
+  it('takes a WebP, container header and all', async () => {
+    const id = ulid();
+    await photos().insertOne({
+      _id: id as never,
+      orgId: ORG_A,
+      subjectId: ulid(),
+      contentType: 'image/webp',
+      byteSize: WEBP.byteLength,
+      capturedAt: Date.now(),
+    });
+
+    expect((await put(USERS.ownerA, id, WEBP, 'image/webp')).status).toBe(200);
+  });
+
+  /**
+   * The other half of the same defence, and the half that covers every record
+   * written before the check above existed.
+   */
+  it('tells a client never to guess at what the bytes are', async () => {
+    const id = ulid();
+    await record(id, ORG_A);
+    await put(USERS.ownerA, id);
+
+    expect((await get(USERS.ownerA, id)).headers['x-content-type-options']).toBe('nosniff');
+  });
+});
+
+/**
+ * Deleting a photo, which used to delete nothing.
+ *
+ * `Blobs.remove` was written with the store and had **no call site**: archiving
+ * a photo set `archivedAt` on the record and left the image in GridFS for good.
+ * A farm had no way to take a picture off the server at all, and the bucket
+ * only ever grew.
+ *
+ * P13 still holds — the record survives, and so does the mutation log — because
+ * what P13 protects is the *record*. The bytes are not a record; they are a
+ * picture of somebody's yard, and a farmer who deletes one means the picture.
+ */
+describeDb('deleting a photo', () => {
+  beforeEach(async () => {
+    await users().deleteMany({});
+    await photos().deleteMany({});
+    await harness!.db.collection('mutations').deleteMany({});
+    await harness!.db.collection('photoBytes.files').deleteMany({});
+    await harness!.db.collection('photoBytes.chunks').deleteMany({});
+    await users().insertMany(
+      Object.values(USERS).map((u) => ({
+        _id: u._id,
+        email: `${u._id}@example.test`,
+        passwordHash: 'unused-in-this-suite',
+        name: 'Test User',
+        orgId: u.orgId,
+        role: u.role,
+        createdAt: new Date(),
+      })) as never,
+    );
+  });
+
+  async function archive(id: string): Promise<void> {
+    const { scopedOn } = await import('@steading/api/db/scoped');
+    const { applyBatch } = await import('@steading/api/sync/apply');
+    const { makeMutation } = await import('../support/fixtures');
+
+    await applyBatch(
+      scopedOn(harness!.db, ORG_A),
+      { userId: USERS.ownerA._id, orgId: ORG_A, role: 'owner' },
+      [makeMutation({ entity: 'photo', op: 'delete', targetId: id, payload: {} } as never)],
+    );
+  }
+
+  it('takes the bytes off the server, not just the record', async () => {
+    const id = ulid();
+    await record(id, ORG_A);
+    await put(USERS.ownerA, id);
+    expect(await harness!.db.collection('photoBytes.files').countDocuments({})).toBe(1);
+
+    await archive(id);
+
+    expect(await harness!.db.collection('photoBytes.files').countDocuments({})).toBe(0);
+    // The record survives, which is what P13 is actually about.
+    const row = await photos().findOne({ _id: id as never });
+    expect(row?.archivedAt).toBeInstanceOf(Date);
+  });
+
+  /**
+   * "Not uploaded yet" sends a farm looking for a phone that still holds the
+   * image. For a deleted photo that is a search which cannot end.
+   */
+  it('says the photo was deleted rather than that it never arrived', async () => {
+    const id = ulid();
+    await record(id, ORG_A);
+    await put(USERS.ownerA, id);
+    await archive(id);
+
+    const answer = await get(USERS.ownerA, id);
+    expect(answer.status).toBe(404);
+    expect(answer.body.toString()).toContain('deleted');
+  });
+
+  it('still says "not uploaded yet" for a record whose bytes never came', async () => {
+    const id = ulid();
+    await record(id, ORG_A);
+
+    const answer = await get(USERS.ownerA, id);
+    expect(answer.status).toBe(404);
+    expect(answer.body.toString()).toContain('not been uploaded');
   });
 });

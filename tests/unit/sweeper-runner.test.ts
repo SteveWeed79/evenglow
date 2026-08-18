@@ -23,7 +23,20 @@ import {
  * seam the runner genuinely has is better than one a test pretends it has.
  */
 
-const NOTHING: SweepReport = { found: 0, decided: 0, unreadable: 0, orphaned: 0, refused: 0 };
+const NOTHING: SweepReport = {
+  found: 0,
+  decided: 0,
+  unreadable: 0,
+  orphaned: 0,
+  refused: 0,
+  capped: false,
+};
+
+/**
+ * Where the durable record goes, stubbed for the same reason `sweep` is: this
+ * file is about scheduling, and a test of scheduling should not need a mongod.
+ */
+const nowhere = async (): Promise<void> => undefined;
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -42,7 +55,7 @@ describe('the sweeper’s timer', () => {
    */
   it('runs a first pass shortly after boot, not an hour later', async () => {
     const sweep = vi.fn().mockResolvedValue(NOTHING);
-    const stop = startSweeper({ sweep, settleMs: 60_000, everyMs: 3_600_000 });
+    const stop = startSweeper({ sweep, persist: nowhere, settleMs: 60_000, everyMs: 3_600_000 });
 
     await vi.advanceTimersByTimeAsync(59_000);
     expect(sweep).not.toHaveBeenCalled();
@@ -73,7 +86,7 @@ describe('the sweeper’s timer', () => {
         }),
     );
 
-    const stop = startSweeper({ sweep, settleMs: 10, everyMs: 1_000 });
+    const stop = startSweeper({ sweep, persist: nowhere, settleMs: 10, everyMs: 1_000 });
 
     await vi.advanceTimersByTimeAsync(20);
     expect(sweep).toHaveBeenCalledTimes(1);
@@ -101,7 +114,7 @@ describe('the sweeper’s timer', () => {
       .mockResolvedValue(NOTHING);
 
     const said: string[] = [];
-    const stop = startSweeper({ sweep, settleMs: 10, everyMs: 1_000, report: (l) => said.push(l) });
+    const stop = startSweeper({ sweep, persist: nowhere, settleMs: 10, everyMs: 1_000, report: (l) => said.push(l) });
 
     await vi.advanceTimersByTimeAsync(20);
     expect(said.join(' ')).toContain('mongo went away');
@@ -117,6 +130,7 @@ describe('the sweeper’s timer', () => {
     const said: string[] = [];
     const stop = startSweeper({
       sweep: vi.fn().mockResolvedValue(NOTHING),
+      persist: nowhere,
       settleMs: 10,
       everyMs: 3_600_000,
       report: (l) => said.push(l),
@@ -131,7 +145,10 @@ describe('the sweeper’s timer', () => {
   it('says what it decided when it decided something', async () => {
     const said: string[] = [];
     const stop = startSweeper({
-      sweep: vi.fn().mockResolvedValue({ found: 3, decided: 2, unreadable: 1, orphaned: 0, refused: 0 }),
+      sweep: vi
+        .fn()
+        .mockResolvedValue({ found: 3, decided: 2, unreadable: 1, orphaned: 0, refused: 0, capped: false }),
+      persist: nowhere,
       settleMs: 10,
       everyMs: 3_600_000,
       report: (l) => said.push(l),
@@ -147,10 +164,78 @@ describe('the sweeper’s timer', () => {
     stop();
   });
 
+  /**
+   * A pass that stopped at its ceiling says so.
+   *
+   * The whole reason `capped` exists: a sweeper that quietly leaves rows behind
+   * and one that finished the job read identically in a journal, and an
+   * operator will assume the second.
+   */
+  it('says when it stopped short with more to do', async () => {
+    const said: string[] = [];
+    const stop = startSweeper({
+      sweep: vi
+        .fn()
+        .mockResolvedValue({ found: 5000, decided: 5000, unreadable: 0, orphaned: 0, refused: 0, capped: true }),
+      persist: nowhere,
+      settleMs: 10,
+      everyMs: 3_600_000,
+      report: (l) => said.push(l),
+    });
+
+    await vi.advanceTimersByTimeAsync(20);
+
+    expect(said[0]).toContain('stopped at the ceiling');
+    stop();
+  });
+
+  /**
+   * **The defect this replaced.** The board is a separate systemd unit, so the
+   * in-memory status the sweeper kept was invisible to it and its panel
+   * reported "no pass since boot" for ever. A pass has to write somewhere
+   * another process can read.
+   */
+  it('records every pass where another process can see it', async () => {
+    const written: unknown[] = [];
+    const stop = startSweeper({
+      sweep: vi.fn().mockResolvedValue({ ...NOTHING, found: 2, decided: 2 }),
+      persist: async (record) => {
+        written.push(record);
+      },
+      settleMs: 10,
+      everyMs: 3_600_000,
+    });
+
+    await vi.advanceTimersByTimeAsync(20);
+
+    expect(written).toHaveLength(1);
+    expect((written[0] as { report?: { decided: number } }).report?.decided).toBe(2);
+    stop();
+  });
+
+  /** And a pass that threw, which is the one an operator most needs to see. */
+  it('records a failed pass too, rather than only a successful one', async () => {
+    const written: { failed?: string }[] = [];
+    const stop = startSweeper({
+      sweep: vi.fn().mockRejectedValue(new Error('mongo went away')),
+      persist: async (record) => {
+        written.push(record);
+      },
+      settleMs: 10,
+      everyMs: 3_600_000,
+      report: () => undefined,
+    });
+
+    await vi.advanceTimersByTimeAsync(20);
+
+    expect(written[0]?.failed).toBe('mongo went away');
+    stop();
+  });
+
   /** Stopping means stopping, so a shutdown is not left waiting on a timer. */
   it('stops when it is told to', async () => {
     const sweep = vi.fn().mockResolvedValue(NOTHING);
-    startSweeper({ sweep, settleMs: 10, everyMs: 1_000 })();
+    startSweeper({ sweep, persist: nowhere, settleMs: 10, everyMs: 1_000 })();
 
     await vi.advanceTimersByTimeAsync(120_000);
 

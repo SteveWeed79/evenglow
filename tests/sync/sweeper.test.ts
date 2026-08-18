@@ -5,7 +5,7 @@ import { scopedOn } from '@steading/api/db/scoped';
 import { applyBatch } from '@steading/api/sync/apply';
 import { PENDING } from '@steading/api/sync/outcome';
 import { readSnapshotPage } from '@steading/api/sync/snapshot';
-import { SWEEP_AFTER_MS, sweepFarm } from '@steading/api/sync/sweep';
+import { SWEEP_AFTER_MS, SWEEP_CEILING, sweepAllFarms, sweepFarm } from '@steading/api/sync/sweep';
 import { makeMutation } from '../support/fixtures';
 import { startTestDb } from '../support/mongo';
 
@@ -309,5 +309,114 @@ describeDb('a row from before the outcome field existed', () => {
     expect(report.found).toBe(0);
     // And it was already replicating, which is why no backfill is needed.
     expect(await feed()).toEqual([m.id]);
+  });
+});
+
+/**
+ * How much one pass actually covers.
+ *
+ * **Two silent caps, both from a default argument nobody passed.** `findMany`
+ * limits to 200 unless told otherwise and `sweepFarm` told it nothing, so a
+ * farm with more stranded rows than that left the rest untouched every hour;
+ * `sweepAllFarms` looped over `listOrgs()`, which caps at 200 and sorts newest
+ * first, so on a busier box the oldest farms were never swept at all — by the
+ * loop written because *"a sweeper that silently covered one farm on a box
+ * holding two would be the quietest possible bug"*.
+ *
+ * Both assertions use numbers just over the old cap rather than large ones, so
+ * the suite stays quick and still fails against the code it replaced.
+ */
+describeDb('how much one pass covers', () => {
+  it('sweeps past the two hundredth row on one farm', async () => {
+    const ids: string[] = [];
+    for (let i = 0; i < 260; i += 1) {
+      ids.push(await stranded({ entity: 'flock', op: 'create', payload: flock({ name: `F${i}` }) }));
+    }
+
+    const swept = await sweepFarm(scope(), Date.now());
+
+    expect(swept.found).toBe(260);
+    expect(swept.decided).toBe(260);
+    expect(swept.capped).toBe(false);
+
+    // Nothing left behind, which is the assertion the row count is standing in
+    // for: the 201st onwards used to stay `pending` for ever.
+    const left = await harness!.db
+      .collection('mutations')
+      .countDocuments({ orgId: ORG, outcome: PENDING });
+    expect(left).toBe(0);
+  });
+
+  /**
+   * A row this build cannot read back is left `pending` on purpose, for a newer
+   * one. That is what makes "just run the query again" wrong as a paging
+   * strategy — such a row returns at the head of every page for ever — so the
+   * seek cursor has to move past whatever a row turned out to be.
+   */
+  it('pages past a row it cannot read rather than looping on it', async () => {
+    const unreadable = await stranded({ entity: 'flock', op: 'create', payload: flock() });
+    await harness!.db
+      .collection('mutations')
+      .updateOne({ _id: unreadable as never }, { $set: { entity: 'nonsense-entity' } });
+
+    const after = await stranded({ entity: 'flock', op: 'create', payload: flock({ name: 'Beta' }) });
+
+    const swept = await sweepFarm(scope(), Date.now());
+
+    expect(swept.unreadable).toBe(1);
+    // The row behind it was still reached, which is the whole point.
+    expect(await outcomeOf(after)).not.toBe(PENDING);
+  });
+
+  it('covers every farm on the box, not the newest two hundred', async () => {
+    const others: string[] = [];
+    for (let i = 0; i < 205; i += 1) {
+      const id = ulid();
+      others.push(id);
+      await harness!.db.collection('orgs').insertOne({
+        _id: id as never,
+        name: `Farm ${i}`,
+        // Ascending, so the ones this used to miss are the earliest written.
+        createdAt: new Date(Date.now() - (205 - i) * 60_000),
+      } as never);
+    }
+
+    const oldest = others[0]!;
+    await harness!.db.collection('users').insertOne({
+      _id: `${oldest}-owner` as never,
+      email: `${oldest.toLowerCase()}@example.test`,
+      name: 'Another keeper',
+      orgId: oldest,
+      role: 'owner',
+      createdAt: new Date(),
+    } as never);
+
+    const m = makeMutation({ entity: 'flock', op: 'create', payload: flock() } as never);
+    await harness!.db.collection('mutations').insertOne({
+      _id: m.id,
+      orgId: oldest,
+      targetId: m.targetId,
+      entity: m.entity,
+      op: m.op,
+      payload: m.payload,
+      deviceId: m.deviceId,
+      clientSeq: m.clientSeq,
+      clientTs: m.clientTs,
+      schemaVersion: m.schemaVersion,
+      userId: `${oldest}-owner`,
+      serverTs: new Date(Date.now() - SWEEP_AFTER_MS - 60_000),
+      outcome: PENDING,
+    } as never);
+
+    await sweepAllFarms();
+
+    expect(await outcomeOf(m.id)).not.toBe(PENDING);
+
+    await harness!.db.collection('orgs').deleteMany({ _id: { $in: others as never[] } });
+  });
+
+  /** A ceiling exists, and it is high enough not to bite an ordinary farm. */
+  it('bounds one pass rather than running until a backlog is gone', () => {
+    expect(SWEEP_CEILING).toBeGreaterThan(1_000);
   });
 });

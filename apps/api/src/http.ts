@@ -3,8 +3,9 @@
  * Messages are user-facing, so they stay plain and literal (UX-SPEC §6).
  *
  * Deliberately free of any framework type. The conversion to a response is the
- * only part that knows what is serving — a Next handler today, Fastify from
- * S3b — and it lives with the adapter rather than here.
+ * only part that knows what is serving, and it lives with the adapter rather
+ * than here — which is what let a whole server be swapped out underneath this
+ * file without touching it, and is the reason to keep it that way.
  */
 export class HttpError extends Error {
   readonly status: number;
@@ -17,8 +18,7 @@ export class HttpError extends Error {
 }
 
 /**
- * The body every adapter sends for a failure, so the two servers cannot answer
- * the same condition differently while both are running.
+ * One body for every failure, wherever in the service it was raised.
  *
  * An unexpected error never reaches the client as text: it can carry query
  * shape or schema detail, and this bundle is read by anyone with the APK.

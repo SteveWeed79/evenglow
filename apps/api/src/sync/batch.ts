@@ -7,11 +7,12 @@ import { applyBatch } from './apply';
 /**
  * The only write path for offline data, as a function of a scope and a body.
  *
- * Extracted for the same reason as the snapshot reader: both servers run this,
- * neither owns a copy. A batch endpoint that differed between them would show
- * up as mutations accepted by one server and rejected by the other, which the
- * client would surface to a user as work arbitrarily landing in the rejected
- * inbox depending on which host answered.
+ * Extracted for the same reason as the snapshot reader: the route is an
+ * adapter and the rules are not in it. That began as a way to keep two live
+ * servers from answering the same flush differently — the Next surface is now
+ * deleted — and it is worth keeping for what it leaves behind: the whole write
+ * path is reachable from a test with a `Scoped` and a body, without a route, a
+ * port, or a framework.
  */
 export async function handleSyncBatch(
   scope: Scoped,

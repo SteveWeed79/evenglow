@@ -86,7 +86,15 @@ beforeEach(async () => {
   const { hashPassword } = await import('@steading/api/auth/password');
   const { insertOrg, insertUser } = await import('@steading/api/db/identity');
 
-  for (const name of ['users', 'orgs', 'mutations', 'flocks', 'promoCodes', 'invites']) {
+  for (const name of [
+    'users',
+    'orgs',
+    'mutations',
+    'flocks',
+    'promoCodes',
+    'invites',
+    'serverHealth',
+  ]) {
     await harness!.db.collection(name).deleteMany({});
   }
 
@@ -298,5 +306,247 @@ describeDb('the page', () => {
 
     expect(answer.body).not.toContain('Hollow Farm');
     expect(answer.body).not.toContain(ORG_A);
+  });
+});
+
+/**
+ * A token that says `admin` is not the same as an account that is one.
+ *
+ * **The door was opened by the token alone**, which is invariant 8 inverted:
+ * cached claims gate local UX, and the server re-derives identity and role on
+ * every mutation. Two of the board's routes *are* mutations — one gives a farm
+ * free sync, the other mints a subscription code — so somebody demoted or
+ * removed a minute ago kept both for the fifteen minutes an access token lives.
+ *
+ * The tokens below are genuine: minted by this server, correctly signed, not
+ * expired. What changed underneath them is the row.
+ */
+describeDb('an administrator who no longer is one', () => {
+  it('is refused the board once the row says otherwise', async () => {
+    // The token still says admin, because it was minted before this.
+    const token = await tokenFor(USERS.admin);
+    await harness!.db
+      .collection('users')
+      .updateOne({ _id: USERS.admin._id as never }, { $set: { role: 'owner' } });
+
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/board',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    await app.close();
+
+    expect(res.statusCode).toBe(403);
+  });
+
+  /** And the two routes that write, which is where it actually mattered. */
+  it('cannot mint a promotion code with a stale token', async () => {
+    const token = await tokenFor(USERS.admin);
+    await harness!.db
+      .collection('users')
+      .updateOne({ _id: USERS.admin._id as never }, { $set: { role: 'owner' } });
+
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/actions/promo',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { months: 12, maxRedemptions: 1 } as never,
+    });
+    await app.close();
+
+    expect(res.statusCode).toBe(403);
+    expect(await harness!.db.collection('promoCodes').countDocuments({})).toBe(0);
+  });
+
+  it('cannot grant a farm free sync with a stale token', async () => {
+    const token = await tokenFor(USERS.admin);
+    await harness!.db
+      .collection('users')
+      .updateOne({ _id: USERS.admin._id as never }, { $set: { role: 'owner' } });
+
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/actions/grant',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { orgId: ORG_B, granted: true } as never,
+    });
+    await app.close();
+
+    expect(res.statusCode).toBe(403);
+    const org = await harness!.db.collection('orgs').findOne({ _id: ORG_B as never });
+    expect(org?.syncGranted).toBeUndefined();
+  });
+
+  /**
+   * A removed account is a 401 rather than the 403 above: it is not a role
+   * problem, and signing in again is the only thing to do about it.
+   */
+  it('is signed out, not merely demoted, once the account is disabled', async () => {
+    const token = await tokenFor(USERS.admin);
+    await harness!.db
+      .collection('users')
+      .updateOne({ _id: USERS.admin._id as never }, { $set: { disabledAt: new Date() } });
+
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/board',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    await app.close();
+
+    expect(res.statusCode).toBe(401);
+  });
+});
+
+/**
+ * The sweep panel, which reported nothing on every box for ever.
+ *
+ * `startSweeper()` runs in the **API** unit and the board is the **ops** unit —
+ * a separate entry point, a separate port, a separate systemd service, all
+ * deliberately. A module variable written in one process is invisible in the
+ * other, so the panel built because *"a silent journal and a broken timer look
+ * identical"* could not tell them apart either.
+ *
+ * These assertions read the board through its own route with nothing having
+ * swept in this process, which is exactly the situation on a real box.
+ */
+describeDb('what the board says about the sweep', () => {
+  it('says nothing has run when no pass has been recorded', async () => {
+    const answer = await get('/board', USERS.admin);
+    const body = JSON.parse(answer.body) as { health: { sweep: { at: string | null } } };
+
+    expect(answer.status).toBe(200);
+    expect(body.health.sweep.at).toBeNull();
+  });
+
+  it('reports a pass recorded by another process', async () => {
+    const { recordSweep } = await import('@steading/api/db/sweep-status');
+    await recordSweep({
+      at: new Date(),
+      host: 'the-api-unit',
+      startedAt: new Date(),
+      report: { found: 4, decided: 3, unreadable: 1, orphaned: 0, refused: 0, capped: false },
+    });
+
+    const answer = await get('/board', USERS.admin);
+    const body = JSON.parse(answer.body) as {
+      health: { sweep: { at: string | null; found: number; decided: number; host: string } };
+    };
+
+    expect(body.health.sweep.at).not.toBeNull();
+    expect(body.health.sweep.found).toBe(4);
+    expect(body.health.sweep.decided).toBe(3);
+    // Which process wrote it, so a stale row is recognisable as one.
+    expect(body.health.sweep.host).toBe('the-api-unit');
+  });
+
+  it('carries a failed pass, which is the one worth seeing', async () => {
+    const { recordSweep } = await import('@steading/api/db/sweep-status');
+    await recordSweep({
+      at: new Date(),
+      host: 'the-api-unit',
+      startedAt: new Date(),
+      failed: 'mongo went away',
+    });
+
+    const answer = await get('/board', USERS.admin);
+    const body = JSON.parse(answer.body) as { health: { sweep: { failed: string | null } } };
+
+    expect(body.health.sweep.failed).toBe('mongo went away');
+  });
+
+  /** A pass that stopped at its ceiling is not the same as one that finished. */
+  it('says when the last pass stopped short', async () => {
+    const { recordSweep } = await import('@steading/api/db/sweep-status');
+    await recordSweep({
+      at: new Date(),
+      host: 'the-api-unit',
+      startedAt: new Date(),
+      report: { found: 5000, decided: 5000, unreadable: 0, orphaned: 0, refused: 0, capped: true },
+    });
+
+    const answer = await get('/board', USERS.admin);
+    const body = JSON.parse(answer.body) as { health: { sweep: { capped: boolean } } };
+
+    expect(body.health.sweep.capped).toBe(true);
+  });
+});
+
+/**
+ * The board is a real web page, and it had no headers at all.
+ *
+ * Everywhere else this service answers an APK, where framing, referrer leakage
+ * and script injection mean very little — which is the argument that kept a
+ * header pack off, and it was three-quarters right. This is the quarter it
+ * missed: HTML, served to a browser, showing every farm on the server, with
+ * buttons that grant subscriptions.
+ */
+describeDb('what the board sends with the page', () => {
+  async function page() {
+    const app = await buildApp();
+    const res = await app.inject({ method: 'GET', url: '/' });
+    await app.close();
+    return res;
+  }
+
+  it('cannot be framed, so its buttons cannot be clickjacked', async () => {
+    const res = await page();
+    expect(res.headers['x-frame-options']).toBe('DENY');
+    expect(String(res.headers['content-security-policy'])).toContain("frame-ancestors 'none'");
+  });
+
+  it('leaks no referrer, since a URL here can name a farm', async () => {
+    expect((await page()).headers['referrer-policy']).toBe('no-referrer');
+  });
+
+  it('tells a browser never to guess at a content type', async () => {
+    expect((await page()).headers['x-content-type-options']).toBe('nosniff');
+  });
+
+  /**
+   * The page is self-contained by design — no CDN, no font host, no image host
+   * — so everything except its own inline style and script is a refusal.
+   */
+  it('refuses everything it does not itself use', async () => {
+    const policy = String((await page()).headers['content-security-policy']);
+    expect(policy).toContain("default-src 'none'");
+    expect(policy).toContain("connect-src 'self'");
+    expect(policy).toContain("base-uri 'none'");
+    // The mistake a CSP usually ships with, and the reason for the nonce.
+    expect(policy).not.toContain('unsafe-inline');
+  });
+
+  /**
+   * **A nonce the response does not name is a page whose script never runs**,
+   * so the two have to come from one value. Asserted by pulling the nonce out
+   * of the header and finding it in the markup, which is the only thing that
+   * proves they agree.
+   */
+  it('names the same nonce in the policy and in the page', async () => {
+    const res = await page();
+    const nonce = /script-src 'nonce-([A-Za-z0-9_-]+)'/.exec(
+      String(res.headers['content-security-policy']),
+    )?.[1];
+
+    expect(nonce).toBeDefined();
+    expect(res.body).toContain(`<script nonce="${nonce}">`);
+    expect(res.body).toContain(`<style nonce="${nonce}">`);
+  });
+
+  /**
+   * A nonce reused across responses is a value an attacker reads out of one
+   * page and writes into the next, which is the whole of what a nonce is for.
+   */
+  it('mints a fresh nonce every time the page is served', async () => {
+    const read = async () =>
+      /nonce-([A-Za-z0-9_-]+)/.exec(String((await page()).headers['content-security-policy']))?.[1];
+
+    const first = await read();
+    expect(first).toBeDefined();
+    expect(await read()).not.toBe(first);
   });
 });

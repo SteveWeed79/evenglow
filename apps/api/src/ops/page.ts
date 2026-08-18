@@ -24,7 +24,13 @@
  * Records. `ACCESS-AND-BILLING.md` §5 draws that line for `farm:show` and it
  * holds here: counts and timings, farm names and ids, and nothing a farm wrote.
  */
-export function boardPage(): string {
+/**
+ * The nonce is threaded through rather than generated here, because the header
+ * and the markup have to carry the same one and only the route can set a
+ * header. A page rendered with a nonce the response does not name is a page
+ * whose script never runs — so the two come from one value, passed in.
+ */
+export function boardPage(nonce: string): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -34,7 +40,7 @@ export function boardPage(): string {
 <!-- An empty icon, so a browser does not ask for one this process will not serve. -->
 <link rel="icon" href="data:,">
 <title>Steading — operations</title>
-<style>
+<style nonce="${nonce}">
   :root {
     color-scheme: light dark;
     --bg: #f6f5f2; --card: #fffefb; --ink: #1c1a17; --muted: #6b665e;
@@ -175,7 +181,7 @@ export function boardPage(): string {
   </div>
 </main>
 
-<script>
+<script nonce="${nonce}">
 (() => {
   'use strict';
 
@@ -289,10 +295,16 @@ export function boardPage(): string {
     $('sweep').textContent = sweep.failed
       ? 'Sweeper failed: ' + sweep.failed
       : sweep.at
-        ? 'Sweeper last ran ' + ago(sweep.at) + ' — ' + sweep.found + ' undecided, ' +
-          sweep.decided + ' decided.'
-        : 'Sweeper has not completed a pass since this process started.';
-    $('sweep').className = 'hint' + (sweep.failed ? ' bad' : '');
+        ? 'Sweeper last ran ' + ago(sweep.at) + ' on ' + (sweep.host || 'an unnamed host') +
+          ' — ' + sweep.found + ' undecided, ' + sweep.decided + ' decided' +
+          (sweep.capped ? ', and stopped at its ceiling with more to do.' : '.')
+        // Said this way rather than "since this process started", which was the
+        // old wording and was wrong twice over: the sweeper runs in the API
+        // unit, not this one, so it was never about this process — and this
+        // sentence is also what a box shows when the API unit is not running at
+        // all, which is worth being able to read as that.
+        : 'No sweeper pass has been recorded. The API service may not be running.';
+    $('sweep').className = 'hint' + (sweep.failed || sweep.capped ? ' bad' : '');
 
     table(
       $('trouble'),

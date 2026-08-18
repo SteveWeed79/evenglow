@@ -12,11 +12,12 @@ import { isUndecided, shouldReplicate } from './outcome';
 /**
  * Hydration, as a function of a scope and a cursor.
  *
- * Extracted so the Next route and the Fastify route call the SAME code rather
- * than each holding a copy. Two servers are live at once during the migration,
- * and a hydration cursor is exactly the wrong thing to have two of: a
- * difference between them would only surface after a reinstall, on whichever
- * server that device happened to talk to.
+ * Extracted from the route, so a hydration cursor is one piece of code that a
+ * test can drive directly. It was written that way because two servers were
+ * live at once and a cursor is exactly the wrong thing to have two of; the
+ * Next surface is deleted now, and the reason that remains is the better one —
+ * a cursor bug surfaces only after a reinstall, which is the hardest kind of
+ * bug to reach through a running server and the easiest to reach here.
  */
 
 interface MutationDoc extends Tenanted {
@@ -42,14 +43,20 @@ export interface SnapshotCursor {
 }
 
 /**
+ * The largest instant a JavaScript `Date` can hold — ±100,000,000 days from the
+ * epoch, per ECMA-262. Anything past it is `Invalid Date`, and an Invalid Date
+ * is the shape that silently becomes zero on the wire.
+ */
+const MAX_TIMESTAMP = 8_640_000_000_000_000;
+
+/**
  * Rejects a malformed cursor rather than defaulting it to "everything".
  *
- * Takes `unknown` because the two servers hand it different things. Next gives
- * `string | null` from URLSearchParams; Fastify's query parser gives an ARRAY
- * for a repeated parameter, so `?since=1&since=2` arrives as `['1','2']`
- * despite the type. Coercing that with `Number()` happens to yield NaN and
- * fail safely, which is luck rather than a design — so the shape is checked
- * instead of assumed (invariant 11).
+ * Takes `unknown` because a query parameter is not a string. Fastify's parser
+ * gives an ARRAY for a repeated one, so `?since=1&since=2` arrives as
+ * `['1','2']` despite the type saying otherwise. Coercing that with `Number()`
+ * happens to yield NaN and fail safely, which is luck rather than a design — so
+ * the shape is checked instead of assumed (invariant 11).
  */
 export function parseSnapshotCursor(rawSince: unknown, rawSinceId: unknown): SnapshotCursor {
   const invalid = new HttpError(400, 'That request is missing a valid starting point.');
@@ -63,6 +70,22 @@ export function parseSnapshotCursor(rawSince: unknown, rawSinceId: unknown): Sna
   // left it blank, which is a bug on their side worth surfacing.
   const since = rawSince === null || rawSince === undefined ? 0 : Number(rawSince);
   if (!Number.isFinite(since) || since < 0 || rawSince === '') throw invalid;
+
+  /**
+   * Above what a `Date` can hold, and this is the hole the paragraph above
+   * claimed was closed.
+   *
+   * `new Date(1e30)` is an Invalid Date, and BSON **serialises one to epoch 0
+   * without complaining** — so `?since=1e30` became `serverTs > 1970` and
+   * returned the farm's entire history, while the caller believed it had asked
+   * for everything after a point in the far future. The one input this function
+   * says it refuses to default to "everything" was the one input that did.
+   *
+   * Checked against the maximum a `Date` represents rather than against
+   * anything about this farm: a cursor beyond that is not a cursor at all, and
+   * a client that produced one has a bug worth being told about.
+   */
+  if (since > MAX_TIMESTAMP) throw invalid;
 
   const sinceId = rawSinceId ?? null;
   if (sinceId !== null && sinceId.length !== 26) throw invalid;
