@@ -264,8 +264,24 @@ describe('incubation', () => {
 
     const after = await mount(<TodayScreen />);
     expect(after.text()).not.toContain('Candle the Sussex');
-    // The hatch is still coming — clearing one step must not clear the other.
-    expect(after.text()).toContain('Sussex eggs due to hatch');
+
+    /**
+     * The hatch is still coming — clearing one step must not clear the other —
+     * and it is asserted on the incubation's own screen rather than on Today.
+     *
+     * **Not a weaker assertion, a differently placed one.** Candling falls on
+     * about day 7 and the hatch on day 21, so the two are a fortnight apart and
+     * cannot both sit inside Today's one-week horizon
+     * (`TODAY_HORIZON_DAYS`). Today is a morning's work; a hatch a fortnight
+     * out is exactly the kind of row that used to live there permanently and
+     * made the screen unreadable.
+     *
+     * The detail screen is where the full horizon belongs, and `duesFor` is
+     * deliberately unfiltered for this reason: somebody who opens the
+     * incubation has opened it to find out when it hatches.
+     */
+    const still = await mount(<IncubationScreen {...routeProps({ incubationId: id })} />);
+    expect(still.text()).toContain('hatch');
   });
 });
 

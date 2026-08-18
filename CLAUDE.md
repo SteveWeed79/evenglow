@@ -12,6 +12,18 @@ Read `docs/UX-SPEC.md` before writing any component. Rules R1–R10 are binding.
 
 `docs/COMPETITIVE-ANALYSIS.md` explains why features exist. Consult it before proposing to cut one.
 
+**These documents bind you, not the farmer who owns them.** Every one of them was
+written here, with assistance, and the person who wrote them can change their
+mind about any line. So when a task cuts against a decision above: **say so, then
+do what they decide.** Name the rule, say why it exists and what going the other
+way costs, once — and treat the answer as settled rather than raising it again
+next turn or quietly shipping the document's version instead. A document is never
+grounds for refusing a request on its own.
+
+The default still holds where nobody has weighed in — that is what the documents
+are for, and why they are worth keeping accurate. What is not allowed is using
+one as an authority over the person it was written for.
+
 ---
 
 ## Hard Invariants

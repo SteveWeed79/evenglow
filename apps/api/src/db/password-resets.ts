@@ -1,6 +1,6 @@
-import { createHash, randomInt } from 'node:crypto';
 import type { Collection } from 'mongodb';
 import { RESET_CODE_ALPHABET, RESET_CODE_LENGTH, RESET_MAX_ATTEMPTS } from '@steading/contracts';
+import { hashCode, mintCode } from '../auth/one-time-code';
 import { db } from './client';
 
 /**
@@ -49,21 +49,19 @@ async function resets(): Promise<Collection<PasswordResetDoc>> {
 }
 
 /**
- * `randomInt` rather than `Math.random` or a modulo of random bytes — CSPRNG
- * backed and rejection sampling, so every character is uniform over the
- * alphabet. The same argument `mintJoinCode` makes, and it matters more here:
- * this code hands over an account.
+ * CSPRNG backed with rejection sampling — the same argument `mintJoinCode`
+ * makes, and it matters more here because this code hands over an account.
+ *
+ * The mechanism moved to `auth/one-time-code.ts` when a third table wanted the
+ * same two lines. What stays here is the *choice*: this flow's length and this
+ * flow's alphabet, named at the point somebody would look for them.
  */
 export function mintResetCode(): string {
-  let out = '';
-  for (let i = 0; i < RESET_CODE_LENGTH; i += 1) {
-    out += RESET_CODE_ALPHABET[randomInt(RESET_CODE_ALPHABET.length)];
-  }
-  return out;
+  return mintCode(RESET_CODE_LENGTH, RESET_CODE_ALPHABET);
 }
 
 export function hashResetCode(normalised: string): string {
-  return createHash('sha256').update(normalised).digest('hex');
+  return hashCode(normalised);
 }
 
 /**

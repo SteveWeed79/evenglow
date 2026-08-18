@@ -199,6 +199,39 @@ describe('a wet day landing on a clip', () => {
     expect(warnings.some((w) => w.kind === 'shearing-wet')).toBe(false);
   });
 
+  /**
+   * **Three weeks out is already too far, and it used to speak.**
+   *
+   * The window was thirty days, argued for as a planning horizon — *"the
+   * weather is against the week you were thinking of"*. But the only sentence
+   * this rule can write is `and it is wet ${when}`, one named day, because a
+   * `ForecastDay` is all it has. So a clip three weeks away was told its
+   * shearing was in trouble over weather that will be long gone.
+   *
+   * Reported off the tablet, with *"Shearing — Woolies · in 3 weeks"* on the
+   * same screen as the warning about tomorrow.
+   */
+  it('stays quiet about a clip beyond the forecast that feeds it', () => {
+    const warnings = warningsFor(
+      forecast(90),
+      { ...FARM, shearings: [{ key: 'k', title: 'Shearing — Woolies', at: NOW + 21 * DAY }] },
+      NOW,
+    );
+
+    expect(warnings.some((w) => w.kind === 'shearing-wet')).toBe(false);
+  });
+
+  /** And still speaks about the week you might actually shear in. */
+  it('still says so about a clip inside the week', () => {
+    const warnings = warningsFor(
+      forecast(90),
+      { ...FARM, shearings: [{ key: 'k', title: 'Shearing — Woolies', at: NOW + 5 * DAY }] },
+      NOW,
+    );
+
+    expect(warnings.some((w) => w.kind === 'shearing-wet')).toBe(true);
+  });
+
   /** A clip owed in March is not made urgent by tomorrow being wet. */
   it('stays quiet about a clip months away', () => {
     const warnings = warningsFor(

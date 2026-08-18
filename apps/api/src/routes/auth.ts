@@ -1,6 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
+  ALREADY_VERIFIED,
+  changeEmailSchema,
+  EMAIL_TAKEN,
   FORGOT_ACKNOWLEDGEMENT,
   forgotSchema,
   googleSignInSchema,
@@ -12,24 +15,44 @@ import {
   RESET_REFUSAL,
   resetSchema,
   signupSchema,
+  VERIFIED_EMAIL_IS_FIXED,
+  VERIFY_CODE_TTL_MINUTES,
+  VERIFY_REFUSAL,
+  VERIFY_SENT,
+  normalizeVerifyCode,
+  verifySchema,
+  WRONG_PASSWORD,
 } from '@steading/contracts';
 import { authorizeCredentials } from '../auth/credentials';
 import { verifyGoogleIdToken } from '../auth/google';
-import { hashPassword } from '../auth/password';
+import { hashPassword, verifyPassword } from '../auth/password';
 import { endSession, rotateSession, startSession } from '../auth/refresh';
+import { requireMutationClaims } from '../auth/require';
 import { verifyAccessToken } from '../auth/tokens';
 import {
+  changeUnverifiedEmail,
   deleteOrgIfEmpty,
   findOrgById,
   findUserByEmail,
   findUserByGoogleSub,
+  findUserById,
   insertOrg,
   insertUser,
+  isDuplicateKey,
   linkGoogleSub,
+  markEmailVerified,
   normalizeEmail,
   orgHasMembers,
   setPasswordHash,
 } from '../db/identity';
+import {
+  claimVerifyCode,
+  hashVerifyCode,
+  mintVerifyCode,
+  replaceVerifyCode,
+  retireVerifyCodes,
+  verifySendsSince,
+} from '../db/email-verifications';
 import {
   claimResetCode,
   hashResetCode,
@@ -79,6 +102,33 @@ async function farmOf(orgId: string): Promise<{ org?: { name: string } }> {
   return org === null ? {} : { org: { name: org.name } };
 }
 
+/**
+ * The account's own address, and whether it has been proved.
+ *
+ * **The address travels because the app never had it.** A device caches what
+ * comes back from sign-in, and that has been the person's name and the farm's
+ * name — never the email, because nothing needed it. Verification needs it, and
+ * for the reason the feature exists at all: a farmer cannot notice they typed
+ * `alcie@` instead of `alice@` on a screen that does not show them what was
+ * typed. A flag with no address beside it would be a warning nobody can act on.
+ *
+ * **Not in the access token**, exactly as the farm's name is not — neither is
+ * authorization, and neither belongs in something re-verified on every request.
+ * So both are re-sent beside the tokens every time, including on refresh, which
+ * is where a device that verified on another handset learns of it.
+ *
+ * Absent when the account has gone, on the same principle `farmOf` uses: an old
+ * session for a deleted account should say nothing rather than name an address.
+ */
+async function accountOf(
+  userId: string,
+): Promise<{ account?: { email: string; emailVerified: boolean } }> {
+  const user = await findUserById(userId);
+  return user === null
+    ? {}
+    : { account: { email: user.email, emailVerified: user.emailVerifiedAt !== undefined } };
+}
+
 export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> {
   /**
    * Five attempts a minute per IP. Deliberately not per-email: keying on a
@@ -124,6 +174,7 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
         ...pair,
         user: { id: user.id, name: user.name, role: user.role },
         ...(await farmOf(user.orgId)),
+        ...(await accountOf(user.id)),
       });
     });
 
@@ -246,7 +297,12 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
       // chances to lose them and buys nothing.
       return reply
         .status(201)
-        .send({ ...pair, user: { id: userId, name, role: 'owner' }, ...(await farmOf(orgId)) });
+        .send({
+          ...pair,
+          user: { id: userId, name, role: 'owner' },
+          ...(await farmOf(orgId)),
+          ...(await accountOf(userId)),
+        });
     });
 
     /**
@@ -300,6 +356,7 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
             ...pair,
             user: { id: byGoogle._id, name: byGoogle.name, role: byGoogle.role },
             ...(await farmOf(byGoogle.orgId)),
+            ...(await accountOf(byGoogle._id)),
           });
       }
 
@@ -310,7 +367,20 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
         if (byEmail.disabledAt) {
           return reply.status(401).send({ error: 'That Google sign-in did not work. Try again.' });
         }
+        /**
+         * The link proves the address as well as binding the identity.
+         *
+         * `verifyGoogleIdToken` refuses a token without `email_verified`, so
+         * Google has just demonstrated exactly what `/auth/verify` would ask
+         * this person to demonstrate — on the same address, since that is how
+         * the account was found. Making them read a code afterwards would be
+         * asking for a second proof of something already proved, and would
+         * leave a farm whose recovery is off for no reason it can see.
+         */
         await linkGoogleSub(byEmail._id, identity.googleSub);
+        if (byEmail.emailVerifiedAt === undefined) {
+          await markEmailVerified(byEmail._id, byEmail.email, now);
+        }
         const pair = await startSession(
           { userId: byEmail._id, orgId: byEmail.orgId, role: byEmail.role },
           env.AUTH_SECRET,
@@ -321,6 +391,7 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
             ...pair,
             user: { id: byEmail._id, name: byEmail.name, role: byEmail.role },
             ...(await farmOf(byEmail.orgId)),
+            ...(await accountOf(byEmail._id)),
           });
       }
 
@@ -357,6 +428,10 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
           _id: userId,
           email: normalizeEmail(identity.email),
           googleSub: identity.googleSub,
+          // Proved on arrival: the ID token carried `email_verified`, which is
+          // the same fact `/auth/verify` exists to establish. See the note on
+          // the linking branch above.
+          emailVerifiedAt: now,
           // No passwordHash, deliberately. Nothing was set, so nothing can be
           // guessed — see `authorizeCredentials`, which refuses the account
           // rather than comparing against an absent digest.
@@ -377,6 +452,7 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
           ...pair,
           user: { id: userId, name: identity.name ?? 'Farmer', role: 'owner' },
           ...(await farmOf(orgId)),
+          ...(await accountOf(userId)),
         });
     });
 
@@ -404,7 +480,9 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
          */
         const claims = await verifyAccessToken(pair.accessToken, env.AUTH_SECRET);
 
-        return reply.status(200).send({ ...pair, ...(await farmOf(claims.orgId)) });
+        return reply
+          .status(200)
+          .send({ ...pair, ...(await farmOf(claims.orgId)), ...(await accountOf(claims.userId)) });
       } catch (error) {
         const { status, body } = errorBody(error);
         return reply.status(status).send(body);
@@ -427,6 +505,7 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
   });
 
   await recoveryRoutes(app, env);
+  await verificationRoutes(app, env);
 }
 
 /**
@@ -446,12 +525,18 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
 const FORGOT_FLOOR_MS = 900;
 
 /**
- * How many codes one account may be sent in an hour.
+ * How many codes one account may be sent in an hour — recovery and
+ * confirmation alike.
  *
- * **The anti-harassment limit, and the one that is easy to forget.** The
- * per-IP limiter on this scope stops somebody hammering the route; it does
- * nothing to stop them filling one farmer's inbox from a phone, a laptop and a
- * VPN. Three is enough for somebody who genuinely mistyped their address twice.
+ * **The anti-harassment limit, and the one that is easy to forget.** A per-IP
+ * limiter stops somebody hammering a route; it does nothing to stop them
+ * filling one farmer's inbox from a phone, a laptop and a VPN. Three is enough
+ * for somebody who genuinely mistyped their address twice.
+ *
+ * Shared by both flows on purpose, and it is the same ceiling for a different
+ * reason each time: recovery protects an address the account owns, and
+ * confirmation protects one it may well not — a typo at signup means every
+ * send lands with a stranger.
  */
 const CODES_PER_ACCOUNT_PER_HOUR = 3;
 
@@ -510,6 +595,28 @@ async function recoveryRoutes(app: FastifyInstance, env: Env): Promise<void> {
         // Unknown address, or an account somebody has removed. Nothing is done
         // and the answer below is identical.
         if (!user || user.disabledAt) return;
+
+        /**
+         * **An unproved address gets nothing, and this is the gate the whole
+         * verification feature was built to install.**
+         *
+         * A password signup accepts whatever was typed. Without this line, a
+         * farm that typed `alcie@` instead of `alice@` has a live recovery
+         * route pointing at a stranger's inbox — and cannot tell, because the
+         * route above answers identically either way.
+         *
+         * It costs that farm its recovery until somebody confirms the address,
+         * and that trade is not close: the records are on the handset (D1), so
+         * an unrecoverable password costs the *sync*, not the season, while a
+         * misdirected reset code costs the farm. `AccountScreen` says the
+         * address is unconfirmed and offers to correct it, which is what keeps
+         * this from being a silent loss.
+         *
+         * Silent, like every other refusal here. Answering differently for an
+         * unverified address would say which addresses have unverified accounts
+         * — a smaller disclosure than existence, and still one.
+         */
+        if (user.emailVerifiedAt === undefined) return;
 
         /**
          * Per account, on top of the per-IP limit above, because they stop
@@ -597,6 +704,279 @@ async function recoveryRoutes(app: FastifyInstance, env: Env): Promise<void> {
       return reply.status(204).send();
     });
   });
+}
+
+/**
+ * Proving the address on an account — `PASSWORD-RECOVERY.md` §10.
+ *
+ * ## Why none of this looks like `/auth/forgot`
+ *
+ * Everything in the recovery section above is shaped by one constraint: the
+ * caller is a stranger, so nothing may be told apart — not a real address from
+ * an unknown one, not a send failure from a success, not even a fast answer
+ * from a slow one. None of that applies here. **Every route below is
+ * authenticated**, and it acts on the caller's own account. There is nobody to
+ * enumerate, nothing to time, and no reason to answer a farmer's honest
+ * question with a sentence built to reveal nothing.
+ *
+ * So the refusals are plain and specific: already confirmed, address taken,
+ * wrong password. The one that stays deliberately blunt is the code itself,
+ * where wrong, expired, spent and exhausted are one sentence for the reason
+ * `RESET_REFUSAL` gives — that one is guessable and the others are not.
+ *
+ * `requireMutationClaims` rather than `requireClaims` on all three: these write,
+ * and a disabled account must not be able to move an address or turn recovery
+ * on for one. That is invariant 8 doing its ordinary job.
+ */
+async function verificationRoutes(app: FastifyInstance, env: Env): Promise<void> {
+  await app.register(async (scope) => {
+    /**
+     * Three a minute, matching the recovery scope, and it fails closed.
+     *
+     * The signed-in caller changes who this protects but not that it is needed:
+     * this route sends mail, so an unthrottled one is somebody else's bill, and
+     * the change-of-address route below is a password-guessing surface that
+     * happens to sit behind a session.
+     */
+    await scope.register(import('@fastify/rate-limit'), { max: 3, timeWindow: '1 minute' });
+
+    scope.post('/auth/verify/send', async (request, reply) => {
+      const claims = await requireMutationClaims(request.headers.authorization, env.AUTH_SECRET);
+
+      // Refused at the edge with a sentence rather than discovered at send
+      // time — the shape §8.3 asks for, and the state every dev box is in.
+      if (!canSendMail(env)) {
+        return reply.status(503).send({ error: NO_MAIL_CONFIGURED });
+      }
+
+      const user = await findUserById(claims.userId);
+      if (user === null) return reply.status(401).send({ error: 'This account is no longer active.' });
+
+      // Nothing to do, and saying so plainly is safe here: the caller is asking
+      // about their own account and already knows the answer is about them.
+      if (user.emailVerifiedAt !== undefined) {
+        return reply.status(409).send({ error: ALREADY_VERIFIED });
+      }
+
+      /**
+       * The same per-account ceiling recovery uses, and it is not the same
+       * attack it stops.
+       *
+       * There nobody could be harassed but the account's owner by a stranger;
+       * here the address is one the account *claims* and may well not own — a
+       * typo at signup means every send lands in somebody else's inbox. Three
+       * an hour keeps a mistyped address from being mailed all afternoon by a
+       * farmer tapping a button that never appears to work.
+       */
+      const hour = new Date(Date.now() - 3_600_000);
+      if ((await verifySendsSince(user._id, hour)) >= CODES_PER_ACCOUNT_PER_HOUR) {
+        return reply.status(429).send({ error: 'Too many codes for now. Try again in an hour.' });
+      }
+
+      const code = mintVerifyCode();
+      const now = new Date();
+
+      // Stored before the send, so a provider outage leaves somebody who waits
+      // and asks again rather than a code nobody holds.
+      await replaceVerifyCode({
+        _id: hashVerifyCode(normalizeVerifyCode(code)),
+        userId: user._id,
+        email: user.email,
+        createdAt: now,
+        expiresAt: new Date(now.getTime() + VERIFY_CODE_TTL_MINUTES * 60_000),
+        attempts: 0,
+      });
+
+      /**
+       * The send result is reported, unlike recovery's.
+       *
+       * There the answer had to be identical whatever happened, or the route
+       * enumerated accounts. Here the caller owns the account and is waiting on
+       * a specific message — telling them the server could not send it is the
+       * honest answer and the one that stops them tapping again for an hour.
+       */
+      const sent = await trySend(mailerFor(env), {
+        to: user.email,
+        subject: 'Confirm your Steading email',
+        text: verifyEmailText(code, user.name, user.email),
+      });
+
+      if (!sent) {
+        return reply
+          .status(502)
+          .send({ error: 'That could not be sent just now. Try again in a minute.' });
+      }
+
+      return reply.status(202).send({ ok: true, message: VERIFY_SENT });
+    });
+
+    scope.post('/auth/verify', async (request, reply) => {
+      const claims = await requireMutationClaims(request.headers.authorization, env.AUTH_SECRET);
+
+      const parsed = verifySchema.safeParse(request.body);
+      if (!parsed.success) return reply.status(400).send({ error: VERIFY_REFUSAL });
+
+      const user = await findUserById(claims.userId);
+      if (user === null) return reply.status(401).send({ error: 'This account is no longer active.' });
+
+      if (user.emailVerifiedAt !== undefined) {
+        return reply.status(409).send({ error: ALREADY_VERIFIED });
+      }
+
+      const now = new Date();
+      const claim = await claimVerifyCode(
+        hashVerifyCode(normalizeVerifyCode(parsed.data.code)),
+        user._id,
+        user.email,
+        now,
+      );
+      if (!claim.ok) return reply.status(400).send({ error: VERIFY_REFUSAL });
+
+      /**
+       * The address the code was minted for is passed through to the write.
+       *
+       * `claimVerifyCode` has already matched on it, so this is the second of
+       * two guards against one race: an address that moved between the mint and
+       * the spend. Belt and braces on purpose — what is being written is the
+       * flag that turns account recovery on.
+       */
+      await markEmailVerified(user._id, user.email, now);
+
+      return reply.status(200).send({ ok: true, ...(await accountOf(user._id)) });
+    });
+
+    /**
+     * Correcting a mistyped address, which is what keeps verification from
+     * being a trap.
+     *
+     * Without it, a typo at signup is a permanent dead end — recovery off, and
+     * no way in the app to fix the cause. With it the farm fixes its own
+     * mistake in the ten seconds after noticing, which is the outcome the whole
+     * feature is aimed at.
+     *
+     * **Only while the address is unproved**, and that is not a limitation
+     * being apologised for. An unverified address asserts nothing, so replacing
+     * one unproved string with another discloses nothing and grants nothing. A
+     * *verified* address is a different object: moving it needs the old address
+     * to confirm the move, or a leaked session becomes an account takeover in
+     * two requests. That flow is not built, and this refuses rather than
+     * approximating it.
+     */
+    scope.post('/auth/email', async (request, reply) => {
+      const claims = await requireMutationClaims(request.headers.authorization, env.AUTH_SECRET);
+
+      const parsed = changeEmailSchema.safeParse(request.body);
+      if (!parsed.success) return reply.status(400).send({ error: 'Check the details and try again.' });
+
+      const user = await findUserById(claims.userId);
+      if (user === null) return reply.status(401).send({ error: 'This account is no longer active.' });
+
+      if (user.emailVerifiedAt !== undefined) {
+        return reply.status(409).send({ error: VERIFIED_EMAIL_IS_FIXED });
+      }
+
+      /**
+       * The current password, even though the caller is already signed in.
+       *
+       * It asks nothing they cannot answer — an unverified account reached this
+       * state through password signup, so there is one to type. What it buys is
+       * that a stolen refresh token on its own cannot walk the address onto an
+       * inbox the thief controls and then reset through it. Session plus
+       * password is two secrets; a session alone is one.
+       *
+       * An account with no password hash is refused here rather than compared
+       * against nothing, exactly as `authorizeCredentials` refuses one. In
+       * practice it is unreachable — the only accounts without a password are
+       * Google's, and those arrive verified — but "unreachable" is a thing that
+       * stops being true when somebody adds a route.
+       */
+      if (
+        user.passwordHash === undefined ||
+        !(await verifyPassword(user.passwordHash, parsed.data.password))
+      ) {
+        return reply.status(403).send({ error: WRONG_PASSWORD });
+      }
+
+      const next = normalizeEmail(parsed.data.email);
+
+      /**
+       * Asked before the write, and **not merely a nicety over the unique
+       * index** — its own test proved that.
+       *
+       * The first version of this route relied on the duplicate-key error
+       * alone, which reads as elegant and is a route whose correctness lives in
+       * a piece of schema. The test wrote a second account onto the target
+       * address and got a 200: the suite's database has no indexes applied, so
+       * nothing failed and the move went through. A production box has the
+       * index and would have refused — which is the worst shape for a bug,
+       * since the only place it shows is the place nobody is testing.
+       *
+       * So the check is here, the index stays as the race guard below, and
+       * neither is load-bearing alone. Exactly the pairing `/auth/signup` uses,
+       * and it says the same sentence.
+       *
+       * Their own address is not somebody else's: re-submitting it is a no-op
+       * rather than a refusal, which is what somebody correcting a typo they
+       * did not actually make would expect.
+       */
+      const holder = await findUserByEmail(next);
+      if (holder && holder._id !== user._id) {
+        return reply.status(409).send({ error: EMAIL_TAKEN });
+      }
+
+      try {
+        const moved = await changeUnverifiedEmail(user._id, next);
+        // Nothing matched. The verified case is answered above, so this is an
+        // account that went away between the read and the write.
+        if (!moved) return reply.status(409).send({ error: VERIFIED_EMAIL_IS_FIXED });
+      } catch (error) {
+        if (isDuplicateKey(error)) return reply.status(409).send({ error: EMAIL_TAKEN });
+        throw error;
+      }
+
+      /**
+       * Every code in flight dies with the old address.
+       *
+       * One was minted for a string this account no longer uses. Leaving it
+       * live would let whoever received it confirm an address they were never
+       * sent anything at — the exact substitution the correction exists to
+       * undo. `claimVerifyCode` also matches on the address, so this is the
+       * cheap half of a guard that holds either way.
+       */
+      await retireVerifyCodes(user._id, new Date());
+
+      return reply.status(200).send({ ok: true, ...(await accountOf(user._id)) });
+    });
+  });
+}
+
+/**
+ * What the confirmation email says.
+ *
+ * **It names the address back**, which the reset email has no reason to and
+ * this one very much does: the person reading it may be a stranger who was
+ * mistyped into somebody else's signup, and the only useful thing to tell them
+ * is what to do about that — nothing. It is also the copy that lets the farmer
+ * who *did* get it check the string against what they meant to type.
+ *
+ * No link, on the same phishing grounds §3 gives. There is nothing to click.
+ */
+function verifyEmailText(code: string, name: string, email: string): string {
+  return [
+    `Hello ${name},`,
+    '',
+    `Someone set up a Steading farm account using ${email}.`,
+    'Type this code into the app to confirm the address:',
+    '',
+    `    ${code}`,
+    '',
+    `It is good for ${VERIFY_CODE_TTL_MINUTES} minutes and can be used once.`,
+    '',
+    'Confirming it is what lets you reset a forgotten password later.',
+    '',
+    'If that was not you, ignore this. Nothing happens, and the account',
+    'that named this address can never send a password reset to it.',
+  ].join('\n');
 }
 
 /**

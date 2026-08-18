@@ -275,9 +275,50 @@ export function compareDues(a: Due, b: Due, now: number): number {
   return a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
 }
 
-/** What Today shows: visible rows, most pressing first. */
+/**
+ * How far ahead a row that is merely *coming* may reach onto Today.
+ *
+ * **A week, and there used to be no limit at all.** `isVisible` alone was the
+ * gate, and it asks only whether a row is inside its own notice window — which
+ * for `shearing` and `birth` is six weeks, and for `hatch` and `service` three.
+ * A clip owed in October therefore appeared on Today every morning from
+ * August, beside the eggs, and stayed until somebody shore the sheep.
+ *
+ * Reported off the tablet with four rows on it — seven days, eleven days,
+ * twelve days and three weeks — and none of them a thing to do that morning:
+ * *"most items are not due soon but are permanently on that screen until
+ * complete."* A list where nothing is urgent is a list nobody reads, and it
+ * takes the genuinely urgent rows down with it.
+ *
+ * **The notice window is not wrong; it answers a different question.** Six
+ * weeks is honestly when a farm should start *thinking* about a clip — book
+ * the shearer, plan the pens. That belongs on the fibre screen and in
+ * `duesFor`, which is deliberately unfiltered for exactly this reason. It does
+ * not belong in a morning's work.
+ *
+ * Overdue and due-now are never held back by this. Something late is late
+ * however long its notice was.
+ */
+export const TODAY_HORIZON_DAYS = 7;
+
+/**
+ * What Today shows: what is late, what is due, and what lands this week.
+ *
+ * The horizon applies only to `soon` — see `TODAY_HORIZON_DAYS`. A row with no
+ * date is `later` and was already excluded by `isVisible`.
+ */
 export function todayList(dues: readonly Due[], now: number): Due[] {
-  return dues.filter((d) => isVisible(d, now)).sort((a, b) => compareDues(a, b, now));
+  const horizon = now + TODAY_HORIZON_DAYS * DAY_MS;
+
+  return dues
+    .filter((d) => {
+      if (!isVisible(d, now)) return false;
+      if (urgencyOf(d, now) !== 'soon') return true;
+
+      const at = dueDate(d);
+      return at !== null && at <= horizon;
+    })
+    .sort((a, b) => compareDues(a, b, now));
 }
 
 /** Whether this row is about a particular record — see `Due.about`. */

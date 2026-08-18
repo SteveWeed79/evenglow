@@ -100,11 +100,25 @@ describe('the reading column', () => {
     const capped = styles(screen.tree.toJSON()).filter((s) => s.maxWidth === LAYOUT.column);
 
     /**
-     * Both, and the pairing is the point: capping only the content would leave
-     * the lamp and the settings gear at the far edge of a 1280dp screen
-     * pointing at a column in the middle of it.
+     * **The content, and only the content.**
+     *
+     * This asserted two capped elements, and the pairing was argued for:
+     *
+     * > *Both, and the pairing is the point: capping only the content would
+     * > leave the lamp and the settings gear at the far edge of a 1280dp screen
+     * > pointing at a column in the middle of it.*
+     *
+     * That cost is real and it is now being paid deliberately. What the pairing
+     * bought was worse, because `cap` is `wide ? LAYOUT.wide : LAYOUT.column` —
+     * so the bar followed the *content's* measure and moved between screens.
+     * Settings and Iron put the chevron at the window's edge; Machines, Animals
+     * and every form pulled it in to 600dp. A control that changes position as
+     * you navigate is the thing a hand actually notices, and it was reported
+     * from the tablet before anybody minded the lamp being far from the text.
+     *
+     * A measure is for prose. Chrome belongs to the window.
      */
-    expect(capped.length).toBeGreaterThanOrEqual(2);
+    expect(capped).toHaveLength(1);
     for (const s of capped) {
       // Capped without `width: '100%'` a flex child shrinks to its content,
       // which would break every full-width row on the phones this is drawn for.
@@ -112,15 +126,11 @@ describe('the reading column', () => {
     }
 
     /**
-     * Centred two different ways, on purpose.
-     *
-     * The status bar is a plain flex child, so `alignSelf` is ordinary
-     * flexbox. The content column is inside a `NativeScrollContentView` whose
-     * width the native scroll view has a hand in — so it is centred by its
-     * *container* rather than by itself, which cannot depend on internals.
+     * The content column is inside a `NativeScrollContentView` whose width the
+     * native scroll view has a hand in — so it is centred by its *container*
+     * rather than by itself, which cannot depend on internals.
      */
     const all = styles(screen.tree.toJSON());
-    expect(all.some((s) => s.maxWidth === LAYOUT.column && s.alignSelf === 'center')).toBe(true);
     expect(all.some((s) => s.alignItems === 'center' && s.flexGrow === 1)).toBe(true);
     screen.unmount();
   });
@@ -158,14 +168,16 @@ describe('the reading column', () => {
 
 describe('a wide screen', () => {
   /**
-   * `wide` moves the cap; it does not remove it.
+   * `wide` moves the content's cap; it does not remove it, and it no longer
+   * moves the bar with it — the bar has no cap to move.
    *
-   * And it moves *both* caps together. A hub whose content reached 1104 while
-   * its status row stayed at 600 would put the settings gear in the middle of
-   * its own content — the same mistake the column comment warns about,
-   * mirrored, and the one this pairing exists to prevent in both directions.
+   * This used to assert both together, on the argument that a hub whose content
+   * reached 1104 while its status row stayed at 600 would put the gear in the
+   * middle of its own content. True of a bar that is capped at all; the answer
+   * taken was to stop capping it, so the bar is at the window's edge on this
+   * screen and on every other one.
    */
-  it('moves both caps out to LAYOUT.wide, together', async () => {
+  it('moves the content cap out to LAYOUT.wide, and leaves the bar alone', async () => {
     const screen = await mount(
       <Screen title="The farm" wide>
         <Text>a row</Text>
@@ -175,13 +187,43 @@ describe('a wide screen', () => {
     const all = styles(screen.tree.toJSON());
     const capped = all.filter((s) => s.maxWidth === LAYOUT.wide);
 
-    expect(capped.length).toBeGreaterThanOrEqual(2);
+    expect(capped).toHaveLength(1);
     for (const s of capped) expect(s.width).toBe('100%');
 
     // And nothing is left behind at the narrow cap, which is what a change
     // that widened only one of the two would look like.
     expect(all.some((s) => s.maxWidth === LAYOUT.column)).toBe(false);
     screen.unmount();
+  });
+
+  /**
+   * The bar is the same width whatever the screen is, which is the whole point
+   * of the change above and the thing a person sees.
+   */
+  it('puts the bar in the same place on a wide screen as on a narrow one', async () => {
+    const narrow = await mount(
+      <Screen title="Machines">
+        <Text>a row</Text>
+      </Screen>,
+    );
+    const wide = await mount(
+      <Screen title="The farm" wide>
+        <Text>a row</Text>
+      </Screen>,
+    );
+
+    const barOf = (screen: Awaited<ReturnType<typeof mount>>) =>
+      styles(screen.tree.toJSON()).find(
+        (s) => s.justifyContent === 'space-between' && s.width === '100%',
+      );
+
+    // Neither carries a cap, so neither can disagree with the other about where
+    // the chevron sits.
+    expect(barOf(narrow)?.maxWidth).toBeUndefined();
+    expect(barOf(wide)?.maxWidth).toBeUndefined();
+
+    narrow.unmount();
+    wide.unmount();
   });
 
   it('is still a cap, and still the one the panes will use', () => {

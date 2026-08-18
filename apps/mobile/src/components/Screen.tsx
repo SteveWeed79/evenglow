@@ -258,8 +258,29 @@ export function Screen({
         * wall as well — letterboxing the app in bare background, which is the
         * failure `reading-column.test.tsx` already stands guard over.
         */}
+      {/**
+        * The bar spans the window. It does not take the column's measure.
+        *
+        * **This used to be `maxWidth: cap`, and the pairing was deliberate** —
+        * `reading-column.test.tsx` argued that *"capping only the content would
+        * leave the lamp and the settings gear at the far edge of a 1280dp
+        * screen pointing at a column in the middle of it."* That cost is real
+        * and it is the one being paid here.
+        *
+        * What it bought was worse. `cap` is `wide ? LAYOUT.wide :
+        * LAYOUT.column`, so the bar moved with the *content's* measure: on
+        * Settings, Iron and Today it sat at the window's edges, and on
+        * Machines, Animals, Crops and every form it pulled in to 600dp. The
+        * back chevron therefore jumped several hundred points sideways between
+        * one screen and the next, which is what a person actually notices —
+        * reported off the tablet as the bar being *"centered on some screens
+        * and sides oriented on other"*.
+        *
+        * A measure is for prose. A chevron and a lamp are chrome: they belong
+        * to the window, they are in the same place on every screen, and the
+        * thumb learns one position rather than two.
+        */}
       <View style={[styles.status, {
-        maxWidth: cap,
         paddingLeft: SPACE.lg + insets.left,
         paddingRight: SPACE.lg + insets.right,
       }]}>
@@ -336,6 +357,27 @@ export function Screen({
           inside it is ordinary flexbox and cannot be anything else. */}
       <ScrollView
         ref={scroll}
+        /**
+         * **Off when there are two panes, because then the panes scroll.**
+         *
+         * One scroll surface held both columns, so dragging the tractor's
+         * timeline dragged the tractor list up with it and off the top — the
+         * list, its actions and the heading all gone, leaving a column of
+         * nothing beside a column of history. Reported off the tablet, and
+         * visible in the screenshot as a blank left half.
+         *
+         * A split screen is two things side by side *because they are read
+         * independently*: the left names what you are looking at and the right
+         * is as long as the record happens to be. Tying them to one scroll
+         * makes the shorter one a passenger.
+         *
+         * Disabled rather than replaced, so the non-split path — every form,
+         * every phone — renders exactly the tree it always did, including the
+         * keyboard-reveal machinery that scrolls a focused field clear. That
+         * machinery keeps working where it is needed: on a split screen the
+         * fields are in the left pane, which has its own scroll below.
+         */
+        scrollEnabled={!split}
         // The insets pad the scroll's CONTAINER, so the column is centred
         // inside the safe area rather than inside the window. The scroll
         // surface itself stays full-bleed — a thumb can still drag anywhere on
@@ -468,12 +510,32 @@ export function Screen({
           * exactly the tree it rendered before this prop existed.
           */}
         {split ? (
+          /**
+           * Two panes, each scrolling itself.
+           *
+           * `styles.panes` stretches them rather than aligning to the top, and
+           * that is the half of this change that is easy to get wrong. The old
+           * row used `flex-start` so *"a short aside must not stretch to match
+           * a long column, or its last card grows a foot of empty card"* —
+           * which was right for two plain views. These are scroll surfaces: the
+           * surface stretches to the height available and the cards inside it
+           * do not, so the card keeps its size and gains somewhere to scroll.
+           */
           <View style={styles.panes}>
-            <View style={[styles.pane, { width: LAYOUT.column }]}>{children}</View>
-            {/* `flex-start`, on the row rather than here: the two panes are
-                different lengths and a short aside must not stretch to match
-                a long column, or its last card grows a foot of empty card. */}
-            <View style={[styles.pane, { width: asidePane }]}>{aside}</View>
+            <ScrollView
+              style={{ width: LAYOUT.column }}
+              contentContainerStyle={styles.pane}
+              keyboardShouldPersistTaps="handled"
+            >
+              {children}
+            </ScrollView>
+            <ScrollView
+              style={{ width: asidePane }}
+              contentContainerStyle={styles.pane}
+              keyboardShouldPersistTaps="handled"
+            >
+              {aside}
+            </ScrollView>
           </View>
         ) : (
           <>
@@ -566,7 +628,12 @@ const styles = StyleSheet.create({
    * regions on a touch screen means a drag that does something different
    * depending on which half of the glass it started on.
    */
-  panes: { flexDirection: 'row', gap: LAYOUT.spacer, alignItems: 'flex-start' },
+  /**
+   * `flex: 1` and `stretch`, because each pane is now its own scroll surface
+   * and a scroll surface with no height scrolls nothing. The row takes what is
+   * left under the hero; the panes take the row.
+   */
+  panes: { flexDirection: 'row', gap: LAYOUT.spacer, alignItems: 'stretch', flex: 1 },
   /** Repeats the content gap, which the row's own `gap` is spending sideways. */
   pane: { gap: SPACE.md },
   // Carries the margin the hero used to, so a screen with no subtitle sits
