@@ -246,12 +246,31 @@ const BIRTH_WINDOW_DAYS = 7;
 /**
  * How close a clip has to be for rain to be worth saying.
  *
- * A month, which is far wider than the birth window and deliberately so. A
- * shearer is booked rather than summoned, and the useful sentence is "the
- * weather is against the week you were thinking of" — that is a planning
- * horizon, not a tonight problem.
+ * **A week, and it was a month.** The original reasoning is kept because it is
+ * good and it is only half wrong:
+ *
+ * > *A month, which is far wider than the birth window and deliberately so. A
+ * > shearer is booked rather than summoned, and the useful sentence is "the
+ * > weather is against the week you were thinking of" — that is a planning
+ * > horizon, not a tonight problem.*
+ *
+ * That describes a sentence this rule cannot write. What it actually says is
+ * `and it is wet ${when}` — one named day — because a `ForecastDay` is all it
+ * has. There is no forecast a month out, so a thirty-day window pinned
+ * tomorrow's rain to a clip three weeks away and told a farm their shearing was
+ * in trouble because of weather that will be long gone. Reported off the
+ * tablet: the warning and *"Shearing — Woolies · in 3 weeks"* on one screen.
+ *
+ * The window cannot usefully outrun the forecast that feeds it. A week is what
+ * the forecast covers, so a week is what this can speak about — and inside it
+ * the sentence is exactly right: you were going to shear in the next few days,
+ * and one of them is wet.
+ *
+ * The planning horizon the note above wants is a real thing and it is the due
+ * row's job: `shearing` has six weeks of notice and says a clip is owed. This
+ * says whether the day is any good.
  */
-const SHEARING_WINDOW_DAYS = 30;
+const SHEARING_WINDOW_DAYS = 7;
 
 /**
  * When a day counts as too wet to shear.

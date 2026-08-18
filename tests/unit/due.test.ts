@@ -228,7 +228,11 @@ describe('service', () => {
    */
   it('sorts a projected meter row against a dated one', () => {
     const service = serviceDue(machine(), { id: 's1', name: 'Oil change', everyHours: 250, lastDoneAtHours: 890 }, NOW);
-    const sow = due({ key: 'sow', kind: 'sow', at: NOW + 12 * DAY, noticeDays: 14 });
+    // Five days rather than twelve, and only because `todayList` now stops at a
+    // week (`TODAY_HORIZON_DAYS`). The assertion is about a projected meter row
+    // ordering against a dated one, and a sow outside the horizon would be
+    // dropped for a reason that has nothing to do with what is being tested.
+    const sow = due({ key: 'sow', kind: 'sow', at: NOW + 5 * DAY, noticeDays: 14 });
 
     // 240 hours from 900 to 1140, at 2 h/day, is 120 days out — well after the sow.
     expect(todayList([service as Due, sow], NOW).map((d) => d.key)).toEqual(['sow']);

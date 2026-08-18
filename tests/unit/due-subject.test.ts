@@ -4,6 +4,7 @@ import {
   concerns,
   type Due,
   duesFor,
+  isVisible,
   taskDues,
   todayList,
   withdrawalDue,
@@ -150,5 +151,72 @@ describe('what a detail screen asks for', () => {
 
   it('says nothing about a record no row is for', () => {
     expect(duesFor([later(now + 300 * DAY)], ['NOTHING'], now)).toEqual([]);
+  });
+});
+
+/**
+ * What belongs in a morning's work, and what merely belongs.
+ *
+ * `isVisible` asks whether a row is inside its own notice window, and those
+ * windows are long on purpose — six weeks for a clip or a birth, three for a
+ * hatch. That is honestly when a farm should start *thinking* about the thing.
+ * It is not when the thing is a job for today, and Today used to make no
+ * distinction: a shearing owed in October sat on the screen every morning from
+ * August and stayed until somebody shore the sheep.
+ *
+ * Reported off the tablet with four rows on it, none of them that morning's
+ * work: *"most items are not due soon but are permanently on that screen until
+ * complete."*
+ */
+describe('how far Today reaches', () => {
+  const NOW = Date.parse('2026-08-18T08:00:00Z');
+  const inDays = (n: number) => NOW + n * 86_400_000;
+
+  const clip = (at: number, noticeDays: number): Due => ({
+    key: `shearing:${at}`,
+    kind: 'shearing',
+    title: 'Shearing — Woolies',
+    at,
+    noticeDays,
+    subject: { entity: 'flock', id: 'w1' },
+    atReading: null,
+    projectedAt: null,
+  });
+
+  it('keeps a job that lands this week', () => {
+    expect(todayList([clip(inDays(4), 42)], NOW)).toHaveLength(1);
+  });
+
+  /**
+   * The row this whole change is about. Three weeks out and well inside its own
+   * six-week notice, so `isVisible` says yes and Today says no.
+   */
+  it('drops one three weeks out, however long its notice is', () => {
+    const far = clip(inDays(21), 42);
+
+    // Still visible — the notice window has not changed and other readers use it.
+    expect(isVisible(far, NOW)).toBe(true);
+    expect(todayList([far], NOW)).toEqual([]);
+  });
+
+  /** And it is on the screen that exists for exactly that question. */
+  it('leaves it for the panel that is meant to reach further', () => {
+    const far = clip(inDays(21), 42);
+
+    expect(duesFor([far], ['w1'], NOW)).toHaveLength(1);
+  });
+
+  /**
+   * Lateness outranks the horizon. Something overdue is overdue however
+   * generous its notice was, and holding it back would be the opposite of the
+   * fault being fixed.
+   */
+  it('never holds back something late', () => {
+    expect(todayList([clip(inDays(-3), 42)], NOW)).toHaveLength(1);
+  });
+
+  it('keeps the boundary day itself', () => {
+    expect(todayList([clip(inDays(7), 42)], NOW)).toHaveLength(1);
+    expect(todayList([clip(inDays(8), 42)], NOW)).toEqual([]);
   });
 });

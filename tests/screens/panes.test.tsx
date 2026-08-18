@@ -282,3 +282,68 @@ function rows(node: unknown, out: Node[] = []): Node[] {
   if (n.children !== undefined) rows(n.children, out);
   return out;
 }
+
+/**
+ * The two panes scroll separately, and one scroll surface is what they used to
+ * share.
+ *
+ * Dragging the tractor's history dragged the tractor list up with it and off
+ * the top — the list, its actions and the heading gone, leaving a blank left
+ * half beside a column of dates. Reported off the tablet with the screenshot to
+ * match, and it is the ordinary case rather than an edge: a machine's timeline
+ * is as long as the machine is old, and the column beside it is a dozen rows.
+ *
+ * The panes exist side by side *because they are read independently*. Tying
+ * them to one scroll makes the shorter one a passenger.
+ */
+describe('what scrolls', () => {
+  /** Every scroll surface in the tree, by whether it will actually scroll. */
+  function scrolls(node: unknown, out: { enabled: boolean }[] = []): { enabled: boolean }[] {
+    if (Array.isArray(node)) {
+      for (const child of node) scrolls(child, out);
+      return out;
+    }
+    if (node === null || typeof node !== 'object') return out;
+
+    const n = node as { type?: unknown; props?: Record<string, unknown>; children?: unknown };
+    // RN renders a ScrollView as a host view carrying its props; the reliable
+    // marker across versions is the prop it is configured with rather than the
+    // element name, which the mock may rewrite.
+    if (n.props !== undefined && 'scrollEventThrottle' in n.props) {
+      out.push({ enabled: n.props.scrollEnabled !== false });
+    } else if (n.props !== undefined && 'keyboardShouldPersistTaps' in n.props) {
+      out.push({ enabled: n.props.scrollEnabled !== false });
+    }
+
+    if (n.children !== undefined) scrolls(n.children, out);
+    return out;
+  }
+
+  it('gives a split screen a scroll per pane, and stills the one under them', async () => {
+    seedWindow(TABLET);
+    const screen = await mount(frame());
+
+    const found = scrolls(screen.tree.toJSON());
+
+    /**
+     * Three surfaces: the outer one, which is now still, and one for each pane.
+     * The outer is disabled rather than removed so the non-split path — every
+     * form, every phone — renders exactly the tree it always did.
+     */
+    expect(found.filter((s) => s.enabled)).toHaveLength(2);
+    expect(found.filter((s) => !s.enabled)).toHaveLength(1);
+    screen.unmount();
+  });
+
+  /** A phone has one column, so it keeps one scroll and nothing changes. */
+  it('leaves a phone with a single scrolling surface', async () => {
+    seedWindow({ width: 400, height: 900 });
+    const screen = await mount(frame());
+
+    const found = scrolls(screen.tree.toJSON());
+
+    expect(found.filter((s) => s.enabled)).toHaveLength(1);
+    expect(found.filter((s) => !s.enabled)).toEqual([]);
+    screen.unmount();
+  });
+});
