@@ -46,6 +46,19 @@ const pairSchema = z
      * see `runRefresh`.
      */
     org: z.object({ name: z.string().max(120) }).partial().optional(),
+    /**
+     * The account's own address and whether it has been confirmed, sent by
+     * sign-in and by every refresh for the reason `org` is.
+     *
+     * Optional, and a server that predates verification omits it entirely —
+     * which is why the cached fields stay optional rather than defaulting to
+     * `false`. "This device has not been told" and "this address is unproved"
+     * are different, and only one of them should put a warning on a screen.
+     */
+    account: z
+      .object({ email: z.string().max(254), emailVerified: z.boolean() })
+      .partial()
+      .optional(),
   })
   .passthrough();
 
@@ -201,6 +214,10 @@ async function establish(body: unknown): Promise<CachedClaims> {
     ...read.claims,
     ...(pair.user?.name === undefined ? {} : { name: pair.user.name }),
     ...(pair.org?.name === undefined ? {} : { orgName: pair.org.name }),
+    ...(pair.account?.email === undefined ? {} : { email: pair.account.email }),
+    ...(pair.account?.emailVerified === undefined
+      ? {}
+      : { emailVerified: pair.account.emailVerified }),
   };
 
   /**
@@ -840,11 +857,22 @@ async function runRefresh(): Promise<CachedClaims | null> {
   const previous = await readCachedClaims();
   const name = pair.user?.name ?? previous?.name;
   const orgName = pair.org?.name ?? previous?.orgName;
+  /**
+   * Server first, cache second, exactly as the two names are — and this is the
+   * field where that ordering does real work rather than tidying a label.
+   * Somebody who confirms their address on the kitchen tablet should stop
+   * seeing the warning on the phone in their pocket, and the refresh is the
+   * only moment the phone finds out.
+   */
+  const email = pair.account?.email ?? previous?.email;
+  const emailVerified = pair.account?.emailVerified ?? previous?.emailVerified;
 
   const named: CachedClaims = {
     ...claims,
     ...(name === undefined ? {} : { name }),
     ...(orgName === undefined ? {} : { orgName }),
+    ...(email === undefined ? {} : { email }),
+    ...(emailVerified === undefined ? {} : { emailVerified }),
   };
 
   await writeCachedClaims(named);
@@ -1042,4 +1070,91 @@ export async function resetPassword(input: {
   });
 
   if (!res.ok) throw await refusal(res, 'That code is not right, or it has expired. Ask for another.');
+}
+
+/**
+ * What the server said the account's address is, after a route that changed it.
+ *
+ * Parsed rather than assumed (invariant 11), and written to the cache so every
+ * screen watching the claims answers immediately instead of at the next
+ * refresh — the same shape `rememberFarmName` uses and for the same reason.
+ */
+const accountSchema = z
+  .object({ account: z.object({ email: z.string().max(254), emailVerified: z.boolean() }) })
+  .passthrough();
+
+async function rememberAccount(body: unknown): Promise<void> {
+  const parsed = accountSchema.safeParse(body);
+  if (!parsed.success) return;
+
+  const previous = await readCachedClaims();
+  // Nothing to merge into. A response cannot conjure a session, and inventing
+  // a claims record here would be the cache asserting one — the same refusal
+  // `rememberFarmName` makes.
+  if (previous === null) return;
+
+  await writeCachedClaims({ ...previous, ...parsed.data.account });
+}
+
+/**
+ * Asks for a code that proves this account's address (`PASSWORD-RECOVERY.md`
+ * §10).
+ *
+ * **Every refusal here is honest**, unlike `requestReset`'s. That route answers
+ * a stranger and must not tell a real address from an unknown one; this one
+ * answers the account's own owner about their own address, so "already
+ * confirmed", "too many for now" and "the server could not send it" are all
+ * things worth saying — and each has a different thing to do about it.
+ */
+export async function sendVerifyCode(): Promise<string> {
+  const res = await fetch(url('/auth/verify/send'), {
+    method: 'POST',
+    headers: syncHeaders({ 'content-type': 'application/json' }),
+    body: JSON.stringify({}),
+  });
+
+  if (!res.ok) throw await refusal(res, 'That could not be sent. Try again in a minute.');
+
+  const body: unknown = await res.json().catch(() => null);
+  const said = (body as { message?: unknown } | null)?.message;
+  return typeof said === 'string' ? said : 'A code is on its way.';
+}
+
+/**
+ * Spends the code and turns recovery on.
+ *
+ * One sentence for every way the code can fail — wrong, expired, spent, too
+ * many guesses — because telling them apart tells somebody which they achieved.
+ * That much is the same argument `resetPassword` makes; what differs is that
+ * everything *around* the code here is answered plainly.
+ */
+export async function confirmEmail(code: string): Promise<void> {
+  const res = await fetch(url('/auth/verify'), {
+    method: 'POST',
+    headers: syncHeaders({ 'content-type': 'application/json' }),
+    body: JSON.stringify({ code }),
+  });
+
+  if (!res.ok) throw await refusal(res, 'That code is not right, or it has expired. Ask for another.');
+  await rememberAccount(await res.json().catch(() => null));
+}
+
+/**
+ * Corrects a mistyped address, while it is still unproved.
+ *
+ * The reason the rest of this exists is worth restating at the call site: a
+ * typo at signup with no way to fix it is recovery permanently off, and the
+ * farm cannot see why. This is the fix, and it needs the account's password
+ * because a session on its own must not be enough to move an address onto an
+ * inbox somebody else controls.
+ */
+export async function changeEmail(input: { email: string; password: string }): Promise<void> {
+  const res = await fetch(url('/auth/email'), {
+    method: 'POST',
+    headers: syncHeaders({ 'content-type': 'application/json' }),
+    body: JSON.stringify(input),
+  });
+
+  if (!res.ok) throw await refusal(res, 'That email could not be changed.');
+  await rememberAccount(await res.json().catch(() => null));
 }

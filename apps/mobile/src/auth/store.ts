@@ -56,6 +56,21 @@ const cachedClaimsSchema = z
     role: roleSchema,
     name: z.string().max(80).optional(),
     orgName: z.string().max(120).optional(),
+    /**
+     * The address this account signs in with, and whether it has been proved.
+     *
+     * **Cached because the app never had it and now has to show it.** A farmer
+     * cannot notice they typed `alcie@` instead of `alice@` on a screen that
+     * does not display what was typed, and a bare "unconfirmed" flag would be a
+     * warning nobody can act on. `AccountScreen` renders both.
+     *
+     * Optional on both, and not only for old cache rows: a server that predates
+     * verification sends neither, and the right reading of silence is "this
+     * device does not know" — never "unconfirmed", which would put a warning on
+     * a screen over a server that has no opinion.
+     */
+    email: z.string().max(254).optional(),
+    emailVerified: z.boolean().optional(),
   })
   .strict();
 

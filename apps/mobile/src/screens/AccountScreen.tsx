@@ -23,6 +23,9 @@ import {
   readCachedClaims,
   requestReset,
   resetPassword,
+  changeEmail,
+  confirmEmail,
+  sendVerifyCode,
   signIn,
   SignInError,
 } from '../auth/session';
@@ -127,6 +130,76 @@ export function AccountScreen({
       setRedeeming(false);
     }
   }, [promo]);
+
+  /**
+   * Confirming the address on an account that is already signed in.
+   *
+   * Its own state rather than the sign-in form's `save`, following `promo`
+   * directly above: the two branches of this screen never render together, but
+   * sharing a failure line between "your password was wrong" and "that code
+   * has expired" is a class of confusion worth not inviting.
+   */
+  const [verifySent, setVerifySent] = useState<string | null>(null);
+  const [verifyCode, setVerifyCode] = useState('');
+  const [verifyBusy, setVerifyBusy] = useState(false);
+  const [verifyFailure, setVerifyFailure] = useState<string | null>(null);
+  /** Open only when somebody says the address is wrong — see the panel. */
+  const [fixing, setFixing] = useState(false);
+  const [fixEmail, setFixEmail] = useState('');
+  const [fixPassword, setFixPassword] = useState('');
+
+  /**
+   * Runs one of the three verification calls and puts its sentence on screen.
+   *
+   * All three answer plainly — the server has an authenticated caller asking
+   * about their own address, so there is nothing here to keep vague — which is
+   * why this shows the server's own words rather than a local substitute.
+   */
+  const runVerify = useCallback(
+    async (work: () => Promise<void>): Promise<void> => {
+      setVerifyBusy(true);
+      setVerifyFailure(null);
+      try {
+        await work();
+        setClaims(await readCachedClaims());
+      } catch (error) {
+        setVerifyFailure(
+          error instanceof Error ? error.message : 'That did not work. Try again in a minute.',
+        );
+      } finally {
+        setVerifyBusy(false);
+      }
+    },
+    [],
+  );
+
+  const askToConfirm = useCallback(() => {
+    void runVerify(async () => {
+      setVerifySent(await sendVerifyCode());
+    });
+  }, [runVerify]);
+
+  const confirmWithCode = useCallback(() => {
+    void runVerify(async () => {
+      await confirmEmail(verifyCode.trim());
+      setVerifyCode('');
+      setVerifySent(null);
+    });
+  }, [runVerify, verifyCode]);
+
+  const correctEmail = useCallback(() => {
+    void runVerify(async () => {
+      await changeEmail({ email: fixEmail.trim(), password: fixPassword });
+      // Only on success. The new address is unproved too, so the panel stays —
+      // with the code step reset, because any code in flight was minted for the
+      // address that has just been replaced and the server has retired it.
+      setFixing(false);
+      setFixEmail('');
+      setFixPassword('');
+      setVerifyCode('');
+      setVerifySent(null);
+    });
+  }, [runVerify, fixEmail, fixPassword]);
 
   /**
    * Which of the three this device is most likely here for.
@@ -368,8 +441,131 @@ export function AccountScreen({
           <Body>
             This device is signed in{claims.name === undefined ? '' : ` as ${claims.name}`}.
           </Body>
+          {/* The address, wherever the server has told this device one. It is
+              here rather than only in the warning below so that somebody who
+              confirmed months ago can still check which inbox a reset would go
+              to — the question that sends people to this screen. */}
+          {claims.email === undefined ? null : (
+            <Body>
+              {claims.email}
+              {claims.emailVerified === true ? ' — confirmed.' : ''}
+            </Body>
+          )}
           <Body>Adding somebody else to the farm is under Members.</Body>
         </Panel>
+
+        {/**
+          * Unconfirmed, which means a forgotten password cannot be recovered.
+          *
+          * **The whole point of email verification is this panel.** The server
+          * gate is what closes the hole — an unproved address is sent nothing —
+          * but a gate nobody is told about is just a farm that one day finds
+          * recovery does not work. What actually prevents the damage is somebody
+          * reading their own address back and noticing they typed `alcie@`.
+          *
+          * So it says the address, says plainly what is switched off, and puts
+          * the correction one tap away. It is not a nag: it appears on a screen
+          * people visit rarely, and it goes away for good the moment a code is
+          * typed.
+          *
+          * **Only when the server has an opinion.** `emailVerified` is absent
+          * against a server that predates this, and absent must not render as
+          * unconfirmed — that would put a warning about recovery on a farm
+          * whose server never said anything about it.
+          */}
+        {claims.emailVerified === false ? (
+          <Panel label="Confirm your email">
+            <Body>
+              {claims.email === undefined
+                ? 'This account’s email has not been confirmed yet.'
+                : `${claims.email} has not been confirmed yet.`}
+            </Body>
+            <Body>
+              Until it is, a forgotten password cannot be reset by email — the app will not send
+              a code to an address nobody has proved they can read. Your records are on this
+              handset either way; what is at stake is getting back in, not losing them.
+            </Body>
+
+            {verifySent === null ? null : <Body>{verifySent}</Body>}
+
+            {verifySent === null ? (
+              <Secondary
+                label={verifyBusy ? 'Sending…' : 'Send me a code'}
+                disabled={verifyBusy}
+                onPress={askToConfirm}
+                testID="verify-send"
+              />
+            ) : (
+              <>
+                <Field label="The code from the email" hint="Eight characters.">
+                  <TextField
+                    value={verifyCode}
+                    onChangeText={setVerifyCode}
+                    placeholder="K3M7QP2W"
+                    maxLength={12}
+                    caps
+                    testID="verify-code"
+                  />
+                </Field>
+                <Primary
+                  label={verifyBusy ? 'Confirming…' : 'Confirm this email'}
+                  disabled={verifyBusy || verifyCode.trim() === ''}
+                  onPress={confirmWithCode}
+                  testID="verify-confirm"
+                />
+              </>
+            )}
+
+            {/**
+              * The correction, under the code rather than beside it.
+              *
+              * Most people came here to type a code they already have. Whoever
+              * needs this needs it because no code ever arrived, which is a
+              * thing they find out after waiting — so it belongs at the end of
+              * the panel, where somebody who has given up will look.
+              */}
+            {fixing ? (
+              <>
+                <Field label="The right email">
+                  <TextField
+                    value={fixEmail}
+                    onChangeText={setFixEmail}
+                    placeholder="you@example.com"
+                    maxLength={254}
+                    keyboardType="email-address"
+                    testID="verify-new-email"
+                  />
+                </Field>
+                <Field
+                  label="Your password"
+                  hint="Asked for because a stolen session must not be able to move the address on its own."
+                >
+                  <TextField
+                    value={fixPassword}
+                    onChangeText={setFixPassword}
+                    secret
+                    testID="verify-password"
+                  />
+                </Field>
+                <Primary
+                  label={verifyBusy ? 'Changing…' : 'Use this email instead'}
+                  disabled={verifyBusy || fixEmail.trim() === '' || fixPassword === ''}
+                  onPress={correctEmail}
+                  testID="verify-change"
+                />
+              </>
+            ) : (
+              <Secondary
+                label="That address is wrong"
+                disabled={verifyBusy}
+                onPress={() => setFixing(true)}
+                testID="verify-fix"
+              />
+            )}
+
+            <Failure message={verifyFailure} />
+          </Panel>
+        ) : null}
 
         {/**
           * What the farm has paid for, and what that changes (D13).
@@ -440,11 +636,15 @@ export function AccountScreen({
   /**
    * Both boxes, and it is a hard gate rather than a warning.
    *
-   * There is no password reset in the app — `pnpm db:password` needs a shell on
-   * the server — so a mistyped password at signup is a farm nobody can open,
-   * with the records already on the phone. Letting it through with a red line
-   * underneath would be offering somebody the chance to make exactly that
-   * mistake.
+   * A mistyped password at signup is a farm nobody can open, with the records
+   * already on the phone. Letting it through with a red line underneath would
+   * be offering somebody the chance to make exactly that mistake.
+   *
+   * **The gate stays now that recovery exists**, and it is worth saying why
+   * rather than leaving the old reasoning to look overtaken. Recovery needs a
+   * *confirmed* address, and an address is unconfirmed on the morning somebody
+   * signs up — which is precisely the morning this mistake gets made. The one
+   * flow that could rescue a mistyped password is the one that is not on yet.
    */
   const matches = mode === 'signin' || password === confirm;
 

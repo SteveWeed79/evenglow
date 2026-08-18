@@ -117,6 +117,16 @@ beforeEach(async () => {
     orgId: ORG,
     role: 'owner',
     createdAt: new Date(),
+    /**
+     * Confirmed, because recovery now requires it (§10).
+     *
+     * Added to the seed rather than left off: every test below is about what
+     * happens once somebody *can* be sent a code, and an unverified account is
+     * sent nothing at all — so without this the whole suite would be asserting
+     * the gate over and over instead of the flow behind it. The gate has its
+     * own test, directly below the ones about asking.
+     */
+    emailVerifiedAt: new Date(),
   } satisfies UserDoc);
 });
 
@@ -239,6 +249,33 @@ describeDb('asking for a code', () => {
     // real address than for a stranger, which is the enumeration §5 removes.
     expect(answer.status).toBe(202);
     expect(await harness!.db.collection('passwordResets').countDocuments({})).toBe(3);
+  });
+
+  /**
+   * **The gate email verification exists to install** (§10).
+   *
+   * An address nobody has proved they can read is sent nothing, because a typo
+   * at signup would otherwise be a recovery route into a stranger's inbox — and
+   * the farm cannot tell, since this route answers identically either way.
+   *
+   * Asserted through the *rows*, not the answer, precisely because the answer
+   * must not change: a 202 that skipped the mint is what this looks like from
+   * outside, and the row count is the only place the difference is visible.
+   */
+  it('sends nothing to an address nobody has confirmed', async () => {
+    await harness!.db
+      .collection('users')
+      .updateOne({ _id: USER as never }, { $unset: { emailVerifiedAt: '' } });
+
+    const answer = await post('/auth/forgot', { email: EMAIL });
+
+    expect(answer.status).toBe(202);
+    expect(await harness!.db.collection('passwordResets').countDocuments({})).toBe(0);
+
+    // Identical to the answer a complete stranger gets, which is the property
+    // that keeps this from disclosing which accounts are unconfirmed.
+    const stranger = await post('/auth/forgot', { email: 'nobody@example.test' });
+    expect(answer.body).toBe(stranger.body);
   });
 
   /**

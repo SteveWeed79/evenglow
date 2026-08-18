@@ -37,6 +37,24 @@ export interface UserDoc {
   orgId: string;
   role: Role;
   createdAt: Date;
+  /**
+   * When this address was proved readable by whoever owns the account.
+   *
+   * Absent means unproved, which is the state every password signup starts in
+   * and the state every account created before this shipped is in. **Absent is
+   * not a defect and is not repaired by a backfill** — dating it from the row's
+   * creation would be this field asserting something nobody ever demonstrated,
+   * which is the one thing it exists to stop.
+   *
+   * Set by `/auth/verify` when a code minted to the address is spent at it, and
+   * set outright on the Google paths: `verifyGoogleIdToken` refuses a token
+   * without `email_verified`, so Google has already done exactly this work and
+   * asking the farmer to do it again would be theatre.
+   *
+   * **What reads it is `/auth/forgot`**, which sends nothing to an unproved
+   * address. See `verification.ts` for why that is worth the recovery it costs.
+   */
+  emailVerifiedAt?: Date;
   disabledAt?: Date;
   /**
    * The address and the Google subject this account had before it was removed.
@@ -196,6 +214,52 @@ export async function setPasswordHash(email: string, passwordHash: string): Prom
   const result = await (await users()).updateOne(
     { email: normalizeEmail(email) },
     { $set: { passwordHash } },
+  );
+  return result.matchedCount === 1;
+}
+
+/**
+ * Records that this account's address has been proved.
+ *
+ * Takes the address it was proved *for* and puts it in the filter, so a write
+ * that lost a race against a change of address lands on nothing rather than
+ * marking the new string verified on the strength of the old one's code.
+ * `claimVerifyCode` already binds the code to an address; this is the second
+ * half of the same guard, at the moment the flag is actually written.
+ */
+export async function markEmailVerified(
+  userId: string,
+  email: string,
+  at: Date,
+): Promise<boolean> {
+  const result = await (await users()).updateOne(
+    { _id: userId, email: normalizeEmail(email) },
+    { $set: { emailVerifiedAt: at } },
+  );
+  return result.matchedCount === 1;
+}
+
+/**
+ * Moves an account onto a different address, and only while the current one is
+ * unproved.
+ *
+ * **`emailVerifiedAt` is in the filter, not merely checked by the caller.** The
+ * route checks it too, and that check is the one a refactor can walk past; this
+ * is the one that cannot. A verified address is a different object — moving it
+ * needs the old address to confirm the move or it is an account-takeover
+ * primitive handed to whoever holds a session — and that flow is not built.
+ *
+ * The new address is left unproved, which is the whole point: a correction
+ * buys the chance to prove the new string, never the belief that it is right.
+ *
+ * False means nothing matched: no such account, or its address is already
+ * verified. A duplicate key from the unique index means somebody else has the
+ * address, and it is left to the caller to read — `isDuplicateKey` is how.
+ */
+export async function changeUnverifiedEmail(userId: string, email: string): Promise<boolean> {
+  const result = await (await users()).updateOne(
+    { _id: userId, emailVerifiedAt: { $exists: false } },
+    { $set: { email: normalizeEmail(email) } },
   );
   return result.matchedCount === 1;
 }

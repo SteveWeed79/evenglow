@@ -224,6 +224,37 @@ const IDENTITY_INDEXES: Record<string, IndexDescription[]> = {
      */
     { key: { expiresAt: 1 }, expireAfterSeconds: 0 },
   ],
+  /**
+   * The recovery and verification codes, which had no indexes at all.
+   *
+   * Both tables are read the same three ways and every one of them leads with
+   * `userId`: the send limit counts a user's rows since an hour ago, minting
+   * supersedes a user's live rows, and a wrong guess is charged to a user's
+   * live row. Only the winning claim goes by `_id`, which needs nothing.
+   *
+   * **A collection scan here is not merely slow.** `resetsSince` is the
+   * anti-harassment limit and `verifySendsSince` is its twin — they run on a
+   * public, rate-limited, timing-sensitive route whose whole design is that a
+   * real address and an unknown one are indistinguishable from outside. A count
+   * whose cost grows with the size of the table is exactly the kind of
+   * measurable difference `FORGOT_FLOOR_MS` exists to bury, and the floor only
+   * covers what stays under it.
+   *
+   * **Thirty days past expiry, not immediately.** Both modules argue for
+   * keeping spent rows: a run of them is the record of somebody being locked
+   * out, or of somebody else trying. That record is worth a month and is not
+   * worth a season — after which it is a growing table of dead digests with
+   * nothing to say. `expiresAt` is set at creation and neither spending nor
+   * superseding extends it, so every state ages out on one clock.
+   */
+  passwordResets: [
+    { key: { userId: 1, createdAt: -1 } },
+    { key: { expiresAt: 1 }, expireAfterSeconds: 30 * 86_400 },
+  ],
+  emailVerifications: [
+    { key: { userId: 1, createdAt: -1 } },
+    { key: { expiresAt: 1 }, expireAfterSeconds: 30 * 86_400 },
+  ],
   invites: [
     // The farm's pending list. orgId leads, as everywhere else.
     { key: { orgId: 1, createdAt: -1 } },

@@ -163,12 +163,47 @@ on the exact failure they then permit.
       reset from a domain the farm has never heard of is indistinguishable from
       phishing, and ignoring it is the correct user response. Cheaper to settle
       before the sending DNS exists than after.
-- [ ] **Verify email addresses at signup.** *(raised by the design above)*
+- [x] **Verify email addresses at signup.** `PASSWORD-RECOVERY.md` §10, **GA**
       Password signup accepts whatever is typed; only the Google path carries
       `email_verified`. Harmless while an address does nothing — and once an
       address can receive a password reset, a typo at signup is a recovery
-      route that reaches a stranger. Same token machinery, one more route,
-      immediately after the sender exists.
+      route that reaches a stranger.
+      **The gate is one line in `/auth/forgot`:** an address nobody has proved
+      they can read is sent nothing. Silently, like every other refusal there,
+      because answering differently would say which accounts are unconfirmed.
+      **It is not what verification first looks like it buys**, and the
+      difference is written into `contracts/verification.ts`: a stranger who
+      receives a misdirected code can confirm the address and then reset
+      through it, exactly as they could have reset directly. What changes is
+      that the *default* is closed rather than open, and that the farm is told
+      — which is the half that actually prevents the damage, since what stops
+      a typo is somebody reading their own address back.
+      **So correcting the address is part of the work, not a follow-up.**
+      Without `/auth/email` a typo at signup is recovery permanently off with
+      no in-app remedy, which makes the feature a trap rather than a guard. It
+      moves an **unverified** address only — an unproved string asserts
+      nothing, so swapping it discloses nothing — and asks for the account
+      password even so, because a stolen session alone must not point an
+      account at an inbox the thief controls. Moving a *verified* address needs
+      the old one to confirm the move and is deliberately not built.
+      **Google arrives confirmed**, on both the signup and the account-linking
+      branch: `verifyGoogleIdToken` refuses a token without `email_verified`,
+      so asking again would be theatre that leaves recovery off.
+      **Existing accounts are not backfilled.** Dating the flag from the row's
+      creation would be it asserting something nobody demonstrated, which is
+      the one thing it exists to stop. They confirm when they next open the app.
+      **A real bug its own test found:** the change-of-address route relied on
+      the unique index alone to refuse a taken address, and the suite's database
+      has no indexes applied — so a second account onto the same address
+      answered 200. A production box would have refused, which is the worst
+      shape for a defect. The explicit check is back, the index stays as the
+      race guard, and neither is load-bearing alone.
+      **`passwordResets` had no index at all**, found on the way past. Both code
+      tables are read three ways and every one leads with `userId` — including
+      the per-account send limit, which runs on the timing-sensitive route whose
+      whole design is that a real address and an unknown one are
+      indistinguishable. Thirty days past expiry, so a run of rows stays
+      readable as the record of somebody being locked out.
 - [x] **Verify units on Harvest and reporting.** **GA**
       *Confirmed true and fixed.* `HarvestScreen` offered pounds to everybody
       and converted with `poundsToUg` whatever the farm had set. The entry

@@ -15,6 +15,7 @@ export * from './roles';
 export * from './billing';
 export * from './membership';
 export * from './recovery';
+export * from './verification';
 export * from './support';
 export * from './backup';
 export * from './entities';

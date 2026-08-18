@@ -306,7 +306,7 @@ mail is configured at all.
 
 ## 10. Email verification, immediately after
 
-Not part of this, and the obvious next thing once a sender exists.
+**Built.** Not part of this, and it was the next thing once a sender existed.
 
 Password signup accepts any address; only Google carries `email_verified`. That
 is tolerable while an address does nothing, and it stops being tolerable the
@@ -315,6 +315,29 @@ recovery route that reaches a stranger, and the farm cannot tell.
 
 Same token machinery, same table shape, one more route. **Not folded in here**
 because it changes the signup flow and this document is about the lockout.
+
+**What it turned out to be, now that it exists.** Three routes rather than one,
+and the extra two are the reason it works:
+
+- `/auth/verify/send` and `/auth/verify` mint and spend a code, against
+  `emailVerifications` — **its own collection, not a `purpose` column on
+  `passwordResets`**. The two codes must never be interchangeable, and a
+  discriminator every query has to remember is a check somebody can refactor
+  past; separate collections make it structural.
+- `/auth/email` corrects a mistyped address while it is still unproved.
+  **Without it the feature is a trap**: a typo at signup would mean recovery
+  permanently off with no way in the app to fix the cause. It refuses a
+  *verified* address, which is a different object needing the old address to
+  confirm the move.
+- `/auth/forgot` gained one line. An unproved address is sent nothing, silently,
+  because a distinct answer would say which accounts are unconfirmed.
+
+**The value is not where §10 implied.** A stranger who receives a misdirected
+code can confirm the address and reset through it, exactly as they could have
+reset directly — verification does not stop that. What it changes is that the
+default is closed rather than open, and that the app *says* the address is
+unproved and offers to fix it. The typo gets found by the person who made it
+rather than by whoever owns the address they hit.
 
 ## 11. What has to be tested
 
