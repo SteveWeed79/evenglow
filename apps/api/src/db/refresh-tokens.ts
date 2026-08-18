@@ -80,3 +80,23 @@ export async function revokeFamily(familyId: string, at: Date): Promise<void> {
     { $set: { revokedAt: at } },
   );
 }
+
+/**
+ * Signs an account out everywhere, on every device.
+ *
+ * **The first of the three writes a password reset makes**, and the one people
+ * leave out. A reset is what somebody does when they think another person has
+ * their password; leaving that person's session alive defeats the entire
+ * exercise — they keep syncing on a refresh token the owner has never seen and
+ * cannot name.
+ *
+ * Returns how many were killed, for the journal. A number greater than zero on
+ * a reset nobody expected is the shape of an account that really was taken.
+ */
+export async function revokeAllForUser(userId: string, at: Date): Promise<number> {
+  const result = await (await tokens()).updateMany(
+    { userId, revokedAt: { $exists: false } },
+    { $set: { revokedAt: at } },
+  );
+  return result.modifiedCount;
+}

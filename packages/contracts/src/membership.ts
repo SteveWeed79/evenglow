@@ -147,11 +147,26 @@ export type InviteCreate = z.infer<typeof inviteCreateSchema>;
  * check: the token proves someone has the link, the email proves they are who
  * it was for.
  */
+/**
+ * One password rule, in one place.
+ *
+ * Signup, accepting an invite and resetting a password all set a password, and
+ * three copies of `z.string().min(12).max(200)` is three places for the bar to
+ * drift — which shows up as a password somebody can choose at signup and not
+ * at reset, discovered by the person who is already locked out.
+ *
+ * Twelve rather than eight, and no composition rules: length is what resists
+ * guessing, and forcing a symbol mostly produces `Password1!`. The upper bound
+ * exists so an argon2 hash cannot be turned into a denial of service by
+ * somebody pasting a megabyte.
+ */
+export const passwordSchema = z.string().min(12).max(200);
+
 export const inviteAcceptSchema = z
   .object({
     token: z.string().min(20).max(200),
     email: z.string().email().max(254),
-    password: z.string().min(12).max(200),
+    password: passwordSchema,
     name: z.string().min(1).max(80),
   })
   .strict();
@@ -189,7 +204,7 @@ export const signupSchema = z
     orgId: z.string().length(26),
     orgName: z.string().min(1).max(120),
     email: z.string().email().max(254),
-    password: z.string().min(12).max(200),
+    password: passwordSchema,
     name: z.string().min(1).max(80),
   })
   .strict();
@@ -333,7 +348,7 @@ export const joinCodeRedeemSchema = z
   .object({
     code: z.string().min(1).max(20),
     email: z.string().email().max(254),
-    password: z.string().min(12).max(200),
+    password: passwordSchema,
     name: z.string().min(1).max(80),
   })
   .strict();
