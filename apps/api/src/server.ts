@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { ping } from './db/client';
 import { type Env, readEnv } from './env';
+import { setSecurityHeaders } from './headers';
 import { errorBody } from './http';
 import { authRoutes } from './routes/auth';
 import { billingRoutes } from './routes/billing';
@@ -15,10 +16,15 @@ import { startSweeper } from './sync/sweep';
 /**
  * The Fastify service (D10).
  *
- * Runs alongside the Next route handlers for now. Both are thin adapters over
- * the same appliers in this package, which is what keeps them from answering
- * the same request differently while both are serving. The Next surface goes
- * away in S7.
+ * The only server. It is a thin adapter over the appliers in this package —
+ * every rule about what is accepted and what is refused lives in `sync/` and
+ * `db/`, and this file parses a request, hands it over, and sends what comes
+ * back.
+ *
+ * That separation was built when a Next surface ran beside this one, and it
+ * outlived it: the Next app is deleted (`CLAUDE.md`), and the seam is worth
+ * keeping because it is what made removing a whole server a deletion rather
+ * than a rewrite.
  */
 
 export async function buildServer(env: Env = readEnv()): Promise<FastifyInstance> {
@@ -45,12 +51,23 @@ export async function buildServer(env: Env = readEnv()): Promise<FastifyInstance
   });
 
   /**
+   * Set on everything, including a 500 and a 404.
+   *
+   * Most of what these buy does not apply to a service answering an APK, and
+   * that is the argument that kept them off — it was three-quarters right. The
+   * quarter it missed is `/photos/:id`, which serves bytes a farm account
+   * uploaded, where `nosniff` is what stops a client guessing at what they are.
+   * See `headers.ts`.
+   */
+  setSecurityHeaders(app);
+
+  /**
    * One error shape for the whole service, and never the raw message.
    *
    * An unhandled error can carry query shape or schema detail, and this
    * service answers a client that ships inside an APK — anyone can read what
-   * it sends. errorBody is shared with the Next adapter so the two cannot
-   * describe the same failure differently.
+   * it sends. `errorBody` is the one place a failure becomes a response, so
+   * nothing in this service can describe the same condition two ways.
    */
   app.setErrorHandler((error, _request, reply) => {
     const { status, body } = errorBody(error);

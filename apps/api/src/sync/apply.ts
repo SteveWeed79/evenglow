@@ -15,6 +15,7 @@ import {
   type Op,
 } from '@steading/contracts';
 import type { SessionClaims } from '../auth/claims';
+import { blobsFor } from '../db/blobs';
 import type { Scoped, Tenanted } from '../db/scoped';
 import { inCommitOrder, nextServerTs } from './commit-order';
 import { DECIDED_OUTCOMES, PENDING, type StoredOutcome } from './outcome';
@@ -510,7 +511,37 @@ export async function project(
       break;
 
     case 'archive':
-      // Archive, never delete — history survives (P13).
+      /**
+       * The bytes go, and this is the one archive that destroys something.
+       *
+       * **Nothing deleted a photo's bytes, ever.** `Blobs.remove` was written
+       * with the store and had no call site, so archiving a photo set
+       * `archivedAt` on the record and left the image in GridFS for good — a
+       * farm had no way to take a picture off the server at all, and the bucket
+       * only ever grew.
+       *
+       * P13 says records are archived rather than deleted because a farm's
+       * history is the point, and that still holds: the row stays, the mutation
+       * log stays, and "there was a photo here and it was removed on Tuesday"
+       * is answerable. What P13 is protecting is the *record*. The bytes are
+       * not a record — they are a picture of somebody's yard, and a farmer who
+       * deletes one means the picture, not the row about it.
+       *
+       * **It is one-way and it is worth naming as one-way.** Nothing in the app
+       * un-archives today, so nothing loses anything now; if un-archiving is
+       * ever built, a restored photo comes back as a record with no image and
+       * that screen has to say so.
+       *
+       * **Before the `$set`, deliberately.** If the store refuses, this throws,
+       * the mutation stays `pending`, and the record stays live — which is the
+       * truthful state, because the picture is still there. The other order
+       * would mark a photo deleted while its image was still being served. The
+       * client retries, and the sweeper picks it up an hour later if the client
+       * never does.
+       */
+      if (entity === 'photo') await (await blobsFor(scope.orgId)).remove(targetId);
+
+      // Archive, never delete — the record survives (P13).
       await col.updateOne({ _id: targetId }, { $set: { archivedAt: new Date(), ...stamp } });
       break;
 

@@ -14,9 +14,9 @@ import { parseSnapshotCursor, readSnapshotPage } from '../sync/snapshot';
  * Both handlers are adapters and nothing more — parse the request, hand it to
  * the shared implementation, send what comes back. Every rule about what is
  * accepted, what is rejected, and how a page is cursored lives in
- * `sync/batch.ts` and `sync/snapshot.ts`, which the Next routes also call.
- * That is what keeps two live servers from answering the same flush
- * differently.
+ * `sync/batch.ts` and `sync/snapshot.ts`. That began as a way to keep two live
+ * servers in step and is kept because it is what makes the whole write path
+ * testable without a port.
  *
  * Deliberately NOT rate limited, unlike the auth routes (A9, rubric B3). A
  * throttled sync loses a farm's morning; the batch cap, the token, the role

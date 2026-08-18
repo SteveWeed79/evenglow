@@ -475,3 +475,78 @@ describeDb('what the board says about the sweep', () => {
     expect(body.health.sweep.capped).toBe(true);
   });
 });
+
+/**
+ * The board is a real web page, and it had no headers at all.
+ *
+ * Everywhere else this service answers an APK, where framing, referrer leakage
+ * and script injection mean very little — which is the argument that kept a
+ * header pack off, and it was three-quarters right. This is the quarter it
+ * missed: HTML, served to a browser, showing every farm on the server, with
+ * buttons that grant subscriptions.
+ */
+describeDb('what the board sends with the page', () => {
+  async function page() {
+    const app = await buildApp();
+    const res = await app.inject({ method: 'GET', url: '/' });
+    await app.close();
+    return res;
+  }
+
+  it('cannot be framed, so its buttons cannot be clickjacked', async () => {
+    const res = await page();
+    expect(res.headers['x-frame-options']).toBe('DENY');
+    expect(String(res.headers['content-security-policy'])).toContain("frame-ancestors 'none'");
+  });
+
+  it('leaks no referrer, since a URL here can name a farm', async () => {
+    expect((await page()).headers['referrer-policy']).toBe('no-referrer');
+  });
+
+  it('tells a browser never to guess at a content type', async () => {
+    expect((await page()).headers['x-content-type-options']).toBe('nosniff');
+  });
+
+  /**
+   * The page is self-contained by design — no CDN, no font host, no image host
+   * — so everything except its own inline style and script is a refusal.
+   */
+  it('refuses everything it does not itself use', async () => {
+    const policy = String((await page()).headers['content-security-policy']);
+    expect(policy).toContain("default-src 'none'");
+    expect(policy).toContain("connect-src 'self'");
+    expect(policy).toContain("base-uri 'none'");
+    // The mistake a CSP usually ships with, and the reason for the nonce.
+    expect(policy).not.toContain('unsafe-inline');
+  });
+
+  /**
+   * **A nonce the response does not name is a page whose script never runs**,
+   * so the two have to come from one value. Asserted by pulling the nonce out
+   * of the header and finding it in the markup, which is the only thing that
+   * proves they agree.
+   */
+  it('names the same nonce in the policy and in the page', async () => {
+    const res = await page();
+    const nonce = /script-src 'nonce-([A-Za-z0-9_-]+)'/.exec(
+      String(res.headers['content-security-policy']),
+    )?.[1];
+
+    expect(nonce).toBeDefined();
+    expect(res.body).toContain(`<script nonce="${nonce}">`);
+    expect(res.body).toContain(`<style nonce="${nonce}">`);
+  });
+
+  /**
+   * A nonce reused across responses is a value an attacker reads out of one
+   * page and writes into the next, which is the whole of what a nonce is for.
+   */
+  it('mints a fresh nonce every time the page is served', async () => {
+    const read = async () =>
+      /nonce-([A-Za-z0-9_-]+)/.exec(String((await page()).headers['content-security-policy']))?.[1];
+
+    const first = await read();
+    expect(first).toBeDefined();
+    expect(await read()).not.toBe(first);
+  });
+});

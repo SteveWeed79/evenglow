@@ -87,13 +87,44 @@ on the exact failure they then permit.
       which also pins `orgId`, and the board is the one surface about no farm in
       particular.
       Every assertion was watched to fail against the code it replaced.
-      **Not taken in this pass and still open:** nothing deletes photo bytes
-      (`Blobs.remove` and `head` have no call sites, so an archived photo stays
-      on the server for ever); `/billing/notifications` is unauthenticated and
-      unthrottled with no Pub/Sub OIDC check; uploaded bytes are never checked
-      to be images and come back with no `nosniff`; there are no security
-      headers; and eleven comments across seven files still describe the
-      two-server world that ended when the Next app was deleted.
+- [x] **The five the first pass reported and did not take.** **GA**
+      **Nothing ever deleted a photo's bytes.** `Blobs.remove` was written with
+      the store and had no call site, so archiving a photo set `archivedAt` and
+      left the image in GridFS for good — a farm had no way to take a picture
+      off the server at all. P13 still holds, because what P13 protects is the
+      *record*: the row and the log survive, and the bytes are not a record but
+      a picture of somebody's yard. **One-way, and named as one-way** — nothing
+      un-archives today, and if that is ever built a restored photo comes back
+      without its image. Removed **before** the `$set`, so a store that refuses
+      leaves the record live, which is the truthful state.
+      **`/billing/notifications` was unauthenticated, unthrottled and reachable
+      from anywhere.** The state was never forgeable — the handler asks Google
+      what a purchase is worth — so what was open was the cost: an outbound Play
+      call and a write per request, unbounded. Now sixty a minute, an OIDC push
+      token verified when `GOOGLE_PUBSUB_AUDIENCE` is set, and `packageName`
+      compared against the configured one instead of parsed and ignored.
+      **The limiter answers 429, and the first draft answered 200.** Writing
+      the test inverted the argument: Pub/Sub retrying *is* the right response
+      to being throttled, where a 200 says the notification landed and loses a
+      real subscription change caught in a burst.
+      **Uploaded bytes were never checked to be images.** Leading-byte checks
+      for JPEG, PNG and WebP; a mismatch against the record's own type is
+      refused rather than silently re-labelled, because the record is what every
+      other device reads. `nosniff` on the way back out is the half that covers
+      every record written before the check existed.
+      **No security headers anywhere.** Hand-written rather than `helmet` — four
+      static headers and a CSP, against a dependency whose own defaults would
+      then have to be turned off one at a time. The board gets a real policy
+      with a **per-response nonce**, so its inline script and style run and an
+      injected one does not.
+      **Eleven comments across seven files described a two-server world** that
+      ended when the Next app was deleted, several of them justifying an
+      extraction by a reason that no longer exists. Corrected to the reason that
+      does: the seams are what made removing a whole server a deletion.
+      **A seam was added to `billingRoutes`** because the notification route is
+      deliberately silent — every outcome is a 200 — so "did a stranger make
+      this server call the Play API" could not be observed at all. Four
+      assertions passed against the ungated code before it existed.
 
 - [x] **Seed `SiteSetupScreen` from the site record.** **GA**
       It opens on hardcoded May 15 / Oct 5 and writes them over the farm's real

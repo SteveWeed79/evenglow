@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { authorizeCredentials } from '../auth/credentials';
@@ -6,6 +7,7 @@ import { farmSyncState } from '../billing/access';
 import { readBoard } from '../db/board';
 import { findUserById } from '../db/identity';
 import { type Env, readEnv } from '../env';
+import { boardPolicy, setSecurityHeaders } from '../headers';
 import { errorBody, HttpError } from '../http';
 import { readSweep } from '../db/sweep-status';
 import { actionGrant, actionNewPromo } from './actions';
@@ -141,7 +143,29 @@ export async function buildOpsServer(env: Env = readEnv()): Promise<FastifyInsta
    * whatever credentials it can get hold of.
    */
 
-  app.get('/', async (_request, reply) => reply.type('text/html; charset=utf-8').send(boardPage()));
+  setSecurityHeaders(app);
+
+  app.get('/', async (_request, reply) => {
+    /**
+     * A fresh nonce per response, from the CSPRNG.
+     *
+     * The point of a nonce is that an injected `<script>` cannot carry one, so
+     * it has to be unguessable and it has to be new — a nonce reused across
+     * responses is a value an attacker can read out of one page and write into
+     * the next. 128 bits, base64url, which is what the CSP grammar takes
+     * without escaping.
+     *
+     * The page renders every value through `textContent` already, and that is
+     * still the thing doing the work. This is the layer underneath: if one of
+     * those ever became an `innerHTML`, this is what stops the result running.
+     */
+    const nonce = randomBytes(16).toString('base64url');
+
+    return reply
+      .type('text/html; charset=utf-8')
+      .header('content-security-policy', boardPolicy(nonce))
+      .send(boardPage(nonce));
+  });
 
   /** Liveness for the unit file. Touches nothing, says nothing about a farm. */
   app.get('/health', async () => ({ ok: true }));

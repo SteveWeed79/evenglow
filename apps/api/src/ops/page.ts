@@ -24,7 +24,13 @@
  * Records. `ACCESS-AND-BILLING.md` §5 draws that line for `farm:show` and it
  * holds here: counts and timings, farm names and ids, and nothing a farm wrote.
  */
-export function boardPage(): string {
+/**
+ * The nonce is threaded through rather than generated here, because the header
+ * and the markup have to carry the same one and only the route can set a
+ * header. A page rendered with a nonce the response does not name is a page
+ * whose script never runs — so the two come from one value, passed in.
+ */
+export function boardPage(nonce: string): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -34,7 +40,7 @@ export function boardPage(): string {
 <!-- An empty icon, so a browser does not ask for one this process will not serve. -->
 <link rel="icon" href="data:,">
 <title>Steading — operations</title>
-<style>
+<style nonce="${nonce}">
   :root {
     color-scheme: light dark;
     --bg: #f6f5f2; --card: #fffefb; --ink: #1c1a17; --muted: #6b665e;
@@ -175,7 +181,7 @@ export function boardPage(): string {
   </div>
 </main>
 
-<script>
+<script nonce="${nonce}">
 (() => {
   'use strict';
 
