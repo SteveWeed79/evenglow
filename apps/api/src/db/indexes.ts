@@ -19,6 +19,37 @@ export const INDEXES: Record<CollectionName, IndexDescription[]> = {
      */
     { key: { orgId: 1, serverTs: 1, _id: 1 } },
     { key: { orgId: 1, deviceId: 1, clientSeq: 1 } },
+    /**
+     * The stranded rows, and without this the sweeper reads the whole log.
+     *
+     * `sweepFarm` asks for `{orgId, outcome: 'pending', serverTs: {$lt: an hour
+     * ago}}`. Neither index above carries `outcome`, so the only usable one was
+     * the cursor index — and that `$lt` matches very nearly every row a farm has
+     * ever written. The answer is normally **zero rows**, so the pass walked and
+     * fetched the entire mutation log, every hour, per farm, to find nothing.
+     * The cost grows for as long as the farm keeps records, which is the point
+     * of the log.
+     *
+     * **Partial, and that is what makes it nearly free.** A `pending` row exists
+     * only between a log write and its projection — milliseconds, ordinarily —
+     * so this index is empty almost all the time and holds a handful of entries
+     * when something has actually gone wrong. A plain three-field index would
+     * carry an entry per mutation for ever to answer a question about the few
+     * that are stuck, on the hottest collection in the schema.
+     *
+     * The literal `'pending'` rather than the `PENDING` constant: a
+     * `partialFilterExpression` is stored in the catalogue when the index is
+     * built, so an index defined through an import would silently stop matching
+     * its query the day that constant changed, with nothing failing. A literal
+     * on both sides can be asserted equal by a test, and is.
+     *
+     * `serverTs` last, so the age filter is a range inside the matched set. The
+     * board's `trouble` panel counts the same rows and rides the same index.
+     */
+    {
+      key: { orgId: 1, outcome: 1, serverTs: 1 },
+      partialFilterExpression: { outcome: 'pending' },
+    },
   ],
   flocks: [{ key: { orgId: 1, _id: 1 } }, { key: { orgId: 1, species: 1, archivedAt: 1 } }],
   animals: [
@@ -247,6 +278,15 @@ const IDENTITY_INDEXES: Record<string, IndexDescription[]> = {
    * nothing to say. `expiresAt` is set at creation and neither spending nor
    * superseding extends it, so every state ages out on one clock.
    */
+  /**
+   * One row with a fixed `_id`, holding how the last sweep went. Found by that
+   * `_id`, which is indexed already, so there is nothing to add.
+   *
+   * Listed and empty rather than absent, on the same principle `promoCodes`
+   * states: "listed and empty" says the question was asked, where absent says
+   * nothing at all.
+   */
+  serverHealth: [],
   passwordResets: [
     { key: { userId: 1, createdAt: -1 } },
     { key: { expiresAt: 1 }, expireAfterSeconds: 30 * 86_400 },

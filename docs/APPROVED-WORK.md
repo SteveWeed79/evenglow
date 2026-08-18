@@ -45,6 +45,56 @@ Nothing already ticked was re-opened.
 Each of these was confirmed by reading the code. Two are in files that comment
 on the exact failure they then permit.
 
+- [x] **Six defects from a read of the whole server.** **GA**
+      A pass over all of `apps/api` after the mail and verification work.
+      **The board's sweep panel could never say anything.** `startSweeper()`
+      runs in the API process; the board is a separate systemd unit reading a
+      module variable nothing in its process ever wrote, so it reported "no pass
+      since boot" on every box for ever — the panel built because *"a silent
+      journal and a broken timer look identical"* could not tell them apart
+      either. `db/sweep-status.ts` is the durable row it reads now; the
+      in-memory reading stays, because the two say different things.
+      **The hourly sweep read the entire mutation log, per farm.** No index
+      carried `outcome`, and `serverTs < an hour ago` matches nearly every row a
+      farm has ever written — with normally zero pending rows, the pass walked
+      and fetched the whole log to find nothing, at a cost that grows for as
+      long as the farm keeps records. Measured against a 5,001-row collection:
+      **5001 documents examined before, 1 after.** The index is partial on
+      `outcome: 'pending'`, so it is empty almost all the time.
+      **Two silent caps, both from a default argument nobody passed.**
+      `findMany` limits to 200 and `sweepFarm` said nothing, so a farm with more
+      stranded rows left the rest every hour; `sweepAllFarms` looped over
+      `listOrgs()`, which caps at 200 newest-first — the loop written because
+      *"a sweeper that silently covered one farm on a box holding two would be
+      the quietest possible bug"* was that bug at two hundred. Paged on the
+      `(serverTs, _id)` pair, because re-running the query loops for ever on an
+      `unreadable` row; `listOrgIds` is unbounded; `capped` is reported.
+      **`?since=` past the date range silently meant "from the beginning".**
+      `new Date(1e30)` is an Invalid Date and BSON serialises one to **epoch 0**
+      without complaining, so a bad cursor returned the farm's whole history
+      while the caller believed it had asked for a point in the far future —
+      on the one function whose docstring is *"Rejects a malformed cursor rather
+      than defaulting it to everything"*.
+      **`assertSafeUpdate` never looked at `$rename` destinations.** Every other
+      operator names what it writes in its keys; `$rename` names it in the
+      value, so `{ $rename: { name: 'orgId' } }` passed the tenancy guard. Not
+      reachable today, which is the reason to close it rather than note it —
+      that function exists so tenancy is a mechanism and not a rule to remember.
+      **The board's two writing actions authorised from the token alone.**
+      Invariant 8 inverted: an administrator demoted or removed kept free-sync
+      grants and promotion-code minting for the fifteen minutes an access token
+      lives. It re-reads the row now — not through `requireMutationClaims`,
+      which also pins `orgId`, and the board is the one surface about no farm in
+      particular.
+      Every assertion was watched to fail against the code it replaced.
+      **Not taken in this pass and still open:** nothing deletes photo bytes
+      (`Blobs.remove` and `head` have no call sites, so an archived photo stays
+      on the server for ever); `/billing/notifications` is unauthenticated and
+      unthrottled with no Pub/Sub OIDC check; uploaded bytes are never checked
+      to be images and come back with no `nosniff`; there are no security
+      headers; and eleven comments across seven files still describe the
+      two-server world that ended when the Next app was deleted.
+
 - [x] **Seed `SiteSetupScreen` from the site record.** **GA**
       It opens on hardcoded May 15 / Oct 5 and writes them over the farm's real
       frost dates on save, stamped `source: 'entered'`. Silent, and every sow

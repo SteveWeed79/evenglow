@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { INDEXES, indexPlan, leadingKey } from '@steading/api/db/indexes';
 import { COLLECTIONS } from '@steading/api/db/scoped';
+import { PENDING } from '@steading/api/sync/outcome';
 
 /**
  * C3 — index discipline. Asserted against the definitions rather than a live
@@ -128,5 +129,60 @@ describe('the Google subject binding', () => {
     const bound = userIndexes().find((index) => 'googleSub' in index.key);
 
     expect(bound?.partialFilterExpression).toEqual({ googleSub: { $type: 'string' } });
+  });
+});
+
+/**
+ * The rows the sweeper looks for, and the index that stops it reading the log
+ * to find them.
+ *
+ * `sweepFarm` asks for `{orgId, outcome: 'pending', serverTs: {$lt: an hour
+ * ago}}`. Nothing carried `outcome`, so the only usable index was the cursor
+ * pair — and that `$lt` matches very nearly every row a farm has ever written,
+ * while the answer is normally zero rows. The pass therefore walked and fetched
+ * the whole mutation log, hourly, per farm, to find nothing, at a cost that
+ * grows for as long as the farm keeps records.
+ *
+ * Asserted here rather than only against a live server for the reason this file
+ * already gives about D15: an index that exists only in a suite which skips
+ * without a mongod is *"a thing somebody can forget to create"*.
+ */
+describe('the stranded-row index', () => {
+  const mutationIndexes = () => indexPlan().find(([name]) => name === 'mutations')?.[1] ?? [];
+
+  const pending = () =>
+    mutationIndexes().find(
+      (index) => 'outcome' in index.key && index.partialFilterExpression !== undefined,
+    );
+
+  it('exists, so the sweep seeks rather than scans', () => {
+    expect(pending()).toBeDefined();
+  });
+
+  /** orgId first like everything else, then the match, then the age range. */
+  it('leads with orgId and ends with serverTs', () => {
+    expect(Object.keys(pending()?.key ?? {})).toEqual(['orgId', 'outcome', 'serverTs']);
+  });
+
+  /**
+   * Partial is what makes it nearly free: a `pending` row exists only between a
+   * log write and its projection, so the index is empty almost all the time. A
+   * plain three-field index would carry an entry per mutation for ever, on the
+   * hottest collection in the schema, to answer a question about the few rows
+   * that are stuck.
+   */
+  it('is partial, so it holds only the rows that are actually stuck', () => {
+    expect(pending()?.partialFilterExpression).toEqual({ outcome: 'pending' });
+  });
+
+  /**
+   * **The one that would go wrong silently.** A `partialFilterExpression` is
+   * stored in the catalogue when the index is built, so it is a literal by
+   * necessity — and a literal that drifted from the value the sweeper queries
+   * with would leave an index that matches nothing, a query that is served by a
+   * full scan again, and nothing failing anywhere.
+   */
+  it('names the same state the sweeper actually queries for', () => {
+    expect(pending()?.partialFilterExpression).toEqual({ outcome: PENDING });
   });
 });

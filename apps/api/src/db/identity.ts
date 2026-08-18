@@ -301,6 +301,27 @@ export async function listOrgs(limit = 200): Promise<OrgDoc[]> {
   return (await orgs()).find({}).sort({ createdAt: -1 }).limit(limit).toArray();
 }
 
+/**
+ * Every farm's id, and deliberately without a limit.
+ *
+ * `listOrgs` takes one and defaults to 200, which is right for a page somebody
+ * reads and wrong for a job that has to cover the whole box — the sweeper ran
+ * over `listOrgs()` and therefore skipped every farm past the two-hundredth,
+ * newest-first, in silence.
+ *
+ * Ids only, which is what makes "no limit" a reasonable thing to offer: a
+ * hundred thousand farms is 2.6 MB of ULIDs, and no server this is for has a
+ * hundredth of that. Nothing here reads a farm's contents, so it stays beside
+ * the other narrow cross-tenant functions rather than becoming a general query.
+ */
+export async function listOrgIds(): Promise<string[]> {
+  const rows = await (await orgs())
+    .find({}, { projection: { _id: 1 } })
+    .sort({ createdAt: 1 })
+    .toArray();
+  return rows.map((org) => org._id);
+}
+
 /** Everyone on one farm, so `farm:show` can say who would be affected. */
 export async function listUsersInOrg(orgId: string): Promise<UserDoc[]> {
   return (await users()).find({ orgId }).sort({ createdAt: 1 }).toArray();

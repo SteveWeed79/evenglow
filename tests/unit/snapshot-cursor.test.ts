@@ -60,6 +60,33 @@ describe('parseSnapshotCursor', () => {
     expect(() => parseSnapshotCursor('0', [id, id])).toThrow(/starting point/);
   });
 
+  /**
+   * **The one input this function said it refused and did not.**
+   *
+   * Its own docstring is *"Rejects a malformed cursor rather than defaulting it
+   * to everything"*. `new Date(1e30)` is an Invalid Date, and BSON serialises
+   * one to **epoch 0** without complaining — so `?since=1e30` became
+   * `serverTs > 1970` and returned the farm's entire history, while the caller
+   * believed it had asked for everything after a point in the far future.
+   *
+   * Asserted around the boundary rather than at one value, because the number
+   * that matters is what a `Date` can hold, not anything about this farm.
+   */
+  it('accepts the largest instant a Date can actually hold', () => {
+    expect(parseSnapshotCursor('8640000000000000', null).since).toBe(8_640_000_000_000_000);
+  });
+
+  it('refuses a since one millisecond past what a Date can hold', () => {
+    expect(() => parseSnapshotCursor('8640000000000001', null)).toThrow(/starting point/);
+  });
+
+  it('refuses a since so large it would silently mean the beginning of time', () => {
+    expect(() => parseSnapshotCursor('1e30', null)).toThrow(/starting point/);
+    // The shape of the bug, kept beside the assertion: this is what the query
+    // would have carried.
+    expect(new Date(1e30).getTime()).toBeNaN();
+  });
+
   it('gives one message for every malformed cursor', () => {
     const messages = [
       () => parseSnapshotCursor('nope', null),

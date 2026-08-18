@@ -4,9 +4,10 @@ import { authorizeCredentials } from '../auth/credentials';
 import { bearerFrom, mintAccessToken, verifyAccessToken } from '../auth/tokens';
 import { farmSyncState } from '../billing/access';
 import { readBoard } from '../db/board';
+import { findUserById } from '../db/identity';
 import { type Env, readEnv } from '../env';
 import { errorBody, HttpError } from '../http';
-import { lastSweep } from '../sync/sweep';
+import { readSweep } from '../db/sweep-status';
 import { actionGrant, actionNewPromo } from './actions';
 import { boardPage } from './page';
 
@@ -87,6 +88,35 @@ async function requireAdmin(request: FastifyRequest, env: Env): Promise<void> {
      */
     throw new HttpError(403, 'That account is not an administrator of this server.');
   }
+
+  /**
+   * And then asked of the database, because the line above reads a token.
+   *
+   * **This was the whole check, and that is invariant 8 inverted**: cached
+   * claims gate local UX, and the server re-derives identity and role on every
+   * mutation. Two of the routes below *are* mutations — one gives a farm free
+   * sync, the other mints a subscription code — so an administrator demoted or
+   * removed a minute ago kept both for the fifteen minutes an access token
+   * lives. Nowhere else on this server does that; `requireMutationClaims` has
+   * re-read the user on every write since it was written, and this is the same
+   * read for the same reason.
+   *
+   * Not `requireMutationClaims` itself, deliberately. That one also insists the
+   * token's `orgId` still matches the user's, which is right for a
+   * tenant-scoped write and wrong here — the board is the one surface that is
+   * about no farm in particular, and somebody who moved farms should not lose
+   * the server's operations page because of it.
+   *
+   * A disabled account gets the 401, not the 403 above: it is not a role
+   * problem, and "sign in again" is the only thing to do about it.
+   */
+  const user = await findUserById(claims.userId);
+  if (user === null || user.disabledAt !== undefined) {
+    throw new HttpError(401, 'That account is no longer active.');
+  }
+  if (user.role !== 'admin') {
+    throw new HttpError(403, 'That account is not an administrator of this server.');
+  }
 }
 
 export async function buildOpsServer(env: Env = readEnv()): Promise<FastifyInstance> {
@@ -157,7 +187,21 @@ export async function buildOpsServer(env: Env = readEnv()): Promise<FastifyInsta
     await requireAdmin(request, env);
 
     const board = await readBoard();
-    const sweep = lastSweep();
+
+    /**
+     * Read from the database, not from this process.
+     *
+     * The sweeper runs in the **API** unit; this is the **ops** unit. A module
+     * variable written there was never visible here, so this panel reported "no
+     * pass since boot" on every box for ever — the exact silence it exists to
+     * break. `db/sweep-status.ts` has the rest of it.
+     *
+     * Null covers three things an operator wants told apart from the row that
+     * follows it: a server whose sweeper has not had its first pass, a box
+     * where the API unit is not running at all, and a database this process
+     * cannot reach — the last of which `health.databaseMs` already names.
+     */
+    const sweep = await readSweep();
 
     return {
       farms: board.farms.map((farm) => ({
@@ -175,10 +219,14 @@ export async function buildOpsServer(env: Env = readEnv()): Promise<FastifyInsta
       health: {
         ...board.health,
         sweep: {
-          at: sweep.at,
-          failed: sweep.failed,
-          found: sweep.report?.found ?? null,
-          decided: sweep.report?.decided ?? null,
+          at: sweep?.at ?? null,
+          failed: sweep?.failed ?? null,
+          found: sweep?.report?.found ?? null,
+          decided: sweep?.report?.decided ?? null,
+          // Said out loud, because a pass that stopped short and a pass that
+          // finished the job otherwise read identically on this panel.
+          capped: sweep?.report?.capped ?? false,
+          host: sweep?.host ?? null,
         },
       },
       trouble: board.trouble,

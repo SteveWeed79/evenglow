@@ -289,10 +289,16 @@ export function boardPage(): string {
     $('sweep').textContent = sweep.failed
       ? 'Sweeper failed: ' + sweep.failed
       : sweep.at
-        ? 'Sweeper last ran ' + ago(sweep.at) + ' — ' + sweep.found + ' undecided, ' +
-          sweep.decided + ' decided.'
-        : 'Sweeper has not completed a pass since this process started.';
-    $('sweep').className = 'hint' + (sweep.failed ? ' bad' : '');
+        ? 'Sweeper last ran ' + ago(sweep.at) + ' on ' + (sweep.host || 'an unnamed host') +
+          ' — ' + sweep.found + ' undecided, ' + sweep.decided + ' decided' +
+          (sweep.capped ? ', and stopped at its ceiling with more to do.' : '.')
+        // Said this way rather than "since this process started", which was the
+        // old wording and was wrong twice over: the sweeper runs in the API
+        // unit, not this one, so it was never about this process — and this
+        // sentence is also what a box shows when the API unit is not running at
+        // all, which is worth being able to read as that.
+        : 'No sweeper pass has been recorded. The API service may not be running.';
+    $('sweep').className = 'hint' + (sweep.failed || sweep.capped ? ' bad' : '');
 
     table(
       $('trouble'),
