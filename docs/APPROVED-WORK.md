@@ -321,8 +321,14 @@ period rather than a task.
 - [ ] **Write the terms of service and EULA.** `[2]`
 - [ ] **Write the "not veterinary advice" line and place it.** `[16]`
       Settings, and beside the withdrawal banner. Two sentences.
-- [ ] **Clear the name.** `[13]` — Play listing, trademark, the farm products
-      already using the word.
+- [ ] **Clear the name — and it did not clear.** `[13]` — checked 19 August
+      2026. **Brechy LLC has a pre-launch page for an app called Steading**,
+      same product and same "Scottish for farmstead" pitch
+      (`brechy.com/apps/steading`). They have not launched; they are a company
+      and this project is not one yet (`[14]`). **Decide before the first Play
+      upload**, because a package name is permanent from that moment while the
+      display name is about eleven lines. Everything else in §2 can proceed
+      without the answer.
 - [ ] **Decide the business entity.** `[14]` — Play needs a payee.
 
 ## 3. Release mechanics

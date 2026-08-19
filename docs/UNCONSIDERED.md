@@ -136,6 +136,34 @@ otherwise plans the billing down to the refusal copy.
     Cheapest to find out before the icon, the splash, the domain and the
     typography all carry it.
 
+    **Checked 19 August 2026, and the answer is the bad one.**
+    `brechy.com/apps/steading` is a pre-launch page for an app called
+    **Steading**, by **Brechy LLC**, described as *"the only app that manages
+    your entire homestead — livestock, gardens, orchards, and all the tasks that
+    keep it running"* — and it argues the name the same way this project does:
+    *"Steading (n.): Scottish for farmstead. Now, an app for yours."* Same word,
+    same product, same reasoning, arrived at independently.
+
+    **What is known:** they have not launched (the page collects a waitlist),
+    they are a formed company, and no trademark filing for them was found —
+    though the trademark databases were unreachable from the environment this
+    was researched in, so that last point proves nothing. **What is not known:**
+    which side used the name publicly first.
+
+    **The decision has a hard deadline and an asymmetric cost.** A Play package
+    name is permanent from the first upload; a display name is about eleven
+    lines (`app.json` plus ten strings in `apps/mobile/src`) and changeable at
+    any release. The 371 files carrying `@steading/*`, the `steading-{orgId}.db`
+    filename and the `steading://` scheme are internal and never need to move.
+    So this is cheap until the first AAB goes up and expensive-to-impossible
+    afterwards — which puts it *before* `[10]`'s first upload rather than
+    alongside it.
+
+    Nothing else found is a conflict: `THE STEADING CODEX` (99877285, Web
+    Production Labs LLC, pending) covers homesteading books and retail, not
+    software; the word is a dictionary term with farms, a wine and a brewing
+    channel already on it. **The conflict is this one product, and it is total.**
+
 14. **There is no business entity, and billing needs one.** Play payouts, tax
     identity, VAT/sales tax on a $39/year subscription, and the invoice a farm
     may want for its own books. Play handles collection and remittance in most
