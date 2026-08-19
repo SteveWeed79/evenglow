@@ -78,18 +78,6 @@ async function requireAdmin(request: FastifyRequest, env: Env): Promise<void> {
   if (token === null) throw new HttpError(401, 'Sign in.');
 
   const claims = await verifyAccessToken(token, env.AUTH_SECRET);
-  if (claims.role !== 'admin') {
-    /**
-     * A 403 rather than a 404, and this is the one place that ordering flips.
-     *
-     * Everywhere else in this service an unauthorised read is a 404, because
-     * distinguishing them discloses that a record exists. There is no record
-     * here — the board is a fixed page — so there is nothing to disclose, and
-     * telling an owner who signed in correctly that their role is not enough is
-     * more useful than pretending the page is missing.
-     */
-    throw new HttpError(403, 'That account is not an administrator of this server.');
-  }
 
   /**
    * And then asked of the database, because the line above reads a token.
@@ -116,8 +104,33 @@ async function requireAdmin(request: FastifyRequest, env: Env): Promise<void> {
   if (user === null || user.disabledAt !== undefined) {
     throw new HttpError(401, 'That account is no longer active.');
   }
-  if (user.role !== 'admin') {
-    throw new HttpError(403, 'That account is not an administrator of this server.');
+
+  /**
+   * The operator flag, **not** the farm role — and the first version of this
+   * checked the role.
+   *
+   * `admin` is a farm's manager. `assignableRoles('owner')` returns all three
+   * roles and `assignableRoles('admin')` returns `['admin', 'hand']`, so any
+   * farm owner could mint one and any admin could mint another — and that
+   * account would have opened this board, read every farm on the server,
+   * granted free sync and minted subscription codes. Cross-tenant escalation
+   * from an ordinary Members screen, on the one surface `scoped()` deliberately
+   * does not protect.
+   *
+   * `operatorSince` is set by `pnpm ops:admin` and by nothing else. No route
+   * writes it, no payload schema carries it, and it is not in the access token
+   * — which is why this is a database read rather than a claim. See
+   * `db/identity.ts`.
+   *
+   * **A 403 rather than a 404, and this is the one place that ordering flips.**
+   * Everywhere else an unauthorised read is a 404, because distinguishing them
+   * discloses that a record exists. There is no record here — the board is a
+   * fixed page — so there is nothing to disclose, and telling somebody who
+   * signed in correctly that their account is not an operator is more useful
+   * than pretending the page is missing.
+   */
+  if (user.operatorSince === undefined) {
+    throw new HttpError(403, 'That account is not an operator of this server.');
   }
 }
 
@@ -195,7 +208,22 @@ export async function buildOpsServer(env: Env = readEnv()): Promise<FastifyInsta
       if (!parsed.success) return refuse();
 
       const user = await authorizeCredentials(parsed.data);
-      if (user === null || user.role !== 'admin') return refuse();
+      if (user === null) return refuse();
+
+      /**
+       * The same operator test the routes make, asked here so a sign-in that
+       * cannot open anything is refused at the door rather than handing over a
+       * token that every subsequent request rejects.
+       *
+       * A second read of a user `authorizeCredentials` has already fetched.
+       * That is one indexed lookup on a route limited to five attempts a
+       * minute, and it buys the flag being read from one place — widening
+       * `AuthorizedUser` to carry it would put an operator bit on the shape the
+       * ordinary farm sign-in path uses, which is the direction this defect
+       * came from in the first place.
+       */
+      const row = await findUserById(user.id);
+      if (row === null || row.operatorSince === undefined) return refuse();
 
       return reply.status(200).send({
         token: await mintAccessToken(

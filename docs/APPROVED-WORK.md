@@ -45,6 +45,35 @@ Nothing already ticked was re-opened.
 Each of these was confirmed by reading the code. Two are in files that comment
 on the exact failure they then permit.
 
+- [x] **The operations board was gated on a role farmers hand out.** **GA**
+      Found while writing the script that would have granted the board to
+      somebody — there was none, and building one surfaced why.
+      `requireAdmin` checked `role === 'admin'`, and **`admin` is a farm role**:
+      the manager an owner appoints on the Members screen.
+      `assignableRoles('owner')` returns all three roles and
+      `assignableRoles('admin')` returns `['admin', 'hand']`, so any owner could
+      mint one and any admin could mint another, self-propagating. That account
+      would have read **every farm on the server**, granted free sync to any of
+      them, and minted unlimited subscription codes — cross-tenant escalation
+      reachable from an ordinary farm screen, on the one surface `scoped()`
+      deliberately does not protect. The suite's own header said *"the only
+      thing between an owner and every other farm's numbers is the role
+      check"*; it was, and the role was one farmers hand out.
+      **Not remotely exploitable as deployed** — the board binds `127.0.0.1:3002`
+      and nothing in the Caddyfile proxies it — which is the only thing that
+      held it, and exposing the board is the whole point of having built it.
+      **The fix is a separate fact, not a fourth role.** `operatorSince` on the
+      user document, set by `pnpm ops:admin` and by nothing else: no payload
+      schema, no `/members/:id/role`, not the access token. A farm's admin
+      manages a farm; an operator runs the box; most operators are a plain
+      `hand` on their own farm. Revoking it stops a board session in flight,
+      because the board re-reads the row on every request — a property the
+      previous PR added for a different reason, now doing a second job.
+      **There was also no way to grant it at all**, which is why the board had
+      never been opened: `db:seed` creates an owner and nothing ever assigned
+      `admin`. `pnpm ops:admin` is the key, and `--list` answers "who else has
+      this", which a grant nobody can audit is a grant nobody can revoke.
+
 - [x] **Six defects from a read of the whole server.** **GA**
       A pass over all of `apps/api` after the mail and verification work.
       **The board's sweep panel could never say anything.** `startSweeper()`
