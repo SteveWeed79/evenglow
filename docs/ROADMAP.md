@@ -890,21 +890,109 @@ reasoning about farms that are mid-restore when the build changes under them.
 
 ---
 
+## 13 — The way *in* for a farm that already keeps records
+
+**Parity floor P9's other half, scoped so that §2.1's refusal survives intact.**
+
+**Cost of skipping it:** the price argument never gets tested. D13 sells this
+app at $39/year against Livestocked's $70 and Farmbrite's tiers, and a keeper
+with three years of eggs in Flockstar or a spreadsheet **cannot accept that
+offer without retyping their history.** Switching cost, not price, is what keeps
+somebody with an incumbent — so the cheaper product loses to the one they
+already have records in. Export stops this app being a trap; import is what lets
+a farm leave the *other* trap.
+
+### The refusal is right, and it is about merging — so do not merge
+
+§2.1 turns import down for three reasons: conflict rules, an id strategy for
+rows that have none, and a preview nobody reads. Every one of them is a
+consequence of **merging against records that already exist**. §12's backup
+restore escapes all three by going into an empty farm, and it says so.
+
+**This takes the same escape.** Import is scoped to the arrival case — a farm
+bringing its past in, before it has a present here — and the scope is enforced
+rather than advised:
+
+- **Create-only. Import never updates an existing record**, ever. A row that
+  would touch one is refused and reported, not merged. That deletes the conflict
+  rules, which were the first objection.
+- **Append-only entities first** (D3): `eggLog`, `feedLog`, `weight`, `harvest`,
+  `mortality`, `hourReading`, `productionLog`. These *cannot* conflict by
+  construction, and they are the overwhelming bulk of what a switcher actually
+  has — years of daily counts.
+- **Mutable entities only into an empty one.** Flocks, animals and equipment
+  import only when the farm holds none of that entity, or as explicitly new
+  records with no matching attempted. No fuzzy name matching, ever: two goats
+  called Dot is a farm's business, not a merge candidate.
+- **IDs are minted here** (invariant 3). Every imported row gets a client-minted
+  ULID at parse time, exactly as a typed one would, so nothing downstream can
+  tell an imported record from a keyed-in one.
+
+### Two things that are genuinely new work
+
+**Idempotency, because a person will import the same file twice.** ULIDs are
+random, so a second run of one file would silently double a farm's year.
+Every row carries the `importBatchId` it arrived under, the file's own hash is
+recorded against that batch, and re-importing a file whose hash is already
+present is refused by default with the date of the first import. This is the
+same shape as the mutation-id idempotency the server already relies on, applied
+one level up.
+
+**Undo, which is the real answer to "a way to quietly corrupt a farm's
+history."** Because a batch is identifiable, *"undo this import"* is a delete of
+its rows — and delete is already permitted on every append-only entity precisely
+because a mistyped record cannot be corrected by adding a better one. **A
+reversible import is a different risk from an irreversible one**, and it is what
+lets the preview stay honest: not a row-by-row wall nobody reads, but a summary
+of counts per entity, the first rejected rows with their reasons, and an undo
+that works afterwards.
+
+### The constraint that will actually bite: volume
+
+Three years of twice-daily egg logs is a couple of thousand rows, and each one
+is a mutation. That means a couple of thousand enqueue-plus-projection writes
+under invariant 5, then a sequential flush at 100 per batch — twenty-odd
+round trips before the farm's history is on the server.
+
+**This is the "first flush at volume" case `ACCESS-AND-BILLING.md` §6 names**,
+which `tests/offline/first-flush.test.ts` covers and which has never met a real
+farm. Import does not create that path; it makes it the *normal* one, on day
+one, for exactly the users who are hardest to win back if it stalls. Sizing the
+enqueue transaction, and deciding whether an import flushes as one long
+sequential run or is deliberately paced, is the engineering here — not the CSV
+parsing.
+
+### Not in scope, and staying refused
+
+**Round-trip editing.** Exporting, editing in a spreadsheet and importing back is
+the merge case wearing a friendly name, and it keeps every objection §2.1
+raised. The export remains one-way by design.
+
+**Column mapping for arbitrary files, at first.** Start with this app's own
+export shape and a documented column set; a mapping step for a foreign CSV is a
+second version, once the ingest path is proven. A farm that needs it today can
+rearrange columns in the spreadsheet they already have open.
+
+---
+
 ## What is deliberately not on this list
 
 - **A weather tab.** Answered by the Farm hub.
 - **Humidity targets for incubation.** The farmer's call.
-- **CSV import.** **Refused, not deferred** — see `COMPETITIVE-ANALYSIS.md`
+- **CSV import *as a merge*.** **Refused** — see `COMPETITIVE-ANALYSIS.md`
   §2.1. Merging spreadsheet rows against records that already exist and already
   sync needs conflict rules, an id strategy for rows that have none, and a
   preview nobody reads. Every one of those is a way to quietly corrupt a farm's
   history. Export is the half that stops the app being a trap, and it is built.
 
-  **Still refused, and §12 is not a reversal of it.** The backup file is the
-  app's own output going back into an empty farm, so all three reasons above
-  fall away — there is nothing to merge against, every row already carries the
-  ULID it was minted with, and there is nothing to preview. A spreadsheet
-  somebody edited has none of those properties and none of this applies to it.
+  **Still refused, and neither §12 nor §13 is a reversal of it.** The backup
+  file is the app's own output going back into an empty farm, so all three
+  reasons fall away — nothing to merge against, every row already carrying the
+  ULID it was minted with, nothing to preview. **§13 takes the same escape for
+  the arrival case**: create-only, append-only entities first, mutable ones only
+  into an empty farm, no matching attempted, and an undo. A spreadsheet somebody
+  edited *against records already here* still has none of those properties, and
+  round-trip editing stays refused by name.
 - **Egg logging per individual bird** (P2). Refused: five hens share one roost,
   so a per-bird tally is a guess recorded as a fact. `eggLog.birdId` stays in
   the contract for a farm that genuinely traps nests; no screen writes one.

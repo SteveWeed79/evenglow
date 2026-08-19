@@ -150,7 +150,7 @@ Ship these or the app reads as a toy. Ordered by how visible their absence is.
 | P6 | Attach receipts, photos, and PDF manuals to equipment | Farmbrite, LookOver | **Built for photos; PDF manuals REFUSED** — see §2.1 |
 | P7 | Full maintenance history export when selling a machine | LookOver | Covered by general export |
 | P8 | Parts inventory with low-stock alerts tied to upcoming service | UpKeep | Partially planned — needs the service linkage |
-| P9 | CSV import **and** export | Flockstar | Export built; **import REFUSED** — see §2.1 |
+| P9 | CSV import **and** export | Flockstar | Export built; **import as a merge stays REFUSED** (§2.1) — **arrival import planned**, `ROADMAP.md` §13 |
 | P10 | Multi-species (chickens, ducks, quail, turkeys, geese) | FarmKeep | **ADD** — plan assumed chickens |
 | P11 | Multiple users, scoped roles, no per-seat fee | Farmbrite | Planned |
 | P12 | Offline logging with automatic sync | Everyone now | Planned (and our core strength) |
@@ -192,6 +192,23 @@ rows that have none, and a preview nobody will read — and every one of those i
 a way to quietly corrupt a farm's history. **Export is the half that matters**,
 because it is what stops the app being a trap, and it is built. Getting data
 *out* has no failure mode worse than a bad spreadsheet; getting it *in* does.
+
+> **Amended 19 August 2026 — the refusal was about merging, and it holds. What
+> it never covered is arrival.** Every objection above is a consequence of
+> writing against records that already exist; a farm importing its past *before
+> it has a present here* has nothing to merge against, which is the same escape
+> §12's backup restore takes. `ROADMAP.md` §13 scopes that: create-only,
+> append-only entities first, mutable ones only into an empty farm, no matching
+> ever attempted, an `importBatchId` with the file's hash so a second run cannot
+> double a year, and an undo — which is what turns "a way to quietly corrupt a
+> farm's history" into a reversible one.
+>
+> **Why it was reopened is commercial, and it is this section's own logic.**
+> D13 prices at $39/year against Livestocked's $70 and Farmbrite's tiers. A
+> keeper with three years in Flockstar cannot take that offer without retyping
+> it, so **switching cost decides the sale, not price** — and the cheaper
+> product loses to the one they already have their records in. Round-trip
+> editing stays refused by name.
 
 ---
 
@@ -270,11 +287,13 @@ Merged into the master plan:
 - Equipment presets by make/model; breed presets by species
 - Hour-meter usage-rate forecasting
 - Parts inventory linked to upcoming service intervals
-- ~~CSV import as well as export~~ — **contradicted by §2.1 and superseded.**
-  Export is built; import stays refused for the reasons P9 gives. What was
-  built instead is a **backup file**, which is the app's own output going back
-  into an empty farm: nothing to merge against, every row carrying the ULID it
-  was minted with, and nothing to preview. See `ROADMAP.md` §12.
+- ~~CSV import as well as export~~ — **contradicted by §2.1, and now split in
+  two.** Export is built. Import *as a merge* stays refused for the reasons P9
+  gives. What was built instead is a **backup file**, which is the app's own
+  output going back into an empty farm: nothing to merge against, every row
+  carrying the ULID it was minted with, and nothing to preview
+  (`ROADMAP.md` §12) — and **arrival import now takes that same escape for a
+  farm switching from somewhere else** (`ROADMAP.md` §13).
 - Deferred to v2, but not designed out: incubation and hatch runs, pedigree/lineage
 
 ---
