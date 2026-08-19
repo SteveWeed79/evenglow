@@ -97,13 +97,21 @@ Android. That is this product's sentence, written by somebody else.
 > `github.com/homesteadhub` exists with **no public repositories**, so the only
 > way to find out is to install it.
 
-**Livestocked** — multi-species herd and flock management, free, across Windows,
+**Livestocked** — multi-species herd and flock management across Windows,
 Android, iOS and macOS, covering cattle, sheep, goats, swine, horses, alpacas,
 llamas and chickens, plus semen and embryo inventory, sales and financials. It
 advertises working *"online or offline"*. The mixed-stock argument in
 `CLAUDE.md` — *"`animal`, not `bird`"* — is not unique to us; this one had it
 first and reaches further into breeding stock than we do. No GitHub presence
 (`github.com/livestocked` is a 404).
+
+> **It is not free, and this document said it was for a day.** The error came
+> from reading "free to download" as free. `livestocked.com/pricing` sells it:
+> a no-card free trial, then paid — aggregators list **$70/year** on one plan
+> and **from £30/month** on another. **So the nearest multi-species competitor
+> charges more than D13 does**, which inverts the worry that started this
+> section. We are not the expensive option; at $39/year we are the cheap one
+> with the better offline story.
 
 **farmOS** — [`farmOS/farmOS`](https://github.com/farmOS/farmOS), 1.3k stars,
 GPL-2.0, PHP on Drupal, self-hosted by Docker with commercial hosting available
