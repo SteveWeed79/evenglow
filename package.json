@@ -10,6 +10,7 @@
     "bench:store": "tsx scripts/bench-store.mts",
     "check:assets": "node scripts/check-assets.mjs",
     "check:icons": "node scripts/check-icons.mjs",
+    "check:names": "node scripts/check-names.mjs",
     "check:no-db-disables": "node scripts/check-no-db-disables.mjs",
     "check:secrets": "node scripts/check-bundle-secrets.mjs",
     "db:indexes": "pnpm --filter @homefarm/api db:indexes",

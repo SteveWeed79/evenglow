@@ -120,6 +120,8 @@ describe('reading the tags', () => {
 describe('what the APK says it is', () => {
   const BADGING =
     "package: name='dev.swbuild.homefarm' versionCode='18' versionName='0.1.13' " +
+    // Captured `aapt dump badging` output, not a copy of the brand: what is
+    // under test is the parser, which never reads this field. check:names-ok
     "compileSdkVersion='36'\nsdkVersion:'24'\napplication-label:'Evenglow'\n";
 
   it('reads the three fields that matter', () => {
@@ -145,6 +147,7 @@ describe('what the APK says it is', () => {
 });
 
 describe('the signing certificate', () => {
+  // check:names-ok — captured `apksigner verify` output, same reason.
   const CERTS = `Signer #1 certificate DN: CN=Evenglow
 Signer #1 certificate SHA-256 digest: a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90
 Signer #1 certificate SHA-1 digest: 0123456789abcdef0123456789abcdef01234567

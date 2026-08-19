@@ -3,7 +3,7 @@
 # The farm server, from a fresh Oracle Always Free instance to a working
 # https:// address. Run it once, on the box, as a user with sudo:
 #
-#   git clone https://github.com/SteveWeed79/steading /opt/homefarm
+#   git clone https://github.com/SteveWeed79/evenglow /opt/homefarm
 #   sudo /opt/homefarm/scripts/deploy/setup-box.sh api.swbuild.dev
 #
 # Idempotent — safe to run again after a failure or a change. Every step says
@@ -51,7 +51,7 @@ if [ -z "$DOMAIN" ]; then
 fi
 
 [ -d "$REPO_DIR/.git" ] || die "No checkout at $REPO_DIR. Clone the repo there first:
-    sudo git clone https://github.com/SteveWeed79/steading $REPO_DIR"
+    sudo git clone https://github.com/SteveWeed79/evenglow $REPO_DIR"
 
 # ── 1. The firewall Oracle does not tell you about ──────────────────────────
 #
@@ -242,7 +242,7 @@ PORT=3001
 #   Permissions -> Repository permissions -> Issues: Read and write
 # and nothing else. It files issues and that is the whole of what it can do.
 #SUPPORT_GITHUB_TOKEN=
-#SUPPORT_REPO=SteveWeed79/steading
+#SUPPORT_REPO=SteveWeed79/evenglow
 
 # Whether a farm's own records may ride along with a report (S5).
 #

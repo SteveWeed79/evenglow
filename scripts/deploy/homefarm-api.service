@@ -11,7 +11,7 @@
 
 [Unit]
 Description=Evenglow farm API
-Documentation=https://github.com/SteveWeed79/steading/blob/main/docs/OPERATOR.md
+Documentation=https://github.com/SteveWeed79/evenglow/blob/main/docs/OPERATOR.md
 # `network-online`, not `network`. The latter fires when the interface exists,
 # which on a cloud instance is before it has an address — and the service would
 # come up, fail to resolve Atlas, and be restarted five seconds later for no

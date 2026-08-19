@@ -36,7 +36,7 @@
 
 [Unit]
 Description=Encrypted off-box backup of the Evenglow database
-Documentation=https://github.com/SteveWeed79/steading/blob/main/docs/DEPLOY-THE-SERVER.md
+Documentation=https://github.com/SteveWeed79/evenglow/blob/main/docs/DEPLOY-THE-SERVER.md
 After=network-online.target
 Wants=network-online.target
 

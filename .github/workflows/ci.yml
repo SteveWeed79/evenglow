@@ -130,6 +130,14 @@ jobs:
       - name: Launcher icon and splash
         run: pnpm check:assets
 
+      # The rename gate. Of the defects the Steading -> Evenglow rename left
+      # behind, typecheck caught zero and the suite caught three; a grep caught
+      # twelve. This is that grep made permanent, plus the two rules covering
+      # what a grep cannot see — a brand copied out of `PRODUCT_NAME`, and a
+      # config naming a path that is no longer on disk.
+      - name: Retired names, and the paths configs point at
+        run: pnpm check:names
+
       - name: Bundle the app (Metro)
         run: pnpm mobile:export
 

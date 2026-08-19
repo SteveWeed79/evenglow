@@ -359,7 +359,7 @@ used to be a managed cluster's IP allowlist, and the database moving onto the
 box removed it:
 
 ```
-sudo git clone https://github.com/SteveWeed79/steading /opt/homefarm
+sudo git clone https://github.com/SteveWeed79/evenglow /opt/homefarm
 sudo /opt/homefarm/scripts/deploy/setup-box.sh api.swbuild.dev
 ```
 
@@ -469,7 +469,7 @@ app falls back to its share sheet — which works, and is not the loop.
 
    ```
    SUPPORT_GITHUB_TOKEN=github_pat_...
-   SUPPORT_REPO=SteveWeed79/steading
+   SUPPORT_REPO=SteveWeed79/evenglow
    ```
 
 3. Restart the farm server. `Check my setup` will say where reports go.
@@ -484,7 +484,7 @@ the deployed box is asking the box, whose `/etc/homefarm/api.env` is a different
 file that `setup-box.sh` leaves commented out.
 
 `Check my setup` read the laptop's `.env.local` no matter where the build
-pointed, so it printed **reporting files issues to SteveWeed79/steading** on the
+pointed, so it printed **reporting files issues to SteveWeed79/evenglow** on the
 morning a handset was being told *this server has nowhere to file a report*. It
 now reads `apps/mobile/.env` first and, when that is a real deployment, asks
 that server instead — an empty `POST /support`, which cannot become a ticket:

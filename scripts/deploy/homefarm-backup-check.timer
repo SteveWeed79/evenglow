@@ -10,7 +10,7 @@
 
 [Unit]
 Description=Daily check that the Evenglow backup is not stale
-Documentation=https://github.com/SteveWeed79/steading/blob/main/docs/DEPLOY-THE-SERVER.md
+Documentation=https://github.com/SteveWeed79/evenglow/blob/main/docs/DEPLOY-THE-SERVER.md
 
 [Timer]
 OnCalendar=*-*-* 09:00:00 UTC

@@ -18,7 +18,7 @@
 
 [Unit]
 Description=Check for a new Evenglow release
-Documentation=https://github.com/SteveWeed79/steading/blob/main/docs/DEPLOY-THE-SERVER.md
+Documentation=https://github.com/SteveWeed79/evenglow/blob/main/docs/DEPLOY-THE-SERVER.md
 
 [Timer]
 # Not immediately at boot. The box has just started; mongod, the API and Caddy

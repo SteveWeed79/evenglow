@@ -5,7 +5,7 @@ import { newestReleaseTag, apkAsset, findRelease, repoSlug } from './lib/release
  * The APK for the commit a box is serving, from the repository's Releases.
  *
  *   git tag --points-at HEAD | node scripts/release-apk.mjs --remote "$(git remote get-url origin)"
- *   git tag --points-at HEAD | node scripts/release-apk.mjs --repo SteveWeed79/steading
+ *   git tag --points-at HEAD | node scripts/release-apk.mjs --repo SteveWeed79/evenglow
  *
  * Prints `url<TAB>version<TAB>code` on stdout when there is one to fetch, and
  * **nothing at all** when there is not. `deploy.sh` reads it exactly the way it

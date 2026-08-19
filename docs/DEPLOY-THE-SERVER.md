@@ -134,7 +134,7 @@ One script, and it is the same one the live box was moved onto:
 
 ```
 sudo apt-get update && sudo apt-get install -y git
-sudo git clone https://github.com/SteveWeed79/steading /opt/homefarm
+sudo git clone https://github.com/SteveWeed79/evenglow /opt/homefarm
 sudo MONGODB_DB=homefarmdb /opt/homefarm/scripts/deploy/setup-mongo.sh
 ```
 
@@ -417,7 +417,7 @@ never been told is the normal state of a new one.
 
    ```
    SUPPORT_GITHUB_TOKEN=github_pat_...
-   SUPPORT_REPO=SteveWeed79/steading
+   SUPPORT_REPO=SteveWeed79/evenglow
    ```
 
 3. Restart, because the environment is read once at startup:

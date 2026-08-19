@@ -70,7 +70,7 @@ const BASE = 'https://api.weather.gov';
  * from the bundle because nothing here is worth withholding.
  */
 const HEADERS = {
-  'User-Agent': `(${PRODUCT_NAME} farm app, https://github.com/SteveWeed79/steading)`,
+  'User-Agent': `(${PRODUCT_NAME} farm app, https://github.com/SteveWeed79/evenglow)`,
   Accept: 'application/geo+json',
 };
 

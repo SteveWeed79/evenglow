@@ -46,6 +46,7 @@ const EMAIL = 'keeper@example.test';
 const CORRECTED = 'the-right-one@example.test';
 
 /** The `log` provider, so the flow runs end to end without a network call. */
+// check:names-ok — an operator-set From header, which is theirs to word.
 const MAIL = { EMAIL_PROVIDER: 'log', EMAIL_FROM: 'Evenglow <hello@example.test>' };
 
 async function buildApp(over: Record<string, string> = {}) {

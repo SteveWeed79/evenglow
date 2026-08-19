@@ -7,6 +7,9 @@ import { describe, expect, it } from 'vitest';
 /**
  * What the live-box rename does to `/etc/<name>/api.env`.
  *
+ * check:names-ok-file — the fixtures here are old-shaped on purpose. A test
+ * for a migration off a name cannot avoid writing that name down.
+ *
  * The migration stops the API, moves three directories, renames a service
  * account and copies a database — all of which are visible if they go wrong.
  * This one step is not. It edits the file that holds the server's only database

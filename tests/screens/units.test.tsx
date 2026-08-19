@@ -39,7 +39,7 @@ async function farm(units?: 'metric' | 'imperial'): Promise<void> {
     entity: 'site',
     op: 'create',
     targetId: newId(),
-    payload: { name: 'Steading', ...(units === undefined ? {} : { units }) },
+    payload: { name: 'Rowan Bank', ...(units === undefined ? {} : { units }) },
   });
 
   await enqueue({

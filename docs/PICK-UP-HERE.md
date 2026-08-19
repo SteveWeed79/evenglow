@@ -72,7 +72,7 @@ in the path**, so no quota can refuse it.
 backup that had never been taken.
 
 **First run:
-[31922188936](https://github.com/SteveWeed79/steading/actions/runs/31922188936)
+[31922188936](https://github.com/SteveWeed79/evenglow/actions/runs/31922188936)
 — failed, and the outcome is now recorded rather than left to be looked up.**
 
 Dispatched from `main` at `9daed0c`. It got through the secrets check, the
@@ -108,7 +108,7 @@ Two more things about that run:
 #### The second promote, which got further and named the real cause
 
 Run
-[31925150611](https://github.com/SteveWeed79/steading/actions/runs/31925150611),
+[31925150611](https://github.com/SteveWeed79/evenglow/actions/runs/31925150611),
 the first promote through `ci.yml` → `apk.yml`. `verify`, `container` and
 `release` all green — the version moved to **0.1.14** and `release` was pushed,
 so the server half shipped. `app / build` then failed at the same step and with
@@ -172,9 +172,9 @@ Two things that run settled, both worth keeping:
 
 #### Run 3 was green. The build half is done
 
-[31927760927](https://github.com/SteveWeed79/steading/actions/runs/31927760927),
+[31927760927](https://github.com/SteveWeed79/evenglow/actions/runs/31927760927),
 at `f149da8`. Build, sign, verify, publish — all of it — and
-**[`v0.1.14+18`](https://github.com/SteveWeed79/steading/releases/tag/v0.1.14%2B18)
+**[`v0.1.14+18`](https://github.com/SteveWeed79/evenglow/releases/tag/v0.1.14%2B18)
 carries `homefarm-0.1.14-18.apk`**, published 05:10 on 16 August.
 
 The key was right the whole time. `ANDROID_CERT_SHA256` matches the APK's

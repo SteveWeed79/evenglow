@@ -348,9 +348,9 @@ describe('reading the tracker config', () => {
 
   it('splits owner from repo and refuses anything else', () => {
     expect(
-      readEnv({ ...base, SUPPORT_GITHUB_TOKEN: 'x', SUPPORT_REPO: 'SteveWeed79/steading' })
+      readEnv({ ...base, SUPPORT_GITHUB_TOKEN: 'x', SUPPORT_REPO: 'SteveWeed79/evenglow' })
         .supportConfig,
-    ).toMatchObject({ owner: 'SteveWeed79', repo: 'steading' });
+    ).toMatchObject({ owner: 'SteveWeed79', repo: 'evenglow' });
 
     expect(() =>
       readEnv({ ...base, SUPPORT_GITHUB_TOKEN: 'x', SUPPORT_REPO: 'homefarm' }),

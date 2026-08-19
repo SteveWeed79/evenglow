@@ -93,13 +93,13 @@ describe('the tag format, now shared', () => {
 describe('turning the origin remote into a repository', () => {
   it('reads the forms git actually prints', () => {
     for (const remote of [
-      'https://github.com/SteveWeed79/steading',
-      'https://github.com/SteveWeed79/steading.git',
-      'https://github.com/SteveWeed79/steading/',
-      'git@github.com:SteveWeed79/steading.git',
-      'ssh://git@github.com/SteveWeed79/steading.git',
+      'https://github.com/SteveWeed79/evenglow',
+      'https://github.com/SteveWeed79/evenglow.git',
+      'https://github.com/SteveWeed79/evenglow/',
+      'git@github.com:SteveWeed79/evenglow.git',
+      'ssh://git@github.com/SteveWeed79/evenglow.git',
     ]) {
-      expect(repoSlug(remote), remote).toBe('SteveWeed79/steading');
+      expect(repoSlug(remote), remote).toBe('SteveWeed79/evenglow');
     }
   });
 
@@ -114,9 +114,9 @@ describe('turning the origin remote into a repository', () => {
    */
   it('refuses a remote that is not GitHub', () => {
     for (const remote of [
-      'https://github.com.example.net/SteveWeed79/steading.git',
-      'https://gitlab.com/SteveWeed79/steading.git',
-      'git@example.com:SteveWeed79/steading.git',
+      'https://github.com.example.net/SteveWeed79/evenglow.git',
+      'https://gitlab.com/SteveWeed79/evenglow.git',
+      'git@example.com:SteveWeed79/evenglow.git',
       '/srv/git/homefarm.git',
       '',
     ]) {
@@ -179,7 +179,7 @@ describe('the APK on a release', () => {
     name: 'homefarm-0.1.13-18.apk',
     state: 'uploaded',
     browser_download_url:
-      'https://github.com/SteveWeed79/steading/releases/download/v0.1.13%2B18/homefarm-0.1.13-18.apk',
+      'https://github.com/SteveWeed79/evenglow/releases/download/v0.1.13%2B18/homefarm-0.1.13-18.apk',
     ...over,
   });
 

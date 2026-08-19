@@ -2,6 +2,10 @@
 #
 # One-shot migration of a live box from the `steading` names to `homefarm`.
 #
+# check:names-ok-file — the old name is this script's subject. It has to say
+# what it is migrating from, and the day it stops naming it is the day it
+# stops working.
+#
 #   sudo /opt/steading/scripts/deploy/rename-to-homefarm.sh          # report only
 #   sudo /opt/steading/scripts/deploy/rename-to-homefarm.sh --go     # do it
 #
