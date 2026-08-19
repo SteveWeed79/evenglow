@@ -2,6 +2,7 @@ import { ulid } from 'ulid';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import type { UserDoc } from '@steading/api/db/identity';
 import { startTestDb } from '../support/mongo';
+import { PRODUCT_NAME } from '@steading/contracts';
 
 /**
  * The one surface on this box that reads every farm.
@@ -312,7 +313,7 @@ describeDb('the page', () => {
     const answer = await get('/');
 
     expect(answer.status).toBe(200);
-    expect(answer.body).toContain('Steading operations');
+    expect(answer.body).toContain(`${PRODUCT_NAME} operations`);
   });
 
   /** Nothing about a farm reaches the browser before somebody has signed in. */

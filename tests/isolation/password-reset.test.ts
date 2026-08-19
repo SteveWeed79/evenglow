@@ -45,7 +45,7 @@ const EMAIL = 'keeper@example.test';
  * without pretending an unconfigured server can send. Choosing it is explicit,
  * exactly as a development box would have to.
  */
-const MAIL = { EMAIL_PROVIDER: 'log', EMAIL_FROM: 'Steading <hello@example.test>' };
+const MAIL = { EMAIL_PROVIDER: 'log', EMAIL_FROM: 'Evenglow <hello@example.test>' };
 
 async function buildApp(over: Record<string, string> = {}) {
   const { buildServer } = await import('@steading/api/server');

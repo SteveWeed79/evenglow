@@ -316,7 +316,7 @@ export function Boot({
         />
       ) : (
         <>
-          <Text style={[styles.title, { color: colors.ink }]}>{PRODUCT_NAME} could not start</Text>
+          <Text style={[styles.title, { color: colors.ink }]}>{`${PRODUCT_NAME} could not start`}</Text>
           {/* Named plainly: this is the one screen where a farmer needs to be
               able to read something back to whoever can help. */}
           <Text style={[styles.body, { color: colors.muted }]}>

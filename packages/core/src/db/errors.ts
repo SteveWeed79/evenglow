@@ -56,7 +56,6 @@ export class DatabaseFromTheFutureError extends Error {
   constructor(found: number, expected: number) {
     super(
       `These records were written by a newer version of ${PRODUCT_NAME}. ` +
-       +
         'Nothing is lost — install the newer version again to open them. ' +
         `(This build reads v${expected}; the records are v${found}.)`,
     );

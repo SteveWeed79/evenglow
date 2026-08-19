@@ -13,6 +13,7 @@ import { resetTrouble } from '../../apps/mobile/src/hooks/useTrouble';
 import { BackupScreen } from '../../apps/mobile/src/screens/BackupScreen';
 import { ExposureNotice } from '../../apps/mobile/src/components/ExposureNotice';
 import { SettingsScreen } from '../../apps/mobile/src/screens/SettingsScreen';
+import { PRODUCT_NAME } from '@steading/contracts';
 
 /**
  * The copy a farm can carry, from the screen.
@@ -272,7 +273,7 @@ describe('putting one back', () => {
     const screen = await mount(<BackupScreen />);
     await screen.press('backup-choose');
 
-    expect(screen.text()).toContain('not a Steading backup');
+    expect(screen.text()).toContain(`not a ${PRODUCT_NAME} backup`);
     expect(screen.has('backup-put')).toBe(false);
     screen.unmount();
   });

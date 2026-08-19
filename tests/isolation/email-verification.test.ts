@@ -46,7 +46,7 @@ const EMAIL = 'keeper@example.test';
 const CORRECTED = 'the-right-one@example.test';
 
 /** The `log` provider, so the flow runs end to end without a network call. */
-const MAIL = { EMAIL_PROVIDER: 'log', EMAIL_FROM: 'Steading <hello@example.test>' };
+const MAIL = { EMAIL_PROVIDER: 'log', EMAIL_FROM: 'Evenglow <hello@example.test>' };
 
 async function buildApp(over: Record<string, string> = {}) {
   const { buildServer } = await import('@steading/api/server');
