@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { type ActiveWithdrawal, withdrawalMessage } from '@steading/contracts';
+import { type ActiveWithdrawal, withdrawalMessage } from '@homefarm/contracts';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
 

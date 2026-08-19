@@ -12,7 +12,7 @@
  * a far smaller problem than a device that never syncs.
  */
 
-export const SYNC_LOCK = 'steading:sync';
+export const SYNC_LOCK = 'homefarm:sync';
 
 export async function withSyncLock<T>(name: string, run: () => Promise<T>): Promise<T | null> {
   if (typeof navigator === 'undefined' || !navigator.locks) return run();

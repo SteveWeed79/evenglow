@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { subscribe } from '@steading/core/sync/engine';
+import { subscribe } from '@homefarm/core/sync/engine';
 import { clearTrouble, reportTrouble } from './useTrouble';
 
 /**

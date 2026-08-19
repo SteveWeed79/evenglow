@@ -1,8 +1,8 @@
-import { apiBase, setAccessToken, syncHeaders } from '@steading/core/api';
-import type { LocalStore } from '@steading/core/db/port';
-import { localStore } from '@steading/core/db/store';
+import { apiBase, setAccessToken, syncHeaders } from '@homefarm/core/api';
+import type { LocalStore } from '@homefarm/core/db/port';
+import { localStore } from '@homefarm/core/db/store';
 import { z } from 'zod';
-import { roleSchema } from '@steading/contracts';
+import { roleSchema } from '@homefarm/contracts';
 import { discardEmptyLocalOrg, readLocalOrgId, retireLocalOrgId } from './local-org';
 import {
   type CachedClaims,

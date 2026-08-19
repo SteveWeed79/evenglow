@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { intoDays, intoMonths, type HistoryEvent } from '@steading/core/read/history';
+import { intoDays, intoMonths, type HistoryEvent } from '@homefarm/core/read/history';
 
 /**
  * What happened, gathered into months.

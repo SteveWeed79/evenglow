@@ -9,9 +9,9 @@ import {
   type Observation,
   observationSchema as observationShape,
   roundPosition,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 import { z } from 'zod';
-import { PRODUCT_NAME } from '@steading/contracts';
+import { PRODUCT_NAME } from '@homefarm/contracts';
 
 /**
  * Where a forecast comes from: the US National Weather Service.

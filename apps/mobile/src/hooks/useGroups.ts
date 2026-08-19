@@ -1,15 +1,15 @@
 
 import { useCallback, useEffect, useState } from 'react';
-import type { ActiveWithdrawal } from '@steading/contracts';
+import type { ActiveWithdrawal } from '@homefarm/contracts';
 import {
   eggsToday,
   type Group,
   listGroups,
   type Produce,
   produceToday,
-} from '@steading/core/read/groups';
-import { withdrawalsBySubject } from '@steading/core/read/withdrawals';
-import { subscribe } from '@steading/core/sync/engine';
+} from '@homefarm/core/read/groups';
+import { withdrawalsBySubject } from '@homefarm/core/read/withdrawals';
+import { subscribe } from '@homefarm/core/sync/engine';
 import { clearTrouble, reportTrouble } from './useTrouble';
 
 export interface GroupsView {

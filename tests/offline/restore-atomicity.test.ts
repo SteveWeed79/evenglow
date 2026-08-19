@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId } from '@steading/contracts';
-import type { SqlDriver, SqlOps, SqlValue } from '@steading/core/db/driver';
-import { openSqliteStore } from '@steading/core/db/sqlite-store';
-import { localStore, setLocalStore } from '@steading/core/db/store';
-import { buildBackup, serialiseBackup } from '@steading/core/backup/file';
-import { planRestore, readBackup, runRestore } from '@steading/core/backup/restore';
-import { enqueue, enqueueAll } from '@steading/core/sync/queue';
+import { newId } from '@homefarm/contracts';
+import type { SqlDriver, SqlOps, SqlValue } from '@homefarm/core/db/driver';
+import { openSqliteStore } from '@homefarm/core/db/sqlite-store';
+import { localStore, setLocalStore } from '@homefarm/core/db/store';
+import { buildBackup, serialiseBackup } from '@homefarm/core/backup/file';
+import { planRestore, readBackup, runRestore } from '@homefarm/core/backup/restore';
+import { enqueue, enqueueAll } from '@homefarm/core/sync/queue';
 import { freshStore } from '../support/store';
 import { nodeIds, nodeSqlDriver } from '../support/sqlite';
 

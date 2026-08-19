@@ -1196,7 +1196,7 @@ take back somebody else's acceptance.
 **These run in CI only.** No mongod is obtainable in the environment they were
 written in — `fastdl.mongodb.org` is blocked by the proxy, there is no docker
 daemon, and no distro package — so `startTestDb` skips them locally and CI's
-`STEADING_REQUIRE_DB=1` turns a skip into a failure there. Stated rather than
+`HOMEFARM_REQUIRE_DB=1` turns a skip into a failure there. Stated rather than
 implied: unlike every other fix on this branch, these were not watched to fail
 before they passed.
 
@@ -1212,8 +1212,8 @@ before they passed.
 **Confirmed.** `scripts/deploy/deploy.sh:84` prints
 `already on $TARGET — nothing to deploy` inside an if/elif/else and **does not
 exit**. Execution falls straight through to `corepack pnpm install` at line 112
-and `systemctl restart steading-api` at line 213, both unconditional. The timer
-runs every five minutes (`steading-deploy.timer`), so an unchanged production box
+and `systemctl restart homefarm-api` at line 213, both unconditional. The timer
+runs every five minutes (`homefarm-deploy.timer`), so an unchanged production box
 reinstalls dependencies and bounces the API about **twelve times an hour**.
 
 Beyond the availability cost, each restart is an opportunity for the in-flight
@@ -1225,7 +1225,7 @@ Control flow traced: nothing between line 84 and line 213 guards the restart. Th
 only branch in between is a Caddy `if` that closes first. No trap, no early
 return, no `set -e` interaction.
 
-**`steading-deploy.timer` states the opposite of what happens:** *"A run that
+**`homefarm-deploy.timer` states the opposite of what happens:** *"A run that
 finds nothing new costs one `git fetch` and exits before touching anything —
 `deploy.sh` compares the commit before and after and says 'already on <sha>'."*
 That comment describes the intended design accurately and the actual behaviour
@@ -1251,7 +1251,7 @@ actually hits.
       and the service restart — plus an early, honest exit before the came-back
       check, whose failure text offers a rollback to the previous commit and
       reads as nonsense on a box already sitting on it.
-- [x] Correct the comment in `steading-deploy.timer`, which currently asserts the
+- [x] Correct the comment in `homefarm-deploy.timer`, which currently asserts the
       behaviour the missing `exit` prevents. It now says what a no-change run
       actually costs, and records that the old sentence was false for as long as
       the file existed.
@@ -1411,16 +1411,16 @@ P3 nicety at most, and it should not be listed beside the scheduling gap.
 
 ### What it does, 15 August
 
-`steading-backup.service` and `.timer` — nightly at 02:00 UTC, `Persistent=true`
+`homefarm-backup.service` and `.timer` — nightly at 02:00 UTC, `Persistent=true`
 so a box that was off backs up on the way back rather than skipping a night in
 silence, which is precisely the silence this item is about. Settings come from
-`/etc/steading/backup.env`, its own file: the bucket credentials have no
+`/etc/homefarm/backup.env`, its own file: the bucket credentials have no
 business beside the auth secret, and the reverse.
 
 **The alert is the harder half and it needed its own unit.** A backup that did
 not run produces no output from a service that did not start, so the thing that
 notices has to be something else on its own schedule.
-`steading-backup-check.service` runs `check-backup.sh` at 09:00 and **exits
+`homefarm-backup-check.service` runs `check-backup.sh` at 09:00 and **exits
 non-zero when the last successful backup is over thirty-six hours old**.
 
 There is no mail sender on this box and no monitoring agent, so a failing
@@ -1546,7 +1546,7 @@ six-second deadline (the driver's own timeout is five, so three aborted the
 request before it could answer). When it never passes, one probe of `/health`
 decides the message: a process answering that but not `/ready` is running the
 new code perfectly well and cannot reach Mongo, so the script points at
-`/etc/steading/api.env` and **withholds the rollback** — reverting would restore
+`/etc/homefarm/api.env` and **withholds the rollback** — reverting would restore
 code that was never the problem and hide the setting that was.
 
 **Fly stays on `/health`, and that is not an oversight.** Its check is wired to
@@ -1566,7 +1566,7 @@ uses a URI that fails at the driver's scheme check so it costs no timeout.
 Three cases: `/health` still answers 200 (not a bug — that is what liveness
 means), `/ready` answers 503, and the body is asserted with `toEqual` against
 the exact object, so adding the driver's message to it fails the test. The
-reachable half runs against `startTestDb('steading_readiness')` — its own
+reachable half runs against `startTestDb('homefarm_readiness')` — its own
 database name — and skips without a mongod, as every database-backed suite here
 does.
 
@@ -2128,7 +2128,7 @@ the tree, and the file says so plainly: *"A flat tree means a package can
 `import` something it never declared — pnpm's strictness is the thing being
 given up, and it is a real guarantee."* That is a deliberate trade for being able
 to build the Android app on Windows at all, and it is the right trade. But the
-Docker build then runs `pnpm install --frozen-lockfile --filter "@steading/api..."`,
+Docker build then runs `pnpm install --frozen-lockfile --filter "@homefarm/api..."`,
 so an undeclared import resolves everywhere a developer looks — local dev, `pnpm
 test`, CI — and is **absent only in the container**.
 
@@ -2144,7 +2144,7 @@ for a problem CI can catch directly.
 
 - **"Absent only in the container" is wrong.** `deploy.sh:112` runs the *same*
   filtered install on the Oracle box: `corepack pnpm install --frozen-lockfile
-  --filter "@steading/api..."`. The box's tree is narrow for the same reason the
+  --filter "@homefarm/api..."`. The box's tree is narrow for the same reason the
   image's is, so the primary production host has the identical hole. The image
   narrows further — `--prod` at `Dockerfile:75` also strips devDependencies,
   which the box keeps — so there is a second class of failure that reaches only
@@ -2152,14 +2152,14 @@ for a problem CI can catch directly.
 - **"The blast radius is a failed deploy, not an outage" is refuted for the live
   path.** That reasoning holds for Fly, but Fly appears not to be the live
   deployment: `eas.json:25` compiles `https://api.swbuild.dev` into the APK,
-  `deploy.sh:197` defaults `STEADING_DOMAIN` to the same, and `fly deploy`
+  `deploy.sh:197` defaults `HOMEFARM_DOMAIN` to the same, and `fly deploy`
   appears exactly once in the docs (`OPERATOR.md:328`). On the real path
   `deploy.sh:213` restarts the service, `:334-341` polls ten times, and
   `:343-351` then **explicitly refuses to roll back** — *"Rolling back
   automatically would be worse than stopping"* — and exits 1. The API stays down
   until a human intervenes. **That is an outage.**
 - **Understated in the audit's favour: there is no current violation.** Every
-  non-relative import in `apps/api/src` — `@node-rs/argon2`, `@steading/contracts`,
+  non-relative import in `apps/api/src` — `@node-rs/argon2`, `@homefarm/contracts`,
   `fastify`, `jose`, `mongodb`, `ulid`, `zod`, plus `node:` builtins — is declared
   in `apps/api/package.json`. This is a latent gap, not a live defect, and
   "Confirmed" could be read as "something is currently broken". Nothing is.
@@ -2270,16 +2270,16 @@ incidental.
 
 ### Verification (15 August) — **the central claim is wrong. Both halves are true.**
 
-Traced rather than inferred. `startTestDb(dbName = 'steading')`
+Traced rather than inferred. `startTestDb(dbName = 'homefarm')`
 (`tests/support/mongo.ts:42`) has two modes. With `MONGODB_TEST_URI` set
 (`:43-46`, which is how CI runs it — `ci.yml:67`) every file connects to *one
 shared mongod* and picks a database by name. Without it (`:48-53`) each file
 spawns its own `mongodb-memory-server` and is genuinely isolated.
 
 The twelve call sites do not all pass distinct names. Seven do
-(`steading_promo`, `steading_claim`, `steading_purchase`, `steading_invites`,
-`steading_photo_bytes`, `steading_stock`, `steading_sync`). **Five share one
-name, `steading_isolation`:** `removed-member.test.ts:28`, `sign-in.test.ts:15`,
+(`homefarm_promo`, `homefarm_claim`, `homefarm_purchase`, `homefarm_invites`,
+`homefarm_photo_bytes`, `homefarm_stock`, `homefarm_sync`). **Five share one
+name, `homefarm_isolation`:** `removed-member.test.ts:28`, `sign-in.test.ts:15`,
 `refresh.test.ts:15`, `sync-tenancy.test.ts:24`, `auth-routes.test.ts:15`. And
 those five destroy shared state — `sign-in.test.ts:31-34` is a `beforeEach` doing
 `deleteMany({})` on `users` and `orgs`. Run two of them concurrently against a
@@ -2302,7 +2302,7 @@ the original item missed it: all twelve files mutate `process.env.MONGODB_URI`.
 - [x] Correct the comment to say the harness is per-file but the database name is
       not always, and that it bites only when `MONGODB_TEST_URI` points several
       files at one server. Name the `process.env` sharing too.
-- [x] Give the five `steading_isolation` files distinct names and tear them down,
+- [x] Give the five `homefarm_isolation` files distinct names and tear them down,
       which removes the collection race. Note it does **not** remove the reason
       for `fileParallelism: false` on its own, because of the `process.env`
       mutation.
@@ -2312,14 +2312,14 @@ the original item missed it: all twelve files mutate `process.env.MONGODB_URI`.
 
 ### What it does, 15 August
 
-The five files now name their own databases — `steading_removed_member`,
-`steading_sign_in`, `steading_refresh`, `steading_sync_tenancy`,
-`steading_auth_routes` — so the collection race is gone.
+The five files now name their own databases — `homefarm_removed_member`,
+`homefarm_sign_in`, `homefarm_refresh`, `homefarm_sync_tenancy`,
+`homefarm_auth_routes` — so the collection race is gone.
 
 `stop()` drops the database it made, so a shared mongod does not accumulate one
 per suite for ever and a rerun does not start on top of what the last one left.
 **Guarded on the name**, and the guard is why dropping is safe to do at all:
-`startTestDb`'s default is `steading`, which is the *production* database name,
+`startTestDb`'s default is `homefarm`, which is the *production* database name,
 so a call site that forgot to name its own would otherwise drop the real one the
 moment somebody pointed `MONGODB_TEST_URI` at a server holding it.
 
@@ -2342,7 +2342,7 @@ ordinary case: it needs a shared server *and* concurrency, so it is green
 locally, green in CI today, and waits for whoever turns file parallelism back
 on.
 
-Checked by breaking it: pointing `refresh.test.ts` at `steading_sign_in` fails
+Checked by breaking it: pointing `refresh.test.ts` at `homefarm_sign_in` fails
 with both filenames in the message.
 
 ## B-4 · `TRUSTED_PROXY_HOPS` is coupled to deployment topology — **P3, ops note**
@@ -2417,7 +2417,7 @@ data-access package may still be worth having for clarity. It would buy no
 enforcement, and must not be mistaken for a security boundary.
 
 **Verification (15 August):** reason 3 checked and confirmed — `apps/mobile`
-imports `@steading/core` directly, so `packages/core` does ship inside the APK.
+imports `@homefarm/core` directly, so `packages/core` does ship inside the APK.
 The rejection stands.
 
 ## Already covered above
@@ -2441,7 +2441,7 @@ Two things the original does not say and should:
 - **136 of those cases do not run without a mongod, and that set is exactly the
   security-critical one** — every `tests/isolation/*` suite and both
   `tests/sync/*` suites. `tests/support/mongo.ts:57-61` makes
-  `STEADING_REQUIRE_DB=1` a hard failure and `ci.yml` sets it against a `mongo:8`
+  `HOMEFARM_REQUIRE_DB=1` a hard failure and `ci.yml` sets it against a `mongo:8`
   service container, so CI genuinely runs them. But a developer's local green run
   is 136 tests lighter than it looks, and the lightest part is tenancy.
 - **The harness has no concept of a second device at all.** Not a helper, not a

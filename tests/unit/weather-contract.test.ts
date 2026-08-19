@@ -9,7 +9,7 @@ import {
   forecastSchema,
   isStale,
   roundPosition,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 
 /**
  * The forecast shape, and the four decisions encoded in it.

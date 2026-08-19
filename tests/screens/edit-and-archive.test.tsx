@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId } from '@steading/contracts';
-import { listAnimals } from '@steading/core/read/animals';
-import { listBeds, listPlantings, listVarieties } from '@steading/core/read/growing';
-import { listInventory, listMachines } from '@steading/core/read/iron';
-import { localStore } from '@steading/core/db/store';
-import { enqueue } from '@steading/core/sync/queue';
+import { newId } from '@homefarm/contracts';
+import { listAnimals } from '@homefarm/core/read/animals';
+import { listBeds, listPlantings, listVarieties } from '@homefarm/core/read/growing';
+import { listInventory, listMachines } from '@homefarm/core/read/iron';
+import { localStore } from '@homefarm/core/db/store';
+import { enqueue } from '@homefarm/core/sync/queue';
 import { freshStore } from '../support/store';
 import { mount, routeProps } from '../support/screen';
 import { EditAnimalScreen } from '../../apps/mobile/src/screens/EditAnimalScreen';

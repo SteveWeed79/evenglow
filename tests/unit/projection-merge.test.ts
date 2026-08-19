@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId } from '@steading/contracts';
-import { nextRecordValue } from '@steading/core/db/project';
-import { listGroups } from '@steading/core/read/groups';
-import { listServices } from '@steading/core/read/iron';
-import { enqueue } from '@steading/core/sync/queue';
-import { localStore } from '@steading/core/db/store';
+import { newId } from '@homefarm/contracts';
+import { nextRecordValue } from '@homefarm/core/db/project';
+import { listGroups } from '@homefarm/core/read/groups';
+import { listServices } from '@homefarm/core/read/iron';
+import { enqueue } from '@homefarm/core/sync/queue';
+import { localStore } from '@homefarm/core/db/store';
 import { freshStore, simulateRestart } from '../support/store';
 
 /**

@@ -12,7 +12,7 @@ import { db } from './client';
  * value **is** and was wrong about where it can live, because of a deployment
  * decision made after it: `startSweeper()` runs in the API process, and the
  * operations board is a **separate systemd unit** — its own entry point, on its
- * own port, so that `systemctl disable steading-ops` is a complete answer to
+ * own port, so that `systemctl disable homefarm-ops` is a complete answer to
  * "take the admin surface off this box".
  *
  * Module state does not cross a process boundary. So the board read a variable

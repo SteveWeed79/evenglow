@@ -1,6 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
-title Steading - build the app
+title Evenglow - build the app
 cd /d "%~dp0..\.."
 
 rem Builds an APK on Expo's machines and publishes it to the farm server, so the
@@ -17,7 +17,7 @@ rem that split - docs/TESTING-BUILD.md section 8.
 
 echo.
 echo   ============================================
-echo     STEADING - build the app for a phone
+echo     EVENGLOW - build the app for a phone
 echo   ============================================
 echo.
 
@@ -45,7 +45,7 @@ echo.
 echo   Ten to twenty minutes, mostly queueing. Leave this window open.
 echo   If it asks you to sign in, it is asking about your Expo account.
 echo.
-call pnpm --filter @steading/mobile exec eas build --profile preview-farm --platform android
+call pnpm --filter @homefarm/mobile exec eas build --profile preview-farm --platform android
 if errorlevel 1 (
   echo.
   echo   [ FAILED ]  the build did not finish. The output above is from EAS
@@ -65,7 +65,7 @@ for /f "tokens=*" %%u in ('node "scripts\windows\build-app.mjs" artifact') do se
 if not defined ARTIFACT (
   echo   [ NOTE ]    could not work out the download url. The build is fine -
   echo               open the build page, copy the url, and on the box run:
-  echo                 sudo /opt/steading/scripts/deploy/publish-apk.sh ^<url^>
+  echo                 sudo /opt/homefarm/scripts/deploy/publish-apk.sh ^<url^>
   goto :done
 )
 
@@ -76,7 +76,7 @@ if errorlevel 1 (
   echo   [ NOTE ]    no ssh on this PC, so this cannot finish the job. On the
   echo               box, run:
   echo.
-  echo                 sudo /opt/steading/scripts/deploy/publish-apk.sh "!ARTIFACT!"
+  echo                 sudo /opt/homefarm/scripts/deploy/publish-apk.sh "!ARTIFACT!"
   goto :done
 )
 
@@ -87,7 +87,7 @@ if /i "!SEND!"=="n" goto :manual
 rem Quoted, because an artefact url carries a query string and an unquoted
 rem ampersand ends the remote command early - which would publish nothing and
 rem look like it worked.
-ssh ubuntu@api.swbuild.dev "sudo /opt/steading/scripts/deploy/publish-apk.sh '!ARTIFACT!'"
+ssh ubuntu@api.swbuild.dev "sudo /opt/homefarm/scripts/deploy/publish-apk.sh '!ARTIFACT!'"
 if errorlevel 1 (
   echo.
   echo   [ NOTE ]    that did not go through. The build is safe on Expo -
@@ -110,7 +110,7 @@ goto :done
 echo.
 echo   To publish it yourself, on the box:
 echo.
-echo     sudo /opt/steading/scripts/deploy/publish-apk.sh "!ARTIFACT!"
+echo     sudo /opt/homefarm/scripts/deploy/publish-apk.sh "!ARTIFACT!"
 echo.
 goto :done
 

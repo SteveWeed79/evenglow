@@ -1,5 +1,5 @@
 /**
- * Steading design tokens — UX-SPEC §2, as data.
+ * Evenglow design tokens — UX-SPEC §2, as data.
  *
  * On the web these live in `:root` and cascade. React Native has no cascade,
  * so they become one object and every component reads them through

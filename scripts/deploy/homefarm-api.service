@@ -1,8 +1,8 @@
 # The farm API, as a service that comes back.
 #
-#   sudo cp scripts/deploy/steading-api.service /etc/systemd/system/
+#   sudo cp scripts/deploy/homefarm-api.service /etc/systemd/system/
 #   sudo systemctl daemon-reload
-#   sudo systemctl enable --now steading-api
+#   sudo systemctl enable --now homefarm-api
 #
 # `DESIGN-BRIEF.md` gap 7 listed "no process supervisor" beside the missing
 # container image. This is the supervisor: systemd restarts the service when it
@@ -10,7 +10,7 @@
 # reboots instances for maintenance, and a farm should not discover that.
 
 [Unit]
-Description=Steading farm API
+Description=Evenglow farm API
 Documentation=https://github.com/SteveWeed79/steading/blob/main/docs/OPERATOR.md
 # `network-online`, not `network`. The latter fires when the interface exists,
 # which on a cloud instance is before it has an address — and the service would
@@ -29,32 +29,32 @@ Wants=network-online.target
 # would have happened anyway. Found by `systemd-analyze verify`, which is worth
 # running against this file after any edit:
 #
-#   systemd-analyze verify scripts/deploy/steading-api.service
+#   systemd-analyze verify scripts/deploy/homefarm-api.service
 StartLimitBurst=5
 StartLimitIntervalSec=60
 
 [Service]
 Type=simple
-User=steading
-Group=steading
+User=homefarm
+Group=homefarm
 
 # The checkout, not the deploy tree. `pnpm install` at the repo root with
 # `node-linker=hoisted` (see .npmrc) puts tsx in the root node_modules, and the
 # service runs the TypeScript source directly — see the Dockerfile for why
 # there is no compile step and why that is not laziness.
-WorkingDirectory=/opt/steading/apps/api
-ExecStart=/usr/bin/node /opt/steading/node_modules/tsx/dist/cli.mjs src/server.ts
+WorkingDirectory=/opt/homefarm/apps/api
+ExecStart=/usr/bin/node /opt/homefarm/node_modules/tsx/dist/cli.mjs src/server.ts
 
 # AUTH_SECRET and MONGODB_URI live here, mode 0600, and nowhere else. Not in
 # the unit file, which is world-readable in /etc/systemd/system.
-EnvironmentFile=/etc/steading/api.env
+EnvironmentFile=/etc/homefarm/api.env
 
 Restart=always
 RestartSec=5s
 
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=steading-api
+SyslogIdentifier=homefarm-api
 
 # ── hardening ───────────────────────────────────────────────────────────────
 #

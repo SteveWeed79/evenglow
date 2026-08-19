@@ -1,10 +1,10 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { type Due, newId, TASK_RECURRENCES, taskDues, urgencyOf } from '@steading/contracts';
-import { listTaskCompletions } from '@steading/core/read/completions';
-import { listGroups } from '@steading/core/read/groups';
-import { listMachines } from '@steading/core/read/iron';
-import { isSettled, listTasks, type Task } from '@steading/core/read/tasks';
+import { type Due, newId, TASK_RECURRENCES, taskDues, urgencyOf } from '@homefarm/contracts';
+import { listTaskCompletions } from '@homefarm/core/read/completions';
+import { listGroups } from '@homefarm/core/read/groups';
+import { listMachines } from '@homefarm/core/read/iron';
+import { isSettled, listTasks, type Task } from '@homefarm/core/read/tasks';
 import { dueWhen } from '../components/DueRow';
 import { Chip, Choice, Confirm, DayPick, Failure, Field, Primary, Row, TextField, Toggle, useSaver } from '../components/Form';
 import { Icon } from '../components/Icon';

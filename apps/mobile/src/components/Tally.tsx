@@ -1,8 +1,8 @@
 import { useCallback, useState } from 'react';
 import { Animated, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { describeLogFailure } from '@steading/core/sync/failure';
-import { loggedConfirmation } from '@steading/core/voice';
+import { describeLogFailure } from '@homefarm/core/sync/failure';
+import { loggedConfirmation } from '@homefarm/core/voice';
 import { Arch } from './Arch';
 import { NumberField } from './Form';
 import { Touch } from './Touch';

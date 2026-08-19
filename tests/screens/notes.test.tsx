@@ -7,11 +7,11 @@ import {
   noteCreateSchema,
   noteUpdateSchema,
   payloadSchemaFor,
-} from '@steading/contracts';
-import { decideProjection } from '@steading/api/sync/projections';
-import { listNotes, noteCounts, notesOn } from '@steading/core/read/notes';
-import { localStore } from '@steading/core/db/store';
-import { enqueue } from '@steading/core/sync/queue';
+} from '@homefarm/contracts';
+import { decideProjection } from '@homefarm/api/sync/projections';
+import { listNotes, noteCounts, notesOn } from '@homefarm/core/read/notes';
+import { localStore } from '@homefarm/core/db/store';
+import { enqueue } from '@homefarm/core/sync/queue';
 import { freshStore } from '../support/store';
 import { mount, routeProps } from '../support/screen';
 import { seedSecureStore } from '../support/native/modules';
@@ -50,7 +50,7 @@ async function aFarm(): Promise<void> {
 beforeEach(async () => {
   await freshStore();
   seedSecureStore({
-    'steading.claims': JSON.stringify({
+    'homefarm.claims': JSON.stringify({
       userId: 'u1',
       orgId: '01J000000000000000000ORG1',
       role: 'hand',
@@ -407,7 +407,7 @@ describe('taking one back', () => {
 
   it('lets an owner change anyone’s', async () => {
     seedSecureStore({
-      'steading.claims': JSON.stringify({
+      'homefarm.claims': JSON.stringify({
         userId: 'u1',
         orgId: '01J000000000000000000ORG1',
         role: 'owner',

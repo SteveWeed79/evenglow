@@ -2,8 +2,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import type { SqlValue } from '@steading/core/db/driver';
-import type { SqliteConnection } from '@steading/mobile/db/expo-driver';
+import type { SqlValue } from '@homefarm/core/db/driver';
+import type { SqliteConnection } from '@homefarm/mobile/db/expo-driver';
 
 /**
  * A stand-in for `expo-sqlite`'s database, over `node:sqlite`.
@@ -64,7 +64,7 @@ import type { SqliteConnection } from '@steading/mobile/db/expo-driver';
  * Per-fake cleanup is not enough: most tests never call `closeAsync`, and a
  * test that fails mid-transaction never reaches its own teardown.
  */
-const scratch = mkdtempSync(join(tmpdir(), 'steading-sqlite-'));
+const scratch = mkdtempSync(join(tmpdir(), 'homefarm-sqlite-'));
 process.once('exit', () => rmSync(scratch, { recursive: true, force: true }));
 
 let files = 0;

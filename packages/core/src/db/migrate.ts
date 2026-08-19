@@ -1,4 +1,4 @@
-import { MUTATION_SCHEMA_VERSION } from '@steading/contracts';
+import { MUTATION_SCHEMA_VERSION } from '@homefarm/contracts';
 
 /**
  * Envelope migration (A7).

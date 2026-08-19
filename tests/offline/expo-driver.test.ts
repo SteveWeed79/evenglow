@@ -4,7 +4,7 @@ import {
   createExpoDriver,
   integrityProblem,
   type SqliteConnection,
-} from '@steading/mobile/db/expo-driver';
+} from '@homefarm/mobile/db/expo-driver';
 import { fakeExpoConnection, tracingExpoConnection } from '../support/expo-sqlite';
 
 /**

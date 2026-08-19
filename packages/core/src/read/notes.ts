@@ -1,4 +1,4 @@
-import { type NoteSubject, noteCreateSchema } from '@steading/contracts';
+import { type NoteSubject, noteCreateSchema } from '@homefarm/contracts';
 import { localStore } from '../db/store';
 
 /**

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { mayChangeNote, newId, type NoteSubject, type Role } from '@steading/contracts';
-import { listNotes, type Note, notesOn } from '@steading/core/read/notes';
-import { saidConfirmation } from '@steading/core/voice';
+import { mayChangeNote, newId, type NoteSubject, type Role } from '@homefarm/contracts';
+import { listNotes, type Note, notesOn } from '@homefarm/core/read/notes';
+import { saidConfirmation } from '@homefarm/core/voice';
 import { Confirm, Confirmation, Failure, Primary, Secondary, TextField, useSaver } from './Form';
 import { Icon } from './Icon';
 import { Body, Panel } from './Panel';

@@ -1,8 +1,8 @@
-import { newId, type SupportBundle } from '@steading/contracts';
+import { newId, type SupportBundle } from '@homefarm/contracts';
 import { apiBase, apiUrl } from '../api';
 import { localStore } from '../db/store';
 import type { StoredTicket } from '../db/port';
-import { PRODUCT_NAME } from '@steading/contracts';
+import { PRODUCT_NAME } from '@homefarm/contracts';
 
 /**
  * Tickets, held until they can be sent (`docs/SUPPORT-LOOP.md` S6 and S7).

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId } from '@steading/contracts';
-import { enqueue } from '@steading/core/sync/queue';
+import { newId } from '@homefarm/contracts';
+import { enqueue } from '@homefarm/core/sync/queue';
 import { SPACE } from '../../apps/mobile/src/theme/tokens';
 import { TodayScreen } from '../../apps/mobile/src/screens/TodayScreen';
 import { freshStore } from '../support/store';

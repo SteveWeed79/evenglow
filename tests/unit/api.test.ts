@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { apiBase, apiUrl, resetApiBase, setApiBase, setClientVersion, syncHeaders } from '@steading/core/api';
-import { CLIENT_VERSION_HEADER } from '@steading/contracts';
+import { apiBase, apiUrl, resetApiBase, setApiBase, setClientVersion, syncHeaders } from '@homefarm/core/api';
+import { CLIENT_VERSION_HEADER } from '@homefarm/contracts';
 
 /**
  * Which server the transports talk to.
@@ -102,7 +102,7 @@ describe('the client version header', () => {
 
     expect(syncHeaders()[CLIENT_VERSION_HEADER]).toBe('0.1.18');
     // Beside what was already there rather than instead of it.
-    expect(syncHeaders()['x-steading-sync']).toBe('1');
+    expect(syncHeaders()['x-homefarm-sync']).toBe('1');
   });
 
   it('can be taken away again', () => {

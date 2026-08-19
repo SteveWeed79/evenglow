@@ -1,6 +1,6 @@
 import { StyleSheet, Text } from 'react-native';
-import { incubationStage } from '@steading/contracts';
-import { listIncubations } from '@steading/core/read/breeding';
+import { incubationStage } from '@homefarm/contracts';
+import { listIncubations } from '@homefarm/core/read/breeding';
 import { Primary, Row } from '../components/Form';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';

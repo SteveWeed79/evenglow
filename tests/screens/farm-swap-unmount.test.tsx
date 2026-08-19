@@ -51,7 +51,7 @@ vi.mock('../../apps/mobile/src/boot/start', () => ({
   start: () => Promise.resolve({ stop: () => {} }),
 }));
 
-vi.mock('@steading/core/sync/engine', async (original) => ({
+vi.mock('@homefarm/core/sync/engine', async (original) => ({
   ...(await original<Record<string, unknown>>()),
   startSync: () => () => {},
 }));

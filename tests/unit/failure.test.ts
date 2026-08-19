@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { describeLogFailure } from '@steading/core/sync/failure';
-import { InvalidMutationError, StorageFullError } from '@steading/core/sync/queue';
+import { describeLogFailure } from '@homefarm/core/sync/failure';
+import { InvalidMutationError, StorageFullError } from '@homefarm/core/sync/queue';
 
 /**
  * The message a keeper sees when a log does not land.

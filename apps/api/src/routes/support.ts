@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { supportTicketSchema } from '@steading/contracts';
+import { supportTicketSchema } from '@homefarm/contracts';
 import { fileTicket } from '../support/github';
 import type { Env } from '../env';
 

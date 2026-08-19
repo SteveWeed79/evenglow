@@ -7,7 +7,7 @@ import {
   type TreatmentRecord,
   withdrawalMessage,
   withdrawalWindow,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 
 /**
  * W2 is a compliance feature. These assertions are the reason it can be

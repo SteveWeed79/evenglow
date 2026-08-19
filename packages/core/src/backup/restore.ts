@@ -5,12 +5,12 @@ import {
   backupRefusal,
   ENTITIES,
   isOpAllowed,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 import { StorageFullError } from '../db/errors';
 import { recordKey } from '../db/records';
 import { localStore } from '../db/store';
 import { enqueueAll } from '../sync/queue';
-import { PRODUCT_NAME } from '@steading/contracts';
+import { PRODUCT_NAME } from '@homefarm/contracts';
 
 /**
  * Putting a backup back, and the rules that make it safe.
@@ -205,12 +205,12 @@ export function readBackup(text: string): { ok: true; file: BackupFile } | { ok:
   try {
     raw = JSON.parse(text);
   } catch {
-    return { ok: false, message: `That file is not a ${PRODUCT_NAME} backup.` };
+    return { ok: false, message: `That file is not a backup from ${PRODUCT_NAME}.` };
   }
 
   const parsed = backupFileSchema.safeParse(raw);
   if (!parsed.success) {
-    return { ok: false, message: `That file is not a ${PRODUCT_NAME} backup.` };
+    return { ok: false, message: `That file is not a backup from ${PRODUCT_NAME}.` };
   }
 
   const refusal = backupRefusal(parsed.data);

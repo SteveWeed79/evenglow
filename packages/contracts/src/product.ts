@@ -4,7 +4,7 @@
  * ## Why this is a constant and not twenty string literals
  *
  * The name was Steading until 19 August 2026, when `UNCONSIDERED.md` §13 found
- * `brechy.com/apps/steading` — the same word, the same product, and the same
+ * `brechy.com/apps/homefarm` — the same word, the same product, and the same
  * *"Scottish for farmstead"* argument, published by somebody else. Renaming
  * meant editing twenty sentences scattered across two apps and the contracts
  * package, and finding all twenty took an audit.
@@ -20,9 +20,9 @@
  *
  * ## What it deliberately does not rename
  *
- * Nothing internal. The `@steading/*` workspace names, the `steading-{orgId}.db`
- * filename, the `steading://` scheme, the `steading-<version>-<code>.apk`
- * artefact, the systemd units and `/opt/steading` all stay — no farmer, no
+ * Nothing internal. The `@homefarm/*` workspace names, the `homefarm-{orgId}.db`
+ * filename, the `homefarm://` scheme, the `homefarm-<version>-<code>.apk`
+ * artefact, the systemd units and `/opt/homefarm` all stay — no farmer, no
  * reviewer and no store listing ever sees them, and each one is a migration
  * rather than an edit. Two are actively load-bearing: the APK stem is how
  * `deploy.sh` decides the shelf is current, and the slug is bound to the EAS

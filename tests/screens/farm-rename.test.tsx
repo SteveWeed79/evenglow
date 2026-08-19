@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { resetApiBase, setAccessToken, setApiBase } from '@steading/core/api';
+import { resetApiBase, setAccessToken, setApiBase } from '@homefarm/core/api';
 import { freshStore } from '../support/store';
 import { mount } from '../support/screen';
 import { seedSecureStore } from '../support/native/modules';
@@ -22,8 +22,8 @@ const ORG = '01J000000000000000000ORG1';
 
 function signedIn(role = 'owner', orgName = 'Hollow Farm'): void {
   seedSecureStore({
-    'steading.refreshToken': 'a-stored-refresh-token',
-    'steading.claims': JSON.stringify({ userId: 'u1', orgId: ORG, role, orgName }),
+    'homefarm.refreshToken': 'a-stored-refresh-token',
+    'homefarm.claims': JSON.stringify({ userId: 'u1', orgId: ORG, role, orgName }),
   });
 }
 

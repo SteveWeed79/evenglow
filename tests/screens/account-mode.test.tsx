@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { newId } from '@steading/contracts';
-import { enqueue } from '@steading/core/sync/queue';
-import { resetApiBase, setApiBase } from '@steading/core/api';
+import { newId } from '@homefarm/contracts';
+import { enqueue } from '@homefarm/core/sync/queue';
+import { resetApiBase, setApiBase } from '@homefarm/core/api';
 import { freshStore } from '../support/store';
 import { mount } from '../support/screen';
 import { AccountScreen } from '../../apps/mobile/src/screens/AccountScreen';

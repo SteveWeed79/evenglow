@@ -6,7 +6,7 @@ import {
   mayChangeNote,
   type Op,
   type Role,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 
 /**
  * Projection decisions, as pure functions.

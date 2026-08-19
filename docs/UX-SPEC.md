@@ -398,9 +398,9 @@ Warm and plainspoken — a well-kept notebook, not a greeting card. Specific alw
 
 **Steading** — the farmhouse and its working buildings taken together: barn, byre, stable, granary, yard. A Scottish word for the whole of a small farm rather than any one part of it, which is exactly the product's scope. Stock and iron and chores under one roofline.
 
-It also sets the voice. A steading is unglamorous, well-kept, and built from what was to hand. Nothing in the interface should contradict that.
+It also sets the voice. A homefarm is unglamorous, well-kept, and built from what was to hand. Nothing in the interface should contradict that.
 
-Reference it plainly: *Steading*, never *the Steading app*, never capitalized mid-sentence for emphasis. Domain target `steading.app` or `steading.farm`; verify the .com and run a USPTO search in class 9/42 before any public launch.
+Reference it plainly: *Steading*, never *the Steading app*, never capitalized mid-sentence for emphasis. Domain target `homefarm.app` or `homefarm.farm`; verify the .com and run a USPTO search in class 9/42 before any public launch.
 
 ---
 

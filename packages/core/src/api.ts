@@ -14,7 +14,7 @@
  * and these files are compiled by webpack too.
  */
 
-import { CLIENT_VERSION_HEADER } from '@steading/contracts';
+import { CLIENT_VERSION_HEADER } from '@homefarm/contracts';
 
 export type Endpoint = 'sync' | 'snapshot' | 'photo' | 'support';
 
@@ -179,13 +179,13 @@ export async function renewSession(): Promise<SessionRenewal> {
 /**
  * Headers every sync request carries.
  *
- * `x-steading-sync` is a custom header, so the request cannot be forged by a
+ * `x-homefarm-sync` is a custom header, so the request cannot be forged by a
  * simple cross-origin form post. The bearer is added only when there is one —
  * an `Authorization: Bearer null` would be a 401 that looks like an expiry
  * rather than like a client that was never signed in.
  */
 export function syncHeaders(extra: Record<string, string> = {}): Record<string, string> {
-  const headers: Record<string, string> = { 'x-steading-sync': '1', ...extra };
+  const headers: Record<string, string> = { 'x-homefarm-sync': '1', ...extra };
   if (clientVersion !== null) headers[CLIENT_VERSION_HEADER] = clientVersion;
   if (accessToken !== null) headers['authorization'] = `Bearer ${accessToken}`;
   return headers;

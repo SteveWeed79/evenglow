@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { canMutate, MAX_PHOTO_BYTES } from '@steading/contracts';
+import { canMutate, MAX_PHOTO_BYTES } from '@homefarm/contracts';
 import { requireClaims, requireMutationClaims } from '../auth/require';
 import { blobsFor } from '../db/blobs';
 import { ACCEPTED_IMAGE_TYPES, isImageType, sniffImageType } from './image-bytes';

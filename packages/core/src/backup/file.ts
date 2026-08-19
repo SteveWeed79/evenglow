@@ -6,8 +6,9 @@ import {
   type BackupFile,
   ENTITIES,
   MUTATION_SCHEMA_VERSION,
+  PRODUCT_NAME,
   payloadSchemaFor,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 import { localStore } from '../db/store';
 
 /**
@@ -130,7 +131,7 @@ export function serialiseBackup(file: BackupFile): string {
 }
 
 /**
- * `steading-farm-2026-08-07.json`.
+ * `evenglow-farm-2026-08-07.json`.
  *
  * Dated, because the file leaves the app and has to say what it is from the
  * outside — the same argument the CSV export makes. Not named for the org id:
@@ -138,5 +139,5 @@ export function serialiseBackup(file: BackupFile): string {
  * file where the restore reads it.
  */
 export function backupFilename(at: number): string {
-  return `steading-farm-${new Date(at).toISOString().slice(0, 10)}.json`;
+  return `${PRODUCT_NAME.toLowerCase()}-farm-${new Date(at).toISOString().slice(0, 10)}.json`;
 }

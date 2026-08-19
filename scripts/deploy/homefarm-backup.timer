@@ -1,7 +1,7 @@
 # Back the database up once a night.
 #
-#   sudo systemctl enable --now steading-backup.timer
-#   systemctl list-timers steading-backup      # when it last ran and next will
+#   sudo systemctl enable --now homefarm-backup.timer
+#   systemctl list-timers homefarm-backup      # when it last ran and next will
 #
 # 02:00 UTC because it is the quietest hour for a farm in either hemisphere and
 # because the dump holds a lock for its duration. `--oplog` makes the snapshot
@@ -10,7 +10,7 @@
 # and there is no reason for that to be at milking time.
 
 [Unit]
-Description=Nightly Steading backup
+Description=Nightly Evenglow backup
 Documentation=https://github.com/SteveWeed79/steading/blob/main/docs/DEPLOY-THE-SERVER.md
 
 [Timer]

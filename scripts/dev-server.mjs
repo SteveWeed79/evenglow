@@ -20,7 +20,7 @@
  * (invariant 12).
  *
  * It is a **development** launcher and says so. There is no production path
- * through this file: `pnpm --filter @steading/api start` is that, against a
+ * through this file: `pnpm --filter @homefarm/api start` is that, against a
  * real database whose URI somebody chose deliberately.
  */
 import net from 'node:net';
@@ -33,7 +33,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const ENV_FILE = join(ROOT, '.env.local');
-const DATA_DIR = join(ROOT, '.steading-data');
+const DATA_DIR = join(ROOT, '.homefarm-data');
 const DB_DIR = join(DATA_DIR, 'mongo');
 const SEEDED = join(DATA_DIR, 'seeded');
 
@@ -204,7 +204,7 @@ async function accountExists(uri, dbName, email) {
 
 // ── 1. configuration ─────────────────────────────────────────────────────────
 
-console.log('\n  Steading — starting your farm server\n');
+console.log('\n  Evenglow — starting your farm server\n');
 
 mkdirSync(DB_DIR, { recursive: true });
 
@@ -279,7 +279,10 @@ if (await alreadyServing(env.MONGODB_URI)) {
 
 // ── 3. the first farm ────────────────────────────────────────────────────────
 
-const dbName = env.MONGODB_DB ?? 'steading';
+// Must match `databaseName()` in `apps/api/src/db/client.ts`. They drifted
+// across the rename — this seeded `steading` while the API read `homefarm`,
+// so `pnpm farm` made an account the server could not find.
+const dbName = env.MONGODB_DB ?? 'homefarm';
 const knownEmail = existsSync(SEEDED) ? readFileSync(SEEDED, 'utf8').trim() : '';
 
 /**
@@ -422,7 +425,7 @@ if (await portInUse(3001)) {
   if (holder !== null) console.error(`  Port 3001 is held by ${holder}.\n`);
 
   console.error('  It is usually a farm server left open from earlier.');
-  console.error('  Look for a window titled "Steading - farm server" and');
+  console.error('  Look for a window titled "Evenglow - farm server" and');
   console.error('  close it, then run this one again.\n');
   process.exit(1);
 }

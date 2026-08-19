@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { INVENTORY_KINDS, INVENTORY_UNITS } from '@steading/contracts';
-import { listInventory } from '@steading/core/read/iron';
+import { INVENTORY_KINDS, INVENTORY_UNITS } from '@homefarm/contracts';
+import { listInventory } from '@homefarm/core/read/iron';
 import {
   Chip,
   Confirm,

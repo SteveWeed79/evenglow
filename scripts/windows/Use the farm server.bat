@@ -1,11 +1,11 @@
 @echo off
 setlocal enabledelayedexpansion
-title Steading - use the farm server
+title Evenglow - use the farm server
 cd /d "%~dp0..\.."
 
 echo.
 echo   ============================================
-echo     STEADING - point the app at the farm server
+echo     EVENGLOW - point the app at the farm server
 echo   ============================================
 echo.
 echo   For testing the whole thing end to end - the app on a

@@ -3,8 +3,8 @@ import {
   getCurrentPositionAsync,
   requestForegroundPermissionsAsync,
 } from 'expo-location';
-import { roundPosition } from '@steading/contracts';
-import { findPlace, type Place, type Position } from '@steading/core/weather';
+import { roundPosition } from '@homefarm/contracts';
+import { findPlace, type Place, type Position } from '@homefarm/core/weather';
 
 /**
  * Finding out where the farm is, the two ways offered.

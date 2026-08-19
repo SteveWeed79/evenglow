@@ -1,6 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { Collection } from 'mongodb';
-import type { Role } from '@steading/contracts';
+import type { Role } from '@homefarm/contracts';
 import { db } from './client';
 import { normalizeEmail } from './identity';
 

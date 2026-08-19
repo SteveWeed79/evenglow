@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_PHOTO_BYTES, newId, photoCreateSchema, photoUpdateSchema } from '@steading/contracts';
+import { MAX_PHOTO_BYTES, newId, photoCreateSchema, photoUpdateSchema } from '@homefarm/contracts';
 
 /**
  * How large a photo may be, and why the number is what it is.

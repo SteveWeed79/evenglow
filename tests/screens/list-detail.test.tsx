@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId } from '@steading/contracts';
-import { enqueue } from '@steading/core/sync/queue';
+import { newId } from '@homefarm/contracts';
+import { enqueue } from '@homefarm/core/sync/queue';
 import { freshStore } from '../support/store';
 import { mount } from '../support/screen';
 import { seedWindow } from '../support/native/react-native';
@@ -36,7 +36,7 @@ beforeEach(async () => {
   seedWindow();
   seedInsets();
   seedSecureStore({
-    'steading.claims': JSON.stringify({
+    'homefarm.claims': JSON.stringify({
       userId: 'u1',
       orgId: newId(),
       role: 'owner',

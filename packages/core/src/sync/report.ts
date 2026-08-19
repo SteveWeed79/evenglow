@@ -1,4 +1,4 @@
-import { PRODUCT_NAME } from '@steading/contracts';
+import { PRODUCT_NAME } from '@homefarm/contracts';
 /**
  * Where the engine says something went wrong.
  *

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LIBRARY_VARIETIES } from '@steading/contracts';
+import { LIBRARY_VARIETIES } from '@homefarm/contracts';
 
 /**
  * How the planting list is ordered, and which field it groups on.

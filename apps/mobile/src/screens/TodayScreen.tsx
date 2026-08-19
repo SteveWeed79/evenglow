@@ -1,8 +1,8 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
-import { type ActiveWithdrawal, dailyProductsOf, type Due, type DueBundle, enteredToStored, entryUnit, gramsToUg, longestWithdrawal, massIn, type Measure, mlToUl, type Product, todayBundles, type UnitSystem, volumeIn } from '@steading/contracts';
-import type { Group } from '@steading/core/read/groups';
-import { basketConfirmation } from '@steading/core/voice';
+import { type ActiveWithdrawal, dailyProductsOf, type Due, type DueBundle, enteredToStored, entryUnit, gramsToUg, longestWithdrawal, massIn, type Measure, mlToUl, type Product, todayBundles, type UnitSystem, volumeIn } from '@homefarm/contracts';
+import type { Group } from '@homefarm/core/read/groups';
+import { basketConfirmation } from '@homefarm/core/voice';
 import { DueRow } from '../components/DueRow';
 import { ExposureNotice } from '../components/ExposureNotice';
 import { Icon } from '../components/Icon';

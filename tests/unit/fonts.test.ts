@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { FONTS } from '@steading/mobile/theme/tokens';
+import { FONTS } from '@homefarm/mobile/theme/tokens';
 
 /**
  * Every named face ships, and every shipped face is named.

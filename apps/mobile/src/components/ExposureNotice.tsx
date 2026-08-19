@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { readExposure } from '@steading/core/backup/exposure';
+import { readExposure } from '@homefarm/core/backup/exposure';
 import { Icon } from './Icon';
 import { Touch } from './Touch';
 import { useLive } from '../hooks/useLive';

@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { incubationDues, newId } from '@steading/contracts';
-import { fertilityRate, hatchRate, listIncubations } from '@steading/core/read/breeding';
-import { listHistory } from '@steading/core/read/history';
-import { enqueue } from '@steading/core/sync/queue';
+import { incubationDues, newId } from '@homefarm/contracts';
+import { fertilityRate, hatchRate, listIncubations } from '@homefarm/core/read/breeding';
+import { listHistory } from '@homefarm/core/read/history';
+import { enqueue } from '@homefarm/core/sync/queue';
 import { freshStore } from '../support/store';
 import { mount, routeProps } from '../support/screen';
 import { EditIncubationScreen } from '../../apps/mobile/src/screens/EditIncubationScreen';

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
 import Svg, { Rect } from 'react-native-svg';
-import type { Point } from '@steading/core/read/trend';
+import type { Point } from '@homefarm/core/read/trend';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, SPACE, TYPE } from '../theme/tokens';
 

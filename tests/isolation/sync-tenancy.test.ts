@@ -1,7 +1,7 @@
 import { ulid } from 'ulid';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { PULL_PAGE_SIZE, type SyncResponse } from '@steading/contracts';
-import type { UserDoc } from '@steading/api/db/identity';
+import { PULL_PAGE_SIZE, type SyncResponse } from '@homefarm/contracts';
+import type { UserDoc } from '@homefarm/api/db/identity';
 import { startTestDb } from '../support/mongo';
 import { makeMutation } from '../support/fixtures';
 
@@ -21,11 +21,11 @@ import { makeMutation } from '../support/fixtures';
  * inbox depending on which server answered.
  */
 
-const harness = await startTestDb('steading_sync_tenancy');
+const harness = await startTestDb('homefarm_sync_tenancy');
 
 if (harness) {
   process.env.MONGODB_URI = harness.uri;
-  process.env.MONGODB_DB = 'steading_sync_tenancy';
+  process.env.MONGODB_DB = 'homefarm_sync_tenancy';
 }
 
 const SECRET = 'a-test-secret-long-enough-for-hs256-abcdef';
@@ -66,7 +66,7 @@ const fastifyServer: Server = {
       bearer = null;
       return;
     }
-    const { mintAccessToken } = await import('@steading/api/auth/tokens');
+    const { mintAccessToken } = await import('@homefarm/api/auth/tokens');
     bearer = await mintAccessToken(
       { userId: user._id, orgId: user.orgId, role: user.role },
       SECRET,
@@ -99,13 +99,13 @@ const fastifyServer: Server = {
 };
 
 async function buildApp() {
-  const { buildServer } = await import('@steading/api/server');
-  const { readEnv } = await import('@steading/api/env');
+  const { buildServer } = await import('@homefarm/api/server');
+  const { readEnv } = await import('@homefarm/api/env');
   return buildServer(
     readEnv({
       AUTH_SECRET: SECRET,
       MONGODB_URI: harness!.uri,
-      MONGODB_DB: 'steading_sync_tenancy',
+      MONGODB_DB: 'homefarm_sync_tenancy',
       CORS_ORIGINS: 'https://app.test',
       /**
        * Open deliberately, because none of this file is about entitlement.

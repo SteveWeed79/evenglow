@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { Text } from 'react-native';
-import { newId } from '@steading/contracts';
+import { newId } from '@homefarm/contracts';
 import { LAYOUT, SPACE } from '../../apps/mobile/src/theme/tokens';
 import { Screen } from '../../apps/mobile/src/components/Screen';
 import { Tally } from '../../apps/mobile/src/components/Tally';
@@ -29,7 +29,7 @@ beforeEach(async () => {
   seedWindow();
   seedInsets();
   seedSecureStore({
-    'steading.claims': JSON.stringify({ userId: 'u1', orgId: ORG, role: 'owner' }),
+    'homefarm.claims': JSON.stringify({ userId: 'u1', orgId: ORG, role: 'owner' }),
   });
 });
 

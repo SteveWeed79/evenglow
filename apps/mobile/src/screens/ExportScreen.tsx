@@ -1,14 +1,14 @@
 import { useCallback, useState } from 'react';
 import { File, Paths } from 'expo-file-system';
 import { isAvailableAsync, shareAsync } from 'expo-sharing';
-import { buildExport, type ExportRange, type Sheet } from '@steading/core/export/csv';
+import { buildExport, type ExportRange, type Sheet } from '@homefarm/core/export/csv';
 import { Choice, Failure, Field, Row } from '../components/Form';
 import { Loading } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useFarmName } from '../hooks/useFarmName';
 import { useLive } from '../hooks/useLive';
-import { PRODUCT_NAME } from '@steading/contracts';
+import { PRODUCT_NAME } from '@homefarm/contracts';
 
 /**
  * Getting a farm's records out of the app.
@@ -90,11 +90,11 @@ export function ExportScreen(): React.ReactElement {
 
         /**
          * Dated in the filename, because the file leaves the app and has to
-         * say what it is from the outside. `steading-eggs-2026-08-03.csv`
+         * say what it is from the outside. `homefarm-eggs-2026-08-03.csv`
          * survives being one of forty attachments in somebody's inbox.
          */
         const today = new Date().toISOString().slice(0, 10);
-        const file = new File(Paths.cache, `steading-${name}-${today}.csv`);
+        const file = new File(Paths.cache, `homefarm-${name}-${today}.csv`);
         file.create({ overwrite: true });
         file.write(sheet.csv);
 

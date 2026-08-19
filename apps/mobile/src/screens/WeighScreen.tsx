@@ -7,10 +7,10 @@ import {
   massEntryToUg,
   newId,
   type UnitSystem,
-} from '@steading/contracts';
-import { listAnimals } from '@steading/core/read/animals';
-import { latestWeightBySubject, listWeights } from '@steading/core/read/breeding';
-import { listGroups } from '@steading/core/read/groups';
+} from '@homefarm/contracts';
+import { listAnimals } from '@homefarm/core/read/animals';
+import { latestWeightBySubject, listWeights } from '@homefarm/core/read/breeding';
+import { listGroups } from '@homefarm/core/read/groups';
 import {
   Choice,
   Failure,

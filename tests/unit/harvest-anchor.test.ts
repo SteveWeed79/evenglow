@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { growingDues, type PlantingNames, type PlantingRecord } from '@steading/contracts';
+import { growingDues, type PlantingNames, type PlantingRecord } from '@homefarm/contracts';
 
 /**
  * When a harvest is due, counted from the day it went in the ground.

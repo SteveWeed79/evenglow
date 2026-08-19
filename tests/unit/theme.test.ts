@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { otherTheme, systemTheme, toggleLabel } from '@steading/core/theme';
+import { otherTheme, systemTheme, toggleLabel } from '@homefarm/core/theme';
 
 describe('lamplight', () => {
   it('follows the system by default', () => {

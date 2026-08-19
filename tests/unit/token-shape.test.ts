@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { mintAccessToken, verifyAccessToken } from '@steading/api/auth/tokens';
-import { decodeBase64Url, parseClaims, readClaims } from '@steading/mobile/auth/session';
+import { mintAccessToken, verifyAccessToken } from '@homefarm/api/auth/tokens';
+import { decodeBase64Url, parseClaims, readClaims } from '@homefarm/mobile/auth/session';
 
 /**
  * The server mints it. The client reads it. Nothing checked they agreed.

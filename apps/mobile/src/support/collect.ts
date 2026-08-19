@@ -4,11 +4,11 @@ import {
   hash64,
   SUPPORT_BUNDLE_VERSION,
   type SupportBundle,
-} from '@steading/contracts';
-import { SCHEMA_VERSION } from '@steading/core/db/migrations';
-import { buildExport } from '@steading/core/export/csv';
-import { diagnostics } from '@steading/core/sync/engine';
-import { listRejected } from '@steading/core/sync/inbox';
+} from '@homefarm/contracts';
+import { SCHEMA_VERSION } from '@homefarm/core/db/migrations';
+import { buildExport } from '@homefarm/core/export/csv';
+import { diagnostics } from '@homefarm/core/sync/engine';
+import { listRejected } from '@homefarm/core/sync/inbox';
 import { readCachedClaims } from '../auth/session';
 import { readLocalOrgId } from '../auth/local-org';
 import { troubleHistory } from '../hooks/useTrouble';

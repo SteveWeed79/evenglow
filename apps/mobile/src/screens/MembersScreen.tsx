@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Share, StyleSheet, Text, View } from 'react-native';
 import { z } from 'zod';
-import { assignableRoles, canInvite, ROLE_WORDS, INVITE_TTL_DAYS, JOIN_CODE_TTL_MINUTES, type PendingInvite, type Role, roleSchema } from '@steading/contracts';
+import { assignableRoles, canInvite, ROLE_WORDS, INVITE_TTL_DAYS, JOIN_CODE_TTL_MINUTES, type PendingInvite, type Role, roleSchema } from '@homefarm/contracts';
 import { Choice, Confirm, Failure, Field, Primary, Secondary, TextField, useSaver } from '../components/Form';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';

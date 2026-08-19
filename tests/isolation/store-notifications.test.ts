@@ -20,11 +20,11 @@ import { startTestDb } from '../support/mongo';
  * what ends up stored — the second was already safe and the first was not.
  */
 
-const harness = await startTestDb('steading_store_notifications');
+const harness = await startTestDb('homefarm_store_notifications');
 
 if (harness) {
   process.env.MONGODB_URI = harness.uri;
-  process.env.MONGODB_DB = 'steading_store_notifications';
+  process.env.MONGODB_DB = 'homefarm_store_notifications';
 }
 
 const describeDb = harness ? describe : describe.skip;
@@ -33,7 +33,7 @@ const SECRET = 'a-test-secret-long-enough-for-hs256-abcdef';
 
 /** Syntactically valid, so the billing routes are live. Google is never reached. */
 const PLAY_ACCOUNT = JSON.stringify({
-  client_email: 'billing@steading-test.iam.gserviceaccount.com',
+  client_email: 'billing@homefarm-test.iam.gserviceaccount.com',
   private_key: '-----BEGIN PRIVATE KEY-----\nnot-a-real-key\n-----END PRIVATE KEY-----',
 });
 
@@ -55,8 +55,8 @@ const AUDIENCE = 'https://farm.example.test/billing/notifications';
  */
 async function server(over: Record<string, string> = {}) {
   const Fastify = (await import('fastify')).default;
-  const { billingRoutes } = await import('@steading/api/routes/billing');
-  const { readEnv } = await import('@steading/api/env');
+  const { billingRoutes } = await import('@homefarm/api/routes/billing');
+  const { readEnv } = await import('@homefarm/api/env');
 
   const app = Fastify({ logger: false });
   await billingRoutes(
@@ -64,7 +64,7 @@ async function server(over: Record<string, string> = {}) {
     readEnv({
       AUTH_SECRET: SECRET,
       MONGODB_URI: harness!.uri,
-      MONGODB_DB: 'steading_store_notifications',
+      MONGODB_DB: 'homefarm_store_notifications',
       GOOGLE_PLAY_SERVICE_ACCOUNT: PLAY_ACCOUNT,
       GOOGLE_PLAY_PACKAGE: 'dev.swbuild.homefarm',
       ...over,

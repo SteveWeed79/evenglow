@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { readExposure } from '@steading/core/backup/exposure';
-import { readSite } from '@steading/core/read/growing';
+import { readExposure } from '@homefarm/core/backup/exposure';
+import { readSite } from '@homefarm/core/read/growing';
 import { Choice, Row } from '../components/Form';
 import { Grid } from '../components/Grid';
 import { Body, Panel } from '../components/Panel';

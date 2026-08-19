@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { heldLabel } from '@steading/contracts';
-import type { SyncState } from '@steading/core/sync/engine';
+import { heldLabel } from '@homefarm/contracts';
+import type { SyncState } from '@homefarm/core/sync/engine';
 import { apiFault } from '../boot/config';
 import { Touch } from './Touch';
 import { useNav } from '../hooks/useNav';

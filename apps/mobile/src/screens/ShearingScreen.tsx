@@ -1,8 +1,8 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
-import { formatMass, gramsToUg, newId, poundsToUg } from '@steading/contracts';
-import { listAnimals } from '@steading/core/read/animals';
-import { listGroups } from '@steading/core/read/groups';
+import { formatMass, gramsToUg, newId, poundsToUg } from '@homefarm/contracts';
+import { listAnimals } from '@homefarm/core/read/animals';
+import { listGroups } from '@homefarm/core/read/groups';
 import {
   Choice,
   Failure,

@@ -5,7 +5,7 @@ import { writeLook } from '../../apps/mobile/src/theme/look';
 import { THEMES } from '../../apps/mobile/src/theme/tokens';
 import { freshStore } from '../support/store';
 import { files, resetSplash, splash } from '../support/native/modules';
-import { PRODUCT_NAME } from '@steading/contracts';
+import { PRODUCT_NAME } from '@homefarm/contracts';
 
 /**
  * When the splash comes down.

@@ -17,7 +17,7 @@
  *   pnpm promo:new --uses 5 --note beta  five farms, and a word to remember why
  */
 
-import { formatPromoCode, promoGrantSchema } from '@steading/contracts';
+import { formatPromoCode, promoGrantSchema } from '@homefarm/contracts';
 import { createPromoCode, mintPromoCode } from './promo-codes';
 
 function flag(name: string): string | undefined {

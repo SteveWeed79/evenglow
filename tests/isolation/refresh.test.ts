@@ -1,6 +1,6 @@
 import { ulid } from 'ulid';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import type { UserDoc } from '@steading/api/db/identity';
+import type { UserDoc } from '@homefarm/api/db/identity';
 import { startTestDb } from '../support/mongo';
 
 /**
@@ -12,11 +12,11 @@ import { startTestDb } from '../support/mongo';
  * like.
  */
 
-const harness = await startTestDb('steading_refresh');
+const harness = await startTestDb('homefarm_refresh');
 
 if (harness) {
   process.env.MONGODB_URI = harness.uri;
-  process.env.MONGODB_DB = 'steading_refresh';
+  process.env.MONGODB_DB = 'homefarm_refresh';
 }
 
 const SECRET = 'a-test-secret-long-enough-for-hs256-abcdef';
@@ -47,8 +47,8 @@ beforeEach(async () => {
 
 describeDb('refresh token rotation', () => {
   it('issues a usable pair on sign-in', async () => {
-    const { startSession } = await import('@steading/api/auth/refresh');
-    const { verifyAccessToken } = await import('@steading/api/auth/tokens');
+    const { startSession } = await import('@homefarm/api/auth/refresh');
+    const { verifyAccessToken } = await import('@homefarm/api/auth/tokens');
 
     const pair = await startSession(CLAIMS, SECRET);
 
@@ -57,7 +57,7 @@ describeDb('refresh token rotation', () => {
   });
 
   it('never stores the refresh token itself', async () => {
-    const { startSession } = await import('@steading/api/auth/refresh');
+    const { startSession } = await import('@homefarm/api/auth/refresh');
     const pair = await startSession(CLAIMS, SECRET);
 
     const stored = await harness!.db.collection('refreshTokens').find({}).toArray();
@@ -67,7 +67,7 @@ describeDb('refresh token rotation', () => {
   });
 
   it('exchanges a token for a new pair', async () => {
-    const { rotateSession, startSession } = await import('@steading/api/auth/refresh');
+    const { rotateSession, startSession } = await import('@homefarm/api/auth/refresh');
 
     const first = await startSession(CLAIMS, SECRET);
     const second = await rotateSession(first.refreshToken, SECRET);
@@ -89,7 +89,7 @@ describeDb('refresh token rotation', () => {
    * `REUSE_GRACE_MS`.
    */
   it('honours a token presented again inside the grace window', async () => {
-    const { rotateSession, startSession } = await import('@steading/api/auth/refresh');
+    const { rotateSession, startSession } = await import('@homefarm/api/auth/refresh');
 
     const first = await startSession(CLAIMS, SECRET);
     await rotateSession(first.refreshToken, SECRET);
@@ -108,7 +108,7 @@ describeDb('refresh token rotation', () => {
    * token is worthless.
    */
   it('revokes the whole family when a used token comes back after the window', async () => {
-    const { rotateSession, startSession } = await import('@steading/api/auth/refresh');
+    const { rotateSession, startSession } = await import('@homefarm/api/auth/refresh');
 
     const first = await startSession(CLAIMS, SECRET);
     const second = await rotateSession(first.refreshToken, SECRET);
@@ -135,7 +135,7 @@ describeDb('refresh token rotation', () => {
    */
   it('keeps a concurrent pair inside one family', async () => {
     const { endSession, rotateSession, startSession } = await import(
-      '@steading/api/auth/refresh'
+      '@homefarm/api/auth/refresh'
     );
 
     const first = await startSession(CLAIMS, SECRET);
@@ -156,12 +156,12 @@ describeDb('refresh token rotation', () => {
   });
 
   it('refuses an unknown token without disclosing anything', async () => {
-    const { rotateSession } = await import('@steading/api/auth/refresh');
+    const { rotateSession } = await import('@homefarm/api/auth/refresh');
     await expect(rotateSession('not-a-real-token', SECRET)).rejects.toThrow(/expired/i);
   });
 
   it('refuses an expired token', async () => {
-    const { rotateSession, startSession } = await import('@steading/api/auth/refresh');
+    const { rotateSession, startSession } = await import('@homefarm/api/auth/refresh');
 
     const ninetyOneDaysAgo = new Date(Date.now() - 91 * 24 * 60 * 60 * 1000);
     const pair = await startSession(CLAIMS, SECRET, ninetyOneDaysAgo);
@@ -174,8 +174,8 @@ describeDb('refresh token rotation', () => {
    * refresh is the one moment a long-lived session can notice a role change.
    */
   it('re-derives role and org from the database on every exchange', async () => {
-    const { rotateSession, startSession } = await import('@steading/api/auth/refresh');
-    const { verifyAccessToken } = await import('@steading/api/auth/tokens');
+    const { rotateSession, startSession } = await import('@homefarm/api/auth/refresh');
+    const { verifyAccessToken } = await import('@homefarm/api/auth/tokens');
 
     const first = await startSession(CLAIMS, SECRET);
 
@@ -188,7 +188,7 @@ describeDb('refresh token rotation', () => {
   });
 
   it('refuses to refresh a disabled account, and kills the family', async () => {
-    const { rotateSession, startSession } = await import('@steading/api/auth/refresh');
+    const { rotateSession, startSession } = await import('@homefarm/api/auth/refresh');
 
     const first = await startSession(CLAIMS, SECRET);
     await harness!.db
@@ -199,7 +199,7 @@ describeDb('refresh token rotation', () => {
   });
 
   it('ends the whole family on sign-out', async () => {
-    const { endSession, rotateSession, startSession } = await import('@steading/api/auth/refresh');
+    const { endSession, rotateSession, startSession } = await import('@homefarm/api/auth/refresh');
 
     const first = await startSession(CLAIMS, SECRET);
     const second = await rotateSession(first.refreshToken, SECRET);
@@ -210,7 +210,7 @@ describeDb('refresh token rotation', () => {
   });
 
   it('is silent on signing out an unknown token', async () => {
-    const { endSession } = await import('@steading/api/auth/refresh');
+    const { endSession } = await import('@homefarm/api/auth/refresh');
     // Sign-out must not become a way to probe which tokens exist.
     await expect(endSession('not-a-real-token')).resolves.toBeUndefined();
   });

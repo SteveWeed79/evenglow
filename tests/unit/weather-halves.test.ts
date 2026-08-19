@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { forecastDaySchema, highLowWords, type ForecastDay } from '@steading/contracts';
+import { forecastDaySchema, highLowWords, type ForecastDay } from '@homefarm/contracts';
 
 /**
  * A forecast day is two halves, and by evening one of them has happened.

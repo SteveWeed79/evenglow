@@ -1,6 +1,6 @@
 import { Text, View } from 'react-native';
-import { formatMass } from '@steading/contracts';
-import { readFarmNumbers } from '@steading/core/read/farm-numbers';
+import { formatMass } from '@homefarm/contracts';
+import { readFarmNumbers } from '@homefarm/core/read/farm-numbers';
 import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';

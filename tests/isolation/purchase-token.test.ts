@@ -27,11 +27,11 @@ import { startTestDb } from '../support/mongo';
  * deployment.
  */
 
-const harness = await startTestDb('steading_purchase');
+const harness = await startTestDb('homefarm_purchase');
 
 if (harness) {
   process.env.MONGODB_URI = harness.uri;
-  process.env.MONGODB_DB = 'steading_purchase';
+  process.env.MONGODB_DB = 'homefarm_purchase';
 }
 
 const SECRET = 'a-test-secret-long-enough-for-hs256-abcdef';
@@ -42,7 +42,7 @@ const SECRET = 'a-test-secret-long-enough-for-hs256-abcdef';
  * happens before the store is asked, which is the point of checking first.
  */
 const PLAY_ACCOUNT = JSON.stringify({
-  client_email: 'billing@steading-test.iam.gserviceaccount.com',
+  client_email: 'billing@homefarm-test.iam.gserviceaccount.com',
   private_key: '-----BEGIN PRIVATE KEY-----\\nnot-a-real-key\\n-----END PRIVATE KEY-----',
 });
 
@@ -55,13 +55,13 @@ const TOKEN = 'play-purchase-token-belonging-to-farm-a';
 const describeDb = harness ? describe : describe.skip;
 
 async function server() {
-  const { buildServer } = await import('@steading/api/server');
-  const { readEnv } = await import('@steading/api/env');
+  const { buildServer } = await import('@homefarm/api/server');
+  const { readEnv } = await import('@homefarm/api/env');
   return buildServer(
     readEnv({
       AUTH_SECRET: SECRET,
       MONGODB_URI: harness!.uri,
-      MONGODB_DB: 'steading_purchase',
+      MONGODB_DB: 'homefarm_purchase',
       GOOGLE_PLAY_SERVICE_ACCOUNT: PLAY_ACCOUNT,
       GOOGLE_PLAY_PACKAGE: 'dev.swbuild.homefarm',
     }),
@@ -69,7 +69,7 @@ async function server() {
 }
 
 async function tokenFor(userId: string, orgId: string) {
-  const { startSession } = await import('@steading/api/auth/refresh');
+  const { startSession } = await import('@homefarm/api/auth/refresh');
   const { accessToken } = await startSession({ userId, orgId, role: 'owner' }, SECRET);
   return `Bearer ${accessToken}`;
 }
@@ -128,7 +128,7 @@ beforeEach(async () => {
 
 describeDb('a purchase token belongs to one farm', () => {
   it('is matched back to the farm that submitted it', async () => {
-    const { findOrgIdByPurchaseToken } = await import('@steading/api/db/identity');
+    const { findOrgIdByPurchaseToken } = await import('@homefarm/api/db/identity');
 
     expect(await findOrgIdByPurchaseToken(TOKEN)).toBe(ORG_A);
     // A token nobody has submitted is either a forgery or an unfinished
@@ -210,7 +210,7 @@ describeDb('a purchase token belongs to one farm', () => {
 
 describeDb('the index behind the check', () => {
   beforeEach(async () => {
-    const { applyIndexes } = await import('@steading/api/db/indexes');
+    const { applyIndexes } = await import('@homefarm/api/db/indexes');
     await applyIndexes(harness!.db);
   });
 

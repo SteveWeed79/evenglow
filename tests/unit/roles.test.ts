@@ -7,7 +7,7 @@ import {
   isUploadStamp,
   OPS,
   ROLES,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 
 describe('role matrix', () => {
   it('recognises exactly the three roles', () => {

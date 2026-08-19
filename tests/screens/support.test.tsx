@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { resetApiBase, setApiBase } from '@steading/core/api';
-import { listTickets, pendingTickets } from '@steading/core/support/tickets';
+import { resetApiBase, setApiBase } from '@homefarm/core/api';
+import { listTickets, pendingTickets } from '@homefarm/core/support/tickets';
 import { shared } from '../support/native/react-native';
 import { freshStore } from '../support/store';
 import { mount } from '../support/screen';

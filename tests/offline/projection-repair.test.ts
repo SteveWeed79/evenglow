@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId, type Mutation, type MutationStatus } from '@steading/contracts';
-import { discardRejected, listRejected } from '@steading/core/sync/inbox';
-import { flushOnce, type SyncTransport } from '@steading/core/sync/flush';
-import { enqueue } from '@steading/core/sync/queue';
-import { pullOnce } from '@steading/core/sync/pull';
-import { localStore } from '@steading/core/db/store';
+import { newId, type Mutation, type MutationStatus } from '@homefarm/contracts';
+import { discardRejected, listRejected } from '@homefarm/core/sync/inbox';
+import { flushOnce, type SyncTransport } from '@homefarm/core/sync/flush';
+import { enqueue } from '@homefarm/core/sync/queue';
+import { pullOnce } from '@homefarm/core/sync/pull';
+import { localStore } from '@homefarm/core/db/store';
 import {
   deleteMetaKey,
   freshStore,

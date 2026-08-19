@@ -3,9 +3,9 @@
 # Atlas -> the box. Run it once, after `setup-mongo.sh`.
 #
 #   export MONGODB_DB=steadingdb
-#   export ATLAS_URI="$(sudo grep -oP '^MONGODB_URI=\K.*' /etc/steading/api.env)"
-#   export LOCAL_URI='mongodb://steading:…@127.0.0.1:27017/steadingdb?authSource=admin'
-#   sudo -E /opt/steading/scripts/deploy/migrate-to-local-mongo.sh
+#   export ATLAS_URI="$(sudo grep -oP '^MONGODB_URI=\K.*' /etc/homefarm/api.env)"
+#   export LOCAL_URI='mongodb://homefarm:…@127.0.0.1:27017/steadingdb?authSource=admin'
+#   sudo -E /opt/homefarm/scripts/deploy/migrate-to-local-mongo.sh
 #
 # ## Downtime is free here, and that is worth using
 #
@@ -31,7 +31,7 @@
 set -Eeuo pipefail
 umask 077
 
-DB_NAME="${MONGODB_DB:-steading}"
+DB_NAME="${MONGODB_DB:-homefarm}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -41,9 +41,9 @@ die() { printf '\n\033[1;31mSTOPPED:\033[0m %s\n\n' "$*" >&2; exit 1; }
 
 [ "$(id -u)" -eq 0 ] || die "Run this with sudo -E, so the URIs survive."
 [ -n "${ATLAS_URI:-}" ] || die "ATLAS_URI is not set. It is the connection string currently in
-  /etc/steading/api.env — the one the API is using right now."
+  /etc/homefarm/api.env — the one the API is using right now."
 [ -n "${LOCAL_URI:-}" ] || die "LOCAL_URI is not set. setup-mongo.sh printed it:
-  mongodb://steading:<password>@127.0.0.1:27017/steading?authSource=admin"
+  mongodb://homefarm:<password>@127.0.0.1:27017/homefarm?authSource=admin"
 
 command -v mongodump >/dev/null 2>&1 || die "mongodump is missing. Run setup-mongo.sh first."
 command -v mongorestore >/dev/null 2>&1 || die "mongorestore is missing. Run setup-mongo.sh first."
@@ -53,7 +53,7 @@ command -v mongorestore >/dev/null 2>&1 || die "mongorestore is missing. Run set
 # **The connection string and the database name are separate settings in this
 # app, and conflating them is how this script would have read the wrong one.**
 # `env.ts` takes `MONGODB_URI` and `MONGODB_DB` independently, defaulting the
-# second to `steading` — so an Atlas string commonly carries no database at all
+# second to `homefarm` — so an Atlas string commonly carries no database at all
 # (`mongodb+srv://user:pass@cluster/?retryWrites=true`).
 #
 # That matters twice below: `mongosh <uri>` would then select `test` and report
@@ -101,8 +101,8 @@ sed 's/^/     /' "$WORK/before.txt"
 
 # ── stop writing ────────────────────────────────────────────────────────────
 say "Stopping the API"
-if systemctl is-active --quiet steading-api; then
-  systemctl stop steading-api
+if systemctl is-active --quiet homefarm-api; then
+  systemctl stop homefarm-api
   note "stopped — phones will queue, which is the normal offline path"
   RESTART=1
 else
@@ -121,11 +121,11 @@ say "Dumping from Atlas"
 if [ -n "$ATLAS_DB" ]; then
   mongodump --uri="$ATLAS_URI" --gzip --archive="$WORK/dump.gz" --quiet \
     || die "The dump failed. Nothing has been changed; the API is stopped and can be started with
-  'sudo systemctl start steading-api'."
+  'sudo systemctl start homefarm-api'."
 else
   mongodump --uri="$ATLAS_URI" --db="$DB_NAME" --gzip --archive="$WORK/dump.gz" --quiet \
     || die "The dump failed. Nothing has been changed; the API is stopped and can be started with
-  'sudo systemctl start steading-api'."
+  'sudo systemctl start homefarm-api'."
 fi
 note "$(du -h "$WORK/dump.gz" | cut -f1)"
 
@@ -139,7 +139,7 @@ say "Restoring onto this box"
 mongorestore --uri="$LOCAL_URI" --gzip --archive="$WORK/dump.gz" \
   --nsFrom="${DB_NAME}.*" --nsTo="${DB_NAME}.*" --drop --quiet \
   || die "The restore failed. Atlas is untouched — put the old MONGODB_URI back in
-  /etc/steading/api.env and start the API to carry on where you were."
+  /etc/homefarm/api.env and start the API to carry on where you were."
 
 # ── prove it ────────────────────────────────────────────────────────────────
 say "Comparing"
@@ -160,7 +160,7 @@ say "Applying indexes"
 # with it, but this is the authoritative definition and it is idempotent —
 # cheaper to run than to wonder about. A missing unique index on `users.email`
 # is not an error, it is two accounts on one address a month from now.
-cd "${STEADING_DIR:-/opt/steading}"
+cd "${HOMEFARM_DIR:-/opt/homefarm}"
 MONGODB_URI="$LOCAL_URI" corepack pnpm db:indexes \
   || note "could not apply — run 'pnpm db:indexes' by hand before the first sign-up"
 
@@ -170,8 +170,8 @@ $(printf '\033[1m')Data is on the box. Two things left.$(printf '\033[0m')
 
   1. Point the API at it, then start it:
 
-       sudo nano /etc/steading/api.env      # MONGODB_URI= the LOCAL_URI
-       sudo systemctl start steading-api
+       sudo nano /etc/homefarm/api.env      # MONGODB_URI= the LOCAL_URI
+       sudo systemctl start homefarm-api
        curl -i https://api.swbuild.dev/health      # curl.exe on Windows
 
   2. Leave the Atlas cluster alone for a week before deleting anything. It is

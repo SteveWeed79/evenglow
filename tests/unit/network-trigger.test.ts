@@ -27,7 +27,7 @@ vi.mock('expo-network', () => ({
   },
 }));
 
-vi.mock('@steading/core/sync/engine', () => ({
+vi.mock('@homefarm/core/sync/engine', () => ({
   setOnline: (value: boolean) => setOnline(value),
   nudge: () => nudge(),
 }));
@@ -38,7 +38,7 @@ vi.mock('../../apps/mobile/src/auth/session', () => ({
   refreshSession: () => Promise.resolve(undefined),
 }));
 
-const { startTriggers } = await import('@steading/mobile/sync/triggers');
+const { startTriggers } = await import('@homefarm/mobile/sync/triggers');
 
 describe('the network listener', () => {
   beforeEach(() => {

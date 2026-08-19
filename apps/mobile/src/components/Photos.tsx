@@ -1,8 +1,8 @@
 import { useCallback, useState } from 'react';
 import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { newId } from '@steading/contracts';
-import { listPhotos, type Photo } from '@steading/core/read/photos';
-import { localStore } from '@steading/core/db/store';
+import { newId } from '@homefarm/contracts';
+import { listPhotos, type Photo } from '@homefarm/core/read/photos';
+import { localStore } from '@homefarm/core/db/store';
 import { capture, forgetBytes, hasBytes, photoUri } from '../photos/store';
 import { Confirm, Failure, Secondary } from './Form';
 import { Icon } from './Icon';

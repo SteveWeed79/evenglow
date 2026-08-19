@@ -1,4 +1,4 @@
-import { PRODUCT_NAME } from '@steading/contracts';
+import { PRODUCT_NAME } from '@homefarm/contracts';
 /**
  * The board, as one self-contained page.
  *

@@ -38,7 +38,7 @@ if (!uri) {
   process.exit(1);
 }
 
-const dbName = process.env.MONGODB_DB ?? 'steading';
+const dbName = process.env.MONGODB_DB ?? 'homefarm';
 
 /** Bytes, in the units somebody reading a capacity report thinks in. */
 function human(bytes: number): string {

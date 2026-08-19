@@ -7,9 +7,9 @@ import {
   newId,
   normaliseZoneValue,
   splitMonthDay,
-} from '@steading/contracts';
-import { readSiteOrBlank } from '@steading/core/read/growing';
-import { describeLogFailure } from '@steading/core/sync/failure';
+} from '@homefarm/contracts';
+import { readSiteOrBlank } from '@homefarm/core/read/growing';
+import { describeLogFailure } from '@homefarm/core/sync/failure';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { Touch } from '../components/Touch';

@@ -6,9 +6,9 @@ import {
   type CareKind,
   careIntervalDays,
   newId,
-} from '@steading/contracts';
-import { lastCareBySubject, listCareLogs } from '@steading/core/read/care';
-import { listGroups } from '@steading/core/read/groups';
+} from '@homefarm/contracts';
+import { lastCareBySubject, listCareLogs } from '@homefarm/core/read/care';
+import { listGroups } from '@homefarm/core/read/groups';
 import { Chip, Failure, Field, Primary, TextField, useSaver } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';

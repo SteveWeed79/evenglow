@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import type { Due } from '@steading/contracts';
+import type { Due } from '@homefarm/contracts';
 import { useNav } from './useNav';
 import { useLog } from './useSync';
 import { reportTrouble } from './useTrouble';

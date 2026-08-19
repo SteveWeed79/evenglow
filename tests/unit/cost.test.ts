@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { formatMoney, formatRate, minorPer, newId } from '@steading/contracts';
-import { feedCostPerEgg, feedSpend } from '@steading/core/read/cost';
-import { enqueue } from '@steading/core/sync/queue';
+import { formatMoney, formatRate, minorPer, newId } from '@homefarm/contracts';
+import { feedCostPerEgg, feedSpend } from '@homefarm/core/read/cost';
+import { enqueue } from '@homefarm/core/sync/queue';
 import { freshStore } from '../support/store';
 
 /**

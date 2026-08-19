@@ -5,9 +5,9 @@ import {
   newId,
   WITHDRAWAL_KINDS,
   type WithdrawalKind,
-} from '@steading/contracts';
-import { listGroups } from '@steading/core/read/groups';
-import { type TreatmentDetail, treatmentById } from '@steading/core/read/withdrawals';
+} from '@homefarm/contracts';
+import { listGroups } from '@homefarm/core/read/groups';
+import { type TreatmentDetail, treatmentById } from '@homefarm/core/read/withdrawals';
 import {
   Chip,
   Confirm,

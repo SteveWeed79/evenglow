@@ -56,11 +56,11 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc tsconfig.json ./
 #
 # The install below is filtered and touches two of them. `pnpm deploy` is not:
 # it re-resolves the whole workspace, and the ROOT package.json declares
-# `@steading/mobile` and `@steading/core` as workspace dependencies. Leave
+# `@homefarm/mobile` and `@homefarm/core` as workspace dependencies. Leave
 # either manifest out of the context and the deploy step fails with
 #
-#   ERR_PNPM_WORKSPACE_PKG_NOT_FOUND  "@steading/mobile@workspace:*" is in the
-#   dependencies but no package named "@steading/mobile" is present
+#   ERR_PNPM_WORKSPACE_PKG_NOT_FOUND  "@homefarm/mobile@workspace:*" is in the
+#   dependencies but no package named "@homefarm/mobile" is present
 #
 # after the install has already succeeded, which is a confusing place to land.
 # They are manifests only — no Expo source enters the image.
@@ -69,10 +69,10 @@ COPY apps/mobile/package.json apps/mobile/
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/core/package.json packages/core/
 
-# `@steading/api...` — the trailing dots mean "and everything it depends on",
-# which is `@steading/contracts` and nothing else. Without the filter this
+# `@homefarm/api...` — the trailing dots mean "and everything it depends on",
+# which is `@homefarm/contracts` and nothing else. Without the filter this
 # installs Expo and React Native to build a server that imports neither.
-RUN pnpm install --frozen-lockfile --filter "@steading/api..."
+RUN pnpm install --frozen-lockfile --filter "@homefarm/api..."
 
 COPY apps/api apps/api
 COPY packages/contracts packages/contracts
@@ -84,7 +84,7 @@ COPY packages/contracts packages/contracts
 # `--legacy` because pnpm 10 otherwise requires `inject-workspace-packages`,
 # which this workspace does not set. `--prod` drops devDependencies — which is
 # why `tsx` had to stop being one.
-RUN pnpm deploy --legacy --filter @steading/api --prod /app
+RUN pnpm deploy --legacy --filter @homefarm/api --prod /app
 
 # ── run ─────────────────────────────────────────────────────────────────────
 FROM node:22-slim AS run

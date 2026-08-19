@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId } from '@steading/contracts';
-import { buildBackup, serialiseBackup } from '@steading/core/backup/file';
-import { planRestore, readBackup, runRestore } from '@steading/core/backup/restore';
-import { EXPOSED_AT } from '@steading/core/backup/exposure';
-import { localStore } from '@steading/core/db/store';
-import { enqueue } from '@steading/core/sync/queue';
+import { newId } from '@homefarm/contracts';
+import { buildBackup, serialiseBackup } from '@homefarm/core/backup/file';
+import { planRestore, readBackup, runRestore } from '@homefarm/core/backup/restore';
+import { EXPOSED_AT } from '@homefarm/core/backup/exposure';
+import { localStore } from '@homefarm/core/db/store';
+import { enqueue } from '@homefarm/core/sync/queue';
 import { files, picker, seedSecureStore, shared } from '../support/native/modules';
 import { freshStore, readAllRecords } from '../support/store';
 import { mount } from '../support/screen';
@@ -13,7 +13,7 @@ import { resetTrouble } from '../../apps/mobile/src/hooks/useTrouble';
 import { BackupScreen } from '../../apps/mobile/src/screens/BackupScreen';
 import { ExposureNotice } from '../../apps/mobile/src/components/ExposureNotice';
 import { SettingsScreen } from '../../apps/mobile/src/screens/SettingsScreen';
-import { PRODUCT_NAME } from '@steading/contracts';
+import { PRODUCT_NAME } from '@homefarm/contracts';
 
 /**
  * The copy a farm can carry, from the screen.
@@ -92,7 +92,7 @@ describe('taking a copy', () => {
     expect(shared).toHaveLength(1);
     const written = files.get(shared[0] ?? '');
     expect(written).toBeDefined();
-    expect(JSON.parse(written ?? '{}')).toMatchObject({ format: 'steading.farm-records' });
+    expect(JSON.parse(written ?? '{}')).toMatchObject({ format: 'homefarm.farm-records' });
     screen.unmount();
   });
 
@@ -273,7 +273,7 @@ describe('putting one back', () => {
     const screen = await mount(<BackupScreen />);
     await screen.press('backup-choose');
 
-    expect(screen.text()).toContain(`not a ${PRODUCT_NAME} backup`);
+    expect(screen.text()).toContain(`not a backup from ${PRODUCT_NAME}`);
     expect(screen.has('backup-put')).toBe(false);
     screen.unmount();
   });

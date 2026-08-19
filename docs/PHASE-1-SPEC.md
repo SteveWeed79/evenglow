@@ -7,7 +7,7 @@ Executable task list. **Exit gate: isolation suite green and a debug APK running
 ## T1 — Workspace
 
 ```bash
-mkdir steading && cd steading && pnpm init
+mkdir homefarm && cd homefarm && pnpm init
 printf 'packages:\n  - "apps/*"\n  - "packages/*"\n' > pnpm-workspace.yaml
 
 pnpm create vite apps/app --template react-ts
@@ -62,7 +62,7 @@ if (!uri) throw new Error('MONGODB_URI is not set');
 const clientPromise = new MongoClient(uri).connect();
 
 export async function db(): Promise<Db> {
-  return (await clientPromise).db(process.env.MONGODB_DB ?? 'steading');
+  return (await clientPromise).db(process.env.MONGODB_DB ?? 'homefarm');
 }
 ```
 
@@ -218,7 +218,7 @@ The 90-day refresh window is deliberate: a device can sit in a barn for weeks an
 ## T8 — Capacitor shell
 
 ```bash
-pnpm --filter app exec cap init Steading app.steading --web-dir=dist
+pnpm --filter app exec cap init Steading app.homefarm --web-dir=dist
 pnpm --filter app exec cap add android
 ```
 

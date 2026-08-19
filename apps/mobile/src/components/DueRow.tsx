@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { type Due, dueDate, type Urgency, urgencyOf } from '@steading/contracts';
+import { type Due, dueDate, type Urgency, urgencyOf } from '@homefarm/contracts';
 import { Icon } from './Icon';
 import { Touch } from './Touch';
 import { useTheme } from '../theme/ThemeProvider';

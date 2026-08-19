@@ -222,7 +222,7 @@ jobs:
       # step — written that way, merged, and never run, because run 1 predated
       # it and there has been no run since.
       - name: Stamp the build
-        run: pnpm --filter @steading/mobile stamp
+        run: pnpm --filter @homefarm/mobile stamp
 
       - name: Prebuild the native project
         run: pnpm mobile:prebuild

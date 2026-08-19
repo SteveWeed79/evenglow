@@ -1,8 +1,8 @@
 import { ulid } from 'ulid';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import type { SessionClaims } from '@steading/api/auth/claims';
-import { scopedOn } from '@steading/api/db/scoped';
-import { applyBatch } from '@steading/api/sync/apply';
+import type { SessionClaims } from '@homefarm/api/auth/claims';
+import { scopedOn } from '@homefarm/api/db/scoped';
+import { applyBatch } from '@homefarm/api/sync/apply';
 import { makeMutation } from '../support/fixtures';
 import { startTestDb } from '../support/mongo';
 
@@ -23,7 +23,7 @@ import { startTestDb } from '../support/mongo';
  * optional field takes a value or nothing.
  */
 
-const harness = await startTestDb('steading_clearing');
+const harness = await startTestDb('homefarm_clearing');
 const describeDb = harness ? describe : describe.skip;
 
 const ORG_A = ulid();

@@ -1,4 +1,4 @@
-import { photoCreateSchema } from '@steading/contracts';
+import { photoCreateSchema } from '@homefarm/contracts';
 import { localStore } from '../db/store';
 
 /**

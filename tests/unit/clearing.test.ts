@@ -9,8 +9,8 @@ import {
   taskCreateSchema,
   taskUpdateSchema,
   type Entity,
-} from '@steading/contracts';
-import { updateFor } from '@steading/api/sync/apply';
+} from '@homefarm/contracts';
+import { updateFor } from '@homefarm/api/sync/apply';
 
 /**
  * `null` means "remove this field", and the rules about where it may say so.

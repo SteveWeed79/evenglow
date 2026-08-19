@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import type { SqlDriver, SqlOps, SqlValue } from '@steading/core/db/driver';
-import { createGate } from '@steading/core/db/gate';
+import type { SqlDriver, SqlOps, SqlValue } from '@homefarm/core/db/driver';
+import { createGate } from '@homefarm/core/db/gate';
 
 /**
  * A `SqlDriver` over `node:sqlite`, for tests.

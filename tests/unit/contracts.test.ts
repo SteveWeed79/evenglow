@@ -19,7 +19,7 @@ import {
   newId,
   payloadSchemaFor,
   syncRequestSchema,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 import { makeMutation } from '../support/fixtures';
 
 describe('ULIDs', () => {

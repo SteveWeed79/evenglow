@@ -4,7 +4,7 @@ import {
   SWEEP_EVERY_MS,
   type SweepReport,
   startSweeper,
-} from '@steading/api/sync/sweep';
+} from '@homefarm/api/sync/sweep';
 
 /**
  * The timer around the sweep, which is the half that can go wrong quietly.

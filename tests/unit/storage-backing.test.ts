@@ -4,7 +4,7 @@ import {
   resetStorageBacking,
   setStorageBacking,
   storageReport,
-} from '@steading/core/sync/storage';
+} from '@homefarm/core/sync/storage';
 
 /**
  * What the diagnostics screen is allowed to claim on a device.

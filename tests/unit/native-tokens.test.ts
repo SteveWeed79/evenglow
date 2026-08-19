@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ARCH, FONTS, TAP, THEMES, TYPE, type ThemeName } from '@steading/mobile/theme/tokens';
-import { archPath } from '@steading/mobile/theme/arch';
+import { ARCH, FONTS, TAP, THEMES, TYPE, type ThemeName } from '@homefarm/mobile/theme/tokens';
+import { archPath } from '@homefarm/mobile/theme/arch';
 
 /**
  * The CSS-parsing checks, ported.

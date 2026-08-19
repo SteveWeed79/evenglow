@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Image, StyleSheet, Text, View, type ImageSourcePropType } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
-import { startSync } from '@steading/core/sync/engine';
-import { setStorageBacking } from '@steading/core/sync/storage';
-import { setEngineReporter } from '@steading/core/sync/report';
+import { startSync } from '@homefarm/core/sync/engine';
+import { setStorageBacking } from '@homefarm/core/sync/storage';
+import { setEngineReporter } from '@homefarm/core/sync/report';
 import { reportTrouble } from './hooks/useTrouble';
 import { describeBreadcrumb, takeBreadcrumb } from './support/breadcrumb';
 import { ensureLocalOrgId } from './auth/local-org';
@@ -13,7 +13,7 @@ import { useAppFonts } from './theme/fonts';
 import type { CachedClaims } from './auth/session';
 import { useTheme, type ThemeName } from './theme/ThemeProvider';
 import { FONTS, SPACE, TYPE } from './theme/tokens';
-import { PRODUCT_NAME } from '@steading/contracts';
+import { PRODUCT_NAME } from '@homefarm/contracts';
 
 /**
  * The mark, per theme, so the boot screen wears what the farm chose.
@@ -41,9 +41,9 @@ import { PRODUCT_NAME } from '@steading/contracts';
    The three lines below are asset resolution, not module loading. Same
    exemption and same reason as `fonts.ts` and `Plaster.tsx`. */
 const MARKS: Record<ThemeName, ImageSourcePropType> = {
-  daylight: require('../assets/splash/steading-daylight.png'),
-  lamplight: require('../assets/splash/steading-lamplight.png'),
-  sun: require('../assets/splash/steading-daylight.png'),
+  daylight: require('../assets/splash/homefarm-daylight.png'),
+  lamplight: require('../assets/splash/homefarm-lamplight.png'),
+  sun: require('../assets/splash/homefarm-daylight.png'),
 };
 /* eslint-enable @typescript-eslint/no-require-imports */
 

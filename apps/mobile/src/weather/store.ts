@@ -1,7 +1,7 @@
-import { type Alert, DEFAULT_UNIT_SYSTEM, type UnitSystem } from '@steading/contracts';
-import { readSite } from '@steading/core/read/growing';
-import { localStore } from '@steading/core/db/store';
-import { subscribe as subscribeToEngine } from '@steading/core/sync/engine';
+import { type Alert, DEFAULT_UNIT_SYSTEM, type UnitSystem } from '@homefarm/contracts';
+import { readSite } from '@homefarm/core/read/growing';
+import { localStore } from '@homefarm/core/db/store';
+import { subscribe as subscribeToEngine } from '@homefarm/core/sync/engine';
 import {
   type Measured,
   readAlerts,
@@ -14,7 +14,7 @@ import {
   wouldFetch,
   wouldFetchAlerts,
   wouldFetchObservation,
-} from '@steading/core/weather';
+} from '@homefarm/core/weather';
 import { clearTrouble, reportTrouble } from '../hooks/useTrouble';
 
 /**

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { type CareKind, careLogCreateSchema } from '@steading/contracts';
+import { type CareKind, careLogCreateSchema } from '@homefarm/contracts';
 import { localStore } from '../db/store';
 
 /**

@@ -13,7 +13,7 @@ import {
   type UnitSystem,
   type Zone,
   zoneSchema,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 import { localStore } from '../db/store';
 
 /**

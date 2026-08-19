@@ -1,20 +1,20 @@
 {
   "expo": {
     "name": "Evenglow",
-    "slug": "steading",
+    "slug": "homefarm",
     "owner": "swbuilds-team",
-    "scheme": "steading",
+    "scheme": "homefarm",
     "version": "0.3.0",
     "orientation": "default",
     "userInterfaceStyle": "automatic",
-    "icon": "./assets/icon/steading.png",
+    "icon": "./assets/icon/homefarm.png",
     "android": {
       "package": "dev.swbuild.homefarm",
       "versionCode": 3,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon/steading-foreground.png",
+        "foregroundImage": "./assets/icon/homefarm-foreground.png",
         "backgroundColor": "#201913",
-        "monochromeImage": "./assets/icon/steading-monochrome.png"
+        "monochromeImage": "./assets/icon/homefarm-monochrome.png"
       },
       "allowBackup": false,
       "permissions": [
@@ -33,17 +33,17 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Steading asks once, to find the forecast for your farm. The position is stored rounded to about a kilometre and is never sent anywhere but the weather service."
+          "locationWhenInUsePermission": "Evenglow asks once, to find the forecast for your farm. The position is stored rounded to about a kilometre and is never sent anywhere but the weather service."
         }
       ],
       [
         "expo-splash-screen",
         {
-          "image": "./assets/splash/steading-daylight.png",
+          "image": "./assets/splash/homefarm-daylight.png",
           "backgroundColor": "#ede6d2",
           "imageWidth": 180,
           "dark": {
-            "image": "./assets/splash/steading-lamplight.png",
+            "image": "./assets/splash/homefarm-lamplight.png",
             "backgroundColor": "#201913"
           }
         }

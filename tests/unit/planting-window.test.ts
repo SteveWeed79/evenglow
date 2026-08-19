@@ -8,7 +8,7 @@ import {
   timingOfRecord,
   type VarietyTiming,
   WINDOW_WORDS,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 
 /**
  * Which of a variety's stages is close enough to today to be offered.

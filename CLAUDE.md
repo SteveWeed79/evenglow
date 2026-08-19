@@ -6,7 +6,7 @@ There is no PWA, no Next.js, and **Expo Go is not a supported runtime** — the 
 
 **React Native replaces Capacitor — it is not a second client.** `docs/NATIVE-PIVOT.md` argued the other way and is marked superseded; `docs/REACT-NATIVE-PLAN.md` is the live plan. The client lives in `apps/mobile`. The Capacitor/Vite client and the Next app are **retired and deleted**; the framework-agnostic half of the old client is `packages/core`.
 
-Read `docs/Steading-Masterplan.md` before proposing architecture changes. Decisions D1–D10 there are settled; if a task appears to require breaking one, stop and say so rather than working around it.
+Read `docs/Evenglow-Masterplan.md` before proposing architecture changes. Decisions D1–D10 there are settled; if a task appears to require breaking one, stop and say so rather than working around it.
 
 Read `docs/UX-SPEC.md` before writing any component. Rules R1–R10 are binding.
 
@@ -40,7 +40,7 @@ Violating any of these is a defect regardless of whether tests pass.
 **Device storage**
 
 5. **Never write to a projection table outside the same transaction that enqueues its mutation.** The queue and the local view must not diverge. One `BEGIN`, both writes, one `COMMIT`.
-6. **Never use `localStorage`, `sessionStorage`, or IndexedDB.** SQLite via `expo-sqlite` is the only store, and the database is **one file per org** — `steading-{orgId}.db`. Tokens live in `expo-secure-store`, never in SQLite.
+6. **Never use `localStorage`, `sessionStorage`, or IndexedDB.** SQLite via `expo-sqlite` is the only store, and the database is **one file per org** — `homefarm-{orgId}.db`. Tokens live in `expo-secure-store`, never in SQLite.
 7. **Never delete a mutation row on success.** Mark it `applied`. History is the audit trail and the duplicate defence.
 
 **Auth**

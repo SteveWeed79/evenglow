@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId } from '@steading/contracts';
+import { newId } from '@homefarm/contracts';
 import { LAYOUT, SPACE } from '../../apps/mobile/src/theme/tokens';
 import { columnsFor, hasRail, widthClass } from '../../apps/mobile/src/theme/window';
 import { FarmScreen } from '../../apps/mobile/src/screens/FarmScreen';
@@ -43,7 +43,7 @@ beforeEach(async () => {
   seedWindow();
   seedInsets();
   seedSecureStore({
-    'steading.claims': JSON.stringify({ userId: 'u1', orgId: ORG, role: 'owner' }),
+    'homefarm.claims': JSON.stringify({ userId: 'u1', orgId: ORG, role: 'owner' }),
   });
 });
 

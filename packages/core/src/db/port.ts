@@ -1,5 +1,5 @@
-import type { SyncRefusal } from '@steading/contracts';
-import type { Entity, MutationResult, Op, PulledMutation } from '@steading/contracts';
+import type { SyncRefusal } from '@homefarm/contracts';
+import type { Entity, MutationResult, Op, PulledMutation } from '@homefarm/contracts';
 import type { LocalRecord, Quarantined, QueuedMutation } from './records';
 import type { metaSchemas } from './schema';
 import type { z } from 'zod';

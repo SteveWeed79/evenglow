@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { monthDay, newId, splitMonthDay } from '@steading/contracts';
-import { enqueue } from '@steading/core/sync/queue';
-import { localStore } from '@steading/core/db/store';
+import { monthDay, newId, splitMonthDay } from '@homefarm/contracts';
+import { enqueue } from '@homefarm/core/sync/queue';
+import { localStore } from '@homefarm/core/db/store';
 import { freshStore } from '../support/store';
 import { mount } from '../support/screen';
 import { SiteSetupScreen } from '../../apps/mobile/src/screens/SiteSetupScreen';

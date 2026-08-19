@@ -20,8 +20,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { enqueue } = vi.hoisted(() => ({ enqueue: vi.fn() }));
 
-vi.mock('@steading/core/sync/queue', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@steading/core/sync/queue')>();
+vi.mock('@homefarm/core/sync/queue', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@homefarm/core/sync/queue')>();
   return { ...actual, enqueue };
 });
 
@@ -32,11 +32,11 @@ vi.mock('@steading/core/sync/queue', async (importOriginal) => {
  * mock at its own `enqueue` recurses until the stack gives out — which is how
  * this was first written.
  */
-const real = await vi.importActual<typeof import('@steading/core/sync/queue')>(
-  '@steading/core/sync/queue',
+const real = await vi.importActual<typeof import('@homefarm/core/sync/queue')>(
+  '@homefarm/core/sync/queue',
 );
 
-const { newId } = await import('@steading/contracts');
+const { newId } = await import('@homefarm/contracts');
 const { freshStore } = await import('../support/store');
 const { mount } = await import('../support/screen');
 const { TodayScreen } = await import('../../apps/mobile/src/screens/TodayScreen');

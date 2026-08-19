@@ -8,9 +8,9 @@ import {
   newId,
   SPECIES_TRAITS,
   type Species,
-} from '@steading/contracts';
-import { listGroups } from '@steading/core/read/groups';
-import { listMachines } from '@steading/core/read/iron';
+} from '@homefarm/contracts';
+import { listGroups } from '@homefarm/core/read/groups';
+import { listMachines } from '@homefarm/core/read/iron';
 import {
   Chip,
   Choice,

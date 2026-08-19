@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FORECAST_STALE_MS } from '@steading/contracts';
-import { localStore } from '@steading/core/db/store';
-import { forgetWeather, readWeather, refreshWeather } from '@steading/core/weather';
+import { FORECAST_STALE_MS } from '@homefarm/contracts';
+import { localStore } from '@homefarm/core/db/store';
+import { forgetWeather, readWeather, refreshWeather } from '@homefarm/core/weather';
 import { freshStore } from '../support/store';
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { errorBody, HttpError } from '@steading/api/http';
+import { errorBody, HttpError } from '@homefarm/api/http';
 
 /**
  * The shared failure shape.

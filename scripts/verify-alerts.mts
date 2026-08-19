@@ -45,7 +45,7 @@ const FEED = 'https://api.weather.gov/alerts/active';
  * whoever is hammering them. This is a one-off script rather than the app, so
  * it says so.
  */
-const AGENT = 'steading-alert-conformance (contact: set STEADING_CONTACT)';
+const AGENT = 'homefarm-alert-conformance (contact: set HOMEFARM_CONTACT)';
 
 const verbose = process.argv.includes('--verbose');
 
@@ -103,12 +103,12 @@ interface Dropped {
 }
 
 async function main(): Promise<void> {
-  const contact = process.env.STEADING_CONTACT;
+  const contact = process.env.HOMEFARM_CONTACT;
   process.stdout.write(`Asking ${FEED} for every active alert in the US…\n`);
 
   const response = await fetch(FEED, {
     headers: {
-      'User-Agent': contact === undefined ? AGENT : `steading-alert-conformance (${contact})`,
+      'User-Agent': contact === undefined ? AGENT : `homefarm-alert-conformance (${contact})`,
       Accept: 'application/geo+json',
     },
   });

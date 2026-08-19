@@ -1,17 +1,17 @@
 # The operations board, as a service the farm API does not depend on.
 #
-#   sudo cp scripts/deploy/steading-ops.service /etc/systemd/system/
+#   sudo cp scripts/deploy/homefarm-ops.service /etc/systemd/system/
 #   sudo systemctl daemon-reload
-#   sudo systemctl enable --now steading-ops
+#   sudo systemctl enable --now homefarm-ops
 #
 # **A separate unit on purpose.** The board reads every farm on the box; the API
 # serves the handsets. Keeping them apart means the board can be restarted,
 # stopped, or never enabled at all without touching the thing farms are syncing
-# to — and `systemctl disable --now steading-ops` is a complete answer to "take
+# to — and `systemctl disable --now homefarm-ops` is a complete answer to "take
 # the admin surface off this machine".
 
 [Unit]
-Description=Steading operations board
+Description=Evenglow operations board
 Documentation=https://github.com/SteveWeed79/steading/blob/main/docs/DEPLOY-THE-SERVER.md
 After=network-online.target
 Wants=network-online.target
@@ -23,23 +23,23 @@ StartLimitIntervalSec=60
 
 [Service]
 Type=simple
-User=steading
-Group=steading
+User=homefarm
+Group=homefarm
 
-WorkingDirectory=/opt/steading/apps/api
-ExecStart=/usr/bin/node /opt/steading/node_modules/tsx/dist/cli.mjs src/ops.ts
+WorkingDirectory=/opt/homefarm/apps/api
+ExecStart=/usr/bin/node /opt/homefarm/node_modules/tsx/dist/cli.mjs src/ops.ts
 
 # The same file the API reads. AUTH_SECRET has to match or a token minted by one
 # is not accepted by the other, and MONGODB_URI has to be the same database or
 # the board is describing a server nobody is using.
-EnvironmentFile=/etc/steading/api.env
+EnvironmentFile=/etc/homefarm/api.env
 
 Restart=always
 RestartSec=5s
 
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=steading-ops
+SyslogIdentifier=homefarm-ops
 
 # ── hardening ───────────────────────────────────────────────────────────────
 #

@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { resetApiBase, setAccessToken, setApiBase } from '@steading/core/api';
+import { resetApiBase, setAccessToken, setApiBase } from '@homefarm/core/api';
 import { freshStore } from '../support/store';
 import { seedSecureStore } from '../support/native/modules';
 import { readCachedClaims, refreshSession, signIn } from '../../apps/mobile/src/auth/session';
-import { localStore } from '@steading/core/db/store';
+import { localStore } from '@homefarm/core/db/store';
 
 /**
  * "The app makes me sign in each time."
@@ -77,8 +77,8 @@ beforeEach(async () => {
   setApiBase('http://farm.test');
   setAccessToken(null);
   seedSecureStore({
-    'steading.refreshToken': 'the-stored-token',
-    'steading.claims': JSON.stringify({ userId: 'u1', orgId: ORG, role: 'owner' }),
+    'homefarm.refreshToken': 'the-stored-token',
+    'homefarm.claims': JSON.stringify({ userId: 'u1', orgId: ORG, role: 'owner' }),
   });
 });
 
@@ -275,8 +275,8 @@ describe('the farm’s own name', () => {
    */
   it('is carried forward when the response does not repeat it', async () => {
     seedSecureStore({
-      'steading.refreshToken': 'the-stored-token',
-      'steading.claims': JSON.stringify({
+      'homefarm.refreshToken': 'the-stored-token',
+      'homefarm.claims': JSON.stringify({
         userId: 'u1',
         orgId: ORG,
         role: 'owner',
@@ -292,8 +292,8 @@ describe('the farm’s own name', () => {
   /** A rename reaches every device on its next rotation, not on its next sign-in. */
   it('takes the server’s name over the cached one', async () => {
     seedSecureStore({
-      'steading.refreshToken': 'the-stored-token',
-      'steading.claims': JSON.stringify({
+      'homefarm.refreshToken': 'the-stored-token',
+      'homefarm.claims': JSON.stringify({
         userId: 'u1',
         orgId: ORG,
         role: 'owner',
@@ -346,7 +346,7 @@ describe('what ended the session', () => {
    */
   it('tells a vanished token apart from a farm that never signed in', async () => {
     seedSecureStore({
-      'steading.claims': JSON.stringify({ userId: 'u1', orgId: ORG, role: 'owner' }),
+      'homefarm.claims': JSON.stringify({ userId: 'u1', orgId: ORG, role: 'owner' }),
     });
 
     expect(await refreshSession()).toBeNull();

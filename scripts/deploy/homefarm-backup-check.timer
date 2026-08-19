@@ -1,6 +1,6 @@
 # Ask once a day whether there is a recent backup.
 #
-#   sudo systemctl enable --now steading-backup-check.timer
+#   sudo systemctl enable --now homefarm-backup-check.timer
 #   systemctl --failed          # where a stale backup shows up
 #
 # 09:00 UTC — seven hours after the backup window, so a run that started late,
@@ -9,7 +9,7 @@
 # sees it, and a failure that appears at 03:00 has all day to be scrolled past.
 
 [Unit]
-Description=Daily check that the Steading backup is not stale
+Description=Daily check that the Evenglow backup is not stale
 Documentation=https://github.com/SteveWeed79/steading/blob/main/docs/DEPLOY-THE-SERVER.md
 
 [Timer]

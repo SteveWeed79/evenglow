@@ -85,8 +85,8 @@ on the exact failure they then permit.
       it with zero — unrepairable in-app, since `assignableRoles('admin')` is
       `['admin', 'hand']` and self-promotion is refused as `self`. The only
       reason that has probably not already happened is a third error in the same
-      snippet: it hardcodes `getSiblingDB("steading")` while the box runs
-      `steadingdb`, so the write lands in a database nothing reads.
+      snippet: it hardcodes `getSiblingDB("homefarm")` while the box runs
+      `homefarmdb`, so the write lands in a database nothing reads.
 
 - [x] **Six defects from a read of the whole server.** **GA**
       A pass over all of `apps/api` after the mail and verification work.
@@ -353,7 +353,7 @@ on the exact failure they then permit.
       single-site template and `install`s it over the running file. So the
       `ops.example.com` block `DEPLOY-THE-SERVER.md` offers as the alternative to
       an SSH tunnel **cannot survive a deploy** — it is gone within five minutes
-      of the next `steading-deploy.timer` tick, with `reloaded for ${DOMAIN}` as
+      of the next `homefarm-deploy.timer` tick, with `reloaded for ${DOMAIN}` as
       the only trace.
       **And the domain is read with `head -1`**, off the running file:
       `sed -n 's/^\([a-z0-9.-]*\) {$/\1/p' | head -1`. An operator who
@@ -405,7 +405,7 @@ period rather than a task.
 - [x] **Clear the name — it did not clear, and the name is now Evenglow.**
       `[13]` — checked 19 August 2026. **Brechy LLC has a pre-launch page for an
       app called Steading**, same product and same "Scottish for farmstead"
-      pitch (`brechy.com/apps/steading`). They have not launched; they are a
+      pitch (`brechy.com/apps/homefarm`). They have not launched; they are a
       company and this project is not one yet (`[14]`). **Decided: the app
       becomes Evenglow.** The rename itself is not done — see §3.
 - [x] **Carry out the rename to Evenglow.** **GA**
@@ -429,11 +429,11 @@ period rather than a task.
       and three Windows `.bat` helpers, `GOOGLE_PLAY_PACKAGE` in `env.ts` and
       `.env.example`, and five test fixtures.
       **Deliberately unmoved**, per that audit's four: the
-      `steading-<version>-<code>.apk` stem, because `deploy.sh` decides the
+      `homefarm-<version>-<code>.apk` stem, because `deploy.sh` decides the
       shelf is current by stripping it; the `slug`, bound to
       `extra.eas.projectId`; the `scheme`, which is in every OAuth redirect URI;
       the systemd units and `/opt`, `/etc`, `/var/lib` paths; and the 371 files
-      carrying `@steading/*`. None is visible to a farm.
+      carrying `@homefarm/*`. None is visible to a farm.
       **What it costs the two devices that have it:** a different package is a
       different app to Android, so the tablet and the tester's phone get a fresh
       install with an empty database rather than an upgrade. Nothing is lost
@@ -505,7 +505,7 @@ period rather than a task.
       Schedules stay mutable; completions become history. Today
       `task.completedAt`, `maintenance.lastDoneAtHours` and `lastDoneAtDate`
       each overwrite, so a machine serviced for six years can show one date —
-      and `Steading-Masterplan.md` advertises a full service record for resale
+      and `Evenglow-Masterplan.md` advertises a full service record for resale
       that therefore cannot be produced.
       **It also removes one of §1's two live clearing symptoms** *(noted 16
       August)*. An un-complete is `{ completedAt: undefined }` today, which is
@@ -961,7 +961,7 @@ period rather than a task.
 - [ ] **A minimum client version the server can require**, and an in-app update
       check against the shelf. `[23]`, `[24]`
       **The first half is built** *(16 August)*: the client states its version
-      in `x-steading-client`, `MINIMUM_CLIENT_VERSION` sets a floor that is
+      in `x-homefarm-client`, `MINIMUM_CLIENT_VERSION` sets a floor that is
       empty and inert on every server today, and a batch from below it gets a
       426 and the `appTooOld` refusal — **held exactly as an unsubscribed farm
       is held**, queued and uncounted, because the mutations are valid and only

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId } from '@steading/contracts';
-import { buildExport, field, stamp, toCsv } from '@steading/core/export/csv';
-import { enqueue } from '@steading/core/sync/queue';
+import { newId } from '@homefarm/contracts';
+import { buildExport, field, stamp, toCsv } from '@homefarm/core/export/csv';
+import { enqueue } from '@homefarm/core/sync/queue';
 import { freshStore } from '../support/store';
 
 /**

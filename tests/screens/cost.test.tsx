@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId } from '@steading/contracts';
-import { feedCostPerEgg } from '@steading/core/read/cost';
-import { listInventory } from '@steading/core/read/iron';
-import { enqueue } from '@steading/core/sync/queue';
+import { newId } from '@homefarm/contracts';
+import { feedCostPerEgg } from '@homefarm/core/read/cost';
+import { listInventory } from '@homefarm/core/read/iron';
+import { enqueue } from '@homefarm/core/sync/queue';
 import { freshStore } from '../support/store';
 import { mount, routeProps } from '../support/screen';
 import { AddItemScreen } from '../../apps/mobile/src/screens/AddItemScreen';

@@ -4,7 +4,7 @@ import {
   incubationCreateSchema,
   type Species,
   weightCreateSchema,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 import { localStore } from '../db/store';
 
 /**

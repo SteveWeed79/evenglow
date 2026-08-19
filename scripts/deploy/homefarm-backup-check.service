@@ -1,7 +1,7 @@
 # Fails when the last backup is too old, so an absence is reported rather than
 # merely true.
 #
-# Its own unit rather than a step inside steading-backup, because a backup that
+# Its own unit rather than a step inside homefarm-backup, because a backup that
 # **did not run** produces no output from a unit that did not start. The thing
 # that notices has to be something else, on its own schedule.
 #
@@ -11,15 +11,15 @@
 # already looks and what any monitoring added later will already watch.
 
 [Unit]
-Description=Check that a Steading backup happened recently
+Description=Check that an Evenglow backup happened recently
 Documentation=https://github.com/SteveWeed79/steading/blob/main/docs/DEPLOY-THE-SERVER.md
 
 [Service]
 Type=oneshot
 User=root
-EnvironmentFile=-/etc/steading/backup.env
-ExecStart=/opt/steading/scripts/deploy/check-backup.sh
+EnvironmentFile=-/etc/homefarm/backup.env
+ExecStart=/opt/homefarm/scripts/deploy/check-backup.sh
 
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=steading-backup-check
+SyslogIdentifier=homefarm-backup-check

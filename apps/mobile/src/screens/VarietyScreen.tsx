@@ -1,11 +1,11 @@
 import { StyleSheet, Text } from 'react-native';
-import { formatTemperature } from '@steading/contracts';
+import { formatTemperature } from '@homefarm/contracts';
 import {
   listBeds,
   listPlantings,
   listVarieties,
   type Planting,
-} from '@steading/core/read/growing';
+} from '@homefarm/core/read/growing';
 import { Row } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';

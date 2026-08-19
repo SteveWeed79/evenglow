@@ -35,7 +35,7 @@ const CLAIMS = JSON.stringify({
 
 beforeEach(async () => {
   await freshStore();
-  seedSecureStore({ 'steading.claims': CLAIMS, 'steading.refreshToken': 'r' });
+  seedSecureStore({ 'homefarm.claims': CLAIMS, 'homefarm.refreshToken': 'r' });
 
   /**
    * A refresh token is seeded because that is what a signed-in device holds,

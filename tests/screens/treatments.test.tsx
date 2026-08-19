@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId } from '@steading/contracts';
-import { localStore } from '@steading/core/db/store';
-import { treatmentById, treatmentsFor } from '@steading/core/read/withdrawals';
-import { enqueue } from '@steading/core/sync/queue';
+import { newId } from '@homefarm/contracts';
+import { localStore } from '@homefarm/core/db/store';
+import { treatmentById, treatmentsFor } from '@homefarm/core/read/withdrawals';
+import { enqueue } from '@homefarm/core/sync/queue';
 import { freshStore } from '../support/store';
 import { mount, routeProps } from '../support/screen';
 import { TreatmentScreen } from '../../apps/mobile/src/screens/TreatmentScreen';

@@ -1,4 +1,4 @@
-import { PRODUCT_NAME } from '@steading/contracts';
+import { PRODUCT_NAME } from '@homefarm/contracts';
 /**
  * Storage failures the UI has to tell apart.
  *

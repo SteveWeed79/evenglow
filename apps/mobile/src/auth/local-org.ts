@@ -1,4 +1,4 @@
-import { isUlid, newId } from '@steading/contracts';
+import { isUlid, newId } from '@homefarm/contracts';
 import { knownFarmIds } from '../db/open';
 import { disposeWhenClosed } from '../db/store';
 import {
@@ -12,7 +12,7 @@ import {
 /**
  * The farm's id before there is an account (A2.1).
  *
- * First launch mints an org ULID on the device and opens `steading-{that}.db`.
+ * First launch mints an org ULID on the device and opens `homefarm-{that}.db`.
  * Everything works from that moment — tallies, dues, weather, photos, the
  * whole app — and nothing flushes, because there is no token and none is
  * needed. This is D1 applied one level out: the client already mints every
@@ -149,7 +149,7 @@ export async function retiredOrgIds(): Promise<string[]> {
  * this device belongs to.
  *
  * **It used to delete the id, and that made the move permanent.** The file is
- * `steading-{orgId}.db` and the id is the only thing that names it, so a join
+ * `homefarm-{orgId}.db` and the id is the only thing that names it, so a join
  * stranded every record behind it for good — no error, nothing on any screen,
  * and no way back on the morning somebody went looking for last week's
  * tallies. The records were never gone; the only copy of their address was.

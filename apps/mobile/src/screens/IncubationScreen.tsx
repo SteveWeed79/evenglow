@@ -5,14 +5,14 @@ import {
   INCUBATION_DAYS,
   incubationStage,
   libraryBreed,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 import {
   fertilityRate,
   hatchRate,
   type IncubationEntry,
   listIncubations,
-} from '@steading/core/read/breeding';
-import { saidConfirmation } from '@steading/core/voice';
+} from '@homefarm/core/read/breeding';
+import { saidConfirmation } from '@homefarm/core/voice';
 import { Coming } from '../components/Coming';
 import { Confirmation, Failure, Field, Primary, Row, Stepper, useSaver } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';

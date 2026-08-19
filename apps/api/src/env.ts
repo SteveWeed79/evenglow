@@ -29,8 +29,8 @@ const envSchema = z.object({
    */
   MONGODB_DB: z
     .string()
-    .default('steading')
-    .transform((value) => (value.trim() === '' ? 'steading' : value.trim())),
+    .default('homefarm')
+    .transform((value) => (value.trim() === '' ? 'homefarm' : value.trim())),
   PORT: z.coerce.number().int().positive().default(3001),
   /**
    * Where the operations board listens, and it is a **different port on

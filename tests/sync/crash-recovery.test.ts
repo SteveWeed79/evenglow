@@ -1,14 +1,14 @@
 import { ulid } from 'ulid';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { SessionClaims } from '@steading/api/auth/claims';
-import { scopedOn } from '@steading/api/db/scoped';
-import { PENDING } from '@steading/api/sync/outcome';
-import { SWEEP_AFTER_MS, sweepFarm } from '@steading/api/sync/sweep';
-import { newId } from '@steading/contracts';
-import { localStore } from '@steading/core/db/store';
-import { flushOnce } from '@steading/core/sync/flush';
-import { pullOnce } from '@steading/core/sync/pull';
-import { enqueue } from '@steading/core/sync/queue';
+import type { SessionClaims } from '@homefarm/api/auth/claims';
+import { scopedOn } from '@homefarm/api/db/scoped';
+import { PENDING } from '@homefarm/api/sync/outcome';
+import { SWEEP_AFTER_MS, sweepFarm } from '@homefarm/api/sync/sweep';
+import { newId } from '@homefarm/contracts';
+import { localStore } from '@homefarm/core/db/store';
+import { flushOnce } from '@homefarm/core/sync/flush';
+import { pullOnce } from '@homefarm/core/sync/pull';
+import { enqueue } from '@homefarm/core/sync/queue';
 import { type Farm, twoDevices } from '../support/devices';
 import { makeMutation } from '../support/fixtures';
 import { startTestDb } from '../support/mongo';
@@ -43,7 +43,7 @@ import { type Wire, wireTo } from '../support/wire';
  * the `serverTs` it was logged with.
  */
 
-const harness = await startTestDb('steading_crash_recovery');
+const harness = await startTestDb('homefarm_crash_recovery');
 
 /**
  * The sweeper re-derives the author's role through `findUserById`, which is
@@ -52,7 +52,7 @@ const harness = await startTestDb('steading_crash_recovery');
  */
 if (harness) {
   process.env.MONGODB_URI = harness.uri;
-  process.env.MONGODB_DB = 'steading_crash_recovery';
+  process.env.MONGODB_DB = 'homefarm_crash_recovery';
 }
 
 const describeDb = harness ? describe : describe.skip;

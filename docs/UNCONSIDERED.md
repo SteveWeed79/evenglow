@@ -16,7 +16,7 @@ work, it says so: several of these want one paragraph of prose and no code, and
 those are the cheapest items on the list.
 
 **What this list is not.** It is not a claim that any of it should be built.
-`Steading-Masterplan.md` §"Explicitly Out of Scope" and `ROADMAP.md`'s refusals
+`Evenglow-Masterplan.md` §"Explicitly Out of Scope" and `ROADMAP.md`'s refusals
 are decisions, and several items below will rightly be refused the same way.
 The point is that a refusal is a decision and silence is not — right now most
 of what follows is silence.
@@ -98,7 +98,7 @@ otherwise plans the billing down to the refusal copy.
    is exactly the kind of wrong that survives review and fails an audit.
 
 8. **Play requires an App Bundle for new apps, and the pipeline builds an
-   APK.** `apk.yml` produces and signs `steading-<version>-<code>.apk`, which
+   APK.** `apk.yml` produces and signs `homefarm-<version>-<code>.apk`, which
    is exactly right for the shelf at `/app` and cannot be uploaded to Play as a
    new app. The AAB path is a second Gradle task and a second artefact, and it
    has not been built or tested once.
@@ -137,7 +137,7 @@ otherwise plans the billing down to the refusal copy.
     typography all carry it.
 
     **Checked 19 August 2026, and the answer is the bad one.**
-    `brechy.com/apps/steading` is a pre-launch page for an app called
+    `brechy.com/apps/homefarm` is a pre-launch page for an app called
     **Steading**, by **Brechy LLC**, described as *"the only app that manages
     your entire homestead — livestock, gardens, orchards, and all the tasks that
     keep it running"* — and it argues the name the same way this project does:
@@ -153,14 +153,14 @@ otherwise plans the billing down to the refusal copy.
     **The decision has a hard deadline and an asymmetric cost.** A Play package
     name is permanent from the first upload; a display name is about eleven
     lines (`app.json` plus ten strings in `apps/mobile/src`) and changeable at
-    any release. The 371 files carrying `@steading/*`, the `steading-{orgId}.db`
-    filename and the `steading://` scheme are internal and never need to move.
+    any release. The 371 files carrying `@homefarm/*`, the `homefarm-{orgId}.db`
+    filename and the `homefarm://` scheme are internal and never need to move.
     So this is cheap until the first AAB goes up and expensive-to-impossible
     afterwards — which puts it *before* `[10]`'s first upload rather than
     alongside it.
 
     Nothing else found is a conflict: `THE STEADING CODEX` (99877285, Web
-    Production Labs LLC, pending) covers homesteading books and retail, not
+    Production Labs LLC, pending) covers homehomefarm books and retail, not
     software; the word is a dictionary term with farms, a wine and a brewing
     channel already on it. **The conflict is this one product, and it is total.**
 
@@ -231,26 +231,26 @@ otherwise plans the billing down to the refusal copy.
 
     **Four things are load-bearing and must not be renamed casually:**
 
-    1. **The APK filename.** `apk-plan.mjs` builds `steading-<version>-<code>.apk`
+    1. **The APK filename.** `apk-plan.mjs` builds `homefarm-<version>-<code>.apk`
        and `deploy.sh` decides whether the shelf is current by comparing against
-       exactly that stem — it strips a literal `steading-` prefix and looks for
-       `/var/lib/steading/dist/steading-<version>-<code>.apk`. Renaming the
+       exactly that stem — it strips a literal `homefarm-` prefix and looks for
+       `/var/lib/homefarm/dist/homefarm-<version>-<code>.apk`. Renaming the
        artefact makes every box re-fetch ninety megabytes, which is the trap
        `DEPLOY-THE-SERVER.md` already recorded once. Either leave the artefact
        name alone or change both sides in one commit and accept one re-download.
-    2. **The systemd units and paths** — `steading-api`, `steading-deploy.timer`,
-       `steading-backup*`, `/etc/steading`, `/opt/steading`, `/var/lib/steading`.
+    2. **The systemd units and paths** — `homefarm-api`, `homefarm-deploy.timer`,
+       `homefarm-backup*`, `/etc/homefarm`, `/opt/homefarm`, `/var/lib/homefarm`.
        Invisible to any farm, and renaming them is a box migration rather than an
        edit. Leave them.
     3. **The EAS slug.** `extra.eas.projectId` is bound to the slug; changing one
        without the other breaks `eas build`. The runner path (`apk.yml`) does not
        care, but the EAS fallback does.
     4. **`check-assets.mjs`** prints the expected `app.json` block with
-       `assets/icon/steading*.png` in it, so renaming the asset files means
+       `assets/icon/homefarm*.png` in it, so renaming the asset files means
        updating that checker's guidance in the same commit.
 
-    **Deliberately staying `steading`:** the 371 files carrying `@steading/*`
-    workspace names, the `steading-{orgId}.db` filename, and the internal
+    **Deliberately staying `homefarm`:** the 371 files carrying `@homefarm/*`
+    workspace names, the `homefarm-{orgId}.db` filename, and the internal
     database name. No user, reviewer or store listing ever sees them, and
     churning them buys nothing but risk.
 

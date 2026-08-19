@@ -1,7 +1,7 @@
 import { createHash, randomInt } from 'node:crypto';
 import type { Collection } from 'mongodb';
-import type { Role } from '@steading/contracts';
-import { JOIN_CODE_ALPHABET, JOIN_CODE_LENGTH } from '@steading/contracts';
+import type { Role } from '@homefarm/contracts';
+import { JOIN_CODE_ALPHABET, JOIN_CODE_LENGTH } from '@homefarm/contracts';
 import { db } from './client';
 
 /**

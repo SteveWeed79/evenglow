@@ -1,7 +1,7 @@
 import { ulid } from 'ulid';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { listFarmSummaries } from '@steading/api/db/farms';
-import { type UserDoc, insertOrg, insertUser, recordLastSeen } from '@steading/api/db/identity';
+import { listFarmSummaries } from '@homefarm/api/db/farms';
+import { type UserDoc, insertOrg, insertUser, recordLastSeen } from '@homefarm/api/db/identity';
 import { startTestDb } from '../support/mongo';
 
 /**
@@ -19,11 +19,11 @@ import { startTestDb } from '../support/mongo';
  * go through `db()` rather than taking an injected scope.
  */
 
-const harness = await startTestDb('steading_last_seen');
+const harness = await startTestDb('homefarm_last_seen');
 
 if (harness) {
   process.env.MONGODB_URI = harness.uri;
-  process.env.MONGODB_DB = 'steading_last_seen';
+  process.env.MONGODB_DB = 'homefarm_last_seen';
 }
 
 const describeDb = harness ? describe : describe.skip;
@@ -49,7 +49,7 @@ async function somebody(over: Partial<UserDoc> = {}): Promise<string> {
 }
 
 async function lastSeenOf(userId: string): Promise<UserDoc['lastSeen']> {
-  const { findUserById } = await import('@steading/api/db/identity');
+  const { findUserById } = await import('@homefarm/api/db/identity');
   return (await findUserById(userId))?.lastSeen;
 }
 

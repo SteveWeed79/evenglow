@@ -10,8 +10,8 @@ import {
   SPECIES_TRAITS,
   suggestedGrowOutWeeks,
   type Species,
-} from '@steading/contracts';
-import { defaultGroupName } from '@steading/core/naming';
+} from '@homefarm/contracts';
+import { defaultGroupName } from '@homefarm/core/naming';
 import {
   Chip,
   DayPick,

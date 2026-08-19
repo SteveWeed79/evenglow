@@ -15,7 +15,7 @@ import {
   SPECIES,
   suggestedGrowOutWeeks,
   SPECIES_TRAITS,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 
 /**
  * What a group produces is capability AND intent.

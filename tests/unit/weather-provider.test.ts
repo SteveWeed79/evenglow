@@ -4,7 +4,7 @@ import {
   findGrid,
   findPlace,
   OutsideCoverageError,
-} from '@steading/core/weather/provider';
+} from '@homefarm/core/weather/provider';
 
 /**
  * The National Weather Service, parsed.

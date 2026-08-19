@@ -3,7 +3,7 @@
  *
  * Everything the engine actually stores — the queued mutation, the local
  * record, the quarantine row, the meta keys — lives in
- * `@steading/app/db/schema` and is re-exported here. Only the three constants
+ * `@homefarm/app/db/schema` and is re-exported here. Only the three constants
  * below are about IndexedDB in particular, and they go with the rest of the
  * browser engine in S7.
  *
@@ -14,7 +14,7 @@
 
 export * from './schema';
 
-export const DB_NAME = 'steading';
+export const DB_NAME = 'homefarm';
 
 /**
  * Bumping this runs the migration ladder in open.ts. Migrations are additive

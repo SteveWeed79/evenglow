@@ -1,5 +1,5 @@
 import { jwtVerify, SignJWT } from 'jose';
-import { isRole } from '@steading/contracts';
+import { isRole } from '@homefarm/contracts';
 import { HttpError } from '../http';
 import type { SessionClaims } from './claims';
 
@@ -13,8 +13,8 @@ import type { SessionClaims } from './claims';
  * this is only the first gate.
  */
 
-const ISSUER = 'steading';
-const AUDIENCE = 'steading-app';
+const ISSUER = 'homefarm';
+const AUDIENCE = 'homefarm-app';
 
 /**
  * Fifteen minutes. Long enough that a refresh is not on the critical path of

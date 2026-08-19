@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { listPlantings, listVarieties } from '@steading/core/read/growing';
+import { listPlantings, listVarieties } from '@homefarm/core/read/growing';
 import {
   Confirm,
   Failure,

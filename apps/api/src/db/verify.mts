@@ -13,16 +13,16 @@
  * SAFETY: this script DROPS the database it uses, so it deliberately does not
  * use the app's database whatever MONGODB_URI or MONGODB_DB point at. The
  * separate name is a safety control, not an environment label — pointing this
- * at `steading` would delete a farm's records.
+ * at `homefarm` would delete a farm's records.
  */
 import { MongoClient } from 'mongodb';
 import { ulid } from 'ulid';
 import { applyIndexes, INDEXES, leadingKey } from './indexes.ts';
 import { COLLECTIONS, scopedOn, type Tenanted } from './scoped.ts';
 import { applyBatch } from '../sync/apply.ts';
-import { MUTATION_SCHEMA_VERSION } from '@steading/contracts';
+import { MUTATION_SCHEMA_VERSION } from '@homefarm/contracts';
 
-const VERIFY_DB = 'steading_verify';
+const VERIFY_DB = 'homefarm_verify';
 
 /**
  * A projected record, as much of it as the checks below read back.

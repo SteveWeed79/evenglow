@@ -49,7 +49,7 @@ offline as a headline and one is free and open source — so the claim in §3 W1
 that *"competitors bolt offline onto a cloud app"* now has counterexamples in the
 same store, and W1 carries a note saying so.
 
-**Steading, by Brechy LLC** — `brechy.com/apps/steading`. Same name, same
+**Steading, by Brechy LLC** — `brechy.com/apps/homefarm`. Same name, same
 product, same argument for the name:
 
 > *"The only app that manages your entire homestead — livestock, gardens,
@@ -78,7 +78,7 @@ No USPTO filing was found for Brechy LLC, but the trademark databases are not
 reachable from the environment this was researched in, so absence is not
 evidence. The only *Steading*-family filing seen is `THE STEADING CODEX`
 (99877285, Web Production Labs LLC, pending) — a different entity, covering
-homesteading books and retail rather than software.
+homehomefarm books and retail rather than software.
 
 **Homestead Hub — Farm Manager** — the closest premise match found to date, and
 it is on Google Play today (`io.homesteadhub.app`; an iOS build appears to exist

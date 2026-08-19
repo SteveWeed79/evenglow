@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { growOutWindow, newId } from '@steading/contracts';
-import { listGroups, produceToday } from '@steading/core/read/groups';
-import { localStore } from '@steading/core/db/store';
-import { enqueue } from '@steading/core/sync/queue';
+import { growOutWindow, newId } from '@homefarm/contracts';
+import { listGroups, produceToday } from '@homefarm/core/read/groups';
+import { localStore } from '@homefarm/core/db/store';
+import { enqueue } from '@homefarm/core/sync/queue';
 import { freshStore } from '../support/store';
 import { mount } from '../support/screen';
 import { TodayScreen } from '../../apps/mobile/src/screens/TodayScreen';

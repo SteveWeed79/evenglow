@@ -8,13 +8,13 @@ before they install it.
 ## 1. The short version
 
 ```
-pnpm --filter @steading/mobile exec eas login                     # once
-pnpm --filter @steading/mobile exec eas build:configure           # once, if it asks
-pnpm --filter @steading/mobile exec eas credentials               # once — back up the keystore (§8)
+pnpm --filter @homefarm/mobile exec eas login                     # once
+pnpm --filter @homefarm/mobile exec eas build:configure           # once, if it asks
+pnpm --filter @homefarm/mobile exec eas credentials               # once — back up the keystore (§8)
 
 # then, for every build that leaves this machine:
 #   bump expo.android.versionCode in app.json  (§5b)
-pnpm --filter @steading/mobile exec eas build --profile preview --platform android
+pnpm --filter @homefarm/mobile exec eas build --profile preview --platform android
 ```
 
 EAS builds it on Expo's machines and prints a URL. That URL is the link — mail
@@ -61,7 +61,7 @@ caused it.
 `eas init` is the deliberate version, run on its own and committed:
 
 ```
-pnpm --filter @steading/mobile exec eas init
+pnpm --filter @homefarm/mobile exec eas init
 ```
 
 **And turn on 2FA for that account.** It holds the one piece of state in this
@@ -191,7 +191,7 @@ separate farms whatever account you sign into — the origin is compiled in, and
 Worth its own line, because it is the trap that follows from the paragraph
 above and it looks nothing like a refusal. Metro prints a big square QR, and
 **only Steading's own development build can open it** — the code carries the
-`steading://` scheme from `app.json`. Scanning it with Expo Go does nothing.
+`homefarm://` scheme from `app.json`. Scanning it with Expo Go does nothing.
 Scanning it with the phone's camera does nothing. Reported exactly that way,
 from a tablet with Expo Go installed and a USB cable plugged in: *"when I scan
 the qr code nothing happens."*
@@ -254,7 +254,7 @@ build, the way it could under Expo Go.
 
 **There is a second, quieter version of this**, documented in
 `auth/local-org.ts`: the farm's id lives in secure storage and the records live
-in `steading-{orgId}.db`. Clearing app data takes both, so usually it is moot —
+in `homefarm-{orgId}.db`. Clearing app data takes both, so usually it is moot —
 but if the id were lost while the file survived, the records would be on disk
 with nothing knowing which file they are in. §4 is how you tell the two apart,
 and **there is no recovery path in the app for that case yet**: the answer it
@@ -271,7 +271,7 @@ adb shell run-as dev.swbuild.homefarm ls -la files/SQLite/       # expo-sqlite �
 adb shell run-as dev.swbuild.homefarm ls -la databases/          # older layout
 ```
 
-- **One `steading-<ULID>.db`** — that is the farm, and it is the one open.
+- **One `homefarm-<ULID>.db`** — that is the farm, and it is the one open.
 - **Two or more** — the app is opening a different farm than the one with the
   records in it. The bytes are safe; the id is what went missing.
 - **None** — the app's data was cleared or it was reinstalled. Nothing to
@@ -401,7 +401,7 @@ Three machines are involved and which does what is the part worth holding onto:
 By hand:
 
 ```
-pnpm --filter @steading/mobile exec eas build --profile preview-farm --platform android
+pnpm --filter @homefarm/mobile exec eas build --profile preview-farm --platform android
 ```
 
 Ten to twenty minutes on Expo's free tier, most of it queueing. It ends with a
@@ -452,10 +452,10 @@ The box already has Caddy and a certificate. One static route later,
 
 ```
 # on the PC, once the build is done
-scp ~/Downloads/steading-0.1.0-2.apk ubuntu@api.swbuild.dev:
+scp ~/Downloads/homefarm-0.1.0-2.apk ubuntu@api.swbuild.dev:
 
 # on the box
-sudo /opt/steading/scripts/deploy/publish-apk.sh ~/steading-0.1.0-2.apk
+sudo /opt/homefarm/scripts/deploy/publish-apk.sh ~/homefarm-0.1.0-2.apk
 ```
 
 **Caddy serves it and Fastify never sees it.** A static file needs no route, no
@@ -463,12 +463,12 @@ auth and no database, so the API's surface does not grow by a byte to get a
 download — `handle_path /app/*` is matched before the reverse proxy and nothing
 under it reaches the service.
 
-It lives in `/var/lib/steading/dist`, deliberately outside `/opt/steading`: the
+It lives in `/var/lib/homefarm/dist`, deliberately outside `/opt/homefarm`: the
 deploy timer pulls into that tree every five minutes, and a build kept there
 would be one `git clean` from gone.
 
 `publish-apk.sh` keeps every build under its own name, moves the
-`steading.apk` symlink the stable link serves, refreshes the install page, and
+`homefarm.apk` symlink the stable link serves, refreshes the install page, and
 **refuses to overwrite a name that already exists** — which is the §5b
 `versionCode` bump with teeth, because two different builds under one name make
 the archive a lie.
@@ -533,11 +533,11 @@ emulation or a community rebuild.
 
 | Secret | Where it comes from |
 |---|---|
-| `ANDROID_KEYSTORE_BASE64` | `base64 -w0 steading.jks` |
+| `ANDROID_KEYSTORE_BASE64` | `base64 -w0 homefarm.jks` |
 | `ANDROID_KEYSTORE_PASSWORD` | the §8 export |
 | `ANDROID_KEY_ALIAS` | the §8 export |
 | `ANDROID_KEY_PASSWORD` | the §8 export |
-| `ANDROID_CERT_SHA256` | `keytool -list -v -keystore steading.jks -alias <alias> \| grep SHA256:` |
+| `ANDROID_CERT_SHA256` | `keytool -list -v -keystore homefarm.jks -alias <alias> \| grep SHA256:` |
 
 #### The `versionCode` is derived, not typed
 
@@ -613,7 +613,7 @@ different question from what a link in a message should point at.
 Being public is what makes the box need no credential: `EXPO_TOKEN` is off it
 entirely, and there is no token on that machine for anything to leak. If this
 repository is ever made private, put a read-only `GITHUB_TOKEN` in
-`/etc/steading/deploy.env` and the lookup honours it.
+`/etc/homefarm/deploy.env` and the lookup honours it.
 
 ---
 
@@ -631,7 +631,7 @@ Play it is worse, because the package name is claimed and cannot be reused.
 Back it up now rather than before the first Play upload:
 
 ```
-pnpm --filter @steading/mobile exec eas credentials
+pnpm --filter @homefarm/mobile exec eas credentials
 ```
 
 Android → the build profile → **Download credentials**. Keep the `.jks` and the

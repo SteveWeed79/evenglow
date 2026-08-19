@@ -1,4 +1,4 @@
-import { animalCreateSchema, type Species } from '@steading/contracts';
+import { animalCreateSchema, type Species } from '@homefarm/contracts';
 import { localStore } from '../db/store';
 
 /**

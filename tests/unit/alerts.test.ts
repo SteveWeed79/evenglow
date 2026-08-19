@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ALERTS_STALE_MS, alertLive, liveAlerts, type Alert } from '@steading/contracts';
-import { ALERTS_GAP_MS, forgetWeather, readAlerts, refreshAlerts } from '@steading/core/weather';
-import { localStore } from '@steading/core/db/store';
+import { ALERTS_STALE_MS, alertLive, liveAlerts, type Alert } from '@homefarm/contracts';
+import { ALERTS_GAP_MS, forgetWeather, readAlerts, refreshAlerts } from '@homefarm/core/weather';
+import { localStore } from '@homefarm/core/db/store';
 import { freshStore } from '../support/store';
 
 /**

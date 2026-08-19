@@ -8,7 +8,7 @@ import {
   partsNote,
   partsState,
   urgencyOf,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 
 /**
  * Routine husbandry, and whether the part is on the shelf.

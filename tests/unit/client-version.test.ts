@@ -4,7 +4,7 @@ import {
   isClientTooOld,
   parseVersion,
   syncRefusalMessage,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 
 /**
  * How old is too old, and the two ways this must not go wrong.
@@ -94,6 +94,6 @@ describe('what the farm is told', () => {
   });
 
   it('states the header once, so the two ends cannot disagree', () => {
-    expect(CLIENT_VERSION_HEADER).toBe('x-steading-client');
+    expect(CLIENT_VERSION_HEADER).toBe('x-homefarm-client');
   });
 });

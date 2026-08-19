@@ -1,9 +1,9 @@
 import { ulid } from 'ulid';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import type { MutationResult } from '@steading/contracts';
-import type { SessionClaims } from '@steading/api/auth/claims';
-import { scopedOn } from '@steading/api/db/scoped';
-import { applyBatch } from '@steading/api/sync/apply';
+import type { MutationResult } from '@homefarm/contracts';
+import type { SessionClaims } from '@homefarm/api/auth/claims';
+import { scopedOn } from '@homefarm/api/db/scoped';
+import { applyBatch } from '@homefarm/api/sync/apply';
 import { makeMutation } from '../support/fixtures';
 import { startTestDb } from '../support/mongo';
 
@@ -12,7 +12,7 @@ import { startTestDb } from '../support/mongo';
  * the assertions are about the write path rather than about HTTP.
  */
 
-const harness = await startTestDb('steading_sync');
+const harness = await startTestDb('homefarm_sync');
 const describeDb = harness ? describe : describe.skip;
 
 const ORG_A = ulid();

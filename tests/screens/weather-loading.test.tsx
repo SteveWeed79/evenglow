@@ -25,7 +25,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const held = { release: (() => undefined) as () => void };
 
-vi.mock('@steading/core/weather', () => ({
+vi.mock('@homefarm/core/weather', () => ({
   readWeather: () =>
     new Promise((resolve) => {
       held.release = () => resolve(null);
@@ -45,8 +45,8 @@ vi.mock('@steading/core/weather', () => ({
   ALERTS_GAP_MS: 900_000,
 }));
 
-const { enqueue } = await import('@steading/core/sync/queue');
-const { newId } = await import('@steading/contracts');
+const { enqueue } = await import('@homefarm/core/sync/queue');
+const { newId } = await import('@homefarm/contracts');
 const { freshStore } = await import('../support/store');
 const { mount } = await import('../support/screen');
 const { TodayScreen } = await import('../../apps/mobile/src/screens/TodayScreen');

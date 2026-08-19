@@ -1,5 +1,5 @@
-import { ENTERPRISES, type Enterprise } from '@steading/contracts';
-import { readSite } from '@steading/core/read/growing';
+import { ENTERPRISES, type Enterprise } from '@homefarm/contracts';
+import { readSite } from '@homefarm/core/read/growing';
 import { useLive } from './useLive';
 
 /**

@@ -11,7 +11,7 @@ import { describeProbe, readSupportEnv } from '../../scripts/lib/support-probe.m
  * and printed "reporting files issues to SteveWeed79/steading". That file
  * configures the server running on the laptop. Once `Use the farm server`
  * pointed the build at the deployed box — a different machine, with its own
- * `/etc/steading/api.env` and nothing in it — the check went on reporting the
+ * `/etc/homefarm/api.env` and nothing in it — the check went on reporting the
  * laptop's configuration for a server the app no longer spoke to.
  *
  * So it read OK on the exact morning a handset was being told *this server has

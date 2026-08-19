@@ -101,7 +101,7 @@ export function reportTrouble(where: string, error: unknown): void {
 
   // Still worth a console line: Metro is where somebody debugging is looking,
   // and the point of this module is that the same fact reaches both places.
-  console.error(`[steading] ${where}: ${current.message}`, current.at ?? '');
+  console.error(`[homefarm] ${where}: ${current.message}`, current.at ?? '');
   publish();
 }
 

@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { flushOnce, type SyncTransport } from '@steading/core/sync/flush';
-import { checkIntegrity, enqueue, queueDepth } from '@steading/core/sync/queue';
-import { nextDelay } from '@steading/core/sync/engine';
-import { MAX_BATCH_SIZE, newId, type Mutation, type MutationStatus } from '@steading/contracts';
+import { flushOnce, type SyncTransport } from '@homefarm/core/sync/flush';
+import { checkIntegrity, enqueue, queueDepth } from '@homefarm/core/sync/queue';
+import { nextDelay } from '@homefarm/core/sync/engine';
+import { MAX_BATCH_SIZE, newId, type Mutation, type MutationStatus } from '@homefarm/contracts';
 import { currentDriver, freshStore, readOutboxBySeq, simulateRestart } from '../support/store';
 
 /**

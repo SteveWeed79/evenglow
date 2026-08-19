@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { newId } from '@steading/contracts';
-import { setSessionRefresher, type SessionRenewal } from '@steading/core/api';
-import { flushOnce } from '@steading/core/sync/flush';
-import { enqueue, queueDepth } from '@steading/core/sync/queue';
-import { pullOnce } from '@steading/core/sync/pull';
-import { localStore } from '@steading/core/db/store';
+import { newId } from '@homefarm/contracts';
+import { setSessionRefresher, type SessionRenewal } from '@homefarm/core/api';
+import { flushOnce } from '@homefarm/core/sync/flush';
+import { enqueue, queueDepth } from '@homefarm/core/sync/queue';
+import { pullOnce } from '@homefarm/core/sync/pull';
+import { localStore } from '@homefarm/core/db/store';
 import { freshStore, readRecordsByEntity } from '../support/store';
 
 /**

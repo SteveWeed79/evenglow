@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { SPECIES_TRAITS } from '@steading/contracts';
+import { SPECIES_TRAITS } from '@homefarm/contracts';
 import { Row } from '../components/Form';
 import { Grid } from '../components/Grid';
 import { Loading } from '../components/Missing';

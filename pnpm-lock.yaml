@@ -11,13 +11,13 @@ importers:
 
   .:
     dependencies:
-      '@steading/api':
+      '@homefarm/api':
         specifier: workspace:*
         version: link:apps/api
-      '@steading/contracts':
+      '@homefarm/contracts':
         specifier: workspace:*
         version: link:packages/contracts
-      '@steading/core':
+      '@homefarm/core':
         specifier: workspace:*
         version: link:packages/core
       mongodb:
@@ -36,7 +36,7 @@ importers:
       '@eslint/js':
         specifier: ^9.39.0
         version: 9.39.5
-      '@steading/mobile':
+      '@homefarm/mobile':
         specifier: workspace:*
         version: link:apps/mobile
       '@types/node':
@@ -81,12 +81,12 @@ importers:
       '@fastify/rate-limit':
         specifier: ^10.2.2
         version: 10.3.0
+      '@homefarm/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@node-rs/argon2':
         specifier: ^2.0.2
         version: 2.0.2
-      '@steading/contracts':
-        specifier: workspace:*
-        version: link:../../packages/contracts
       fastify:
         specifier: ^5.2.1
         version: 5.10.0
@@ -108,6 +108,12 @@ importers:
 
   apps/mobile:
     dependencies:
+      '@homefarm/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@homefarm/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@react-navigation/bottom-tabs':
         specifier: ^7.18.14
         version: 7.18.14(@react-navigation/native@7.3.14(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3))(react-native-safe-area-context@5.7.0(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3))(react-native-screens@4.26.2(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3))(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3)
@@ -117,12 +123,6 @@ importers:
       '@react-navigation/native-stack':
         specifier: ^7.4.0
         version: 7.18.6(@react-navigation/native@7.3.14(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3))(react-native-safe-area-context@5.7.0(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3))(react-native-screens@4.26.2(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3))(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3)
-      '@steading/contracts':
-        specifier: workspace:*
-        version: link:../../packages/contracts
-      '@steading/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       expo:
         specifier: ~57.0.13
         version: 57.0.13(@babel/core@7.29.7)(@expo/dom-webview@57.0.1)(react-dom@19.2.4(react@19.2.3))(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3)(typescript@5.9.3)
@@ -220,7 +220,7 @@ importers:
 
   packages/core:
     dependencies:
-      '@steading/contracts':
+      '@homefarm/contracts':
         specifier: workspace:*
         version: link:../contracts
       zod:

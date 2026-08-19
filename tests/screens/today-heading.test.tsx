@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId } from '@steading/contracts';
-import { enqueue } from '@steading/core/sync/queue';
+import { newId } from '@homefarm/contracts';
+import { enqueue } from '@homefarm/core/sync/queue';
 import { freshStore } from '../support/store';
 import { mount } from '../support/screen';
 import { seedSecureStore } from '../support/native/modules';
@@ -41,7 +41,7 @@ beforeEach(async () => {
 describe('the heading on Today', () => {
   it('is the farm’s own name', async () => {
     seedSecureStore({
-      'steading.claims': JSON.stringify({
+      'homefarm.claims': JSON.stringify({
         userId: 'u1',
         orgId: ORG,
         role: 'owner',
@@ -58,7 +58,7 @@ describe('the heading on Today', () => {
 
   it('does not also say the word the tab bar is already saying', async () => {
     seedSecureStore({
-      'steading.claims': JSON.stringify({
+      'homefarm.claims': JSON.stringify({
         userId: 'u1',
         orgId: ORG,
         role: 'owner',
@@ -93,7 +93,7 @@ describe('the heading on Today', () => {
     // A farm named "My farm" by the Google path is still a name somebody
     // accepted, so it is said like one rather than treated as absent.
     seedSecureStore({
-      'steading.claims': JSON.stringify({
+      'homefarm.claims': JSON.stringify({
         userId: 'u1',
         orgId: ORG,
         role: 'owner',

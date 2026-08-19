@@ -1,7 +1,7 @@
 import { AppState, type AppStateStatus } from 'react-native';
 import { addNetworkStateListener, type NetworkStateEvent } from 'expo-network';
-import { nudge, setOnline } from '@steading/core/sync/engine';
-import { reportEngineError } from '@steading/core/sync/report';
+import { nudge, setOnline } from '@homefarm/core/sync/engine';
+import { reportEngineError } from '@homefarm/core/sync/report';
 import { refreshSession } from '../auth/session';
 
 /**

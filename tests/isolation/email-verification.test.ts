@@ -1,7 +1,7 @@
 import { ulid } from 'ulid';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { VERIFY_MAX_ATTEMPTS, normalizeVerifyCode } from '@steading/contracts';
-import type { UserDoc } from '@steading/api/db/identity';
+import { VERIFY_MAX_ATTEMPTS, normalizeVerifyCode } from '@homefarm/contracts';
+import type { UserDoc } from '@homefarm/api/db/identity';
 import { startTestDb } from '../support/mongo';
 
 /**
@@ -28,11 +28,11 @@ import { startTestDb } from '../support/mongo';
  * rather than closed one.
  */
 
-const harness = await startTestDb('steading_email_verify');
+const harness = await startTestDb('homefarm_email_verify');
 
 if (harness) {
   process.env.MONGODB_URI = harness.uri;
-  process.env.MONGODB_DB = 'steading_email_verify';
+  process.env.MONGODB_DB = 'homefarm_email_verify';
 }
 
 const describeDb = harness ? describe : describe.skip;
@@ -49,13 +49,13 @@ const CORRECTED = 'the-right-one@example.test';
 const MAIL = { EMAIL_PROVIDER: 'log', EMAIL_FROM: 'Evenglow <hello@example.test>' };
 
 async function buildApp(over: Record<string, string> = {}) {
-  const { buildServer } = await import('@steading/api/server');
-  const { readEnv } = await import('@steading/api/env');
+  const { buildServer } = await import('@homefarm/api/server');
+  const { readEnv } = await import('@homefarm/api/env');
   return buildServer(
     readEnv({
       AUTH_SECRET: SECRET,
       MONGODB_URI: harness!.uri,
-      MONGODB_DB: 'steading_email_verify',
+      MONGODB_DB: 'homefarm_email_verify',
       ...MAIL,
       ...over,
     }),
@@ -105,7 +105,7 @@ async function installCode(
   over: Partial<{ email: string; expiresAt: Date; attempts: number }> = {},
 ): Promise<void> {
   const { hashVerifyCode, replaceVerifyCode } = await import(
-    '@steading/api/db/email-verifications'
+    '@homefarm/api/db/email-verifications'
   );
   const now = new Date();
   await replaceVerifyCode({
@@ -119,18 +119,18 @@ async function installCode(
 }
 
 async function freshCode(): Promise<string> {
-  const { mintVerifyCode } = await import('@steading/api/db/email-verifications');
+  const { mintVerifyCode } = await import('@homefarm/api/db/email-verifications');
   return mintVerifyCode();
 }
 
 async function verifiedAt(): Promise<Date | undefined> {
-  const { findUserById } = await import('@steading/api/db/identity');
+  const { findUserById } = await import('@homefarm/api/db/identity');
   return (await findUserById(USER))?.emailVerifiedAt;
 }
 
 beforeEach(async () => {
-  const { hashPassword } = await import('@steading/api/auth/password');
-  const { insertOrg, insertUser } = await import('@steading/api/db/identity');
+  const { hashPassword } = await import('@homefarm/api/auth/password');
+  const { insertOrg, insertUser } = await import('@homefarm/api/db/identity');
 
   for (const name of [
     'users',
@@ -171,7 +171,7 @@ describeDb('what an unconfirmed address costs', () => {
     await post('/auth/forgot', { email: EMAIL });
     expect(await harness!.db.collection('passwordResets').countDocuments({})).toBe(0);
 
-    const { markEmailVerified } = await import('@steading/api/db/identity');
+    const { markEmailVerified } = await import('@homefarm/api/db/identity');
     await markEmailVerified(USER, EMAIL, new Date());
 
     await post('/auth/forgot', { email: EMAIL });
@@ -200,7 +200,7 @@ describeDb('what an unconfirmed address costs', () => {
    */
   it('is reported again on every refresh', async () => {
     const { refreshToken } = await tokens();
-    const { markEmailVerified } = await import('@steading/api/db/identity');
+    const { markEmailVerified } = await import('@homefarm/api/db/identity');
     await markEmailVerified(USER, EMAIL, new Date());
 
     const answer = await post('/auth/refresh', { refreshToken });
@@ -273,7 +273,7 @@ describeDb('asking for a code', () => {
   });
 
   it('says so rather than sending again once the address is confirmed', async () => {
-    const { markEmailVerified } = await import('@steading/api/db/identity');
+    const { markEmailVerified } = await import('@homefarm/api/db/identity');
     await markEmailVerified(USER, EMAIL, new Date());
     const { accessToken } = await tokens();
 
@@ -334,8 +334,8 @@ describeDb('using a code', () => {
    * has to, which is exactly the case §11 asks for.
    */
   it('cannot be spent on somebody elses account', async () => {
-    const { hashPassword } = await import('@steading/api/auth/password');
-    const { insertOrg, insertUser, findUserById } = await import('@steading/api/db/identity');
+    const { hashPassword } = await import('@homefarm/api/auth/password');
+    const { insertOrg, insertUser, findUserById } = await import('@homefarm/api/db/identity');
     const otherOrg = ulid();
     const other = ulid();
     await insertOrg({ _id: otherOrg, name: 'Far Field', createdAt: new Date() });
@@ -379,7 +379,7 @@ describeDb('correcting a mistyped address', () => {
     );
     expect(answer.status).toBe(200);
 
-    const { findUserByEmail } = await import('@steading/api/db/identity');
+    const { findUserByEmail } = await import('@homefarm/api/db/identity');
     expect((await findUserByEmail(CORRECTED))?._id).toBe(USER);
     expect(await verifiedAt()).toBeUndefined();
     // Signing in with the old address stops working, which is what "moved"
@@ -403,7 +403,7 @@ describeDb('correcting a mistyped address', () => {
     );
 
     expect(answer.status).toBe(403);
-    const { findUserById } = await import('@steading/api/db/identity');
+    const { findUserById } = await import('@homefarm/api/db/identity');
     expect((await findUserById(USER))?.email).toBe(EMAIL);
   });
 
@@ -412,8 +412,8 @@ describeDb('correcting a mistyped address', () => {
   });
 
   it('refuses an address somebody else already has', async () => {
-    const { hashPassword } = await import('@steading/api/auth/password');
-    const { insertOrg, insertUser, findUserById } = await import('@steading/api/db/identity');
+    const { hashPassword } = await import('@homefarm/api/auth/password');
+    const { insertOrg, insertUser, findUserById } = await import('@homefarm/api/db/identity');
     const otherOrg = ulid();
     await insertOrg({ _id: otherOrg, name: 'Far Field', createdAt: new Date() });
     await insertUser({
@@ -446,7 +446,7 @@ describeDb('correcting a mistyped address', () => {
    * truthful description of a thing that is not built.
    */
   it('will not move an address that has been confirmed', async () => {
-    const { markEmailVerified, findUserById } = await import('@steading/api/db/identity');
+    const { markEmailVerified, findUserById } = await import('@homefarm/api/db/identity');
     await markEmailVerified(USER, EMAIL, new Date());
     const { accessToken } = await tokens();
 
@@ -512,7 +512,7 @@ describeDb('signing up with Google', () => {
    * writes it except a proof.
    */
   it('is the only signup that arrives already confirmed', async () => {
-    const { insertUser, findUserById } = await import('@steading/api/db/identity');
+    const { insertUser, findUserById } = await import('@homefarm/api/db/identity');
     const googler = ulid();
     await insertUser({
       _id: googler,

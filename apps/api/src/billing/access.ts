@@ -1,4 +1,4 @@
-import { type Entitlement, entitlementOf, type SyncRefusal } from '@steading/contracts';
+import { type Entitlement, entitlementOf, type SyncRefusal } from '@homefarm/contracts';
 import type { Env } from '../env';
 import type { OrgDoc } from '../db/identity';
 

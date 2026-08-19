@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as SecureStore from 'expo-secure-store';
-import { currentAccessToken, resetApiBase, setAccessToken, setApiBase } from '@steading/core/api';
-import { localStore } from '@steading/core/db/store';
+import { currentAccessToken, resetApiBase, setAccessToken, setApiBase } from '@homefarm/core/api';
+import { localStore } from '@homefarm/core/db/store';
 import { freshStore } from '../support/store';
 import { seedSecureStore } from '../support/native/modules';
 import {
@@ -62,7 +62,7 @@ function heldRefresh(): { release: () => void; posted: () => number } {
 }
 
 async function storedRefreshToken(): Promise<string | null> {
-  return SecureStore.getItemAsync('steading.refreshToken');
+  return SecureStore.getItemAsync('homefarm.refreshToken');
 }
 
 beforeEach(async () => {
@@ -70,8 +70,8 @@ beforeEach(async () => {
   setApiBase('http://farm.test');
   setAccessToken(null);
   seedSecureStore({
-    'steading.refreshToken': 'the-stored-token',
-    'steading.claims': JSON.stringify({ userId: 'u1', orgId: ORG, role: 'owner' }),
+    'homefarm.refreshToken': 'the-stored-token',
+    'homefarm.claims': JSON.stringify({ userId: 'u1', orgId: ORG, role: 'owner' }),
   });
 });
 
@@ -118,7 +118,7 @@ describe('a sign-out that lands mid-refresh', () => {
       async (key: string, value: string) => {
         // Sign out from inside the keychain write, so the delete happens while
         // this one is still open and lands first.
-        if (key === 'steading.refreshToken' && signedOut === null) {
+        if (key === 'homefarm.refreshToken' && signedOut === null) {
           signedOut = signOut();
           await signedOut;
         }

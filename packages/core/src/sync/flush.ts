@@ -4,7 +4,7 @@ import {
   type MutationResult,
   type SyncRefusal,
   type SyncResponse,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 import { apiUrl, renewSession, type SessionRenewal, syncHeaders } from '../api';
 import { localStore, storeGeneration } from '../db/store';
 import type { QueuedMutation } from '../db/records';

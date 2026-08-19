@@ -1,11 +1,11 @@
 @echo off
 setlocal enabledelayedexpansion
-title Steading - reset my password
+title Evenglow - reset my password
 cd /d "%~dp0..\.."
 
 echo.
 echo   ============================================
-echo     STEADING - set a new password
+echo     EVENGLOW - set a new password
 echo   ============================================
 echo.
 echo   Use this when the app says your email or

@@ -1,4 +1,4 @@
-# Steading
+# Evenglow
 
 Offline-first farm operations — stock, iron, and chores under one roofline.
 
@@ -14,7 +14,7 @@ exactly once. See [Phase status](#phase-status).
 > PWA and no Next.js; a suggestion that assumes SSR, server components, or
 > framework API routes is aimed at a different project.
 
-Steading covers **everything a small mixed farm does** — the animals, the
+Evenglow covers **everything a small mixed farm does** — the animals, the
 growing, and the machinery that serves both.
 
 **Animals:** poultry, ratites, ruminants and camelids, pigs, rabbits, equines,
@@ -32,7 +32,7 @@ Planning docs, which are the source of truth:
 
 | Doc | What it settles |
 |---|---|
-| [`docs/Steading-Masterplan.md`](docs/Steading-Masterplan.md) | Decisions D1–D14, phases, security rubric |
+| [`docs/Evenglow-Masterplan.md`](docs/Evenglow-Masterplan.md) | Decisions D1–D14, phases, security rubric |
 | [`docs/UX-SPEC.md`](docs/UX-SPEC.md) | Rules R1–R10, tokens, voice |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | What is left, in the order it should be built |
 | [`docs/COMPETITIVE-ANALYSIS.md`](docs/COMPETITIVE-ANALYSIS.md) | Why each feature exists, and what a farm must do before it sees one |
@@ -137,7 +137,7 @@ pnpm mobile                                    # Metro, second window
 
 `pnpm farm` is the development back end for a machine with nothing installed on
 it. It generates `.env.local` with a random `AUTH_SECRET`, starts a MongoDB
-against `.steading-data/` (downloading one on first run — it does **not** need
+against `.homefarm-data/` (downloading one on first run — it does **not** need
 MongoDB installed, and it does **not** use the throwaway in-memory engine, so
 your farm survives closing the window), seeds the first owner account, and then
 runs Fastify on port 3001. If a MongoDB is already listening it uses that
@@ -310,7 +310,7 @@ data loss.
 ```bash
 pnpm test                                    # skips db-backed suites if no mongod
 MONGODB_TEST_URI=mongodb://localhost:27017 pnpm test    # runs everything
-STEADING_REQUIRE_DB=1 pnpm test              # no database is a failure, not a skip
+HOMEFARM_REQUIRE_DB=1 pnpm test              # no database is a failure, not a skip
 ```
 
 Suites split by what they need:
@@ -328,7 +328,7 @@ Suites split by what they need:
 - **`tests/e2e/`** — needs a build and Chromium. The Phase 2 exit gate.
 
 Without a database the mongod group **skips loudly**. CI sets
-`STEADING_REQUIRE_DB=1` against a `mongo:8` service container, so the gate
+`HOMEFARM_REQUIRE_DB=1` against a `mongo:8` service container, so the gate
 cannot be met by a suite that quietly did not run.
 
 ### The Phase 2 exit gate

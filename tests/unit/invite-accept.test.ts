@@ -5,7 +5,7 @@ import {
   looksLikeJoinCode,
   normalizeJoinCode,
   ROLE_WORDS,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 
 /**
  * Telling a join code from an invite link.

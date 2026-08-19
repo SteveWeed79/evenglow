@@ -115,7 +115,7 @@ export const VERIFIED_EMAIL_IS_FIXED =
   'That email is confirmed, so it cannot be changed here. Ask whoever runs the server.';
 
 /** Said when the new address belongs to somebody else. */
-export const EMAIL_TAKEN = `That email already has a ${PRODUCT_NAME} account.`;
+export const EMAIL_TAKEN = `That email is already registered with ${PRODUCT_NAME}.`;
 
 /** Said when the password offered alongside a new address is not the account’s. */
 export const WRONG_PASSWORD = 'That password is not right.';

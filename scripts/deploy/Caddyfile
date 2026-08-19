@@ -96,17 +96,17 @@ api.example.com {
 	#
 	# ## Outside the repository, on purpose
 	#
-	# `/var/lib/steading/dist` rather than anywhere under /opt/steading. The
+	# `/var/lib/homefarm/dist` rather than anywhere under /opt/homefarm. The
 	# deploy timer pulls into that tree every five minutes, so an APK kept there
 	# would be one `git clean` from gone — and a directory Caddy serves should
 	# not be a directory a deploy writes to.
 	#
-	#   sudo install -d -m 0755 /var/lib/steading/dist
+	#   sudo install -d -m 0755 /var/lib/homefarm/dist
 	#
 	# Put a build there with `scripts/deploy/publish-apk.sh`, which is where the
 	# naming and the symlink are explained.
 	handle_path /app/* {
-		root * /var/lib/steading/dist
+		root * /var/lib/homefarm/dist
 
 		# A link to a build that is no longer here lands on the install page
 		# rather than on nothing.
@@ -179,14 +179,14 @@ api.example.com {
 	}
 
 	# Caddy sets X-Forwarded-For itself. The service must be told to believe
-	# exactly one hop — `TRUSTED_PROXY_HOPS=1` in /etc/steading/api.env — or
+	# exactly one hop — `TRUSTED_PROXY_HOPS=1` in /etc/homefarm/api.env — or
 	# `request.ip` is 127.0.0.1 for every request and every rate limiter in the
 	# service counts the whole internet as one caller. See env.ts.
 
 	encode zstd gzip
 
 	log {
-		output file /var/log/caddy/steading.log {
+		output file /var/log/caddy/homefarm.log {
 			roll_size 10MiB
 			roll_keep 5
 		}

@@ -23,7 +23,7 @@ import {
   verifySchema,
   WRONG_PASSWORD,
   PRODUCT_NAME,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 import { authorizeCredentials } from '../auth/credentials';
 import { verifyGoogleIdToken } from '../auth/google';
 import { hashPassword, verifyPassword } from '../auth/password';
@@ -230,7 +230,7 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
        */
       if (await findUserByEmail(email)) {
         return reply.status(409).send({
-          error: `That email already has a ${PRODUCT_NAME} account. Sign in with it instead.`,
+          error: `That email is already registered with ${PRODUCT_NAME}. Sign in with it instead.`,
         });
       }
 
@@ -287,7 +287,7 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
         // the empty org back out rather than leaving the id spent.
         await deleteOrgIfEmpty(orgId).catch(() => undefined);
         return reply.status(409).send({
-          error: `That email already has a ${PRODUCT_NAME} account. Sign in with it instead.`,
+          error: `That email is already registered with ${PRODUCT_NAME}. Sign in with it instead.`,
         });
       }
 
@@ -966,7 +966,7 @@ function verifyEmailText(code: string, name: string, email: string): string {
   return [
     `Hello ${name},`,
     '',
-    `Someone set up a ${PRODUCT_NAME} farm account using ${email}.`,
+    `Someone set up a farm account on ${PRODUCT_NAME} using ${email}.`,
     'Type this code into the app to confirm the address:',
     '',
     `    ${code}`,
@@ -985,7 +985,7 @@ function verifyEmailText(code: string, name: string, email: string): string {
  *
  * Short, plain, and it names the app first — `PASSWORD-RECOVERY.md` §8.2 warns
  * that a reset from a domain the farm has never heard of is indistinguishable
- * from phishing, and until the sending domain says Steading the body is what
+ * from phishing, and until the sending domain says Evenglow the body is what
  * has to carry that. It also says what to do if it was not them, because a
  * reset code nobody asked for is the only warning an account gets.
  *

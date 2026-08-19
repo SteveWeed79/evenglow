@@ -148,7 +148,7 @@ console.log(`
 
   And it only answers while its own unit is running:
 
-      sudo systemctl status steading-ops
+      sudo systemctl status homefarm-ops
 
   Take it back with: pnpm ops:admin ${email} --revoke
 `);

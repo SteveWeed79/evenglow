@@ -7,7 +7,7 @@
 #
 #   ./scripts/backup-mongo.sh backup
 #   ./scripts/backup-mongo.sh list
-#   ./scripts/backup-mongo.sh restore steading-2026-08-05T02-00-00Z.age
+#   ./scripts/backup-mongo.sh restore homefarm-2026-08-05T02-00-00Z.age
 #
 # ## Why it encrypts to a public key
 #
@@ -20,7 +20,7 @@
 # failure to plan for. The realistic ones are a leaked access key and a bad
 # bucket policy, and only client-side encryption covers those.
 #
-# `age` is asymmetric, so STEADING_BACKUP_RECIPIENT is a *public* key and the
+# `age` is asymmetric, so HOMEFARM_BACKUP_RECIPIENT is a *public* key and the
 # private half never exists on this machine. **The server can write backups it
 # cannot read.** A box compromise does not become a history compromise. Keep the
 # identity file in a password manager; you need it once, on the worst day.
@@ -38,9 +38,9 @@
 # this way.
 #
 #   MONGODB_URI                  same variable the API uses
-#   STEADING_BACKUP_BUCKET       s3://bucket/prefix
-#   STEADING_BACKUP_RECIPIENT    age public key, age1...
-#   STEADING_BACKUP_IDENTITY     restore only: path to the age identity file
+#   HOMEFARM_BACKUP_BUCKET       s3://bucket/prefix
+#   HOMEFARM_BACKUP_RECIPIENT    age public key, age1...
+#   HOMEFARM_BACKUP_IDENTITY     restore only: path to the age identity file
 #
 # Rotation is an S3 lifecycle rule on the prefix, not logic in here. A bucket
 # setting cannot silently stop working the way a script can.
@@ -60,7 +60,7 @@ readonly ARCHIVE_FLOOR_BYTES=4096
 #
 # Beside the deploy's own markers, in the state directory one level above what
 # Caddy serves, so it is a note to the machine rather than a published file.
-MARKER="${STEADING_BACKUP_MARKER:-/var/lib/steading/.last-backup}"
+MARKER="${HOMEFARM_BACKUP_MARKER:-/var/lib/homefarm/.last-backup}"
 
 die() {
   printf '%s\n' "$*" >&2
@@ -96,12 +96,12 @@ backup() {
   need aws 'Install the AWS CLI.'
 
   : "${MONGODB_URI:?MONGODB_URI is not set}"
-  : "${STEADING_BACKUP_BUCKET:?STEADING_BACKUP_BUCKET is not set, e.g. s3://backups/steading}"
-  : "${STEADING_BACKUP_RECIPIENT:?STEADING_BACKUP_RECIPIENT is not set — the age PUBLIC key}"
+  : "${HOMEFARM_BACKUP_BUCKET:?HOMEFARM_BACKUP_BUCKET is not set, e.g. s3://backups/homefarm}"
+  : "${HOMEFARM_BACKUP_RECIPIENT:?HOMEFARM_BACKUP_RECIPIENT is not set — the age PUBLIC key}"
 
   WORK="$(mktemp -d)"
   local name plain sealed
-  name="steading-$(stamp)"
+  name="homefarm-$(stamp)"
   plain="$WORK/$name.gz"
   sealed="$WORK/$name.age"
 
@@ -116,12 +116,12 @@ backup() {
   size="$(stat -c%s "$plain" 2>/dev/null || stat -f%z "$plain")"
   (( size >= ARCHIVE_FLOOR_BYTES )) || die "Dump is only ${size} bytes. Refusing to upload it."
 
-  age --recipient "$STEADING_BACKUP_RECIPIENT" --output "$sealed" "$plain"
+  age --recipient "$HOMEFARM_BACKUP_RECIPIENT" --output "$sealed" "$plain"
 
   # Plaintext dies here rather than at exit, so it does not outlive the upload.
   shred --remove --zero "$plain"
 
-  aws s3 cp "$sealed" "${STEADING_BACKUP_BUCKET%/}/$name.age" --only-show-errors
+  aws s3 cp "$sealed" "${HOMEFARM_BACKUP_BUCKET%/}/$name.age" --only-show-errors
 
   # ── Did it land? ──────────────────────────────────────────────────────────
   #
@@ -134,7 +134,7 @@ backup() {
   # real restore test needs the age identity, and the whole point of the design
   # is that the private half never exists on this machine.
   local landed
-  landed="$(aws s3 ls "${STEADING_BACKUP_BUCKET%/}/$name.age" 2>/dev/null | awk '{print $3}')"
+  landed="$(aws s3 ls "${HOMEFARM_BACKUP_BUCKET%/}/$name.age" 2>/dev/null | awk '{print $3}')"
   [[ -n "$landed" ]] || die "Uploaded $name.age but it is not in the bucket. Check the prefix and the bucket policy."
   (( landed >= ARCHIVE_FLOOR_BYTES )) || die "$name.age is only ${landed} bytes in the bucket. Refusing to call that a backup."
 
@@ -156,8 +156,8 @@ backup() {
 }
 
 list() {
-  : "${STEADING_BACKUP_BUCKET:?STEADING_BACKUP_BUCKET is not set}"
-  aws s3 ls "${STEADING_BACKUP_BUCKET%/}/" | sort
+  : "${HOMEFARM_BACKUP_BUCKET:?HOMEFARM_BACKUP_BUCKET is not set}"
+  aws s3 ls "${HOMEFARM_BACKUP_BUCKET%/}/" | sort
 }
 
 # Restore is deliberately awkward: it names one archive, refuses to guess, and
@@ -172,15 +172,15 @@ restore() {
   need aws 'Install the AWS CLI.'
 
   : "${MONGODB_URI:?MONGODB_URI is not set — point it at the TARGET database}"
-  : "${STEADING_BACKUP_BUCKET:?STEADING_BACKUP_BUCKET is not set}"
-  : "${STEADING_BACKUP_IDENTITY:?STEADING_BACKUP_IDENTITY is not set — the age private key file}"
-  [[ -r "$STEADING_BACKUP_IDENTITY" ]] || die "Cannot read $STEADING_BACKUP_IDENTITY"
+  : "${HOMEFARM_BACKUP_BUCKET:?HOMEFARM_BACKUP_BUCKET is not set}"
+  : "${HOMEFARM_BACKUP_IDENTITY:?HOMEFARM_BACKUP_IDENTITY is not set — the age private key file}"
+  [[ -r "$HOMEFARM_BACKUP_IDENTITY" ]] || die "Cannot read $HOMEFARM_BACKUP_IDENTITY"
 
   WORK="$(mktemp -d)"
   local sealed="$WORK/archive.age" plain="$WORK/archive.gz"
 
-  aws s3 cp "${STEADING_BACKUP_BUCKET%/}/$key" "$sealed" --only-show-errors
-  age --decrypt --identity "$STEADING_BACKUP_IDENTITY" --output "$plain" "$sealed"
+  aws s3 cp "${HOMEFARM_BACKUP_BUCKET%/}/$key" "$sealed" --only-show-errors
+  age --decrypt --identity "$HOMEFARM_BACKUP_IDENTITY" --output "$plain" "$sealed"
 
   printf 'Restoring %s into %s\n' "$key" "${MONGODB_URI%%\?*}"
   mongorestore --uri="$MONGODB_URI" --archive="$plain" --gzip --oplogReplay

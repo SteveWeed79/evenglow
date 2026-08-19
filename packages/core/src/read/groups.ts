@@ -5,7 +5,7 @@ import {
   flockCreateSchema,
   idMintedAt,
   type Species,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 import { localStore } from '../db/store';
 
 /**

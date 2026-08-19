@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { newId } from '@steading/contracts';
-import { listInventory, listMachines } from '@steading/core/read/iron';
+import { newId } from '@homefarm/contracts';
+import { listInventory, listMachines } from '@homefarm/core/read/iron';
 import {
   Chip,
   Failure,

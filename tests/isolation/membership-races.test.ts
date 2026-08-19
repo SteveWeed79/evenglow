@@ -1,8 +1,8 @@
 import { ulid } from 'ulid';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import type { UserDoc } from '@steading/api/db/identity';
-import type { InviteDoc } from '@steading/api/db/invites';
-import { resetOrgLanes } from '@steading/api/org-lane';
+import type { UserDoc } from '@homefarm/api/db/identity';
+import type { InviteDoc } from '@homefarm/api/db/invites';
+import { resetOrgLanes } from '@homefarm/api/org-lane';
 import { startTestDb } from '../support/mongo';
 
 /**
@@ -21,11 +21,11 @@ import { startTestDb } from '../support/mongo';
  * self-hosted box the operator can fix `role` in Mongo — the product cannot.
  */
 
-const harness = await startTestDb('steading_membership');
+const harness = await startTestDb('homefarm_membership');
 
 if (harness) {
   process.env.MONGODB_URI = harness.uri;
-  process.env.MONGODB_DB = 'steading_membership';
+  process.env.MONGODB_DB = 'homefarm_membership';
 }
 
 const SECRET = 'a-test-secret-long-enough-for-hs256-abcdef';
@@ -40,20 +40,20 @@ const email = (id: string): string => `u-${id}@example.test`.toLowerCase();
 const describeDb = harness ? describe : describe.skip;
 
 async function server() {
-  const { buildServer } = await import('@steading/api/server');
-  const { readEnv } = await import('@steading/api/env');
+  const { buildServer } = await import('@homefarm/api/server');
+  const { readEnv } = await import('@homefarm/api/env');
   return buildServer(
     readEnv({
       AUTH_SECRET: SECRET,
       MONGODB_URI: harness!.uri,
-      MONGODB_DB: 'steading_membership',
+      MONGODB_DB: 'homefarm_membership',
       CORS_ORIGINS: 'https://app.test',
     }),
   );
 }
 
 async function tokenFor(userId: string, role: 'owner' | 'admin' | 'hand') {
-  const { startSession } = await import('@steading/api/auth/refresh');
+  const { startSession } = await import('@homefarm/api/auth/refresh');
   const { accessToken } = await startSession({ userId, orgId: ORG, role }, SECRET);
   return `Bearer ${accessToken}`;
 }
@@ -74,7 +74,7 @@ beforeEach(async () => {
   // The lane is a module-level map, so a suite must not inherit another's.
   resetOrgLanes();
 
-  const { hashPassword } = await import('@steading/api/auth/password');
+  const { hashPassword } = await import('@homefarm/api/auth/password');
   const hash = await hashPassword(PASSWORD);
 
   for (const name of ['users', 'orgs', 'invites', 'joinCodes', 'refreshTokens']) {
@@ -259,7 +259,7 @@ describeDb('a credential spent on an account that could not be made', () => {
 
     // The address is claimed after the route has already looked and found
     // nothing — which is what losing the race means.
-    const { hashInviteToken } = await import('@steading/api/db/invites');
+    const { hashInviteToken } = await import('@homefarm/api/db/invites');
     const original = harness!.db.collection<UserDoc>('users');
     await original.insertOne({
       _id: ulid(),
@@ -337,7 +337,7 @@ describeDb('a credential spent on an account that could not be made', () => {
    */
   it('cannot take back somebody else’s acceptance', async () => {
     const { acceptInvite, unacceptInvite, hashInviteToken } = await import(
-      '@steading/api/db/invites'
+      '@homefarm/api/db/invites'
     );
     const app = await server();
 

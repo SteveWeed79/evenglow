@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId } from '@steading/contracts';
+import { newId } from '@homefarm/contracts';
 import {
   bucketStart,
   bucketsBack,
@@ -7,8 +7,8 @@ import {
   eggTrend,
   feedTrend,
   produceTrend,
-} from '@steading/core/read/trend';
-import { enqueue } from '@steading/core/sync/queue';
+} from '@homefarm/core/read/trend';
+import { enqueue } from '@homefarm/core/sync/queue';
 import { freshStore } from '../support/store';
 
 /**

@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
-import { MORTALITY_CAUSES } from '@steading/contracts';
-import { listGroups, lossesByGroup } from '@steading/core/read/groups';
+import { MORTALITY_CAUSES } from '@homefarm/contracts';
+import { listGroups, lossesByGroup } from '@homefarm/core/read/groups';
 import {
   Choice,
   Failure,

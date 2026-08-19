@@ -1,9 +1,9 @@
-# One deployment attempt. Started by steading-deploy.timer, not by hand —
-# though `sudo systemctl start steading-deploy` is a fine way to force one.
+# One deployment attempt. Started by homefarm-deploy.timer, not by hand —
+# though `sudo systemctl start homefarm-deploy` is a fine way to force one.
 #
-#   sudo cp scripts/deploy/steading-deploy.{service,timer} /etc/systemd/system/
+#   sudo cp scripts/deploy/homefarm-deploy.{service,timer} /etc/systemd/system/
 #   sudo systemctl daemon-reload
-#   sudo systemctl enable --now steading-deploy.timer
+#   sudo systemctl enable --now homefarm-deploy.timer
 #
 # ## Why the box pulls instead of GitHub pushing
 #
@@ -17,7 +17,7 @@
 # offline by design, that is not a cost.
 
 [Unit]
-Description=Deploy Steading from the release branch
+Description=Deploy Evenglow from the release branch
 Documentation=https://github.com/SteveWeed79/steading/blob/main/docs/DEPLOY-THE-SERVER.md
 After=network-online.target
 Wants=network-online.target
@@ -25,11 +25,11 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 
-# Root, because it restarts steading-api and chowns the checkout. It is a
+# Root, because it restarts homefarm-api and chowns the checkout. It is a
 # scheduled job rather than a listening service, so it has no attack surface of
 # its own beyond the repository it pulls from.
 User=root
-ExecStart=/opt/steading/scripts/deploy/deploy.sh
+ExecStart=/opt/homefarm/scripts/deploy/deploy.sh
 
 # A pull that hangs on a network that is not coming back must not sit there
 # until the next one starts underneath it.
@@ -37,4 +37,4 @@ TimeoutStartSec=600
 
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=steading-deploy
+SyslogIdentifier=homefarm-deploy

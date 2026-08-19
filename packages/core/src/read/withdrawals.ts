@@ -5,7 +5,7 @@ import {
   MEDICATION_ROUTES,
   type TreatmentRecord,
   type WithdrawalKind,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 import { localStore } from '../db/store';
 
 /**

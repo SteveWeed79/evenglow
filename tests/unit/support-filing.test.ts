@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fileTicket, resetFiling, type SupportConfig } from '@steading/api/support/github';
-import type { SupportBundle } from '@steading/contracts';
+import { fileTicket, resetFiling, type SupportConfig } from '@homefarm/api/support/github';
+import type { SupportBundle } from '@homefarm/contracts';
 
 /**
  * Two reports of one fault must become one issue and a comment.
@@ -38,7 +38,7 @@ import type { SupportBundle } from '@steading/contracts';
 const CONFIG: SupportConfig = {
   token: 'a-token',
   owner: 'a-farm',
-  repo: 'steading',
+  repo: 'homefarm',
   acceptRecords: false,
 };
 

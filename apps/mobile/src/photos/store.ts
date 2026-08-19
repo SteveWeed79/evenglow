@@ -7,7 +7,7 @@ import {
   requestCameraPermissionsAsync,
   type ImagePickerAsset,
 } from 'expo-image-picker';
-import { localStore } from '@steading/core/db/store';
+import { localStore } from '@homefarm/core/db/store';
 
 /**
  * Where a photo's bytes live, and how one is taken.

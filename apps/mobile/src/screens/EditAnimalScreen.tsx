@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { SPECIES_TRAITS } from '@steading/contracts';
-import { listAnimals } from '@steading/core/read/animals';
+import { SPECIES_TRAITS } from '@homefarm/contracts';
+import { listAnimals } from '@homefarm/core/read/animals';
 import {
   Chip,
   Confirm,

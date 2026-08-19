@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId } from '@steading/contracts';
-import { listHistory } from '@steading/core/read/history';
-import { listTasks } from '@steading/core/read/tasks';
-import { enqueue } from '@steading/core/sync/queue';
+import { newId } from '@homefarm/contracts';
+import { listHistory } from '@homefarm/core/read/history';
+import { listTasks } from '@homefarm/core/read/tasks';
+import { enqueue } from '@homefarm/core/sync/queue';
 import { freshStore } from '../support/store';
 import { mount, routeProps } from '../support/screen';
 import { GroupScreen } from '../../apps/mobile/src/screens/GroupScreen';

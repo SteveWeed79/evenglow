@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { verifyGoogleIdToken } from '@steading/api/auth/google';
-import { readEnv } from '@steading/api/env';
+import { verifyGoogleIdToken } from '@homefarm/api/auth/google';
+import { readEnv } from '@homefarm/api/env';
 
 /**
  * Verifying a Google ID token (A2.4).

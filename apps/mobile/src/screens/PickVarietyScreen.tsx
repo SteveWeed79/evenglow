@@ -18,15 +18,15 @@ import {
   varietyPayload,
   type VarietyTiming,
   WINDOW_WORDS,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 import {
   listBeds,
   listVarieties,
   readSite,
   type Site,
   type Variety,
-} from '@steading/core/read/growing';
-import { describeLogFailure } from '@steading/core/sync/failure';
+} from '@homefarm/core/read/growing';
+import { describeLogFailure } from '@homefarm/core/sync/failure';
 import { Secondary } from '../components/Form';
 import { Icon } from '../components/Icon';
 import { Loading, Missing } from '../components/Missing';

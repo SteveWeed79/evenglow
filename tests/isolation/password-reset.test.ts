@@ -1,7 +1,7 @@
 import { ulid } from 'ulid';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { RESET_MAX_ATTEMPTS, normalizeResetCode } from '@steading/contracts';
-import type { UserDoc } from '@steading/api/db/identity';
+import { RESET_MAX_ATTEMPTS, normalizeResetCode } from '@homefarm/contracts';
+import type { UserDoc } from '@homefarm/api/db/identity';
 import { startTestDb } from '../support/mongo';
 
 /**
@@ -23,11 +23,11 @@ import { startTestDb } from '../support/mongo';
  * changed, so everything looks fixed.
  */
 
-const harness = await startTestDb('steading_password_reset');
+const harness = await startTestDb('homefarm_password_reset');
 
 if (harness) {
   process.env.MONGODB_URI = harness.uri;
-  process.env.MONGODB_DB = 'steading_password_reset';
+  process.env.MONGODB_DB = 'homefarm_password_reset';
 }
 
 const describeDb = harness ? describe : describe.skip;
@@ -48,13 +48,13 @@ const EMAIL = 'keeper@example.test';
 const MAIL = { EMAIL_PROVIDER: 'log', EMAIL_FROM: 'Evenglow <hello@example.test>' };
 
 async function buildApp(over: Record<string, string> = {}) {
-  const { buildServer } = await import('@steading/api/server');
-  const { readEnv } = await import('@steading/api/env');
+  const { buildServer } = await import('@homefarm/api/server');
+  const { readEnv } = await import('@homefarm/api/env');
   return buildServer(
     readEnv({
       AUTH_SECRET: SECRET,
       MONGODB_URI: harness!.uri,
-      MONGODB_DB: 'steading_password_reset',
+      MONGODB_DB: 'homefarm_password_reset',
       ...MAIL,
       ...over,
     }),
@@ -70,7 +70,7 @@ async function post(path: string, payload: unknown, over: Record<string, string>
 
 /** The code as it was minted, read from the only place it exists in the clear. */
 async function theCode(): Promise<string> {
-  const { mintResetCode } = await import('@steading/api/db/password-resets');
+  const { mintResetCode } = await import('@homefarm/api/db/password-resets');
   // Not readable from the row by design — the row holds a SHA-256. So the
   // suite mints its own and installs it, which is what a test of redemption
   // needs and what a test of storage must never be able to do.
@@ -78,7 +78,7 @@ async function theCode(): Promise<string> {
 }
 
 async function installCode(code: string, over: Partial<{ expiresAt: Date; attempts: number }> = {}) {
-  const { hashResetCode, replaceResetCode } = await import('@steading/api/db/password-resets');
+  const { hashResetCode, replaceResetCode } = await import('@homefarm/api/db/password-resets');
   const now = new Date();
   await replaceResetCode({
     _id: hashResetCode(normalizeResetCode(code)),
@@ -101,8 +101,8 @@ async function signedIn(): Promise<string> {
 }
 
 beforeEach(async () => {
-  const { hashPassword } = await import('@steading/api/auth/password');
-  const { insertOrg, insertUser } = await import('@steading/api/db/identity');
+  const { hashPassword } = await import('@homefarm/api/auth/password');
+  const { insertOrg, insertUser } = await import('@homefarm/api/db/identity');
 
   for (const name of ['users', 'orgs', 'passwordResets', 'refreshTokens']) {
     await harness!.db.collection(name).deleteMany({});
@@ -385,8 +385,8 @@ describeDb('using a code', () => {
    * structural stops this and the filter has to.
    */
   it('cannot be spent on somebody elses account', async () => {
-    const { hashPassword } = await import('@steading/api/auth/password');
-    const { insertOrg, insertUser } = await import('@steading/api/db/identity');
+    const { hashPassword } = await import('@homefarm/api/auth/password');
+    const { insertOrg, insertUser } = await import('@homefarm/api/db/identity');
     const otherOrg = ulid();
     const other = ulid();
     await insertOrg({ _id: otherOrg, name: 'Far Field', createdAt: new Date() });

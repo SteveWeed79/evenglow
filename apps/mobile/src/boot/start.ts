@@ -1,17 +1,17 @@
-import { currentAccessToken, setClientVersion, setSessionRefresher } from '@steading/core/api';
-import { localStore } from '@steading/core/db/store';
-import { startSync, stopSync } from '@steading/core/sync/engine';
-import { setPhotoBytes } from '@steading/core/sync/photos';
-import { setStorageBacking } from '@steading/core/sync/storage';
+import { currentAccessToken, setClientVersion, setSessionRefresher } from '@homefarm/core/api';
+import { localStore } from '@homefarm/core/db/store';
+import { startSync, stopSync } from '@homefarm/core/sync/engine';
+import { setPhotoBytes } from '@homefarm/core/sync/photos';
+import { setStorageBacking } from '@homefarm/core/sync/storage';
 import { ensureLocalOrgId } from '../auth/local-org';
 import { APP_VERSION } from '../version';
 import { type CachedClaims, refreshSession } from '../auth/session';
 import { deviceBytes } from '../photos/bytes';
 import { recoverPendingPhoto } from '../photos/store';
-import { enqueue } from '@steading/core/sync/queue';
+import { enqueue } from '@homefarm/core/sync/queue';
 import { openLocalStore } from '../db/store';
 import { startTriggers, type TriggerHandles } from '../sync/triggers';
-import { reportEngineError } from '@steading/core/sync/report';
+import { reportEngineError } from '@homefarm/core/sync/report';
 import { type ApiFault, configureApi } from './config';
 
 /**

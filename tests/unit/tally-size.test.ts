@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { TALLY, tallySize } from '@steading/mobile/theme/tally';
-import { TYPE } from '@steading/mobile/theme/tokens';
+import { TALLY, tallySize } from '@homefarm/mobile/theme/tally';
+import { TYPE } from '@homefarm/mobile/theme/tokens';
 
 /**
  * How big the numeral is, which was wrong on every device that is not a

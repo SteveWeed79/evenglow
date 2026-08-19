@@ -50,7 +50,7 @@ jobs:
 
     services:
       # A real mongod, so the isolation and idempotency suites actually run.
-      # STEADING_REQUIRE_DB below turns "no database" into a failure rather
+      # HOMEFARM_REQUIRE_DB below turns "no database" into a failure rather
       # than a skip — the Phase 1 exit gate cannot be met by a suite that
       # quietly did not execute.
       mongo:
@@ -65,9 +65,9 @@ jobs:
 
     env:
       MONGODB_TEST_URI: mongodb://localhost:27017
-      STEADING_REQUIRE_DB: '1'
+      HOMEFARM_REQUIRE_DB: '1'
       MONGODB_URI: mongodb://localhost:27017
-      MONGODB_DB: steading
+      MONGODB_DB: homefarm
       AUTH_SECRET: ci-only-secret-not-used-anywhere-else
 
     steps:
@@ -145,7 +145,7 @@ jobs:
   # declared — the file says so itself — and it is the right trade, because
   # unwinding it re-breaks the Windows Android build over a CMake path-length
   # wall. But the Docker build and `deploy.sh` both run
-  # `pnpm install --filter "@steading/api..."`, so an undeclared import resolves
+  # `pnpm install --filter "@homefarm/api..."`, so an undeclared import resolves
   # everywhere a developer looks — local dev, `pnpm test`, the whole `verify`
   # job above — and is absent exactly where the service actually runs. There is
   # no compile step to catch it, so the failure is `MODULE_NOT_FOUND` at boot.
@@ -175,7 +175,7 @@ jobs:
       - name: Build the API image
         env:
           DOCKER_BUILDKIT: '1'
-        run: docker build -f apps/api/Dockerfile -t steading-api:ci .
+        run: docker build -f apps/api/Dockerfile -t homefarm-api:ci .
 
       # ── Booting it is the half that matters ──────────────────────────────
       #
@@ -194,10 +194,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          docker run -d --name steading-api-ci -p 3001:3001 \
+          docker run -d --name homefarm-api-ci -p 3001:3001 \
             -e AUTH_SECRET=ci-only-secret-not-used-anywhere-else \
             -e MONGODB_URI=mongodb://127.0.0.1:27017 \
-            steading-api:ci
+            homefarm-api:ci
 
           for attempt in $(seq 1 30); do
             if curl -fsS --max-time 3 http://127.0.0.1:3001/health >/dev/null 2>&1; then
@@ -207,9 +207,9 @@ jobs:
 
             # A container that has already exited will never answer, so say so
             # now rather than after thirty seconds of silence.
-            if [ "$(docker inspect -f '{{.State.Running}}' steading-api-ci)" != "true" ]; then
+            if [ "$(docker inspect -f '{{.State.Running}}' homefarm-api-ci)" != "true" ]; then
               echo "::error::The API image built but the process did not stay up."
-              docker logs steading-api-ci
+              docker logs homefarm-api-ci
               exit 1
             fi
 
@@ -217,7 +217,7 @@ jobs:
           done
 
           echo "::error::The API image booted but never answered /health."
-          docker logs steading-api-ci
+          docker logs homefarm-api-ci
           exit 1
 
       # ── The other half of the split (P2-4) ───────────────────────────────
@@ -242,7 +242,7 @@ jobs:
 
           if [ "$code" != "503" ]; then
             echo "::error::/ready answered '${code}' with no database behind it. It must refuse."
-            docker logs steading-api-ci
+            docker logs homefarm-api-ci
             exit 1
           fi
 
@@ -250,7 +250,7 @@ jobs:
 
       - name: What it said
         if: always()
-        run: docker logs steading-api-ci 2>&1 | tail -40 || true
+        run: docker logs homefarm-api-ci 2>&1 | tail -40 || true
 
   # ── What the server is allowed to run ───────────────────────────────────────
   #
@@ -268,7 +268,7 @@ jobs:
   # internet.
   #
   # Pulling inverts it. The box reaches out on a timer
-  # (`scripts/deploy/steading-deploy.timer`), nothing inbound is opened, and
+  # (`scripts/deploy/homefarm-deploy.timer`), nothing inbound is opened, and
   # there is no key anywhere that a leaked GitHub token would hand over. The
   # cost is latency — up to five minutes — which for an app whose clients queue
   # offline by design is not a cost at all.

@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { expectedHarvestAt, growingSeasonDays, plantingWords } from '@steading/contracts';
-import { type Bed, occupants, type Planting } from '@steading/core/read/growing';
-import { listVarieties } from '@steading/core/read/growing';
+import { expectedHarvestAt, growingSeasonDays, plantingWords } from '@homefarm/contracts';
+import { type Bed, occupants, type Planting } from '@homefarm/core/read/growing';
+import { listVarieties } from '@homefarm/core/read/growing';
 import { Primary } from '../components/Form';
 import { Grid } from '../components/Grid';
 import { Icon } from '../components/Icon';

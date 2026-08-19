@@ -13,9 +13,9 @@ import {
   subscriptionSchema,
   syncRefusalMessage,
   type Subscription,
-} from '@steading/contracts';
-import { readPlayConfig, subscriptionFrom } from '@steading/api/billing/play';
-import { readEnv } from '@steading/api/env';
+} from '@homefarm/contracts';
+import { readPlayConfig, subscriptionFrom } from '@homefarm/api/billing/play';
+import { readEnv } from '@homefarm/api/env';
 
 /**
  * What a subscription buys, and what happens when it stops (D13).
@@ -236,7 +236,7 @@ describe('the stored shape', () => {
 describe('what Google says, and what it means', () => {
   const purchase = (state: string, expiry?: string) => ({
     subscriptionState: state,
-    lineItems: [{ productId: 'steading.year', ...(expiry === undefined ? {} : { expiryTime: expiry }) }],
+    lineItems: [{ productId: 'homefarm.year', ...(expiry === undefined ? {} : { expiryTime: expiry }) }],
   });
 
   it('treats an active subscription as active', () => {
@@ -309,7 +309,7 @@ describe('what Google says, and what it means', () => {
   it('records the rail, so a second one is additive rather than a migration', () => {
     expect(subscriptionFrom(purchase('SUBSCRIPTION_STATE_ACTIVE'), NOW)).toMatchObject({
       source: 'play',
-      productId: 'steading.year',
+      productId: 'homefarm.year',
       updatedAt: NOW,
     });
   });

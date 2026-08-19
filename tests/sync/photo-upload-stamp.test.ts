@@ -1,9 +1,9 @@
 import { ulid } from 'ulid';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import type { SessionClaims } from '@steading/api/auth/claims';
-import { scopedOn } from '@steading/api/db/scoped';
-import { applyBatch } from '@steading/api/sync/apply';
-import { readSnapshotPage } from '@steading/api/sync/snapshot';
+import type { SessionClaims } from '@homefarm/api/auth/claims';
+import { scopedOn } from '@homefarm/api/db/scoped';
+import { applyBatch } from '@homefarm/api/sync/apply';
+import { readSnapshotPage } from '@homefarm/api/sync/snapshot';
 import { makeMutation } from '../support/fixtures';
 import { startTestDb } from '../support/mongo';
 
@@ -23,7 +23,7 @@ import { startTestDb } from '../support/mongo';
  * the other devices never receive would fix nothing.
  */
 
-const harness = await startTestDb('steading_photo_stamp');
+const harness = await startTestDb('homefarm_photo_stamp');
 const describeDb = harness ? describe : describe.skip;
 
 const ORG = ulid();

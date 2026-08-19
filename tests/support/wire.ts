@@ -1,9 +1,9 @@
-import type { SessionClaims } from '@steading/api/auth/claims';
-import type { Scoped } from '@steading/api/db/scoped';
-import { applyBatch } from '@steading/api/sync/apply';
-import { readSnapshotPage } from '@steading/api/sync/snapshot';
-import type { SyncTransport } from '@steading/core/sync/flush';
-import type { PullTransport } from '@steading/core/sync/pull';
+import type { SessionClaims } from '@homefarm/api/auth/claims';
+import type { Scoped } from '@homefarm/api/db/scoped';
+import { applyBatch } from '@homefarm/api/sync/apply';
+import { readSnapshotPage } from '@homefarm/api/sync/snapshot';
+import type { SyncTransport } from '@homefarm/core/sync/flush';
+import type { PullTransport } from '@homefarm/core/sync/pull';
 
 /**
  * The wire between a device and the real server, minus HTTP.

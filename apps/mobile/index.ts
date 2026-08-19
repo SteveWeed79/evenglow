@@ -1,5 +1,5 @@
 import { getRandomValues } from 'expo-crypto';
-import { configureIds } from '@steading/contracts';
+import { configureIds } from '@homefarm/contracts';
 
 /**
  * The device's random source, installed before anything can mint an ID.

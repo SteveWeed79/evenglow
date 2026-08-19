@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId, readableRows, type PulledRow } from '@steading/contracts';
-import { pullOnce } from '@steading/core/sync/pull';
-import { localStore } from '@steading/core/db/store';
+import { newId, readableRows, type PulledRow } from '@homefarm/contracts';
+import { pullOnce } from '@homefarm/core/sync/pull';
+import { localStore } from '@homefarm/core/db/store';
 import {
   deleteMetaKey,
   freshStore,

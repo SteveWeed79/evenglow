@@ -82,7 +82,7 @@ if (wanted === null) {
  * room to spare for a person running this by hand while wondering why the
  * shelf has not moved.
  *
- * `GITHUB_TOKEN` is honoured when `/etc/steading/deploy.env` sets one — needed
+ * `GITHUB_TOKEN` is honoured when `/etc/homefarm/deploy.env` sets one — needed
  * only if this repository is ever made private, since a public repository's
  * releases are readable by anybody.
  */
@@ -90,7 +90,7 @@ const headers = {
   accept: 'application/vnd.github+json',
   'x-github-api-version': '2022-11-28',
   // GitHub refuses a request without one.
-  'user-agent': 'steading-deploy',
+  'user-agent': 'homefarm-deploy',
 };
 if (process.env.GITHUB_TOKEN) headers.authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
 

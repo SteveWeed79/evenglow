@@ -35,7 +35,7 @@ import {
   productionLogCreateSchema,
   shearingCreateSchema,
   weightCreateSchema,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 import { z } from 'zod';
 import { localStore } from '../db/store';
 import { listAnimals } from '../read/animals';

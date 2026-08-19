@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { careDues, careIntervalDays, newId } from '@steading/contracts';
-import { listGroups } from '@steading/core/read/groups';
-import { enqueue } from '@steading/core/sync/queue';
+import { careDues, careIntervalDays, newId } from '@homefarm/contracts';
+import { listGroups } from '@homefarm/core/read/groups';
+import { enqueue } from '@homefarm/core/sync/queue';
 import { freshStore } from '../support/store';
 import { mount, routeProps } from '../support/screen';
 import { CareRoutineScreen } from '../../apps/mobile/src/screens/CareRoutineScreen';

@@ -5,9 +5,9 @@ import {
   newId,
   nextWindow,
   timingOf,
-} from '@steading/contracts';
-import { listPlantings, listVarieties } from '@steading/core/read/growing';
-import { enqueue } from '@steading/core/sync/queue';
+} from '@homefarm/contracts';
+import { listPlantings, listVarieties } from '@homefarm/core/read/growing';
+import { enqueue } from '@homefarm/core/sync/queue';
 import { freshStore } from '../support/store';
 import { mount, routeProps } from '../support/screen';
 import { PickVarietyScreen } from '../../apps/mobile/src/screens/PickVarietyScreen';

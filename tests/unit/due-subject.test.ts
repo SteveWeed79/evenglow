@@ -8,7 +8,7 @@ import {
   taskDues,
   todayList,
   withdrawalDue,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 
 /**
  * Which rows are about which records, and why that is not `subject`.

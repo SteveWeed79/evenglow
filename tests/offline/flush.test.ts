@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { discardRejected, listRejected, retryRejected } from '@steading/core/sync/inbox';
-import { diagnostics, subscribe, type SyncState } from '@steading/core/sync/engine';
-import { flushOnce, MAX_ATTEMPTS, type SyncTransport } from '@steading/core/sync/flush';
-import { checkIntegrity, enqueue, queueDepth } from '@steading/core/sync/queue';
-import { MAX_BATCH_SIZE, newId, type Mutation, type MutationStatus } from '@steading/contracts';
-import { localStore } from '@steading/core/db/store';
+import { discardRejected, listRejected, retryRejected } from '@homefarm/core/sync/inbox';
+import { diagnostics, subscribe, type SyncState } from '@homefarm/core/sync/engine';
+import { flushOnce, MAX_ATTEMPTS, type SyncTransport } from '@homefarm/core/sync/flush';
+import { checkIntegrity, enqueue, queueDepth } from '@homefarm/core/sync/queue';
+import { MAX_BATCH_SIZE, newId, type Mutation, type MutationStatus } from '@homefarm/contracts';
+import { localStore } from '@homefarm/core/db/store';
 import { freshStore, readOutboxBySeq } from '../support/store';
 
 function eggLog() {

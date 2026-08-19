@@ -1,5 +1,5 @@
 import { Text, View } from 'react-native';
-import { readFarmNumbers } from '@steading/core/read/farm-numbers';
+import { readFarmNumbers } from '@homefarm/core/read/farm-numbers';
 import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';

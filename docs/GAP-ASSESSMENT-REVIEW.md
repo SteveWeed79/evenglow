@@ -133,7 +133,7 @@ test caught.
 and `lastDoneAtDate` are two more. Every completion overwrites the last, so a
 recurring job has a *current state* and no history.
 
-**`Steading-Masterplan.md` lists "machine history export — full service record
+**`Evenglow-Masterplan.md` lists "machine history export — full service record
 for one machine, for resale" as a feature.** There is no full service record to
 export. A machine serviced every 250 hours for six years can show one date.
 That is not a missing nicety, it is a promise the schema cannot keep.
