@@ -31,11 +31,18 @@ import { boardPage } from './page';
  *
  * ## Auth, and the three conditions on it
  *
- * A **password on the existing `admin` role**. Not a second auth system:
- * `ROLES` already has `owner | admin | hand`, `authorizeCredentials` is the one
- * path no user avoids, and this reuses both. An admin account is made the way
- * any account is made and its password comes out of a manager, never typed —
- * the whole thing rests on that entropy.
+ * A **password on an ordinary account, plus a flag only a shell can set**. Not
+ * a second auth system: `authorizeCredentials` is the one path no user avoids
+ * and this reuses it, so an operator is made the way any account is made and
+ * their password comes out of a manager, never typed.
+ *
+ * **The flag is not a role, and the first version of this used one.** It read
+ * `role === 'admin'` — but `admin` is a *farm* role, the manager an owner
+ * appoints on the Members screen, and `assignableRoles` lets an owner mint one
+ * and an admin mint another. So the gate on the one surface that reads every
+ * farm was a permission farmers hand out. `operatorSince` is set by
+ * `pnpm ops:admin` and by nothing on the wire; see `requireAdmin` and
+ * `db/identity.ts`.
  *
  * **Its own rate limiter.** The existing registrations are per-route
  * `scope.register` calls, so a new route inherits nothing; sign-in here gets
@@ -67,11 +74,11 @@ const signInRequest = z
   .strict();
 
 /**
- * An admin, or nobody.
+ * An operator of this server, or nobody.
  *
- * Re-derived from the token on every request rather than trusted from sign-in
- * (invariant 8), and the role is checked here rather than assumed from the fact
- * that a token exists — every farmer on the server has one of those.
+ * Re-derived from the database on every request rather than trusted from
+ * sign-in (invariant 8), and the grant is checked here rather than assumed from
+ * the fact that a token exists — every farmer on the server has one of those.
  */
 async function requireAdmin(request: FastifyRequest, env: Env): Promise<void> {
   const token = bearerFrom(request.headers.authorization);

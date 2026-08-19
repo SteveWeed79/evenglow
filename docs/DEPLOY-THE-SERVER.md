@@ -994,21 +994,50 @@ buttons for `promo:new` and `farm:grant`.
 unless the unit is running, and even then it binds `127.0.0.1`, so a box that
 never adds the Caddy block below has no admin surface reachable from anywhere.
 
-### An admin account
+### An operator account
 
-The board admits `role: 'admin'` and nobody else — an owner's token is valid,
-signed by this server, and still refused. Promote an existing account:
+The board admits **operators** and nobody else — an owner's token is valid,
+signed by this server, and still refused. Name one:
 
 ```
-mongosh "$MONGODB_URI" --eval '
-  db.getSiblingDB("steading").users.updateOne(
-    { email: "you@example.com" }, { $set: { role: "admin" } })'
+cd /opt/steading
+sudo pnpm ops:admin you@example.com     # the account must already exist
+sudo pnpm ops:admin --list              # who has it now
 ```
 
-**Its password comes out of a password manager and is never typed.** The whole
-control rests on that entropy: the rate limiter bounds guessing, and the
-`admin` role bounds what a farmer's account can reach, but neither helps against
-a password somebody chose.
+> #### This page used to tell you to run a mongosh line, and it was wrong twice
+>
+> It said the board admits `role: 'admin'` and gave you:
+>
+> ```
+> db.getSiblingDB("steading").users.updateOne(
+>   { email: "you@example.com" }, { $set: { role: "admin" } })
+> ```
+>
+> **Do not run it.** Three things are wrong with it now, and the second is the
+> one that costs you something:
+>
+> 1. **It grants nothing.** The board reads `operatorSince`, not the role —
+>    `admin` is a *farm* role any owner can hand out from the Members screen, so
+>    gating a cross-farm surface on it was an escalation. See `OPERATOR.md` §3.
+> 2. **It demotes you.** `db:seed` makes you an `owner`; that `$set` makes you an
+>    `admin`. On a single-farm box you were the only owner, so the farm now has
+>    **zero**, and no remaining member can put it back —
+>    `assignableRoles('admin')` is `['admin', 'hand']`, and promoting yourself is
+>    refused as `self`. Repairing it needs another raw write.
+> 3. **It names the wrong database.** `getSiblingDB("steading")` is hardcoded,
+>    and this box runs `MONGODB_DB=steadingdb` — so on a correctly configured
+>    server the write lands in a database nothing reads, which is the only reason
+>    (2) has probably not already happened to you.
+>
+> If you did run it, check with `sudo pnpm farm:show <farmId>`: an owner-less
+> farm shows nobody at `owner`. Put it back with the same shape of write against
+> the right database, then use `ops:admin` for the board.
+
+**The password comes out of a password manager and is never typed.** The whole
+control rests on that entropy: the rate limiter bounds guessing and the operator
+flag bounds who may ask at all, but neither helps against a password somebody
+chose.
 
 ### The unit
 

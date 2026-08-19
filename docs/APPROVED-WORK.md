@@ -69,10 +69,24 @@ on the exact failure they then permit.
       `hand` on their own farm. Revoking it stops a board session in flight,
       because the board re-reads the row on every request — a property the
       previous PR added for a different reason, now doing a second job.
-      **There was also no way to grant it at all**, which is why the board had
-      never been opened: `db:seed` creates an owner and nothing ever assigned
-      `admin`. `pnpm ops:admin` is the key, and `--list` answers "who else has
-      this", which a grant nobody can audit is a grant nobody can revoke.
+      **There was no way to grant it *in the codebase*** — `db:seed` creates an
+      owner and nothing ever assigned `admin` — which is why the board had never
+      been opened. `pnpm ops:admin` is the key, and `--list` answers "who else
+      has this", because a grant nobody can audit is a grant nobody can revoke.
+      **"No way to grant it at all" was the claim and it was wrong**, found by
+      the audit of this commit rather than by writing it. `DEPLOY-THE-SERVER.md`
+      documented a working grant the whole time — a raw `mongosh` `$set` of
+      `role: 'admin'` — so the premise that nobody could already hold access was
+      false, and that premise is what made this look like it needed no migration
+      note. Two consequences, both now written into that page: a box whose
+      operator followed it has an account that **silently stops working** at the
+      board's sign-in, with a refusal indistinguishable from a wrong password;
+      and the instruction **demotes the farm's only owner** to `admin`, leaving
+      it with zero — unrepairable in-app, since `assignableRoles('admin')` is
+      `['admin', 'hand']` and self-promotion is refused as `self`. The only
+      reason that has probably not already happened is a third error in the same
+      snippet: it hardcodes `getSiblingDB("steading")` while the box runs
+      `steadingdb`, so the write lands in a database nothing reads.
 
 - [x] **Six defects from a read of the whole server.** **GA**
       A pass over all of `apps/api` after the mail and verification work.
@@ -332,6 +346,24 @@ on the exact failure they then permit.
       run — build a file on a device that has synced photos, wipe the server,
       restore, and watch the bytes arrive. And `ACCESS-AND-BILLING.md` §4.1a-i
       is now wrong in the app's favour and wants the correction §12c asks for.
+
+- [ ] **`deploy.sh` deletes any Caddy site block added by hand.** *(found by the
+      audit above; pre-existing, not introduced by it)*
+      Every deploy re-renders `/etc/caddy/Caddyfile` from the repository's
+      single-site template and `install`s it over the running file. So the
+      `ops.example.com` block `DEPLOY-THE-SERVER.md` offers as the alternative to
+      an SSH tunnel **cannot survive a deploy** — it is gone within five minutes
+      of the next `steading-deploy.timer` tick, with `reloaded for ${DOMAIN}` as
+      the only trace.
+      **And the domain is read with `head -1`**, off the running file:
+      `sed -n 's/^\([a-z0-9.-]*\) {$/\1/p' | head -1`. An operator who
+      *prepended* the ops block rather than appending it gets the API's Caddyfile
+      rendered for the ops hostname — every handset offline, reported as a
+      successful reload.
+      Not urgent while the tunnel is the documented default, and it is a trap
+      laid for exactly the person who reads to the end of that section. The fix
+      is either a second rendered site block the template owns, or a
+      `caddy.d/`-style include the deploy leaves alone.
 
 ## 2. Start on the same day — the only work with a calendar attached
 
