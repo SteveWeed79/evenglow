@@ -82,11 +82,20 @@ otherwise plans the billing down to the refusal copy.
    they raised. Under UK/EU rules this is a thirty-day obligation with a
    defined shape.
 
-7. **The lawful basis and the processor chain are undocumented.** MongoDB Atlas
-   (US), AWS S3 (backups), GitHub (support bundles and gists), Google
-   (sign-in), api.weather.gov and the US Census geocoder. Each is a processor
-   or a recipient; none is named in a document a farm could read, and there are
-   no data-processing agreements on file.
+7. **The lawful basis and the processor chain are undocumented.** Oracle Cloud
+   (the box the records sit on), AWS S3 (backups, once configured), GitHub
+   (support bundles and gists), Google (sign-in and Play billing),
+   api.weather.gov and the US Census geocoder. Each is a processor or a
+   recipient; none is named in a document a farm could read, and there are no
+   data-processing agreements on file.
+
+   **This list used to begin "MongoDB Atlas (US)", and that is no longer where
+   the records are** — the database was moved onto the box and the cluster
+   deleted. The correction matters more here than anywhere else in this file:
+   the processor list is what the privacy policy and the Data Safety
+   declaration are built from, and an inaccurate declaration is an enforcement
+   matter rather than a rejection. Naming a data processor that holds nothing
+   is exactly the kind of wrong that survives review and fails an audit.
 
 8. **Play requires an App Bundle for new apps, and the pipeline builds an
    APK.** `apk.yml` produces and signs `steading-<version>-<code>.apk`, which
@@ -126,6 +135,99 @@ otherwise plans the billing down to the refusal copy.
     trademark, and against the several farm products already using the word.
     Cheapest to find out before the icon, the splash, the domain and the
     typography all carry it.
+
+    **Checked 19 August 2026, and the answer is the bad one.**
+    `brechy.com/apps/steading` is a pre-launch page for an app called
+    **Steading**, by **Brechy LLC**, described as *"the only app that manages
+    your entire homestead — livestock, gardens, orchards, and all the tasks that
+    keep it running"* — and it argues the name the same way this project does:
+    *"Steading (n.): Scottish for farmstead. Now, an app for yours."* Same word,
+    same product, same reasoning, arrived at independently.
+
+    **What is known:** they have not launched (the page collects a waitlist),
+    they are a formed company, and no trademark filing for them was found —
+    though the trademark databases were unreachable from the environment this
+    was researched in, so that last point proves nothing. **What is not known:**
+    which side used the name publicly first.
+
+    **The decision has a hard deadline and an asymmetric cost.** A Play package
+    name is permanent from the first upload; a display name is about eleven
+    lines (`app.json` plus ten strings in `apps/mobile/src`) and changeable at
+    any release. The 371 files carrying `@steading/*`, the `steading-{orgId}.db`
+    filename and the `steading://` scheme are internal and never need to move.
+    So this is cheap until the first AAB goes up and expensive-to-impossible
+    afterwards — which puts it *before* `[10]`'s first upload rather than
+    alongside it.
+
+    Nothing else found is a conflict: `THE STEADING CODEX` (99877285, Web
+    Production Labs LLC, pending) covers homesteading books and retail, not
+    software; the word is a dictionary term with farms, a wine and a brewing
+    channel already on it. **The conflict is this one product, and it is total.**
+
+    ### The new name is **Evenglow**
+
+    Decided 19 August 2026, after about a hundred candidates. Clear on Google
+    Play, checked in the store itself. No exact trademark found; `EVENGLO`
+    (Fort Howard Paper, 1930, paper goods) is the nearest and is another century
+    and another class away.
+
+    **What the standard actually is**, because it drifted during the search and
+    the drift was wrong: a name does not have to be unused. Dove is soap and
+    chocolate. The test is whether it is taken **in software**, taken **in
+    farming**, or taken **in both at once** — and only the third forces a
+    rename. Steading fails the third. Nothing else considered did, which means
+    several candidates were retired here for search noise rather than conflict.
+
+    **Known and accepted about Evenglow.** *Even* reads to most Americans as
+    *level* rather than *evening*, which is why "even glow" is a skincare phrase
+    (Pureance, skinbetter both sell one). It is also phonetically close to
+    `EVENFLO`, the baby-products brand, and to Everglow — several companies and a
+    K-pop group. None of that blocks anything; it means the store listing does
+    the explaining, which is a communication cost taken with open eyes.
+
+    ### What the rename touches — audited 19 August, not yet carried out
+
+    **Config, and the only irreversible part:** `app.json` — `name`, `slug`,
+    `scheme`, `android.package`, `ios.bundleIdentifier`. `com.evenglow.app`
+    must be right *before the first Play upload*, because a package name cannot
+    be changed afterwards.
+
+    **User-visible strings, and the app is the smaller half.** Three in
+    `apps/mobile/src` — `Boot.tsx`'s accessibility label and its *"Steading could
+    not start"*, and `ExportScreen`'s share-sheet title. **About fifteen on the
+    server**, which nobody had counted: the six copies of *"That email already
+    has a Steading account"* across `auth.ts` and `members.ts`, `EMAIL_TAKEN` in
+    `contracts/verification.ts`, *"No Steading account uses that Google address
+    yet"*, the mail subjects *"Your Steading reset code"* and *"Confirm your
+    Steading email"* with their bodies, three on the ops page, and the support
+    gist description. **The farm reads the server's words more often than the
+    app's**, so a rename that stops at `apps/mobile` leaves the old name in every
+    email the product sends.
+
+    **Four things are load-bearing and must not be renamed casually:**
+
+    1. **The APK filename.** `apk-plan.mjs` builds `steading-<version>-<code>.apk`
+       and `deploy.sh` decides whether the shelf is current by comparing against
+       exactly that stem — it strips a literal `steading-` prefix and looks for
+       `/var/lib/steading/dist/steading-<version>-<code>.apk`. Renaming the
+       artefact makes every box re-fetch ninety megabytes, which is the trap
+       `DEPLOY-THE-SERVER.md` already recorded once. Either leave the artefact
+       name alone or change both sides in one commit and accept one re-download.
+    2. **The systemd units and paths** — `steading-api`, `steading-deploy.timer`,
+       `steading-backup*`, `/etc/steading`, `/opt/steading`, `/var/lib/steading`.
+       Invisible to any farm, and renaming them is a box migration rather than an
+       edit. Leave them.
+    3. **The EAS slug.** `extra.eas.projectId` is bound to the slug; changing one
+       without the other breaks `eas build`. The runner path (`apk.yml`) does not
+       care, but the EAS fallback does.
+    4. **`check-assets.mjs`** prints the expected `app.json` block with
+       `assets/icon/steading*.png` in it, so renaming the asset files means
+       updating that checker's guidance in the same commit.
+
+    **Deliberately staying `steading`:** the 371 files carrying `@steading/*`
+    workspace names, the `steading-{orgId}.db` filename, and the internal
+    database name. No user, reviewer or store listing ever sees them, and
+    churning them buys nothing but risk.
 
 14. **There is no business entity, and billing needs one.** Play payouts, tax
     identity, VAT/sales tax on a $39/year subscription, and the invoice a farm
@@ -362,13 +464,18 @@ implementation: none. This is the largest purely technical gap on the list.
     which are handled properly, and are the only thing that is.
 
 56. **Nothing enforces a per-org storage quota.** Documented as uninstrumented
-    for pricing; the operational half is that one farm uploading video fills a
-    512 MB cluster for everybody, and the failure reaches every other farm as
-    rejected mutations.
+    for pricing; the operational half is that one farm uploading video fills
+    **the box's disk** for everybody, and the failure reaches every other farm
+    as rejected mutations. *(Written against a 512 MB managed tier, which is
+    gone. The shape is identical and the headroom is tens of gigabytes rather
+    than half of one, so this moved from near-term to eventual — not from real
+    to imaginary. A disk with no quota still fills.)*
 
-57. **Mongo connection limits are unconsidered.** M0 caps concurrent
-    connections; nothing documents the pool size or what a burst of devices
-    flushing after an outage does to it.
+57. **Mongo connection limits are unconsidered.** Nothing documents the pool
+    size or what a burst of devices flushing after an outage does to it. *(The
+    free managed tier's 500-connection cap was the original worry; a local
+    `mongod` sets its own ceiling and the API is a single process, so the
+    question is now about the pool, not the tier.)*
 
 58. **No load test, ever.** Not a criticism at three farms. It becomes one the
     first time a snapshot of a ten-year farm meets a slow connection, and the
@@ -809,8 +916,9 @@ Each of these looked like an omission and is not:
 - **iOS** — deferred with a route (EAS Build), masterplan §5.
 - **Backups** — designed, scripted, scheduled, blocked on a bucket and an
   `age` key; restore untested and named as such.
-- **Photo storage growth and the M0 ceiling** — measured and documented in
-  `PICK-UP-HERE.md`.
+- **Photo storage growth** — measured and documented in `PICK-UP-HERE.md`. The
+  free-tier ceiling it was measured against no longer exists; the box's disk is
+  the number now.
 - **Reduce-motion** — implemented in `theme/motion.ts`.
 - **Dark mode** — implemented, and the splash has both.
 - **Multi-org membership** — refused structurally, with the reason.
@@ -1104,8 +1212,9 @@ the farm's records outliving the person who wrote the app.
 
 192. **`OPERATOR.md` is commands, not custody.** A second person could run the
      day-to-day; they could not take over the keystore, the `age` key, the
-     Atlas account, the DNS registrar, the Play account or the Google Cloud
-     project, because nothing lists them as things that have owners.
+     Oracle Cloud account that the box and its only copy of the records live
+     in, the DNS registrar, the Play account or the Google Cloud project,
+     because nothing lists them as things that have owners.
 
 193. **Nothing covers a fortnight of illness during lambing.** The support loop
      assumes somebody reads the issues.

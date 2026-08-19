@@ -5,10 +5,12 @@
 #   sudo /opt/steading/scripts/deploy/setup-mongo.sh
 #
 # The second half of `ACCESS-AND-BILLING.md` §4.1a, which always said both
-# Fastify and MongoDB run on the one free instance. Atlas's free M0 is 512 MB
-# and photos live in GridFS, so it fills; the box has ~170 GB spare.
+# Fastify and MongoDB run on the one free instance. This is now the only place
+# the records live: the free managed tier this deployment started on was 512 MB
+# with photos in GridFS, so it filled, and the box has tens of gigabytes spare.
 #
-# Run `migrate-to-local-mongo.sh` afterwards to bring the data across.
+# `migrate-to-local-mongo.sh` brings data across from a cluster you are moving
+# off. A fresh box has nothing to move and starts empty.
 #
 # ## A standalone, not a replica set, and that was checked
 #
@@ -41,7 +43,7 @@ CACHE_GB="${STEADING_MONGO_CACHE_GB:-2}"
 # `steading`.**
 #
 # The API chooses its database from MONGODB_DB, independently of the connection
-# string (`db/client.ts`). An Atlas cluster named `steadingdb` holding a
+# string (`db/client.ts`). A cluster named `steadingdb` holding a
 # database also named `steadingdb` is an ordinary thing to end up with — and
 # this script used to grant readWrite on `steading` regardless, so the restore
 # that followed failed with "not authorized" against a database the account had
@@ -235,13 +237,15 @@ cat <<DONE
 
 $(printf '\033[1m')Next:$(printf '\033[0m')
 
-  1. Bring the data across from Atlas:
+  1. Only if you are moving off a managed cluster, bring the data across:
 
        sudo /opt/steading/scripts/deploy/migrate-to-local-mongo.sh
 
+     A fresh box has nothing to migrate and starts empty.
+
   2. Backups are now YOURS. ACCESS-AND-BILLING §4.1a-i calls a nightly dump a
-     condition of the first real farm, not a nicety — Atlas was not doing it
-     either on the free tier, but there is no longer anybody else who might.
+     condition of the first real farm, not a nicety — a free managed tier was
+     not doing it either, but there is no longer anybody else who might.
 
        scripts/backup-mongo.sh backup
 

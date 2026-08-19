@@ -483,12 +483,25 @@ Ordered by cost, cheapest first, and all four are now done:
    depended on somebody remembering to type a command. `PICK-UP-HERE.md` said
    the opposite of this line the whole time, which is how it survived.
 
-   Done now, and the word means something different: `steading-backup.timer`
-   runs it nightly, the script reads the object back out of S3 before calling
-   it a backup, and `steading-backup-check.timer` fails a unit when the last
-   one is more than thirty-six hours old. A **restore drill stays manual and
-   periodic** — see `DEPLOY-THE-SERVER.md` — because the age identity is
-   deliberately not on the box and no automated test can hold it.
+   The mechanism is done, and the word means something different from last
+   time: `steading-backup.timer` runs it nightly, the script reads the object
+   back out of S3 before calling it a backup, and `steading-backup-check.timer`
+   fails a unit when the last one is more than thirty-six hours old. A
+   **restore drill stays manual and periodic** — see `DEPLOY-THE-SERVER.md` —
+   because the age identity is deliberately not on the box and no automated
+   test can hold it.
+
+   **And "done" still does not mean a farm has a backup.** `STEADING_BACKUP_BUCKET`
+   and `STEADING_BACKUP_RECIPIENT` are unset on the box, so the timer fires and
+   the script stops on the variable it needs: **no backup has been taken.** That
+   is a state which reports itself rather than failing silently, which is the
+   whole design — but it is not the same thing as a copy existing.
+
+   **It is also stricter than it was when this was written.** The database has
+   moved onto the box and the managed cluster it came from has been deleted, so
+   there is no longer any second disk that has ever held these records. Two
+   settings — a bucket and an `age` public key — are all that stand between one
+   volume and an off-site copy.
 
 **D13, the billing, is now built to the edge of the store.** The rules, the
 gate, the Play mapping and the copy are in; the purchase flow and a Play

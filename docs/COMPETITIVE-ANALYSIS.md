@@ -40,6 +40,100 @@ The market splits into three camps. Nobody occupies the intersection, which is e
 
 **UpKeep / Maintainly** — the industrial framing that matches farm reality: most farm maintenance is triggered by engine hours, not calendar time (oil at 250 hours, not every three months), while hour-meter-less assets like pumps and augers still need date-based intervals. Parts inventory with low-stock alerts before a service window.
 
+### D. The ones this document missed — *added 19 August 2026*
+
+**Four products in the intersection §1 says nobody occupies**, one of which
+shares this app's name. All four were found while checking whether the name was
+clear, which is not a research method anybody should rely on. Two advertise
+offline as a headline and one is free and open source — so the claim in §3 W1
+that *"competitors bolt offline onto a cloud app"* now has counterexamples in the
+same store, and W1 carries a note saying so.
+
+**Steading, by Brechy LLC** — `brechy.com/apps/steading`. Same name, same
+product, same argument for the name:
+
+> *"The only app that manages your entire homestead — livestock, gardens,
+> orchards, and all the tasks that keep it running."*
+>
+> *"Steading (n.): Scottish for farmstead. Now, an app for yours."*
+
+That second line is this project's own naming rationale, arrived at
+independently and published by somebody else. The page is a pre-launch waitlist
+— the call to action is **"Get Notified at Launch"** — badged *IN-HOUSE*, which
+reads as an agency's own product alongside client work.
+
+> **This is a name conflict before it is a competitive one, and the two want
+> separating.** As a competitor it is unlaunched vapour: a headline, a promise
+> and an email capture, against a signed APK on a farm's tablet. Nothing in §2
+> or §3 moves for it. As a name it was fatal to `[13]` — identical word,
+> identical category, identical pitch, and the other side is a formed company
+> while this project's `[14]` (business entity) is still open.
+>
+> **Settled 19 August: the app becomes Evenglow**, and the rename happens before
+> the first Play upload, because a package name is permanent from that moment
+> and a display name is cheap until then. `[13]` carries the decision, the
+> standard it was judged against, and the audit of what the rename touches.
+
+No USPTO filing was found for Brechy LLC, but the trademark databases are not
+reachable from the environment this was researched in, so absence is not
+evidence. The only *Steading*-family filing seen is `THE STEADING CODEX`
+(99877285, Web Production Labs LLC, pending) — a different entity, covering
+homesteading books and retail rather than software.
+
+**Homestead Hub — Farm Manager** — the closest premise match found to date, and
+it is on Google Play today (`io.homesteadhub.app`; an iOS build appears to exist
+too). Its own listing: *"track plants, poultry, eggs, health & harvests — all
+offline, all in one app"*, with plant lifecycle from seed to harvest, poultry
+across chickens, ducks, turkeys and geese, and health records covering
+observations, medications, treatments and costs. Small mixed homestead, offline,
+Android. That is this product's sentence, written by somebody else.
+
+> **The medication line is the one to read twice.** W2 calls withdrawal tracking
+> the highest-value feature in this document *because nobody at homestead scale
+> does it* — and this app records medications and treatments. Recording a
+> treatment is not the same as deriving a withdrawal window and blocking the egg
+> screen while it is open, which is the part that is compliance-grade. **But
+> nobody has checked which one it does**, and the difference is the whole wedge.
+> `github.com/homesteadhub` exists with **no public repositories**, so the only
+> way to find out is to install it.
+
+**Livestocked** — multi-species herd and flock management across Windows,
+Android, iOS and macOS, covering cattle, sheep, goats, swine, horses, alpacas,
+llamas and chickens, plus semen and embryo inventory, sales and financials. It
+advertises working *"online or offline"*. The mixed-stock argument in
+`CLAUDE.md` — *"`animal`, not `bird`"* — is not unique to us; this one had it
+first and reaches further into breeding stock than we do. No GitHub presence
+(`github.com/livestocked` is a 404).
+
+> **It is not free, and this document said it was for a day.** The error came
+> from reading "free to download" as free. `livestocked.com/pricing` sells it:
+> a no-card free trial, then paid — aggregators list **$70/year** on one plan
+> and **from £30/month** on another. **So the nearest multi-species competitor
+> charges more than D13 does**, which inverts the worry that started this
+> section. We are not the expensive option; at $39/year we are the cheap one
+> with the better offline story.
+
+**farmOS** — [`farmOS/farmOS`](https://github.com/farmOS/farmOS), 1.3k stars,
+GPL-2.0, PHP on Drupal, self-hosted by Docker with commercial hosting available
+through Farmier. Web-based farm record keeping by a volunteer community, and the
+first thing a technically confident smallholder finds when they go looking for
+something that is not a subscription.
+
+> **It is the one competitor whose code can be read**, which makes it worth more
+> than its market share: every entity, every report and every migration in it is
+> a decision somebody made against real farms, published. D8 and D9 are the
+> argument against it — a Drupal site is not a native app over local SQLite, and
+> the yard has no signal — so this is not a threat to the positioning. It is a
+> free, capable, permanently-available alternative that costs a server instead of
+> $39/year, and this document should have said so from the start.
+
+**What none of them changes.** The parity floor and the wedge were derived from
+what farms complained about, not from a competitor census, so nothing in §2 or §4
+moves. What moves is confidence: §1 opens by saying nobody occupies the
+intersection, and three products occupy some part of it. The honest version is
+that nobody occupies it *the way D8, D9 and W2 describe* — and that claim is
+now testable rather than assumed.
+
 ---
 
 ## 2. Parity Floor
@@ -106,9 +200,22 @@ because it is what stops the app being a trap, and it is built. Getting data
 Where we win. Each is a real gap, not a spin on parity.
 
 **W1 — Offline-first, not offline-tolerant.**
+> **Unverified since 19 August 2026.** [Homestead Hub](https://play.google.com/store/apps/details?id=io.homesteadhub.app)
+> ships on Play advertising *"all offline… no internet required"*, and
+> Livestocked claims *"online or offline"* across four platforms. The sentence
+> below may still be exactly right — offline-tolerant is not offline-first, and
+> neither of them makes a claim about what happens when a flush fails — but it
+> is now a claim with counterexamples rather than an observation. **It is
+> settled by a device, not by a store listing:** install Homestead Hub, log
+> records with the radio off, force-stop it, and see what survives. §1.D.
 Competitors bolt offline onto a cloud app. Ours is a native app over a local SQLite database that happens to sync — the data sits in the app sandbox, not in a browser storage bucket the OS is permitted to evict. Concretely: cold start to logged egg count in under five seconds with the radio off, and a visible, diagnosable queue. Nobody advertises what happens when sync *fails*, because in their apps it fails silently.
 
 **W2 — Medication and withdrawal tracking.**
+> **The "nobody does it" half needs one check.** Homestead Hub's listing claims
+> *"health observations, medications, treatments, and costs"* (§1.D). Recording a
+> medication is not deriving a withdrawal window and blocking the egg screen
+> while it runs, which is the compliance-grade part and the actual wedge — but
+> nobody has looked, and it is the highest-value claim in this document.
 Requested in Flockstar reviews, unmet. Log a treatment, get an automatic egg/meat withdrawal window, and see a blocking warning on the egg-collection screen while the window is open. This is compliance-grade and nobody at homestead scale does it. **Highest-value single feature in this document.**
 
 **W3 — One app for birds and iron.**

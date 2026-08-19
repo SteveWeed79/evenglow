@@ -3,9 +3,15 @@
 From a fresh Oracle Always Free instance to `https://api.swbuild.dev/health`
 answering `{"ok":true}`, and then to two phones syncing one farm.
 
-Follow it in order. Steps 1–3 are three different consoles and none of them can
-be scripted from the box; steps 4–6 are the box, and only step 5b is not the
-script; steps 7–8 are the app.
+Follow it in order. Steps 1–2 are two different consoles and neither can be
+scripted from the box; steps 3–6 are the box, and only step 5b is not a script;
+steps 7–8 are the app.
+
+> **The database lives on the box.** This deployment ran on a managed MongoDB
+> cluster to begin with and no longer does — `mongod` is installed alongside the
+> API, bound to loopback, and the cluster has been deleted. Step 3 is where that
+> happens on a fresh box, and *"Moving the database onto the box"* below is the
+> record of the move and the reasoning that still governs it.
 
 ---
 
@@ -28,7 +34,7 @@ anybody is ever asked to pay for (D13).
 |---|---|
 | An Oracle Cloud instance | Always Free ARM, **Ubuntu** — not Oracle Linux |
 | A domain you control | A subdomain is enough. `api.swbuild.dev` throughout below |
-| A MongoDB Atlas cluster | The free M0 is fine to begin with |
+| Somewhere to put the database | **Nothing to arrange.** Step 3 installs `mongod` on this same box |
 | SSH access to the box | `ssh ubuntu@<the box's public IP>` |
 
 ### Two SSH settings, before you spend an evening on the box
@@ -122,22 +128,44 @@ control plane. The other one is on the instance itself and step 4 handles it.
 
 ---
 
-## 3. Atlas — let the box in
+## 3. The database — on the box
 
-Atlas blocks by IP by default. Network Access → Add IP Address → the box's
-public address.
+One script, and it is the same one the live box was moved onto:
 
-Until you do this every request waits five seconds for a connection it will
-never get and then fails — and the app reports it as a network error, which
-sends you looking at wifi.
+```
+sudo apt-get update && sudo apt-get install -y git
+sudo git clone https://github.com/SteveWeed79/steading /opt/steading
+sudo MONGODB_DB=steadingdb /opt/steading/scripts/deploy/setup-mongo.sh
+```
+
+Installs MongoDB 8, binds it to **127.0.0.1 only**, caps the WiredTiger cache,
+and creates the application user. The connection string that comes out of it is
+a loopback one, and it is what goes in `MONGODB_URI` at step 5.
+
+**Pass `MONGODB_DB` if your database is not to be called `steading`** — this
+deployment's is `steadingdb`, and `env.ts` reads `MONGODB_URI` and `MONGODB_DB`
+independently, so a mismatch is a server that connects and serves an empty
+database while reporting nothing wrong.
+
+**Nothing to open in a firewall for this**, which is the point of loopback: the
+database is reachable from this box and from nowhere else, so the only way in
+is a shell on the machine. Authorization is switched on even so — a bug in the
+API that let somebody run code as the service user should not additionally hand
+them an unauthenticated database admin shell.
+
+> **This step used to be a third console: a managed cluster's IP allowlist.**
+> That deployment is over and the cluster is deleted. The failure it produced is
+> worth remembering only because it is such a good disguise — every request
+> waited five seconds for a connection it would never get, and the app reported
+> it as a network error, which sends you looking at wifi.
 
 ---
 
 ## 4. On the box — one script
 
+The checkout is already there from step 3, so this is the one line:
+
 ```
-sudo apt-get update && sudo apt-get install -y git
-sudo git clone https://github.com/SteveWeed79/steading /opt/steading
 sudo /opt/steading/scripts/deploy/setup-box.sh api.swbuild.dev
 ```
 
@@ -170,7 +198,7 @@ sudo nano /etc/steading/api.env
 | | |
 |---|---|
 | `AUTH_SECRET` | 32 characters or more. `openssl rand -base64 48` |
-| `MONGODB_URI` | The Atlas connection string, password included |
+| `MONGODB_URI` | The loopback string `setup-mongo.sh` printed at step 3, password included. Add `MONGODB_DB=` on its own line when the database is not called `steading` — this box's is `steadingdb` |
 
 Two more are already in the file and should stay:
 
@@ -424,7 +452,8 @@ local-only — it has never had a server to reach — so an uninstall takes it.
 
 1. **On the tablet, still on its USB dev build**, point it at the real server
    and sign up. Signing up claims the org the device already minted (D15) and
-   flushes its queue, so the farm reaches Atlas without anything being retyped.
+   flushes its queue, so the farm reaches the server without anything being
+   retyped.
 2. **Then** install the EAS APK on your phone and sign in with the same
    account. The records arrive by snapshot. That *is* the continuity test.
 3. Farm → Members → mint a join code. Six characters, ten minutes, one use.
@@ -499,13 +528,24 @@ the gate, so nothing downstream learns that promotions exist.
 
 ## Moving the database onto the box
 
-Optional at first and eventually not: **Atlas's free M0 is 512 MB, and photos
-live in GridFS.** At roughly 1 MB of records and 30 MB of photos per farm-year
-(§4.1) that is about sixteen farm-years — but a farm photographing receipts and
-equipment gets there much faster, and the box has ~170 GB spare.
+**Done. This is the record of it, and of the reasoning that still governs the
+`mongod` running today.** The live deployment ran on a free managed cluster,
+was migrated with the two scripts below, and that cluster has since been
+deleted — so a fresh box does step 3 and never has a second place to move from.
+
+The reason for the move: the free tier was 512 MB with photos in GridFS. At
+roughly 1 MB of records and 30 MB of photos per farm-year (§4.1) that is about
+sixteen farm-years — and a farm photographing receipts and equipment gets there
+much faster, against a box with tens of gigabytes spare and no bill either way.
 
 This is what `ACCESS-AND-BILLING.md` §4.1a always described: Fastify and MongoDB
 on one free instance.
+
+**One consequence worth carrying:** every ceiling argument that named 512 MB
+died with the cluster, and the constraint is now the box's own disk — `df -h /`.
+`db:usage`'s 10 GB photo-bytes warning was always reasoning about `mongodump`
+size on a self-hosted `mongod`, so it is the right signal here rather than a
+threshold twenty times the capacity it was watching.
 
 ### A standalone, not a replica set
 
@@ -540,6 +580,10 @@ above, deliberately, and is the moment to do it.
 
 ### Two commands
 
+**The first is step 3 on any box. The second had one job, has done it, and now
+has no source to read from** — it is kept because a restore-into-a-new-box is
+the same shape, and because the checks it makes are the ones worth copying.
+
 ```
 sudo MONGODB_DB=steadingdb /opt/steading/scripts/deploy/setup-mongo.sh
 ```
@@ -569,9 +613,9 @@ migration runs. Which is the exact thing the script's own header says it is
 avoiding, and this document told you to do it the wrong way until somebody ran
 it.
 
-Counts every collection on Atlas, stops the API, dumps, restores with `--drop`,
-counts again, and **refuses to declare success unless the two match document for
-document**. Then applies the indexes.
+Counts every collection at the source, stops the API, dumps, restores with
+`--drop`, counts again, and **refuses to declare success unless the two match
+document for document**. Then applies the indexes.
 
 Both URIs go through the environment rather than argv, because argv is visible
 in `ps` to every user on the box — the same rule `backup-mongo.sh` and
@@ -579,8 +623,9 @@ in `ps` to every user on the box — the same rule `backup-mongo.sh` and
 
 **If your records are not in a database called `steading`, pass `MONGODB_DB`
 too.** The connection string and the database name are separate settings in
-this app — `env.ts` reads `MONGODB_URI` and `MONGODB_DB` independently — and an
-Atlas string commonly names no database at all. The script settles it once
+this app — `env.ts` reads `MONGODB_URI` and `MONGODB_DB` independently — and a
+managed cluster's string commonly names no database at all. The script settles
+it once
 rather than guessing twice: a URI that names a *different* database stops with
 both names printed rather than migrating the wrong records, and the count it
 compares before and after is taken against `MONGODB_DB` explicitly, so it
@@ -605,15 +650,24 @@ shell.
 
 ### Afterwards
 
-**Leave the Atlas cluster alone for a week.** It is a free, off-site, known-good
-copy of the farm's records and costs nothing to keep until the box has proven
-itself.
+The advice here was to leave the old cluster alone for a week — a free,
+off-site, known-good copy that cost nothing to keep until the box had proven
+itself. **That week has passed and the cluster has been deleted.**
 
-**Then backups are yours, and nobody else has a copy.**
+**So backups are yours, and nobody else has a copy. That is now literal.**
 `scripts/backup-mongo.sh` is the job — dump, encrypt to a public key so the box
 can write backups it cannot read, upload; `restore` is a subcommand of the same
 script. §4.1a-i calls this a condition of the first real farm rather than a
-nicety, and it was already true on M0, which has no automated backups either.
+nicety, and it was already true of the free managed tier, which has no automated
+backups either — the difference is that there is no longer a second disk
+anywhere that has ever held these records.
+
+> **As of today this is not yet configured.** Both timers are installed and the
+> script stops on the first variable it needs, so the state reports itself
+> rather than failing quietly — but `STEADING_BACKUP_BUCKET` and
+> `STEADING_BACKUP_RECIPIENT` are unset, which means **no backup has been
+> taken**. One box, one volume, one copy. This is the top of the list before a
+> farm that is not yours depends on it.
 
 Enable `steading-backup.timer` **and** `steading-backup-check.timer` together —
 "Before a farm that is not yours depends on this", below, has the settings and
@@ -639,9 +693,10 @@ Worth knowing before spending an evening growing a disk, because the answer is
 | Photos | ~30 MB per farm-year, in GridFS |
 | SQLite | **none** — that lives on the handset |
 
-The last two are on the box only once the database is; before that they are in
-Atlas and the server is stateless. Either way a default 46.6 GB boot volume has
-roughly 37 GB spare — over a thousand farm-years. `df -h /` settles it in a line.
+The last two are on the box, because the database is. A default 46.6 GB boot
+volume has roughly 37 GB spare — over a thousand farm-years. `df -h /` settles
+it in a line, and it is the ceiling that matters now that no free-tier allowance
+is in the picture.
 
 Memory is the same story. The only component with a real appetite is argon2,
 bounded per hash at 19 MiB and `parallelism: 1`, so a hundred *simultaneous*
@@ -789,7 +844,7 @@ in the repo exists to prevent.
 
 **No — and doing it by hand is actively harmful.** The timer runs `deploy.sh`,
 which fetches and fast-forwards for you. The only manual `git` on that box is
-the `git clone` in step 4, once.
+the `git clone` in step 3, once.
 
 The reason it matters: `git pull` there moves the checkout to **`main`**, which
 is ahead of the CI-gated `release` ref. Every deployment afterwards would find
@@ -1097,8 +1152,10 @@ so the box can write backups it cannot read — and uploads. `restore` is a
 subcommand of the same script, and a tested restore is a rehearsed migration.
 
 `ACCESS-AND-BILLING.md` §4.1a-i calls this a condition of the first real farm
-rather than a nicety, and that is still right even with Atlas holding the data:
-the free M0 tier has no automated backups either.
+rather than a nicety. That was right when a free managed tier held the data —
+it has no automated backups either — and it is stricter now that the data is on
+this box and the cluster is gone: **this script is the only thing that will ever
+put a copy anywhere else.**
 
 **The script existed for months with nothing running it**, which is the state
 this section is really about: a backup that depends on somebody remembering to
@@ -1193,7 +1250,7 @@ backups it silently ruined are all of them.
 |---|---|
 | `curl` hangs, no response at all | The Oracle ingress rule (step 2). Then the instance iptables: `sudo iptables -L INPUT -n --line-numbers` |
 | Certificate error, or Caddy will not start | DNS. `dig +short api.swbuild.dev` must return the box. Then `journalctl -u caddy -n 50` |
-| `{"ok":true}` but everything else fails | Ask `/ready`. A `503` there confirms it: Atlas Network Access (step 3), or a wrong `MONGODB_URI`. On a local mongod: `systemctl status mongod` |
+| `{"ok":true}` but everything else fails | Ask `/ready`. A `503` there confirms the database: `systemctl status mongod` first, then a wrong `MONGODB_URI` or `MONGODB_DB` in `/etc/steading/api.env` |
 | Service will not start | `systemctl status steading-api` then `journalctl -u steading-api -n 50`. Usually an empty `AUTH_SECRET` |
 | Restarting in a loop | It stops itself after five in a minute. The reason is in `systemctl status` |
 | Connects fine, but the farm is empty | `MONGODB_DB`. The default is `steading`; a cluster holding records under another name serves an empty one without complaining (step 5) |

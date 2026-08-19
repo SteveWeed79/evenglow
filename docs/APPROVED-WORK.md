@@ -321,8 +321,16 @@ period rather than a task.
 - [ ] **Write the terms of service and EULA.** `[2]`
 - [ ] **Write the "not veterinary advice" line and place it.** `[16]`
       Settings, and beside the withdrawal banner. Two sentences.
-- [ ] **Clear the name.** `[13]` — Play listing, trademark, the farm products
-      already using the word.
+- [x] **Clear the name — it did not clear, and the name is now Evenglow.**
+      `[13]` — checked 19 August 2026. **Brechy LLC has a pre-launch page for an
+      app called Steading**, same product and same "Scottish for farmstead"
+      pitch (`brechy.com/apps/steading`). They have not launched; they are a
+      company and this project is not one yet (`[14]`). **Decided: the app
+      becomes Evenglow.** The rename itself is not done — see §3.
+- [ ] **Carry out the rename to Evenglow.** **Before the first Play upload**,
+      and not urgent before then: a package name is permanent from that moment,
+      while a display name is changeable at any release. `[13]` has the audit of
+      what the name touches and the four things that are load-bearing.
 - [ ] **Decide the business entity.** `[14]` — Play needs a payee.
 
 ## 3. Release mechanics
@@ -336,8 +344,11 @@ period rather than a task.
 - [ ] **Decide what deletion means** on the server, in backups, and for a
       lapsed farm. `[5]`
 - [ ] **Complete the Data Safety declaration.** `[3]`
-- [ ] **Name the processors** — Atlas, S3, GitHub, Google, weather.gov, the
-      Census geocoder. `[7]`
+- [ ] **Name the processors** — Oracle Cloud (the box), S3, GitHub, Google,
+      weather.gov, the Census geocoder. `[7]`
+      **Not Atlas.** The database moved onto the box and the cluster was
+      deleted, so the managed-cluster row that used to lead this list names a
+      processor holding nothing. The Data Safety form is built from this list.
 - [ ] **Verify target API level and 16 KB page support.** `[11]`
 - [ ] **Acknowledge a Play purchase inside three days.** `[181]` — *added 16
       August; entailed by §2's Play items rather than a new decision*

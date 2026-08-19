@@ -21,6 +21,25 @@ pnpm farm:ls
 They read `.env.local` in that root, so `MONGODB_URI` decides which database
 they touch.
 
+### Where these run, now that the database is on the box
+
+**On the box, over loopback.** The live database is a `mongod` on the server
+itself, bound to `127.0.0.1` — so a laptop with the checkout has nothing to
+connect to, however correct its `MONGODB_URI` is. These commands used to run
+from anywhere with a route to the managed cluster; that route no longer exists,
+and the cluster has been deleted.
+
+To run one from a laptop anyway, forward the port and point at the forward:
+
+```
+ssh -L 27017:127.0.0.1:27017 ubuntu@api.swbuild.dev
+MONGODB_URI=mongodb://127.0.0.1:27017 MONGODB_DB=steadingdb pnpm farm:ls
+```
+
+That is a deliberate narrowing rather than a regression: the database is
+reachable from exactly one machine, and getting to it means holding SSH to that
+machine.
+
 **On the farm server that file is a symlink**, created by `setup-box.sh`,
 pointing at `/etc/steading/api.env` — the same config the service itself reads.
 So `sudo pnpm farm:ls` works on the box with nothing exported, and cannot
@@ -35,9 +54,10 @@ what it should be.
 > ### That last sentence is the whole safety story
 >
 > These commands do not know or care whether a database is "production". If
-> `.env.local` points at your Atlas cluster, then `pnpm farm:grant` typed on a
-> laptop in a kitchen writes to the live farm data — the same as if it were
-> typed on the server.
+> `.env.local` points at the live database — a tunnel to the box's `mongod`, or
+> the box's own `api.env` — then `pnpm farm:grant` typed on a laptop in a
+> kitchen writes to the live farm data, the same as if it were typed on the
+> server.
 >
 > There is no staging flag and there will not be one: a label that says
 > `production` is trusted right up until somebody points a staging config at a
@@ -228,7 +248,8 @@ Brings a **development** server up from nothing: a local database, a first
 account, and the API. For a working machine, not for a deployment.
 
 It writes any missing `AUTH_SECRET` or `MONGODB_URI` into `.env.local` and
-leaves anything already there alone — so it will not overwrite an Atlas URI. It
+leaves anything already there alone — so it will not overwrite a URI that
+already points somewhere real. It
 does rewrite the file when it adds something, and comments do not survive that.
 
 ### `pnpm dev:api`
@@ -255,7 +276,7 @@ Two environment values, and nothing else is required:
 | | |
 |---|---|
 | `AUTH_SECRET` | 32 characters or more. Signs access and refresh tokens |
-| `MONGODB_URI` | Atlas, or a `mongod` on the same box |
+| `MONGODB_URI` | A `mongod` on the same box, which is what this deployment runs. A managed cluster works too — `db/client.ts` takes the string and does not care |
 
 Everything else in `apps/api/src/env.ts` has a default, and the features they
 switch on — Google sign-in, Play billing, the support loop — each stay off and
@@ -287,9 +308,10 @@ forge past it by sending the header themselves.
 ### The box, start to finish
 
 **`docs/DEPLOY-THE-SERVER.md` is the step-by-step**, from a fresh Oracle
-Always Free instance to `https://api.swbuild.dev/health`. Three consoles that
-cannot be scripted (DNS, Oracle's ingress rule, Atlas's IP allowlist), then one
-script:
+Always Free instance to `https://api.swbuild.dev/health`. Two consoles that
+cannot be scripted (DNS, Oracle's ingress rule), then one script — the third
+used to be a managed cluster's IP allowlist, and the database moving onto the
+box removed it:
 
 ```
 sudo git clone https://github.com/SteveWeed79/steading /opt/steading

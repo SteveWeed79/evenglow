@@ -102,7 +102,7 @@ Gradle task and half is a route nobody has written.
 | `[4]` | Account deletion: in-app, plus a web URL reachable without the app |
 | `[5]` | Decide what deletion means on the server, in backups, and for a lapsed farm |
 | `[3]` | Fill in the Data Safety declaration to match what the app actually does |
-| `[7]` | Name the processors — Atlas, S3, GitHub, Google, weather.gov, the geocoder |
+| `[7]` | Name the processors — Oracle Cloud (the box), S3, GitHub, Google, weather.gov, the geocoder. **Not Atlas**: the database is on the box and that cluster is deleted |
 | `[6]` | Decide the shape of a subject access request, even if the answer is "export plus a manual step" |
 | `[11]` | Verify target API level and 16 KB page support against the current Play rules |
 
@@ -245,8 +245,8 @@ that cannot be recovered by shipping a fix later.**
 | `[54]` | Monitor the domain and the DNS zone, not just the certificate |
 | `[55]` | Dependency scanning, and a license inventory beyond the fonts |
 | `[59]` | Decide what is logged, for how long, and whether a payload ever reaches a line |
-| `[56]` | A per-org storage guard, so one farm cannot fill the cluster for everybody |
-| `[57]` | Write down the connection-pool answer for M0's limit |
+| `[56]` | A per-org storage guard, so one farm cannot fill the box's disk for everybody |
+| `[57]` | Write down the connection-pool answer for the `mongod` on the box |
 | `[67]` | `SECURITY.md`, and an address a researcher can use that is not a public issue |
 | `[61]` | A device list and "sign out my other devices", for the handset left in a market car park |
 | `[64]` | Run the photo isolation suite against the derived S3 key before the bytes move there |

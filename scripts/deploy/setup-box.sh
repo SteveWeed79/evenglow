@@ -186,9 +186,11 @@ else
 # every device out. Generate one with:  openssl rand -base64 48
 AUTH_SECRET=
 
-# The Atlas connection string. Atlas blocks by IP by default, so this box's
-# public address has to be on the Network Access list there or every request
-# hangs for five seconds and fails.
+# The connection string. This deployment runs `mongod` on this same box, bound
+# to 127.0.0.1 — `setup-mongo.sh` installs it and prints the string once, and
+# that is what goes here. A managed cluster's string works too; if you use one,
+# its Network Access list has to carry this box's public address or every
+# request hangs for five seconds and fails.
 MONGODB_URI=
 
 # **Which database inside that cluster, and this is NOT taken from the URI.**
@@ -198,8 +200,8 @@ MONGODB_URI=
 # two are separate settings and the default is only right if the database is
 # actually called `steading`.
 #
-# It caught the first real deployment. An Atlas cluster named `steadingdb`
-# holding a database also named `steadingdb` is an ordinary thing to end up
+# It caught the first real deployment. A cluster named `steadingdb` holding a
+# database also named `steadingdb` is an ordinary thing to end up
 # with, and the server then answers /health perfectly while every real request
 # reads an empty database that it silently creates. Which looks, from a
 # handset, exactly like a farm's records having vanished.
@@ -210,7 +212,7 @@ MONGODB_URI=
 # that now; leaving the line commented means nothing depends on the guard.
 #
 # Uncomment and fill in when the database is not called `steading`. Check
-# rather than assume — in Atlas use Browse Collections, or:
+# rather than assume:
 #   mongosh "<uri>" --eval 'db.adminCommand({listDatabases:1}).databases.forEach(d=>print(d.name))'
 #MONGODB_DB=
 
@@ -324,8 +326,10 @@ $(printf '\033[1m')Set up. Three things left, and only you can do them.$(printf 
      The instance firewall is already open. This is the other one, and
      forgetting it looks exactly like the server being down.
 
-  3. Add this box's public address to Atlas -> Network Access. Until then
-     every request waits five seconds for a connection and fails.
+  3. Install the database on this box, if it is not there yet:
+       sudo MONGODB_DB=steadingdb /opt/steading/scripts/deploy/setup-mongo.sh
+     It binds mongod to 127.0.0.1 and prints the connection string once.
+     Nothing to open in any firewall for it, which is the point.
 
 $(printf '\033[1m')Then check it from anywhere:$(printf '\033[0m')
 

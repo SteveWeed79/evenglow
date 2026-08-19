@@ -326,9 +326,15 @@ Fastify behind it.
 | Checked | How |
 |---|---|
 | The whole request path | `curl https://api.swbuild.dev/health` from a machine that is not the box |
-| Atlas reachable **from the service process**, not just the box | `POST /auth/login` with a junk email returned *"That email or password is not right."* — that route reads `users`, so a clean 401 proves the connection |
-| The server data path against the real cluster | `pnpm db:verify` — 55/55, including cross-tenant isolation, idempotent replay, role refusals and archive-not-delete |
+| The database reachable **from the service process**, not just the box | `POST /auth/login` with a junk email returned *"That email or password is not right."* — that route reads `users`, so a clean 401 proves the connection |
+| The server data path against the real database | `pnpm db:verify` — 55/55, including cross-tenant isolation, idempotent replay, role refusals and archive-not-delete |
 | Indexes on the real database | `pnpm db:indexes` reported *Indexes applied to "steadingdb"* |
+
+> **The last three were run while the data was still on Atlas.** The database
+> has since moved onto the box (below), and none of them has been re-run against
+> the local `mongod`. They are cheap and they are the checks that would notice a
+> half-finished move: `db:verify` and `db:indexes` both take a `MONGODB_URI` and
+> do not care which one.
 
 ## The facts this box actually runs on
 
@@ -339,13 +345,27 @@ Fastify behind it.
 | Hostname | `api.swbuild.dev` |
 | DNS | **GoDaddy** holds the zone (`ns71`/`ns72.domaincontrol.com`). Vercel is only the registrar's tenant on the apex — a record added on Vercel's side would be ignored |
 | VCN | `vcn-20260115-1714`, Default Security List, ingress on 22 / 80 / 443 |
-| Atlas | cluster `steadingdb`, **database `steadingdb`**, M0 free, AWS us-east-1 |
+| Database | **`mongod` on this box**, bound to `127.0.0.1`, standalone, **database `steadingdb`**. Atlas is gone |
 | Checkout | `/opt/steading`, tracking `main` |
 | Config | `/etc/steading/api.env`, mode 0600 — `AUTH_SECRET`, `MONGODB_URI`, `MONGODB_DB=steadingdb`, `TRUSTED_PROXY_HOPS=1`, `PORT=3001` |
 
+**The database is on the box, and Atlas has been deleted.** That was
+`DEPLOY-THE-SERVER.md`'s *"Moving the database onto the box"* — `setup-mongo.sh`
+then `migrate-to-local-mongo.sh` — and the cluster it came from no longer exists.
+Three things follow, and each of them changes an answer this file used to give:
+
+- **The 512 MB ceiling is gone.** Photos in GridFS now run against the box's
+  disk, not a free tier's allowance. `df -h /` is the number that matters.
+- **`db:usage`'s 10 GB photo signal is now the right one**, not a threshold
+  twenty times the capacity it was watching. Its reasoning was always about
+  `mongodump` size on a self-hosted `mongod`, which is what this is.
+- **Nobody else holds a copy.** A managed tier at least ran on somebody else's
+  disks; this is one `mongod`, on one volume, on one instance. See the backups
+  item below, which is the same item it always was and now the only one.
+
 **`MONGODB_DB=steadingdb` is load-bearing.** `env.ts` defaults it to `steading`,
-and this cluster's database is not called that. Without the line the service
-starts, connects, serves an empty database and reports nothing wrong.
+and this box's database is not called that. Without the line the service starts,
+connects, serves an empty database and reports nothing wrong.
 
 **There is a systemd drop-in on this box that must not be lost yet:**
 `/etc/systemd/system/steading-api.service.d/netlink.conf`. It adds `AF_NETLINK`
@@ -433,7 +453,7 @@ accumulates rather than dropping.
 
 Sign up on the tablet **before any released APK goes near it**. Signing up
 claims the org the device already minted (D15) and flushes its queue, so the
-records reach Atlas without anything being retyped.
+records reach the server without anything being retyped.
 
 > **Installing a released APK over a locally-built one forces an uninstall** —
 > different signing keys, `INSTALL_FAILED_UPDATE_INCOMPATIBLE` — and an
@@ -471,8 +491,10 @@ Told to do, never confirmed done — worth checking rather than assuming:
 
 - [ ] **Reserve the public IP.** Instance → Attached VNICs → the VNIC → IP
       administration → Ephemeral → **Reserved**. An ephemeral address is
-      released on stop/start, and losing it silently breaks the DNS record, the
-      Atlas allowlist and the certificate at once. A plain reboot keeps it.
+      released on stop/start, and losing it silently breaks the DNS record and
+      the certificate at once. A plain reboot keeps it. *(It used to break the
+      Atlas allowlist too. With the database on the box and reached over
+      loopback, that failure mode has gone with it.)*
 - [ ] **Dedupe `MONGODB_DB` in `api.env`.** It was written twice, both
       `steadingdb`, so the value is right and systemd takes the last one — but a
       later edit to the first line would be silently overridden.
@@ -484,10 +506,13 @@ Told to do, never confirmed done — worth checking rather than assuming:
 
 Known and deliberately deferred:
 
-- **No backups *yet*, and now only for want of a bucket.** Atlas M0 shows
-  `Backups: Inactive`, so the farm's 3.8 MB exists in one place.
-  `ACCESS-AND-BILLING.md` §4.1a-i calls a tested restore a condition of the
-  first real farm rather than a nicety.
+- **No backups *yet*, and now only for want of a bucket — and now the only
+  copy is here.** The farm's 3.8 MB is on this box's disk and nowhere else:
+  Atlas held an off-site copy until the migration, and that cluster has been
+  deleted. `ACCESS-AND-BILLING.md` §4.1a-i calls a tested restore a condition of
+  the first real farm rather than a nicety, and the move onto the box is what
+  makes that literal — there is no longer a second disk anywhere that has ever
+  seen these records.
 
   `scripts/backup-mongo.sh` is written and **now scheduled** —
   `steading-backup.timer` nightly, `steading-backup-check.timer` failing a unit
@@ -501,20 +526,26 @@ Known and deliberately deferred:
   about whether a farm has backups is worse than either answer, and the roadmap
   was the one that was wrong — a script with no timer is not a backup. Both now
   say the same thing.
-- **Photos share the 512 MB M0 cap, and nothing warns in time.** Photo bytes
-  live in GridFS in this same database (`blobsFor(orgId)`, bucket `photoBytes`),
-  so they count against the tier's total. At the 200–400 KB the app resizes to,
-  that is roughly **1,300–2,500 photos** before the cluster is full; `photoShape`
-  permits 25 MB per photo, so ~20 would do it if anything ever escapes the
-  resize path. When M0 fills, writes fail — and a farm sees rejected mutations,
-  not "the server is full".
+- ~~**Photos share the 512 MB M0 cap, and nothing warns in time.**~~
+  **Withdrawn — it was true of Atlas and the database is no longer there.**
+  Photo bytes still live in GridFS beside the records (`blobsFor(orgId)`, bucket
+  `photoBytes`), but they now run against the box's disk: roughly 37 GB spare on
+  a default 46.6 GB boot volume, which at 30 MB per farm-year is over a thousand
+  farm-years. The old arithmetic — 1,300–2,500 photos to fill a free tier — does
+  not apply to this deployment.
 
-  `db:usage` watches for photo bytes past **10 GB**, which is twenty times this
-  cluster's entire capacity, so that signal cannot fire first. Its reasoning is
-  about `mongodump` size and is right for a self-hosted mongod; it is the wrong
-  constraint for M0. Either add a capacity-aware warning, or treat Atlas Flex
-  ($8/month, priced in §4.1a) or the S3 move (§4A) as due earlier than the
-  documented signal implies.
+  **And `db:usage`'s 10 GB photo threshold is the correct signal here**, not a
+  number twenty times the capacity it was watching. Its reasoning is about
+  `mongodump` size on a self-hosted `mongod`, which is exactly what this now is.
+  Nothing needs adding; the note that said otherwise was reasoning from a tier
+  that has been deleted.
+
+  **What survives the correction:** `photoShape` still permits 25 MB per photo
+  against an app that resizes to 200–400 KB, so the ceiling is still four
+  hundred times the typical, and a payload that escapes the resize path is still
+  worth refusing at the boundary rather than storing. That was never an M0
+  argument. `ACCESS-AND-BILLING.md` §4.1a-i's serverless 4.5 MB note is the
+  other half of it.
 - **Twenty-five VCNs in this tenancy**, nearly all duplicates on `10.0.0.0/16`,
   several created seconds apart in January. Only `vcn-20260115-1714` is live.
   They consume the tenancy's VCN limit, which is the kind of thing that makes a
@@ -542,5 +573,8 @@ this deployment actually hit, in case they recur:
 | Two accounts on one email, or nothing ever expires | `pnpm db:indexes` was never run against the real database |
 
 Operational commands are in `OPERATOR.md`. `pnpm farm:ls` and
-`pnpm farm:show <id>` both read `MONGODB_URI`, so they can run from any machine
-with the checkout and a route to Atlas — not only from the box.
+`pnpm farm:show <id>` both read `MONGODB_URI` — **and since the database moved
+onto the box and bound itself to `127.0.0.1`, that means they run *on the box*.**
+They used to work from any machine with the checkout and a route to Atlas; there
+is no longer a route to reach from anywhere else. An SSH tunnel is the way to
+run them from a laptop, and `OPERATOR.md` §"Where these run" has it.
