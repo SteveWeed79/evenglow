@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Steading",
+    "name": "Evenglow",
     "slug": "steading",
     "owner": "swbuilds-team",
     "scheme": "steading",
@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon/steading.png",
     "android": {
-      "package": "com.steading.app",
+      "package": "dev.swbuild.homefarm",
       "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon/steading-foreground.png",
@@ -25,7 +25,7 @@
       ]
     },
     "ios": {
-      "bundleIdentifier": "com.steading.app",
+      "bundleIdentifier": "dev.swbuild.homefarm",
       "supportsTablet": false
     },
     "plugins": [

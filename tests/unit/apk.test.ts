@@ -119,12 +119,12 @@ describe('reading the tags', () => {
 
 describe('what the APK says it is', () => {
   const BADGING =
-    "package: name='com.steading.app' versionCode='18' versionName='0.1.13' " +
+    "package: name='dev.swbuild.homefarm' versionCode='18' versionName='0.1.13' " +
     "compileSdkVersion='36'\nsdkVersion:'24'\napplication-label:'Steading'\n";
 
   it('reads the three fields that matter', () => {
     expect(parseBadging(BADGING)).toEqual({
-      package: 'com.steading.app',
+      package: 'dev.swbuild.homefarm',
       versionCode: 18,
       versionName: '0.1.13',
     });

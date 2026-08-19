@@ -408,10 +408,36 @@ period rather than a task.
       pitch (`brechy.com/apps/steading`). They have not launched; they are a
       company and this project is not one yet (`[14]`). **Decided: the app
       becomes Evenglow.** The rename itself is not done — see §3.
-- [ ] **Carry out the rename to Evenglow.** **Before the first Play upload**,
-      and not urgent before then: a package name is permanent from that moment,
-      while a display name is changeable at any release. `[13]` has the audit of
-      what the name touches and the four things that are load-bearing.
+- [x] **Carry out the rename to Evenglow.** **GA**
+      **The package is `dev.swbuild.homefarm`, not `com.evenglow.app`** — the
+      publisher and the category rather than the brand. A package name is
+      permanent from the first Play upload, so it is the one identifier that has
+      to survive a change of name, and this project has already had a name taken
+      out from under it by somebody who reached it independently. Evenglow is
+      clear today; so was Steading. Overrules the first draft of `[13]`'s audit.
+      **The brand is one constant**, `PRODUCT_NAME` in
+      `contracts/src/product.ts`, so the next rename is a line rather than an
+      audit. Twenty user-visible strings read it.
+      **`[13]`'s audit missed six of them.** It counted `apps/mobile` and
+      `apps/api` and never opened `packages/core` — where `restore.ts` refuses a
+      foreign backup by name twice, `db/errors.ts` names the app in a version
+      refusal, `support/tickets.ts` titles every ticket, and
+      `weather/provider.ts` sends it as a User-Agent to an external API.
+      **The package change reaches past `app.json`**: twenty-eight references
+      across fifteen files, every one of them genuinely about package identity —
+      the adb lines in `apk.yml`, `publish-apk.sh`, `deploy.sh`, `apk-check.mjs`
+      and three Windows `.bat` helpers, `GOOGLE_PLAY_PACKAGE` in `env.ts` and
+      `.env.example`, and five test fixtures.
+      **Deliberately unmoved**, per that audit's four: the
+      `steading-<version>-<code>.apk` stem, because `deploy.sh` decides the
+      shelf is current by stripping it; the `slug`, bound to
+      `extra.eas.projectId`; the `scheme`, which is in every OAuth redirect URI;
+      the systemd units and `/opt`, `/etc`, `/var/lib` paths; and the 371 files
+      carrying `@steading/*`. None is visible to a farm.
+      **What it costs the two devices that have it:** a different package is a
+      different app to Android, so the tablet and the tester's phone get a fresh
+      install with an empty database rather than an upgrade. Nothing is lost
+      that a backup and restore does not carry across, and it happens once.
 - [ ] **Decide the business entity.** `[14]` — Play needs a payee.
 
 ## 3. Release mechanics

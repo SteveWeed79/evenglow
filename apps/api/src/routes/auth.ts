@@ -22,6 +22,7 @@ import {
   normalizeVerifyCode,
   verifySchema,
   WRONG_PASSWORD,
+  PRODUCT_NAME,
 } from '@steading/contracts';
 import { authorizeCredentials } from '../auth/credentials';
 import { verifyGoogleIdToken } from '../auth/google';
@@ -229,7 +230,7 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
        */
       if (await findUserByEmail(email)) {
         return reply.status(409).send({
-          error: 'That email already has a Steading account. Sign in with it instead.',
+          error: `That email already has a ${PRODUCT_NAME} account. Sign in with it instead.`,
         });
       }
 
@@ -286,7 +287,7 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
         // the empty org back out rather than leaving the id spent.
         await deleteOrgIfEmpty(orgId).catch(() => undefined);
         return reply.status(409).send({
-          error: 'That email already has a Steading account. Sign in with it instead.',
+          error: `That email already has a ${PRODUCT_NAME} account. Sign in with it instead.`,
         });
       }
 
@@ -399,7 +400,7 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
       const { orgId, orgName } = parsed.data;
       if (orgId === undefined || orgName === undefined) {
         return reply.status(404).send({
-          error: 'No Steading account uses that Google address yet.',
+          error: `No ${PRODUCT_NAME} account uses that Google address yet.`,
         });
       }
 
@@ -647,7 +648,7 @@ async function recoveryRoutes(app: FastifyInstance, env: Env): Promise<void> {
         // journal, where the person who can fix it will see it.
         await trySend(mailerFor(env), {
           to: user.email,
-          subject: 'Your Steading reset code',
+          subject: `Your ${PRODUCT_NAME} reset code`,
           text: resetEmailText(code, user.name),
         });
       });
@@ -797,7 +798,7 @@ async function verificationRoutes(app: FastifyInstance, env: Env): Promise<void>
        */
       const sent = await trySend(mailerFor(env), {
         to: user.email,
-        subject: 'Confirm your Steading email',
+        subject: `Confirm your ${PRODUCT_NAME} email`,
         text: verifyEmailText(code, user.name, user.email),
       });
 
@@ -965,7 +966,7 @@ function verifyEmailText(code: string, name: string, email: string): string {
   return [
     `Hello ${name},`,
     '',
-    `Someone set up a Steading farm account using ${email}.`,
+    `Someone set up a ${PRODUCT_NAME} farm account using ${email}.`,
     'Type this code into the app to confirm the address:',
     '',
     `    ${code}`,
@@ -994,7 +995,7 @@ function resetEmailText(code: string, name: string): string {
   return [
     `Hello ${name},`,
     '',
-    'Someone asked to reset the password on your Steading account.',
+    `Someone asked to reset the password on your ${PRODUCT_NAME} account.`,
     'Type this code into the app:',
     '',
     `    ${code}`,

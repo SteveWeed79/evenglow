@@ -78,7 +78,7 @@ echo   [1 of 2] Everything the app needs is ready.
 :: takes the app's data with it — so bumping expo 57.0.9 to 57.0.11 emptied a
 :: farm, twice, and neither time was a bug in the app.
 ::
-:: A development build is Steading's OWN apk, com.steading.app, with its own
+:: A development build is Steading's OWN apk, dev.swbuild.homefarm, with its own
 :: sandbox. It still talks to Metro, so editing code still reloads in a second;
 :: what changes is that the records survive it.
 ::

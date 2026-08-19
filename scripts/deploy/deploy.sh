@@ -37,7 +37,7 @@ REF="${STEADING_REF:-release}"
 # anything that names a different application. Exported rather than merely set,
 # because that check runs in a child process and a `deploy.env` override that
 # only this script could see would be an override that does nothing.
-export STEADING_APP_ID="${STEADING_APP_ID:-com.steading.app}"
+export STEADING_APP_ID="${STEADING_APP_ID:-dev.swbuild.homefarm}"
 
 say() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 note() { printf '   %s\n' "$*"; }

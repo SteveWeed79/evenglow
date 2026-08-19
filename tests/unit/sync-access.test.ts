@@ -39,7 +39,7 @@ const farm = (over: Partial<OrgDoc> = {}): OrgDoc => ({
 const withPlay = {
   ...base,
   GOOGLE_PLAY_SERVICE_ACCOUNT: '{"client_email":"a@b.com","private_key":"k"}',
-  GOOGLE_PLAY_PACKAGE: 'com.steading.app',
+  GOOGLE_PLAY_PACKAGE: 'dev.swbuild.homefarm',
 };
 
 describe('a server deliberately left open', () => {

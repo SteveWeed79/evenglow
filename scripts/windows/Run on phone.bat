@@ -165,7 +165,7 @@ call "%~dp0_shared.bat" :keep_chosen_address
 if errorlevel 1 call "%~dp0_shared.bat" :set_usb_address !PHONE!
 
 set "NEEDBUILD="
-adb -s !PHONE! shell pm list packages 2>nul | findstr /c:"com.steading.app" >nul
+adb -s !PHONE! shell pm list packages 2>nul | findstr /c:"dev.swbuild.homefarm" >nul
 if errorlevel 1 set "NEEDBUILD=1"
 
 rem Checked out here rather than inside the branch below, because `goto` out of

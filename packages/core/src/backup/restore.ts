@@ -10,6 +10,7 @@ import { StorageFullError } from '../db/errors';
 import { recordKey } from '../db/records';
 import { localStore } from '../db/store';
 import { enqueueAll } from '../sync/queue';
+import { PRODUCT_NAME } from '@steading/contracts';
 
 /**
  * Putting a backup back, and the rules that make it safe.
@@ -204,12 +205,12 @@ export function readBackup(text: string): { ok: true; file: BackupFile } | { ok:
   try {
     raw = JSON.parse(text);
   } catch {
-    return { ok: false, message: 'That file is not a Steading backup.' };
+    return { ok: false, message: `That file is not a ${PRODUCT_NAME} backup.` };
   }
 
   const parsed = backupFileSchema.safeParse(raw);
   if (!parsed.success) {
-    return { ok: false, message: 'That file is not a Steading backup.' };
+    return { ok: false, message: `That file is not a ${PRODUCT_NAME} backup.` };
   }
 
   const refusal = backupRefusal(parsed.data);

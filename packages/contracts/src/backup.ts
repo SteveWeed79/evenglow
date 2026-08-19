@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { entitySchema, MUTATION_SCHEMA_VERSION } from './mutation';
+import { PRODUCT_NAME } from './product';
 
 /**
  * A farm's records, as a file it can carry to another phone.
@@ -154,7 +155,7 @@ export type BackupFile = z.infer<typeof backupFileSchema>;
  */
 export function backupRefusal(file: BackupFile): string | null {
   if (file.formatVersion > BACKUP_FORMAT_VERSION) {
-    return 'That backup was written by a newer version of Steading. Update the app and try again.';
+    return `That backup was written by a newer version of ${PRODUCT_NAME}. Update the app and try again.`;
   }
   if (file.mutationSchemaVersion > MUTATION_SCHEMA_VERSION) {
     return 'That backup holds records this version cannot read. Update the app and try again.';

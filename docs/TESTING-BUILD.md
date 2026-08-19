@@ -121,7 +121,7 @@ Bumping `expo` from 57.0.9 to 57.0.11 was enough. Android takes an app's data
 on reinstall, so the database went with it, and neither loss was a bug in this
 app.
 
-A **development build** is Steading's own APK, `com.steading.app`, with its own
+A **development build** is Steading's own APK, `dev.swbuild.homefarm`, with its own
 sandbox. It still connects to Metro, so a code change still reloads in a second
 — what changes is that the records survive it. `Run on phone` and `Run on
 emulator` both build one; `npx expo run:android` is the same thing by hand.
@@ -198,7 +198,7 @@ the qr code nothing happens."*
 
 Nothing was broken. The device simply did not have the app the code is for, and
 the window handed over a QR without ever checking. `Run on phone` now looks
-first — if `com.steading.app` is not on the attached device it builds and
+first — if `dev.swbuild.homefarm` is not on the attached device it builds and
 installs it, and only offers the code to a device that can read it.
 
 The price is the first build: Gradle, five to fifteen minutes, and it needs
@@ -267,8 +267,8 @@ is designed around is an account (A2.3), which is the whole thing being sold.
 For a debuggable build, over adb:
 
 ```
-adb shell run-as com.steading.app ls -la files/SQLite/       # expo-sqlite ≥ 14
-adb shell run-as com.steading.app ls -la databases/          # older layout
+adb shell run-as dev.swbuild.homefarm ls -la files/SQLite/       # expo-sqlite ≥ 14
+adb shell run-as dev.swbuild.homefarm ls -la databases/          # older layout
 ```
 
 - **One `steading-<ULID>.db`** — that is the farm, and it is the one open.
@@ -337,7 +337,7 @@ places instead:
   uninstall takes the farm. Worth knowing *before* you need it.
 - **Nothing on the device can tell two builds apart.** Settings → Apps shows
   `version`, which does not move between builds. `adb shell dumpsys package
-  com.steading.app | findstr versionCode` is the only place the integer
+  dev.swbuild.homefarm | findstr versionCode` is the only place the integer
   surfaces, and it was the same integer every time.
 
 ### The rule
@@ -559,7 +559,7 @@ takes the farm's records with it (§3, last row).
 anything it cannot positively confirm is a failure, including its own inputs
 being missing.
 
-- **The APK is the app.** `aapt2 dump badging` has to say `com.steading.app`
+- **The APK is the app.** `aapt2 dump badging` has to say `dev.swbuild.homefarm`
   with the version and code we intended. A build that read a stale `app.json`
   produces a perfectly ordinary APK with the wrong number in it.
 - **The signature is ours.** The certificate's SHA-256 is compared against

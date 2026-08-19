@@ -2,7 +2,7 @@
 
 Offline-first farm operations app. **React Native (Expo SDK 57, Android first) · TypeScript strict · SQLite on device · Fastify + MongoDB on the server.**
 
-There is no PWA, no Next.js, and **Expo Go is not a supported runtime** — the app runs as its own development build under `com.steading.app`, because Expo Go's shared sandbox wiped a farm's records twice. If a suggestion assumes SSR, server components, or Next API routes, it is aimed at the wrong project.
+There is no PWA, no Next.js, and **Expo Go is not a supported runtime** — the app runs as its own development build under `dev.swbuild.homefarm`, because Expo Go's shared sandbox wiped a farm's records twice. If a suggestion assumes SSR, server components, or Next API routes, it is aimed at the wrong project.
 
 **React Native replaces Capacitor — it is not a second client.** `docs/NATIVE-PIVOT.md` argued the other way and is marked superseded; `docs/REACT-NATIVE-PLAN.md` is the live plan. The client lives in `apps/mobile`. The Capacitor/Vite client and the Next app are **retired and deleted**; the framework-agnostic half of the old client is `packages/core`.
 

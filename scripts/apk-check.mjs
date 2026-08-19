@@ -12,7 +12,7 @@ import {
  *
  *   node scripts/apk-check.mjs \
  *     --badging badging.txt --certs certs.txt \
- *     --package com.steading.app --version 0.1.13 --code 18 \
+ *     --package dev.swbuild.homefarm --version 0.1.13 --code 18 \
  *     --fingerprint "$ANDROID_CERT_SHA256"
  *
  * Every check here exists because the thing it catches **succeeds silently**.

@@ -18,6 +18,7 @@ import {
   canAssign,
   canInvite,
   type PendingInvite,
+  PRODUCT_NAME,
 } from '@steading/contracts';
 import { requireClaims, requireMutationClaims } from '../auth/require';
 import { hashPassword } from '../auth/password';
@@ -160,7 +161,7 @@ export async function memberRoutes(app: FastifyInstance, env: Env): Promise<void
        */
       if (await findUserByEmail(email)) {
         return reply.status(409).send({
-          error: 'That email already has a Steading account. Sign in with it instead.',
+          error: `That email already has a ${PRODUCT_NAME} account. Sign in with it instead.`,
         });
       }
 
@@ -202,7 +203,7 @@ export async function memberRoutes(app: FastifyInstance, env: Env): Promise<void
 
         if (isDuplicateKey(error)) {
           return reply.status(409).send({
-            error: 'That email already has a Steading account. Sign in with it instead.',
+            error: `That email already has a ${PRODUCT_NAME} account. Sign in with it instead.`,
           });
         }
         throw error;
@@ -256,7 +257,7 @@ export async function memberRoutes(app: FastifyInstance, env: Env): Promise<void
        */
       if (await findUserByEmail(email)) {
         return reply.status(409).send({
-          error: 'That email already has a Steading account. Sign in with it instead.',
+          error: `That email already has a ${PRODUCT_NAME} account. Sign in with it instead.`,
         });
       }
 
@@ -287,7 +288,7 @@ export async function memberRoutes(app: FastifyInstance, env: Env): Promise<void
 
         if (isDuplicateKey(error)) {
           return reply.status(409).send({
-            error: 'That email already has a Steading account. Sign in with it instead.',
+            error: `That email already has a ${PRODUCT_NAME} account. Sign in with it instead.`,
           });
         }
         throw error;

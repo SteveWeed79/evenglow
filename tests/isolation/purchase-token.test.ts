@@ -63,7 +63,7 @@ async function server() {
       MONGODB_URI: harness!.uri,
       MONGODB_DB: 'steading_purchase',
       GOOGLE_PLAY_SERVICE_ACCOUNT: PLAY_ACCOUNT,
-      GOOGLE_PLAY_PACKAGE: 'com.steading.app',
+      GOOGLE_PLAY_PACKAGE: 'dev.swbuild.homefarm',
     }),
   );
 }

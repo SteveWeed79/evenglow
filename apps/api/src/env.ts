@@ -84,7 +84,7 @@ const envSchema = z.object({
    * what the app does today.
    */
   GOOGLE_PLAY_SERVICE_ACCOUNT: z.string().default(''),
-  /** The package the purchase must belong to. `com.steading.app`. */
+  /** The package the purchase must belong to. `dev.swbuild.homefarm`. */
   GOOGLE_PLAY_PACKAGE: z.string().default(''),
   /**
    * What a Pub/Sub push token must be addressed to, if push tokens are on.

@@ -1296,7 +1296,7 @@ forty megabytes have been downloaded:
 
 ```
 --build-profile   preview-farm      the profile CI builds, and no other
---app-identifier  com.steading.app  this application, not a fork or a sibling
+--app-identifier  dev.swbuild.homefarm  this application, not a fork or a sibling
 --git-commit-hash <full sha>        the build made from the commit being served
 ```
 

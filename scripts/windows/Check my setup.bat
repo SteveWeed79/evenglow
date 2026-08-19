@@ -277,7 +277,7 @@ if errorlevel 1 (
   for /f "skip=1 tokens=1,2" %%D in ('adb devices') do (
     if "%%E"=="device" (
       set "ANYDEVICE=1"
-      adb -s %%D shell pm list packages 2>nul | findstr /c:"com.steading.app" >nul
+      adb -s %%D shell pm list packages 2>nul | findstr /c:"dev.swbuild.homefarm" >nul
       if errorlevel 1 (
         echo   [ NOTE ]    not installed on %%D
       ) else (

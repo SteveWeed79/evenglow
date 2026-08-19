@@ -8,6 +8,7 @@ import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useFarmName } from '../hooks/useFarmName';
 import { useLive } from '../hooks/useLive';
+import { PRODUCT_NAME } from '@steading/contracts';
 
 /**
  * Getting a farm's records out of the app.
@@ -100,7 +101,7 @@ export function ExportScreen(): React.ReactElement {
         await shareAsync(file.uri, {
           mimeType: 'text/csv',
           UTI: 'public.comma-separated-values-text',
-          dialogTitle: `Steading — ${name}`,
+          dialogTitle: `${PRODUCT_NAME} — ${name}`,
         });
       } catch (error) {
         // Named rather than swallowed: a share that silently did nothing is

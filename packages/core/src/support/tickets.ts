@@ -2,6 +2,7 @@ import { newId, type SupportBundle } from '@steading/contracts';
 import { apiBase, apiUrl } from '../api';
 import { localStore } from '../db/store';
 import type { StoredTicket } from '../db/port';
+import { PRODUCT_NAME } from '@steading/contracts';
 
 /**
  * Tickets, held until they can be sent (`docs/SUPPORT-LOOP.md` S6 and S7).
@@ -178,7 +179,7 @@ export async function deliver(ticket: StoredTicket): Promise<Filed> {
  */
 export function ticketAsText(bundle: SupportBundle): string {
   return [
-    `Steading report ${bundle.fingerprint}`,
+    `${PRODUCT_NAME} report ${bundle.fingerprint}`,
     bundle.said === undefined ? null : `\n${bundle.said}\n`,
     JSON.stringify(bundle),
   ]

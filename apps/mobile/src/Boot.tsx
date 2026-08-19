@@ -13,6 +13,7 @@ import { useAppFonts } from './theme/fonts';
 import type { CachedClaims } from './auth/session';
 import { useTheme, type ThemeName } from './theme/ThemeProvider';
 import { FONTS, SPACE, TYPE } from './theme/tokens';
+import { PRODUCT_NAME } from '@steading/contracts';
 
 /**
  * The mark, per theme, so the boot screen wears what the farm chose.
@@ -310,12 +311,12 @@ export function Boot({
           resizeMode="contain"
           accessible
           accessibilityRole="image"
-          accessibilityLabel="Steading"
+          accessibilityLabel={PRODUCT_NAME}
           testID="boot-mark"
         />
       ) : (
         <>
-          <Text style={[styles.title, { color: colors.ink }]}>Steading could not start</Text>
+          <Text style={[styles.title, { color: colors.ink }]}>{PRODUCT_NAME} could not start</Text>
           {/* Named plainly: this is the one screen where a farmer needs to be
               able to read something back to whoever can help. */}
           <Text style={[styles.body, { color: colors.muted }]}>

@@ -39,7 +39,7 @@ SOURCE="${1:-}"
 
 # The application this box serves. `deploy.sh` passes the same value to EAS as a
 # query filter; this is the check on the file that actually arrived.
-EXPECT_APP_ID="${STEADING_APP_ID:-com.steading.app}"
+EXPECT_APP_ID="${STEADING_APP_ID:-dev.swbuild.homefarm}"
 
 die() { printf '\n  %s\n\n' "$*" >&2; exit 1; }
 say() { printf '\n  %s\n' "$*"; }

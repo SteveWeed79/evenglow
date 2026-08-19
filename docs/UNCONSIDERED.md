@@ -187,10 +187,35 @@ otherwise plans the billing down to the refusal copy.
 
     ### What the rename touches — audited 19 August, not yet carried out
 
-    **Config, and the only irreversible part:** `app.json` — `name`, `slug`,
-    `scheme`, `android.package`, `ios.bundleIdentifier`. `com.evenglow.app`
-    must be right *before the first Play upload*, because a package name cannot
-    be changed afterwards.
+    **Config, and the only irreversible part:** `app.json`. `name` becomes
+    `Evenglow`; **`slug` and `scheme` deliberately do not move** — the slug is
+    bound to `extra.eas.projectId` and the scheme is in every OAuth redirect
+    URI, and neither is visible to a farm.
+
+    **The package is `dev.swbuild.homefarm`, not `com.evenglow.app`** — the
+    publisher and the category rather than the brand. A package name is
+    permanent from the first Play upload, so it is the one identifier that has
+    to survive a change of name, and **this project has already had a name
+    taken out from under it by somebody who reached it independently.** Evenglow
+    is clear today; so was Steading, until somebody looked. Putting the brand
+    inside the permanent thing would mean the next collision costs the install
+    base rather than a display name. Decided 19 August 2026, overruling the
+    `com.evenglow.app` in the first draft of this audit.
+
+    **It reaches further than `app.json`** — twenty-eight references across
+    fifteen files, all of them genuinely about package identity: the adb lines
+    in `apk.yml`, `publish-apk.sh`, `deploy.sh`, `apk-check.mjs` and the three
+    Windows `.bat` helpers, `GOOGLE_PLAY_PACKAGE` in `env.ts` and
+    `.env.example`, and five test fixtures.
+
+    **They are one constant now**, `PRODUCT_NAME` in
+    `contracts/src/product.ts`, because finding all of them took an audit and
+    the next rename should not. **This audit itself missed six of them** — it
+    counted `apps/mobile` and `apps/api` and never looked in `packages/core`,
+    where `restore.ts` says *"That file is not a Steading backup"* twice,
+    `db/errors.ts` names the app in a version refusal, `support/tickets.ts`
+    titles every support ticket, and `weather/provider.ts` puts it in the
+    User-Agent sent to an external API. Twenty in total, not fifteen.
 
     **User-visible strings, and the app is the smaller half.** Three in
     `apps/mobile/src` — `Boot.tsx`'s accessibility label and its *"Steading could

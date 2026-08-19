@@ -311,7 +311,7 @@ jobs:
           node scripts/apk-check.mjs \
             --badging "$RUNNER_TEMP/badging.txt" \
             --certs "$RUNNER_TEMP/certs.txt" \
-            --package com.steading.app \
+            --package dev.swbuild.homefarm \
             --version "$VERSION" \
             --code "$CODE" \
             --fingerprint "$FINGERPRINT"
