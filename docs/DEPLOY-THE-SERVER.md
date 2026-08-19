@@ -1114,9 +1114,12 @@ steading-box` and open `http://localhost:3002`. No certificate, no hostname, no
 public port, and the board is reachable exactly by people who can already log
 into the box.
 
-If you would rather have a URL, it is its own site block on its own name:
+If you would rather have a URL, it is its own site block on its own name — and
+it goes in **`/etc/caddy/conf.d/`, never in the Caddyfile itself**:
 
 ```
+sudo install -d -m 0755 /etc/caddy/conf.d
+sudo tee /etc/caddy/conf.d/ops.caddy >/dev/null <<'EOF'
 ops.example.com {
 	# Optional and cheap. Breaks when your ISP rotates you, which is the
 	# trade — a tailnet survives that and is one more daemon to run.
@@ -1126,7 +1129,30 @@ ops.example.com {
 	reverse_proxy 127.0.0.1:3002
 	encode zstd gzip
 }
+EOF
+sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+sudo systemctl reload caddy
 ```
+
+> #### This page used to say "append it to the Caddyfile", and a deploy ate it
+>
+> `deploy.sh` renders `/etc/caddy/Caddyfile` from the repository and installs it
+> over the running one **on every tick** — which is deliberate, and is why a
+> Caddyfile change reaches the box at all. A block appended by hand was therefore
+> gone within five minutes, with `reloaded for api.example.com` as the only
+> trace, and the board's URL started answering 404 for no reason anybody could
+> see.
+>
+> Worse if you *prepended* it: the deploy reads the domain to render with as the
+> first site block in the running file, so the API's config would have been
+> rendered for `ops.example.com` and every handset would have lost its server —
+> reported as a successful reload.
+>
+> The Caddyfile now ends its preamble with `import /etc/caddy/conf.d/*.caddy`,
+> and the deploy creates that directory and never writes into it. If you already
+> had a block in the Caddyfile, the next deploy keeps a copy at
+> `/etc/caddy/Caddyfile.local-blocks.bak` and says so — move the block out of it
+> into `conf.d` and reload.
 
 **`TRUSTED_PROXY_HOPS=1` has to be right for this to mean anything.** With it
 wrong, `request.ip` is `127.0.0.1` for every request and every limiter in the

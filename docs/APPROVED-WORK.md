@@ -347,8 +347,8 @@ on the exact failure they then permit.
       restore, and watch the bytes arrive. And `ACCESS-AND-BILLING.md` §4.1a-i
       is now wrong in the app's favour and wants the correction §12c asks for.
 
-- [ ] **`deploy.sh` deletes any Caddy site block added by hand.** *(found by the
-      audit above; pre-existing, not introduced by it)*
+- [x] **`deploy.sh` deleted any Caddy site block added by hand.** **GA**
+      *(found by the audit above; pre-existing, not introduced by it)*
       Every deploy re-renders `/etc/caddy/Caddyfile` from the repository's
       single-site template and `install`s it over the running file. So the
       `ops.example.com` block `DEPLOY-THE-SERVER.md` offers as the alternative to
@@ -360,10 +360,30 @@ on the exact failure they then permit.
       *prepended* the ops block rather than appending it gets the API's Caddyfile
       rendered for the ops hostname — every handset offline, reported as a
       successful reload.
-      Not urgent while the tunnel is the documented default, and it is a trap
-      laid for exactly the person who reads to the end of that section. The fix
-      is either a second rendered site block the template owns, or a
-      `caddy.d/`-style include the deploy leaves alone.
+      **The include, and a refusal rather than a guess.** The template now ends
+      its preamble with `import /etc/caddy/conf.d/*.caddy`; both `setup-box.sh`
+      and `deploy.sh` create that directory and neither ever writes into it, so
+      a local block survives every tick. Absolute path deliberately — Caddy
+      resolves a relative import against the file it appears in, and the deploy
+      validates a rendered copy in `/tmp`, so a relative one would look in the
+      wrong directory at exactly one of the two moments. `*.caddy` rather than
+      `*` because Caddy's globbing includes dotfiles and would hand it an
+      editor's swap file. An empty glob is not an error, which is what makes it
+      safe to ship to every box at once.
+      **The `head -1` half is not worked around, it is refused.** Two site
+      blocks means the box predates `conf.d` and the deploy does not know which
+      name is the API's — so it keeps a copy at
+      `/etc/caddy/Caddyfile.local-blocks.bak`, says which blocks it found and
+      what to do, and **leaves the Caddyfile alone**. A config that stops being
+      updated is a real cost and it is the smaller one: bounded by one manual
+      step, loud every five minutes until somebody takes it, and it cannot take
+      a farm's server offline.
+      **Tested by running the shipped shell**, not by restating it —
+      `tests/unit/caddy-deploy.test.ts` lifts the decision block out of
+      `deploy.sh` with `sed` and drives it against all three file shapes. Five
+      of its ten assertions fail against the code they replaced, including both
+      hazards: the appended block being deleted, and the prepended one causing
+      the API's config to be rendered for the board's hostname.
 
 ## 2. Start on the same day — the only work with a calendar attached
 

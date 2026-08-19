@@ -173,15 +173,56 @@ fi
 # that look like a much bigger failure than it is.
 if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
   say "Caddy"
-  DOMAIN="$(sed -n 's/^\([a-z0-9.-]*\) {$/\1/p' /etc/caddy/Caddyfile | head -1)"
+
+  # Where a box keeps what only that box needs, and the reason the overwrite
+  # below is survivable at all. Created BEFORE the validate, because the
+  # rendered file imports it — see the Caddyfile's own note on why an empty
+  # glob is fine but a relative path would not be.
+  install -d -m 0755 /etc/caddy/conf.d
+
+  # ── Which name to render for, and a refusal rather than a guess ───────────
+  #
+  # The template owns exactly ONE site block, so a correctly managed box has
+  # exactly one in its running file. This used to take `head -1` of them, which
+  # is right only as long as that stays true — and `DEPLOY-THE-SERVER.md` spent
+  # months telling operators to add a second one by hand for the operations
+  # board.
+  #
+  # **Two blocks, and `head -1` is a coin toss with the farm on it.** Appended,
+  # the deploy silently deleted the board's block. *Prepended*, it read
+  # `ops.example.com` as the domain and rendered the API's entire config for
+  # that name — every handset loses its server, reported as `reloaded for
+  # ops.example.com`. Verified against both orderings before this was written.
+  #
+  # So a second block is not something to work around. It means the box predates
+  # `conf.d` and this deploy does not know which name is the API's. It keeps a
+  # copy, says what to do, and leaves the Caddyfile alone — a config that stops
+  # being updated is a real cost, and it is the smaller one, bounded by a single
+  # manual step and loud every five minutes until somebody takes it.
+  BLOCKS="$(sed -n 's/^\([a-z0-9.-]*\) {$/\1/p' /etc/caddy/Caddyfile)"
+  COUNT="$(printf '%s\n' "$BLOCKS" | grep -c . || true)"
+  DOMAIN="$(printf '%s\n' "$BLOCKS" | head -1)"
 
   if [ -z "$DOMAIN" ]; then
     note "could not read the domain out of /etc/caddy/Caddyfile — left alone"
+  elif [ "$COUNT" -gt 1 ]; then
+    # One fixed name, never overwritten: the first copy is the one taken while
+    # the extra blocks were still in the file. Outside conf.d deliberately — a
+    # backup in there ending in `.caddy` would be imported, re-declaring the
+    # API's own block and leaving Caddy a config it refuses to load.
+    if [ ! -f /etc/caddy/Caddyfile.local-blocks.bak ]; then
+      cp -a /etc/caddy/Caddyfile /etc/caddy/Caddyfile.local-blocks.bak
+    fi
+    note "/etc/caddy/Caddyfile has ${COUNT} site blocks ($(printf '%s\n' "$BLOCKS" | tr '\n' ' ')) — this deploy will not guess which is the API's, so it left the file alone"
+    note "copy at /etc/caddy/Caddyfile.local-blocks.bak — move the blocks that are not the API's into /etc/caddy/conf.d/<name>.caddy, leave one in the Caddyfile, then reload caddy"
   else
     sed "s/api\.example\.com/${DOMAIN}/" "$REPO_DIR/scripts/deploy/Caddyfile" > /tmp/Caddyfile.next
 
+    # Validated against the whole config, imports included — so a syntax error
+    # in a local block under conf.d is caught here rather than by a reload that
+    # leaves the box serving nothing.
     if ! caddy validate --config /tmp/Caddyfile.next --adapter caddyfile >/dev/null 2>&1; then
-      note "the Caddyfile in this commit is not valid — left the running one alone"
+      note "the rendered Caddyfile is not valid — left the running one alone (check /etc/caddy/conf.d)"
     elif cmp -s /tmp/Caddyfile.next /etc/caddy/Caddyfile; then
       note "unchanged"
     else

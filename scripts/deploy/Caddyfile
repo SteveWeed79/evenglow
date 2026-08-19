@@ -33,6 +33,43 @@
 # itself — so Caddy's challenge cannot complete, and if it did, the hop count
 # below would be wrong.
 
+# ── Anything this box adds, which a deploy must not eat ─────────────────────
+#
+# **`deploy.sh` renders this file and installs it over the running one on every
+# tick.** That is deliberate and it is why this file is here rather than only in
+# `setup-box.sh` — a Caddyfile that only the one-time setup installed went stale
+# the day `/app` was added, and the box answered 404 for a route Caddy was
+# supposed to serve.
+#
+# The cost was that a site block added by hand could not survive five minutes.
+# `DEPLOY-THE-SERVER.md` told operators to append an `ops.example.com` block for
+# the operations board, and the next deploy silently removed it.
+#
+# So this file owns the API's own block and **nothing else**, and everything
+# local to one box lives in `/etc/caddy/conf.d/*.caddy`, which no deploy writes
+# to. Add a file, `systemctl reload caddy`, done — and it is still there
+# tomorrow.
+#
+# ## Three things about `import` that decide whether this works
+#
+# **An empty glob is not an error.** Caddy errors on an `import` of a named file
+# that is missing, and treats a glob matching nothing as a no-op — so a box with
+# no local blocks, or no `conf.d` at all, validates and serves exactly as it did
+# before. That is what makes it safe to ship this line to every box at once.
+#
+# **The path is absolute because a relative one would resolve against the wrong
+# directory.** Caddy resolves a relative import against the file the import
+# appears in, and `deploy.sh` validates a rendered copy at `/tmp/Caddyfile.next`
+# — so `conf.d/*.caddy` would look in `/tmp` at validate time and in `/etc/caddy`
+# at serve time, which is the shape of bug that passes every check and then
+# fails on the box.
+#
+# **`*.caddy`, not `*`.** Caddy's globbing includes dotfiles, unlike a shell's,
+# so a bare `*` picks up an editor's `.ops.caddy.swp` and hands Caddy a binary
+# file. Requiring the suffix means a swap file, a `~` backup and a `.bak` are
+# all ignored.
+import /etc/caddy/conf.d/*.caddy
+
 api.example.com {
 	# ── The app itself, for a phone to install ──────────────────────────────
 	#

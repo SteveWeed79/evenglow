@@ -299,6 +299,13 @@ chown caddy:caddy /var/log/caddy 2>/dev/null || true
 install -d -m 0755 /var/lib/steading/dist
 chown caddy:caddy /var/lib/steading/dist 2>/dev/null || true
 
+# Where this box keeps site blocks the repository does not own — the operations
+# board's, most likely. `deploy.sh` renders the Caddyfile over the running one
+# every five minutes and imports this directory without ever writing to it, so
+# anything put here survives a deploy and anything put in the Caddyfile itself
+# does not. Created empty; an empty glob is not an error to Caddy.
+install -d -m 0755 /etc/caddy/conf.d
+
 sed "s/api\.example\.com/${DOMAIN}/" "$REPO_DIR/scripts/deploy/Caddyfile" > /etc/caddy/Caddyfile
 systemctl enable caddy >/dev/null
 systemctl reload caddy 2>/dev/null || systemctl restart caddy
