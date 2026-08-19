@@ -124,7 +124,7 @@ describe('the rail', () => {
    * it holds a 24dp icon with a short label under it; this one holds the label
    * alone, and the budget above allows eight characters.
    *
-   * The estimate is IBM Plex Mono's 0.6em advance at `TYPE.label`, plus the
+   * The estimate is the data face's 0.6em advance at `TYPE.label`, plus the
    * tracking `TabMark` applies, plus the padding either side. It is an
    * estimate and the device is the judge — but it must not be *obviously*
    * short, which is what it was at 80.

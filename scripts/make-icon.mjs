@@ -58,7 +58,7 @@ import { compose, encodePng } from './lib/png-write.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const MOBILE = path.join(ROOT, 'apps/mobile');
-const FONT = path.join(MOBILE, 'assets/fonts/Fraunces-Soft30Wonk1-Bold.ttf');
+const FONT = path.join(MOBILE, 'assets/fonts/Fraunces-Opsz30Soft100Wonk1-Bold.ttf');
 
 /** Expo requires exactly this for every app icon. */
 const SIZE = 1024;

@@ -1,45 +1,11 @@
-/**
- * What ships inside the APK alongside the fonts.
- *
- * The SIL Open Font License requires its text and the copyright notice to be
- * distributed with the font software, and **an APK is a distribution**. The
- * `OFL-*.txt` files in `assets/fonts` satisfy that for anyone reading the
- * repository; they are not bundled by Metro, which only packages what is
- * `require`d, so on a handset they would not exist. This does.
- *
- * The body is included once because all three families are OFL 1.1 and the
- * files are byte-identical apart from the notice at the top.
- *
- * Generated from those files rather than retyped — see the commit that added
- * the fonts. If a family is added or its licence changes, replace this and
- * keep `fonts.test.ts` honest.
- */
+Copyright 2019 The Recursive Project Authors (github.com/arrowtype/recursive)
 
-export interface FontLicence {
-  family: string;
-  notice: string;
-  source: string;
-}
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+http://scripts.sil.org/OFL
 
-export const FONT_LICENCES: readonly FontLicence[] = [
-  {
-    family: 'Fraunces',
-    notice: 'Copyright 2018 The Fraunces Project Authors',
-    source: 'https://github.com/undercasetype/Fraunces',
-  },
-  {
-    family: 'Alegreya Sans',
-    notice: 'Copyright 2013 The Alegreya Sans Project Authors',
-    source: 'https://github.com/huertatipografica/Alegreya-Sans',
-  },
-  {
-    family: 'Recursive Mono Casual',
-    notice: 'Copyright 2019 The Recursive Project Authors',
-    source: 'https://github.com/arrowtype/recursive',
-  },
-];
 
-export const OFL_1_1 = `-----------------------------------------------------------
+-----------------------------------------------------------
 SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
 -----------------------------------------------------------
 
@@ -52,7 +18,7 @@ with others.
 
 The OFL allows the licensed fonts to be used, studied, modified and
 redistributed freely as long as they are not sold by themselves. The
-fonts, including any derivative works, can be bundled, embedded, 
+fonts, including any derivative works, can be bundled, embedded,
 redistributed and/or sold with any software provided that any reserved
 names are not used by derivative works. The fonts and derivatives,
 however, cannot be released under any other type of license. The
@@ -124,5 +90,4 @@ COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
 INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
 DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
-OTHER DEALINGS IN THE FONT SOFTWARE.`;
-
+OTHER DEALINGS IN THE FONT SOFTWARE.

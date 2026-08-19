@@ -236,18 +236,20 @@ export const THEMES: Record<ThemeName, Theme> = {
 /**
  * Type.
  *
- * Fraunces' SOFT and WONK axes cannot be set in RN — variable-font axes are
- * unsupported — so the display face ships as static instances cut at
- * SOFT 30 / WONK 1 and is referenced by family name. The faces are not
- * registered yet; until `expo-font` loads them RN falls back to the system
- * face, which is visible on purpose rather than hidden behind a resolved
- * default.
+ * Variable-font axes cannot be set in RN, so every face here ships as a static
+ * instance cut from its variable original and is referenced by family name —
+ * Fraunces at SOFT 100 / WONK 1, Recursive at MONO 1 / CASL 1. `fonts.ts` says
+ * why each coordinate is what it is and `scripts/cut-fonts.py` reproduces them.
+ *
+ * The faces are not registered yet; until `expo-font` loads them RN falls back
+ * to the system face, which is visible on purpose rather than hidden behind a
+ * resolved default.
  */
 export const FONTS = {
-  display: 'Fraunces-Soft30Wonk1-Bold',
+  display: 'Fraunces-Opsz30Soft100Wonk1-Bold',
   body: 'AlegreyaSans-Regular',
   bodyBold: 'AlegreyaSans-Bold',
-  data: 'IBMPlexMono-Regular',
+  data: 'RecursiveMonoCasual-Medium',
   /**
    * The same face, cut bold. Used where a mono label has to carry emphasis
    * that colour alone does not — the tab you are standing in, most of all.
@@ -257,7 +259,7 @@ export const FONTS = {
    * the label silently stays regular, which is the failure this token exists
    * to prevent.
    */
-  dataBold: 'IBMPlexMono-Bold',
+  dataBold: 'RecursiveMonoCasual-Bold',
 } as const;
 
 /**
@@ -369,7 +371,7 @@ export const LAYOUT = {
    * 96 rather than Material's 80, and the reason is that this bar has no
    * icons. A rail is 80 wide because it holds a 24dp glyph with a short word
    * under it; ours holds the word alone, and `tab-marks.ts` caps a name at
-   * eight characters — 8 × IBM Plex Mono at `TYPE.label` plus its tracking is
+   * eight characters — 8 × the data face at `TYPE.label` plus its tracking is
    * about 70dp, which does not fit inside 80 less padding. `TabMark`'s comment
    * records this bar clipping its labels twice already, both times because a
    * word was put in a box measured for something else. Not a third time.

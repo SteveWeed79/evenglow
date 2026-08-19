@@ -4,21 +4,39 @@ import { describe, expect, it } from 'vitest';
 // Plain .mjs build scripts, like `png.mjs` above them — TS resolves and infers
 // these, so the assertions below are checked against the real thing.
 import { glyphCoverage, internals } from '../../scripts/lib/glyph.mjs';
+import { PRODUCT_NAME } from '@homefarm/contracts';
+import { FONTS } from '@homefarm/mobile/theme/tokens';
 
 /**
  * The letterform behind `pnpm make:icon`.
  *
- * The launcher icon is an S taken out of the app's own display `.ttf` rather
- * than drawn to resemble one, so the outline cannot quietly stop matching the
- * headings. That makes the extraction load-bearing: if it is wrong, the mark on
- * every phone is wrong, and the only place it would ever be noticed is a
- * home screen.
+ * The launcher icon is the product's own initial taken out of the app's own
+ * display `.ttf` rather than drawn to resemble one, so the outline cannot
+ * quietly stop matching the headings. That makes the extraction load-bearing:
+ * if it is wrong, the mark on every phone is wrong, and the only place it would
+ * ever be noticed is a home screen.
+ *
+ * **Both of those are derived here, and that is the point of this preamble.**
+ * This file used to name the font file and the letter `S` outright. The rename
+ * to Evenglow moved neither: the generator went on cutting an S — a launcher
+ * icon bearing a letter absent from the product's name — and these assertions
+ * went on passing, because they were checking the same two constants the
+ * generator was wrong about. A test that hardcodes what it is meant to be
+ * guarding agrees with the defect.
+ *
+ * `FONTS.display` is the family name, and in this project the family name is
+ * the filename stem — `fonts.test.ts` is what holds those two in step. So a
+ * re-cut of the display face at different axes is followed here automatically,
+ * and so is the next rename.
  */
 
 const FONT = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
-  '../../apps/mobile/assets/fonts/Fraunces-Soft30Wonk1-Bold.ttf',
+  `../../apps/mobile/assets/fonts/${FONTS.display}.ttf`,
 );
+
+/** The same letter `make-icon.mjs` draws, from the same source. */
+const MARK = PRODUCT_NAME[0]!;
 
 describe('a curve flattened from a font', () => {
   /**
@@ -104,10 +122,10 @@ describe('filling an outline', () => {
   });
 });
 
-describe('the S the icon is made of', () => {
+describe('the letter the icon is made of', () => {
   it('comes out of the app’s own display face', () => {
     const size = 128;
-    const coverage = glyphCoverage({ file: FONT, character: 'S', size, span: 80 });
+    const coverage = glyphCoverage({ file: FONT, character: MARK, size, span: 80 });
 
     expect(coverage).toHaveLength(size * size);
     // Ink, but nowhere near solid: a letter covers a fraction of its tile, and
@@ -127,7 +145,7 @@ describe('the S the icon is made of', () => {
    */
   it('is centred on the letter, not on its sidebearings', () => {
     const size = 256;
-    const coverage = glyphCoverage({ file: FONT, character: 'S', size, span: 160 });
+    const coverage = glyphCoverage({ file: FONT, character: MARK, size, span: 160 });
 
     let minX = size;
     let maxX = -1;
