@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from '@homefarm/contracts';
 /**
  * Where the engine says something went wrong.
  *
@@ -17,7 +18,7 @@
 export type EngineReporter = (where: string, error: unknown) => void;
 
 const DEFAULT: EngineReporter = (where, error) => {
-  console.warn(`Steading: ${where} failed`, error);
+  console.warn(`${PRODUCT_NAME}: ${where} failed`, error);
 };
 
 let reporter: EngineReporter = DEFAULT;

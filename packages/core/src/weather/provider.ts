@@ -9,8 +9,9 @@ import {
   type Observation,
   observationSchema as observationShape,
   roundPosition,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 import { z } from 'zod';
+import { PRODUCT_NAME } from '@homefarm/contracts';
 
 /**
  * Where a forecast comes from: the US National Weather Service.
@@ -69,7 +70,7 @@ const BASE = 'https://api.weather.gov';
  * from the bundle because nothing here is worth withholding.
  */
 const HEADERS = {
-  'User-Agent': '(Steading farm app, https://github.com/SteveWeed79/steading)',
+  'User-Agent': `(${PRODUCT_NAME} farm app, https://github.com/SteveWeed79/evenglow)`,
   Accept: 'application/geo+json',
 };
 

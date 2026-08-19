@@ -14,7 +14,7 @@ import {
   type VarietyTiming,
   type Zone,
   zoneFloor,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 
 /**
  * The growing arithmetic.

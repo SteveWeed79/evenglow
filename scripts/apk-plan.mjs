@@ -90,7 +90,7 @@ if (apiUrl === null) {
 }
 
 const tag = releaseTag(version, decision.code);
-const apk = `steading-${version}-${decision.code}.apk`;
+const apk = `homefarm-${version}-${decision.code}.apk`;
 
 process.stdout.write(
   `version ${version}\nversionCode ${decision.code} — ${decision.reason}\n` +

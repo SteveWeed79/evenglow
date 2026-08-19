@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { newId } from '@steading/contracts';
-import { localStore } from '@steading/core/db/store';
-import { enqueue } from '@steading/core/sync/queue';
+import { newId } from '@homefarm/contracts';
+import { localStore } from '@homefarm/core/db/store';
+import { enqueue } from '@homefarm/core/sync/queue';
 import { type Farm, twoDevices } from '../support/devices';
 
 /**

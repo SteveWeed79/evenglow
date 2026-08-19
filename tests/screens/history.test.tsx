@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId } from '@steading/contracts';
-import { localStore } from '@steading/core/db/store';
-import { intoDays, listHistory } from '@steading/core/read/history';
-import { enqueue } from '@steading/core/sync/queue';
+import { newId } from '@homefarm/contracts';
+import { localStore } from '@homefarm/core/db/store';
+import { intoDays, listHistory } from '@homefarm/core/read/history';
+import { enqueue } from '@homefarm/core/sync/queue';
 import { freshStore } from '../support/store';
 import { mount } from '../support/screen';
 import { ExportScreen } from '../../apps/mobile/src/screens/ExportScreen';
@@ -461,7 +461,7 @@ describe('sending records out', () => {
     await screen.press('export-eggs');
     screen.unmount();
 
-    expect(shared[0]).toMatch(/steading-eggs-\d{4}-\d{2}-\d{2}\.csv$/);
+    expect(shared[0]).toMatch(/homefarm-eggs-\d{4}-\d{2}-\d{2}\.csv$/);
   });
 
   /**

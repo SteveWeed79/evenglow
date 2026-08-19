@@ -167,10 +167,10 @@ describe('writing it back', () => {
   });
 
   it('leaves everything else in the file exactly as it was', () => {
-    const text = '{\n  "name": "steading",\n  "version": "0.1.0",\n  "icon": "./x.png"\n}\n';
+    const text = '{\n  "name": "homefarm",\n  "version": "0.1.0",\n  "icon": "./x.png"\n}\n';
 
     expect(withVersion(text, '0.1.1')).toBe(
-      '{\n  "name": "steading",\n  "version": "0.1.1",\n  "icon": "./x.png"\n}\n',
+      '{\n  "name": "homefarm",\n  "version": "0.1.1",\n  "icon": "./x.png"\n}\n',
     );
   });
 

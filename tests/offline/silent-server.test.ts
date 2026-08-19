@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { flushOnce, MAX_ATTEMPTS, type SyncTransport } from '@steading/core/sync/flush';
-import { listRejected } from '@steading/core/sync/inbox';
-import { enqueue, queueDepth, rejectedCount } from '@steading/core/sync/queue';
+import { flushOnce, MAX_ATTEMPTS, type SyncTransport } from '@homefarm/core/sync/flush';
+import { listRejected } from '@homefarm/core/sync/inbox';
+import { enqueue, queueDepth, rejectedCount } from '@homefarm/core/sync/queue';
 
-import { newId } from '@steading/contracts';
+import { newId } from '@homefarm/contracts';
 import { freshStore, readOutboxBySeq } from '../support/store';
 
 /**

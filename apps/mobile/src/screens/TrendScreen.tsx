@@ -11,9 +11,9 @@ import {
   mlToUl,
   type Product,
   type UnitSystem,
-} from '@steading/contracts';
-import { feedCostPerEgg, feedSpend, type PerEgg } from '@steading/core/read/cost';
-import { listGroups } from '@steading/core/read/groups';
+} from '@homefarm/contracts';
+import { feedCostPerEgg, feedSpend, type PerEgg } from '@homefarm/core/read/cost';
+import { listGroups } from '@homefarm/core/read/groups';
 import {
   direction,
   eggTrend,
@@ -21,7 +21,7 @@ import {
   type Grain,
   type Point,
   produceTrend,
-} from '@steading/core/read/trend';
+} from '@homefarm/core/read/trend';
 import { Choice } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';

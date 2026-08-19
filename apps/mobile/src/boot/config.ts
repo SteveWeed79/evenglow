@@ -1,4 +1,4 @@
-import { setApiBase } from '@steading/core/api';
+import { setApiBase } from '@homefarm/core/api';
 
 /**
  * Where the server is, and what to do when nobody said.

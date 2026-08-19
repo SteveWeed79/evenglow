@@ -20,7 +20,7 @@
 # `fly secrets` is where the two required values go. They are NOT in this file
 # and must never be: it is committed.
 
-app = "steading-api"
+app = "homefarm-api"
 
 # Set at `fly launch` to whatever is nearest the farm. Sync is a background
 # flush of small payloads, so a hundred milliseconds either way is invisible —

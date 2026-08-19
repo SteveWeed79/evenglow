@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { configureIds, isUlid, newId, resetIds } from '@steading/contracts';
+import { configureIds, isUlid, newId, resetIds } from '@homefarm/contracts';
 
 /**
  * The random source a handset does not have.

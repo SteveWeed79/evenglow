@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId } from '@steading/contracts';
-import { listRejected } from '@steading/core/sync/inbox';
-import { enqueue } from '@steading/core/sync/queue';
-import { localStore } from '@steading/core/db/store';
+import { newId } from '@homefarm/contracts';
+import { listRejected } from '@homefarm/core/sync/inbox';
+import { enqueue } from '@homefarm/core/sync/queue';
+import { localStore } from '@homefarm/core/db/store';
 import { freshStore, readOutboxBySeq } from '../support/store';
 import { mount, routeProps } from '../support/screen';
 import { navCalls } from '../support/native/navigation';
@@ -507,7 +507,7 @@ describe('finishing a job from the list', () => {
     await today.press(`due-done-${key}`);
     today.unmount();
 
-    const { listHistory } = await import('@steading/core/read/history');
+    const { listHistory } = await import('@homefarm/core/read/history');
     const days = await listHistory();
     expect(days[0]?.events[0]?.title).toBe('Trimmed feet — The goats');
   });

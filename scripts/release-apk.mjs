@@ -5,7 +5,7 @@ import { newestReleaseTag, apkAsset, findRelease, repoSlug } from './lib/release
  * The APK for the commit a box is serving, from the repository's Releases.
  *
  *   git tag --points-at HEAD | node scripts/release-apk.mjs --remote "$(git remote get-url origin)"
- *   git tag --points-at HEAD | node scripts/release-apk.mjs --repo SteveWeed79/steading
+ *   git tag --points-at HEAD | node scripts/release-apk.mjs --repo SteveWeed79/evenglow
  *
  * Prints `url<TAB>version<TAB>code` on stdout when there is one to fetch, and
  * **nothing at all** when there is not. `deploy.sh` reads it exactly the way it
@@ -82,7 +82,7 @@ if (wanted === null) {
  * room to spare for a person running this by hand while wondering why the
  * shelf has not moved.
  *
- * `GITHUB_TOKEN` is honoured when `/etc/steading/deploy.env` sets one — needed
+ * `GITHUB_TOKEN` is honoured when `/etc/homefarm/deploy.env` sets one — needed
  * only if this repository is ever made private, since a public repository's
  * releases are readable by anybody.
  */
@@ -90,7 +90,7 @@ const headers = {
   accept: 'application/vnd.github+json',
   'x-github-api-version': '2022-11-28',
   // GitHub refuses a request without one.
-  'user-agent': 'steading-deploy',
+  'user-agent': 'homefarm-deploy',
 };
 if (process.env.GITHUB_TOKEN) headers.authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
 

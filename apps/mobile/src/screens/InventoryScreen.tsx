@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { listInventory, runningLow, type StockItem } from '@steading/core/read/iron';
+import { listInventory, runningLow, type StockItem } from '@homefarm/core/read/iron';
 import { Primary, Secondary, Stepper } from '../components/Form';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';

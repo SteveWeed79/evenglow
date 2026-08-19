@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { mutationSchema, SYNC_REFUSALS } from '@steading/contracts';
+import { mutationSchema, SYNC_REFUSALS } from '@homefarm/contracts';
 
 /**
  * The shapes the offline engine stores, independent of what stores them.

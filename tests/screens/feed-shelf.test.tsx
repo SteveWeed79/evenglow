@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId } from '@steading/contracts';
-import { listInventory } from '@steading/core/read/iron';
-import { enqueue } from '@steading/core/sync/queue';
+import { newId } from '@homefarm/contracts';
+import { listInventory } from '@homefarm/core/read/iron';
+import { enqueue } from '@homefarm/core/sync/queue';
 import { freshStore } from '../support/store';
 import { mount, routeProps } from '../support/screen';
 import { FeedScreen } from '../../apps/mobile/src/screens/FeedScreen';
@@ -199,7 +199,7 @@ describe('once the farm has said what a scoop is', () => {
 
     await feed(2, 'Scoops');
 
-    const { localStore } = await import('@steading/core/db/store');
+    const { localStore } = await import('@homefarm/core/db/store');
     const [record] = await localStore().readRecordsByEntity('feedLog');
     // 3000 g rather than the 1814 g the old estimate would have written.
     expect(record?.value).toMatchObject({ amountGrams: 3000 });
@@ -246,7 +246,7 @@ describe('what is written', () => {
 
     await feed(3);
 
-    const { listHistory } = await import('@steading/core/read/history');
+    const { listHistory } = await import('@homefarm/core/read/history');
     const events = (await listHistory('imperial')).flatMap((day) => day.events);
     expect(events.some((one) => one.entity === 'feedLog')).toBe(true);
   });

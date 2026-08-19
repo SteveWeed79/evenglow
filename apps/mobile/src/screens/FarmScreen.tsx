@@ -1,4 +1,4 @@
-import { type Enterprise } from '@steading/contracts';
+import { type Enterprise } from '@homefarm/contracts';
 import { Row } from '../components/Form';
 import { Grid } from '../components/Grid';
 import { Body, Panel } from '../components/Panel';

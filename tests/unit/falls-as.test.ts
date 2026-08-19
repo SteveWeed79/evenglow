@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CONDITIONS, fallsAs } from '@steading/contracts';
+import { CONDITIONS, fallsAs } from '@homefarm/contracts';
 
 /**
  * What the chance is a chance **of**.

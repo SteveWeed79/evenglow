@@ -1,11 +1,11 @@
 @echo off
 setlocal enabledelayedexpansion
-title Steading - check my setup
+title Evenglow - check my setup
 cd /d "%~dp0..\.."
 
 echo.
 echo   ============================================
-echo     STEADING - what is installed on this PC
+echo     EVENGLOW - what is installed on this PC
 echo   ============================================
 echo.
 echo   Nothing here changes anything. It only looks.
@@ -253,7 +253,7 @@ if "%LONGPATHS%"=="0x1" (
 ) else (
   echo   [ NOTE ]    long file paths are OFF in Windows.
   echo               If the build fails on a path nobody can read, that is
-  echo               why. The reliable fix is a short folder: C:\steading
+  echo               why. The reliable fix is a short folder: C:\evenglow
 )
 
 echo.
@@ -277,7 +277,7 @@ if errorlevel 1 (
   for /f "skip=1 tokens=1,2" %%D in ('adb devices') do (
     if "%%E"=="device" (
       set "ANYDEVICE=1"
-      adb -s %%D shell pm list packages 2>nul | findstr /c:"com.steading.app" >nul
+      adb -s %%D shell pm list packages 2>nul | findstr /c:"dev.swbuild.homefarm" >nul
       if errorlevel 1 (
         echo   [ NOTE ]    not installed on %%D
       ) else (
@@ -358,9 +358,9 @@ pushd "apps\mobile"
 :: Installing is safe, idempotent and never touches package.json, so it is
 :: named first for every case. Only if it survives an install is it the third
 :: kind — and that is a decision made where it can be reviewed, not here.
-echo n| call npx expo install --check > "%TEMP%\steading-expo-check.txt" 2>&1
+echo n| call npx expo install --check > "%TEMP%\homefarm-expo-check.txt" 2>&1
 set EXPOFAIL=%errorlevel%
-type "%TEMP%\steading-expo-check.txt"
+type "%TEMP%\homefarm-expo-check.txt"
 
 :: Four goes, then. The fourth is the one that says "always".
 ::
@@ -382,12 +382,12 @@ type "%TEMP%\steading-expo-check.txt"
 if "%EXPOFAIL%"=="0" goto :packages_done
 
 :: Did it report version drift at all, or fail for some other reason?
-findstr /c:"- expected version:" "%TEMP%\steading-expo-check.txt" >nul 2>&1
+findstr /c:"- expected version:" "%TEMP%\homefarm-expo-check.txt" >nul 2>&1
 if errorlevel 1 goto :packages_missing
 
 :: Take the deliberate exception out and see whether anything survives it.
-findstr /v /i /c:"typescript@" "%TEMP%\steading-expo-check.txt" > "%TEMP%\steading-expo-rest.txt" 2>nul
-findstr /c:"- expected version:" "%TEMP%\steading-expo-rest.txt" >nul 2>&1
+findstr /v /i /c:"typescript@" "%TEMP%\homefarm-expo-check.txt" > "%TEMP%\homefarm-expo-rest.txt" 2>nul
+findstr /c:"- expected version:" "%TEMP%\homefarm-expo-rest.txt" >nul 2>&1
 if errorlevel 1 goto :packages_held
 
 :packages_missing
@@ -419,8 +419,8 @@ echo               TypeScript is its own job. Nothing is missing - see
 echo               ROADMAP.md. Everything else Expo asked about matches.
 
 :packages_done
-del "%TEMP%\steading-expo-check.txt" >nul 2>&1
-del "%TEMP%\steading-expo-rest.txt" >nul 2>&1
+del "%TEMP%\homefarm-expo-check.txt" >nul 2>&1
+del "%TEMP%\homefarm-expo-rest.txt" >nul 2>&1
 popd
 
 echo.

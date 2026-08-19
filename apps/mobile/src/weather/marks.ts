@@ -1,4 +1,4 @@
-import type { Condition } from '@steading/contracts';
+import type { Condition } from '@homefarm/contracts';
 import type { IconName } from '../components/Icon';
 
 /**

@@ -1,11 +1,11 @@
 @echo off
 setlocal enabledelayedexpansion
-title Steading - run on the emulator
+title Evenglow - run on the emulator
 cd /d "%~dp0..\.."
 
 echo.
 echo   ============================================
-echo     STEADING - run the app on the emulator
+echo     EVENGLOW - run the app on the emulator
 echo   ============================================
 echo.
 echo   Start your virtual device in Android Studio FIRST
@@ -73,12 +73,12 @@ echo   [1 of 2] Everything the app needs is ready.
 :: Expo Go is gone, and losing a farm twice is why.
 ::
 :: Expo Go is one shared app that every Expo project borrows, so the records
-:: lived in ITS sandbox (host.exp.exponent) rather than in Steading's. Expo Go
+:: lived in ITS sandbox (host.exp.exponent) rather than in Evenglow's. Expo Go
 :: reinstalls itself whenever the SDK version moves, and an Android reinstall
 :: takes the app's data with it — so bumping expo 57.0.9 to 57.0.11 emptied a
 :: farm, twice, and neither time was a bug in the app.
 ::
-:: A development build is Steading's OWN apk, com.steading.app, with its own
+:: A development build is Evenglow's OWN apk, dev.swbuild.homefarm, with its own
 :: sandbox. It still talks to Metro, so editing code still reloads in a second;
 :: what changes is that the records survive it.
 ::
@@ -94,7 +94,7 @@ echo   it downloads Android's build tools. After that it is a
 echo   couple of minutes, and a code change still reloads in a
 echo   second.
 echo.
-echo   This installs Steading as its own app, so what you log
+echo   This installs Evenglow as its own app, so what you log
 echo   stays put. Expo Go could not promise that: it is one
 echo   shared app, and it wipes itself whenever it updates.
 echo.

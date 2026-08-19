@@ -9,9 +9,9 @@ import {
   laysEggs,
   SPECIES_TRAITS,
   type Species,
-} from '@steading/contracts';
-import { listIncubations } from '@steading/core/read/breeding';
-import { listGroups } from '@steading/core/read/groups';
+} from '@homefarm/contracts';
+import { listIncubations } from '@homefarm/core/read/breeding';
+import { listGroups } from '@homefarm/core/read/groups';
 import {
   Chip,
   Choice,

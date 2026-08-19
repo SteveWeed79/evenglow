@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import type { QueuedMutation } from '@steading/core/db/records';
-import { discardRejected, listRejected, retryRejected } from '@steading/core/sync/inbox';
-import { nudge, subscribe } from '@steading/core/sync/engine';
+import type { QueuedMutation } from '@homefarm/core/db/records';
+import { discardRejected, listRejected, retryRejected } from '@homefarm/core/sync/inbox';
+import { nudge, subscribe } from '@homefarm/core/sync/engine';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { Touch } from '../components/Touch';

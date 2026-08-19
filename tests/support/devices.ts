@@ -1,10 +1,10 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { SqlDriver } from '@steading/core/db/driver';
-import type { LocalStore } from '@steading/core/db/port';
-import { openSqliteStore } from '@steading/core/db/sqlite-store';
-import { localStore, resetLocalStore, setLocalStore } from '@steading/core/db/store';
+import type { SqlDriver } from '@homefarm/core/db/driver';
+import type { LocalStore } from '@homefarm/core/db/port';
+import { openSqliteStore } from '@homefarm/core/db/sqlite-store';
+import { localStore, resetLocalStore, setLocalStore } from '@homefarm/core/db/store';
 import { nodeIds, nodeSqlDriver } from './sqlite';
 
 /**
@@ -109,7 +109,7 @@ function installed(): LocalStore | null {
  * draw would not exist.
  */
 async function openDevice(name: string): Promise<Device> {
-  const file = join(mkdtempSync(join(tmpdir(), `steading-${name}-`)), 'store.db');
+  const file = join(mkdtempSync(join(tmpdir(), `homefarm-${name}-`)), 'store.db');
   const driver = nodeSqlDriver(file);
   const store = await openSqliteStore(driver, nodeIds());
 

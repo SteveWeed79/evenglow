@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { formatMass } from '@steading/contracts';
-import { readFarmNumbers, type YearNumbers } from '@steading/core/read/farm-numbers';
+import { formatMass } from '@homefarm/contracts';
+import { readFarmNumbers, type YearNumbers } from '@homefarm/core/read/farm-numbers';
 import { Row } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';

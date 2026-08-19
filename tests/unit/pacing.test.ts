@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { nextDelay, stillHydrating } from '@steading/core/sync/engine';
-import type { PullOutcome } from '@steading/core/sync/pull';
+import { nextDelay, stillHydrating } from '@homefarm/core/sync/engine';
+import type { PullOutcome } from '@homefarm/core/sync/pull';
 
 /**
  * The scheduling rule, which is where a live hot loop lived.

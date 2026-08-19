@@ -1,7 +1,7 @@
 # Steading — D8–D10 Migration Plan
 
 How the Next.js + IndexedDB implementation becomes the Capacitor + SQLite +
-Fastify one described in `Steading-Masterplan.md`.
+Fastify one described in `Evenglow-Masterplan.md`.
 
 Companion to masterplan §0.1, which states the gap. This states the route
 across it.
@@ -120,7 +120,7 @@ Each stage ends with a green tree. No stage may be merged red.
 
 Move `lib/contracts/**`, `lib/ulid.ts`, `lib/withdrawal.ts` into
 `packages/contracts`. **The Next app keeps working**, importing
-`@steading/contracts` instead of `@/lib/contracts`. Regenerate
+`@homefarm/contracts` instead of `@/lib/contracts`. Regenerate
 `pnpm-lock.yaml` — a stale single-importer lockfile is what killed CI on the
 first attempt.
 

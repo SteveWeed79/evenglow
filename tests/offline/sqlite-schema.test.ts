@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import type { SqlDriver } from '@steading/core/db/driver';
-import { currentVersion, migrate, MIGRATIONS, SCHEMA_VERSION } from '@steading/core/db/migrations';
-import { DatabaseFromTheFutureError } from '@steading/core/db/errors';
+import type { SqlDriver } from '@homefarm/core/db/driver';
+import { currentVersion, migrate, MIGRATIONS, SCHEMA_VERSION } from '@homefarm/core/db/migrations';
+import { DatabaseFromTheFutureError } from '@homefarm/core/db/errors';
 import { nodeSqlDriver } from '../support/sqlite';
 
 /**

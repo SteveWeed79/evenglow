@@ -81,4 +81,4 @@ export function isClientTooOld(reported: string | undefined, minimum: string | n
 }
 
 /** The header a client states its version in. */
-export const CLIENT_VERSION_HEADER = 'x-steading-client';
+export const CLIENT_VERSION_HEADER = 'x-homefarm-client';

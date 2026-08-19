@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
-import { STOCK_REASONS, newId, type StockReason } from '@steading/contracts';
-import { listInventory } from '@steading/core/read/iron';
+import { STOCK_REASONS, newId, type StockReason } from '@homefarm/contracts';
+import { listInventory } from '@homefarm/core/read/iron';
 import {
   Choice,
   Failure,

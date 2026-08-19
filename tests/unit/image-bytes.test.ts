@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isImageType, sniffImageType } from '@steading/api/routes/image-bytes';
+import { isImageType, sniffImageType } from '@homefarm/api/routes/image-bytes';
 
 /**
  * What the bytes are, rather than what the request said they were.

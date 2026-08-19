@@ -15,7 +15,7 @@ the number, and where the photo bytes belong.
 **The app cannot be opened without a login, and that undercuts the wedge at the
 front door.**
 
-W1 is "offline-first, not offline-tolerant". But `steading-{orgId}.db` is one
+W1 is "offline-first, not offline-tolerant". But `homefarm-{orgId}.db` is one
 file per org and `orgId` comes from a verified token, so the *first* launch is
 identical to a cloud app's: a wall. An offline-first app that cannot be opened
 offline is only offline-first from the second morning onward, and the first
@@ -32,7 +32,7 @@ for.** That is the same hole the feature analysis found, in a different wall.
 
 ### A2.1 — Local-first first run. No account until it buys something.
 
-First launch mints an org ULID on device, opens `steading-{that}.db`, and the
+First launch mints an org ULID on device, opens `homefarm-{that}.db`, and the
 app works: tallies, dues, weather, photos, the lot. Mutations queue exactly as
 they do now. Nothing flushes, because there is no token and none is needed.
 
@@ -773,7 +773,7 @@ paid here"* — nobody could have bought anything, so refusing work over a
 subscription state nobody could possibly hold would lock every farm out of a
 self-hosted server permanently.
 
-Confirm which state a box is in with `grep -c GOOGLE_PLAY /etc/steading/api.env`.
+Confirm which state a box is in with `grep -c GOOGLE_PLAY /etc/homefarm/api.env`.
 
 ### Except when the box is on the open internet
 

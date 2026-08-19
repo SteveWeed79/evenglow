@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { checkIntegrity, enqueue, InvalidMutationError, queueDepth } from '@steading/core/sync/queue';
-import { newId } from '@steading/contracts';
+import { checkIntegrity, enqueue, InvalidMutationError, queueDepth } from '@homefarm/core/sync/queue';
+import { newId } from '@homefarm/contracts';
 import { deleteMetaKey, deleteOutboxRow, freshStore, readAllRecords, readOutboxBySeq, simulateRestart } from '../support/store';
 
 function eggLog(count = 18) {

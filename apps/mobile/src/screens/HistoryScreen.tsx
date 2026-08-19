@@ -5,7 +5,7 @@ import {
   type HistoryDay,
   type HistoryMonth,
   listHistory,
-} from '@steading/core/read/history';
+} from '@homefarm/core/read/history';
 import { Icon } from '../components/Icon';
 import { DayEvents } from '../components/Timeline';
 import { Loading } from '../components/Missing';

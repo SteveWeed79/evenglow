@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { newId } from '@steading/contracts';
-import { resetApiBase, setAccessToken, setApiBase } from '@steading/core/api';
-import { listPhotos } from '@steading/core/read/photos';
-import { setPhotoBytes, transferPhotos } from '@steading/core/sync/photos';
-import { startSync, stopSync } from '@steading/core/sync/engine';
-import type { SyncTransport } from '@steading/core/sync/flush';
-import { localStore } from '@steading/core/db/store';
-import { enqueue } from '@steading/core/sync/queue';
+import { newId } from '@homefarm/contracts';
+import { resetApiBase, setAccessToken, setApiBase } from '@homefarm/core/api';
+import { listPhotos } from '@homefarm/core/read/photos';
+import { setPhotoBytes, transferPhotos } from '@homefarm/core/sync/photos';
+import { startSync, stopSync } from '@homefarm/core/sync/engine';
+import type { SyncTransport } from '@homefarm/core/sync/flush';
+import { localStore } from '@homefarm/core/db/store';
+import { enqueue } from '@homefarm/core/sync/queue';
 import { freshStore } from '../support/store';
 
 /**

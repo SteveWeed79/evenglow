@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { careDues, type Due, todayBundles, todayList } from '@steading/contracts';
+import { careDues, type Due, todayBundles, todayList } from '@homefarm/contracts';
 
 /**
  * The screenshot that prompted this: nine rows on a two-group farm.

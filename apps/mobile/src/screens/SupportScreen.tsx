@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Share, StyleSheet, Text, View } from 'react-native';
-import type { SupportBundle } from '@steading/contracts';
-import type { StoredTicket } from '@steading/core/db/port';
+import type { SupportBundle } from '@homefarm/contracts';
+import type { StoredTicket } from '@homefarm/core/db/port';
 import {
   flushTickets,
   listTickets,
@@ -9,7 +9,7 @@ import {
   sendTicket,
   ticketAsText,
   type Filed,
-} from '@steading/core/support/tickets';
+} from '@homefarm/core/support/tickets';
 import { Failure, Field, Row, Primary, Secondary, TextField, Toggle } from '../components/Form';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';

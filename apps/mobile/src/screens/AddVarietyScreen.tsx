@@ -1,8 +1,8 @@
 import { useCallback, useState } from 'react';
-import { cropDefaults, LIFECYCLES, newId, scheduleFor } from '@steading/contracts';
+import { cropDefaults, LIFECYCLES, newId, scheduleFor } from '@homefarm/contracts';
 
 type Lifecycle = (typeof LIFECYCLES)[number];
-import { listBeds, readSite } from '@steading/core/read/growing';
+import { listBeds, readSite } from '@homefarm/core/read/growing';
 import { Choice, Failure, Field, Primary, Stepper, TextField, useSaver } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';

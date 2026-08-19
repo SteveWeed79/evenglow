@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { newId } from '@steading/contracts';
-import { resetApiBase, setApiBase } from '@steading/core/api';
+import { newId } from '@homefarm/contracts';
+import { resetApiBase, setApiBase } from '@homefarm/core/api';
 import { seedSecureStore } from '../support/native/modules';
 import { freshStore } from '../support/store';
 import { mount } from '../support/screen';
@@ -33,7 +33,7 @@ const USER = newId();
 
 function signedInAs(account: { email?: string; emailVerified?: boolean }): void {
   seedSecureStore({
-    'steading.claims': JSON.stringify({
+    'homefarm.claims': JSON.stringify({
       userId: USER,
       orgId: ORG,
       role: 'owner',

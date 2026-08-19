@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { setOnline, startSync, stopSync, subscribe } from '@steading/core/sync/engine';
+import { setOnline, startSync, stopSync, subscribe } from '@homefarm/core/sync/engine';
 import { freshStore } from '../support/store';
 
 /**

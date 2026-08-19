@@ -2,8 +2,8 @@
 #
 # Puts a built APK where Caddy serves it.
 #
-#   sudo /opt/steading/scripts/deploy/publish-apk.sh https://expo.dev/artifacts/eas/XXXX.apk
-#   sudo /opt/steading/scripts/deploy/publish-apk.sh ~/steading-0.1.0-3.apk
+#   sudo /opt/homefarm/scripts/deploy/publish-apk.sh https://expo.dev/artifacts/eas/XXXX.apk
+#   sudo /opt/homefarm/scripts/deploy/publish-apk.sh ~/homefarm-0.1.0-3.apk
 #
 # **The url form is the one to use.** The APK is built on Expo's machines, so a
 # file on the PC got there by being downloaded from Expo already — sending it on
@@ -23,13 +23,13 @@
 # a new one every time and watching old ones die. Here the address is a
 # constant and the file behind it moves.
 #
-# **Both are kept.** `steading.apk` is what the stable link serves, and every
+# **Both are kept.** `homefarm.apk` is what the stable link serves, and every
 # build also stays under its own version so "the build she had in August" is a
 # question with an answer. Nothing is deleted; see PRUNE below for why that is
 # a decision rather than an oversight.
 set -euo pipefail
 
-DIST="${STEADING_DIST:-/var/lib/steading/dist}"
+DIST="${HOMEFARM_DIST:-/var/lib/homefarm/dist}"
 # One level up from what Caddy serves. Deploy markers live here — which build
 # was fetched last, which version is on the shelf — because they are notes to
 # the next deploy rather than files to publish, and `$DIST` has `file_server`
@@ -39,7 +39,7 @@ SOURCE="${1:-}"
 
 # The application this box serves. `deploy.sh` passes the same value to EAS as a
 # query filter; this is the check on the file that actually arrived.
-EXPECT_APP_ID="${STEADING_APP_ID:-com.steading.app}"
+EXPECT_APP_ID="${HOMEFARM_APP_ID:-dev.swbuild.homefarm}"
 
 die() { printf '\n  %s\n\n' "$*" >&2; exit 1; }
 say() { printf '\n  %s\n' "$*"; }
@@ -56,7 +56,7 @@ trap cleanup EXIT
 
 case "$SOURCE" in
   https://*)
-    FETCHED="$(mktemp /tmp/steading-XXXXXX.apk)"
+    FETCHED="$(mktemp /tmp/homefarm-XXXXXX.apk)"
     say "Fetching from ${SOURCE%%\?*}"
     # --fail so an HTML error page does not get published as an APK, and
     # --location because artefact urls redirect to storage.
@@ -178,12 +178,12 @@ if [ -z "$VERSION" ] && [ -n "$LABEL" ]; then
 fi
 
 if [ -n "$VERSION" ] && [ -n "$CODE" ]; then
-  NAME="steading-${VERSION}-${CODE}.apk"
-  say "Publishing Steading $VERSION (versionCode $CODE)"
+  NAME="homefarm-${VERSION}-${CODE}.apk"
+  say "Publishing Evenglow $VERSION (versionCode $CODE)"
 elif [ -n "$LABEL" ]; then
   # Said rather than read. The box has no Android SDK and is not getting one,
   # so on the url path this is how a build gets a name that means something.
-  NAME="steading-${LABEL}.apk"
+  NAME="homefarm-${LABEL}.apk"
   say "Publishing $NAME"
 elif [ -z "$FETCHED" ]; then
   # A local file already carries whatever name the person who downloaded it
@@ -194,7 +194,7 @@ else
   # Downloaded, unreadable and unnamed. A timestamp is unique and sortable and
   # tells you nothing about what is in the file, so this says so plainly rather
   # than letting a meaningless name look deliberate.
-  NAME="steading-$(date -u +%Y%m%d-%H%M).apk"
+  NAME="homefarm-$(date -u +%Y%m%d-%H%M).apk"
   say "Publishing $NAME"
   note "no version in the name — pass one as a second argument:"
   note "  publish-apk.sh <url> 0.1.0-2"
@@ -217,8 +217,8 @@ note "kept as $NAME"
 
 # The stable link. Replaced every time, which is the whole reason the address
 # can be sent once and never again.
-ln -sfn "$NAME" "$DIST/steading.apk"
-note "/app/steading.apk now serves it"
+ln -sfn "$NAME" "$DIST/homefarm.apk"
+note "/app/homefarm.apk now serves it"
 
 # ── Which build this is, remembered where the next deploy can find it ───────
 #
@@ -256,16 +256,16 @@ note "install page refreshed${STAMP:+ — $STAMP}"
 chown -R caddy:caddy "$DIST" 2>/dev/null || true
 
 say "Published"
-note "Send this, once: https://${STEADING_DOMAIN:-api.swbuild.dev}/app"
+note "Send this, once: https://${HOMEFARM_DOMAIN:-api.swbuild.dev}/app"
 note ""
 note "Everything published so far:"
-# Real files only. `steading.apk` is the symlink to whichever of these is
+# Real files only. `homefarm.apk` is the symlink to whichever of these is
 # current, and listing it alongside them showed a build of zero bytes.
 find "$DIST" -maxdepth 1 -type f -name '*.apk' -printf '%f\t%s\n' 2>/dev/null \
   | sort \
   | while IFS=$'\t' read -r f bytes; do
       current=""
-      [ "$(readlink "$DIST/steading.apk" 2>/dev/null)" = "$f" ] && current="   <- /app/steading.apk"
+      [ "$(readlink "$DIST/homefarm.apk" 2>/dev/null)" = "$f" ] && current="   <- /app/homefarm.apk"
       note "  $f  $((bytes / 1024 / 1024)) MB$current"
     done
 
@@ -276,7 +276,7 @@ find "$DIST" -maxdepth 1 -type f -name '*.apk' -printf '%f\t%s\n' 2>/dev/null \
 # a full disk is a script that quietly deleted the build a farm is still
 # running when somebody needs to reproduce a defect against it.
 #
-#   ls -lt /var/lib/steading/dist/*.apk        # newest first
-#   sudo rm /var/lib/steading/dist/steading-0.1.0-2.apk
+#   ls -lt /var/lib/homefarm/dist/*.apk        # newest first
+#   sudo rm /var/lib/homefarm/dist/homefarm-0.1.0-2.apk
 #
-# Never delete the target of the steading.apk symlink; `ls -l` shows which.
+# Never delete the target of the homefarm.apk symlink; `ls -l` shows which.

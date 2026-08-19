@@ -1,4 +1,4 @@
-import { syncRequestSchema, type SyncResponse } from '@steading/contracts';
+import { syncRequestSchema, type SyncResponse } from '@homefarm/contracts';
 import type { SessionClaims } from '../auth/claims';
 import type { Scoped } from '../db/scoped';
 import { HttpError } from '../http';

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { resetApiBase, setAccessToken, setApiBase } from '@steading/core/api';
+import { resetApiBase, setAccessToken, setApiBase } from '@homefarm/core/api';
 import { freshStore } from '../support/store';
 import { mount } from '../support/screen';
 import { seedSecureStore } from '../support/native/modules';
@@ -37,8 +37,8 @@ beforeEach(async () => {
   // The state the device was in: signed in, with no access token in memory.
   setAccessToken(null);
   seedSecureStore({
-    'steading.refreshToken': 'a-stored-refresh-token',
-    'steading.claims': JSON.stringify({ userId: 'u1', orgId: ORG, role: 'owner' }),
+    'homefarm.refreshToken': 'a-stored-refresh-token',
+    'homefarm.claims': JSON.stringify({ userId: 'u1', orgId: ORG, role: 'owner' }),
   });
 });
 

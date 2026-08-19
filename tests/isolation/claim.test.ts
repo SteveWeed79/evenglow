@@ -1,6 +1,6 @@
 import { ulid } from 'ulid';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import type { UserDoc } from '@steading/api/db/identity';
+import type { UserDoc } from '@homefarm/api/db/identity';
 import { makeMutation } from '../support/fixtures';
 import { startTestDb } from '../support/mongo';
 
@@ -21,11 +21,11 @@ import { startTestDb } from '../support/mongo';
  * **404, never 403**, because a 403 confirms the thing exists.
  */
 
-const harness = await startTestDb('steading_claim');
+const harness = await startTestDb('homefarm_claim');
 
 if (harness) {
   process.env.MONGODB_URI = harness.uri;
-  process.env.MONGODB_DB = 'steading_claim';
+  process.env.MONGODB_DB = 'homefarm_claim';
 }
 
 const SECRET = 'a-test-secret-long-enough-for-hs256-abcdef';
@@ -39,13 +39,13 @@ const HAND_A = ulid();
 const describeDb = harness ? describe : describe.skip;
 
 async function server(over: Record<string, string> = {}) {
-  const { buildServer } = await import('@steading/api/server');
-  const { readEnv } = await import('@steading/api/env');
+  const { buildServer } = await import('@homefarm/api/server');
+  const { readEnv } = await import('@homefarm/api/env');
   return buildServer(
     readEnv({
       AUTH_SECRET: SECRET,
       MONGODB_URI: harness!.uri,
-      MONGODB_DB: 'steading_claim',
+      MONGODB_DB: 'homefarm_claim',
       CORS_ORIGINS: 'https://app.test',
       ...over,
     }),
@@ -53,7 +53,7 @@ async function server(over: Record<string, string> = {}) {
 }
 
 async function tokenFor(userId: string, orgId: string, role: 'owner' | 'admin' | 'hand') {
-  const { startSession } = await import('@steading/api/auth/refresh');
+  const { startSession } = await import('@homefarm/api/auth/refresh');
   const { accessToken } = await startSession({ userId, orgId, role }, SECRET);
   return `Bearer ${accessToken}`;
 }
@@ -64,7 +64,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   if (!harness) return;
-  const { hashPassword } = await import('@steading/api/auth/password');
+  const { hashPassword } = await import('@homefarm/api/auth/password');
   const hash = await hashPassword(PASSWORD);
 
   await harness.db.collection('joinCodes').deleteMany({});
@@ -150,7 +150,7 @@ describeDb('claiming the farm a device already has', () => {
 
     // And the session it hands back carries that id, so the first flush lands
     // in the farm the queue was built for.
-    const { verifyAccessToken } = await import('@steading/api/auth/tokens');
+    const { verifyAccessToken } = await import('@homefarm/api/auth/tokens');
     const claims = await verifyAccessToken(res.json().accessToken, SECRET);
     expect(claims.orgId).toBe(payload.orgId);
     expect(claims.role).toBe('owner');
@@ -358,7 +358,7 @@ describeDb('join codes', () => {
 
     expect(joined.statusCode).toBe(201);
 
-    const { verifyAccessToken } = await import('@steading/api/auth/tokens');
+    const { verifyAccessToken } = await import('@homefarm/api/auth/tokens');
     const claims = await verifyAccessToken(joined.json().accessToken, SECRET);
     expect(claims.orgId).toBe(ORG_A);
     // The role was chosen by the person with the authority to grant it, not by
@@ -514,7 +514,7 @@ describeDb('what a server without a payment rail charges for', () => {
 
   /** The way out, which is the half the old note said did not exist. */
   it('syncs once somebody with a shell grants it', async () => {
-    const { setSyncGrant } = await import('@steading/api/db/identity');
+    const { setSyncGrant } = await import('@homefarm/api/db/identity');
     const app = await server();
     // Named before the payload is built, so the grant below needs no cast off
     // a `Record<string, unknown>` spread.

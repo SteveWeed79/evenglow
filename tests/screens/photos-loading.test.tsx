@@ -25,15 +25,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const held = { resolve: (() => undefined) as () => void };
 
-vi.mock('@steading/core/read/photos', () => ({
+vi.mock('@homefarm/core/read/photos', () => ({
   listPhotos: () =>
     new Promise((resolve) => {
       held.resolve = () => resolve([]);
     }),
 }));
 
-const { enqueue } = await import('@steading/core/sync/queue');
-const { newId } = await import('@steading/contracts');
+const { enqueue } = await import('@homefarm/core/sync/queue');
+const { newId } = await import('@homefarm/contracts');
 const { freshStore } = await import('../support/store');
 const { mount, routeProps } = await import('../support/screen');
 const { MachineScreen } = await import('../../apps/mobile/src/screens/MachineScreen');

@@ -1,7 +1,7 @@
 import { randomUUID } from 'expo-crypto';
-import type { LocalStore } from '@steading/core/db/port';
-import { openSqliteStore } from '@steading/core/db/sqlite-store';
-import { setLocalStore } from '@steading/core/db/store';
+import type { LocalStore } from '@homefarm/core/db/port';
+import { openSqliteStore } from '@homefarm/core/db/sqlite-store';
+import { setLocalStore } from '@homefarm/core/db/store';
 import { databaseNameFor, forgetDatabase, openExpoSqlDriver } from './open';
 
 /**
@@ -19,7 +19,7 @@ import { databaseNameFor, forgetDatabase, openExpoSqlDriver } from './open';
  * is. Signing in as a second farm on a shared tablet opens a different file,
  * so the first farm's records are not merely hidden — they are somewhere else.
  *
- * `@steading/app` is imported for the store and the port — 3,700 lines that
+ * `@homefarm/app` is imported for the store and the port — 3,700 lines that
  * have no DOM in them and are proven by the existing suite. They move to
  * `packages/core` when the web client retires.
  */

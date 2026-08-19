@@ -1,8 +1,8 @@
 import { StyleSheet, Text } from 'react-native';
-import { formatMass, SPECIES_TRAITS } from '@steading/contracts';
-import { inGroup, listAnimals } from '@steading/core/read/animals';
-import { latestWeightBySubject, listWeights } from '@steading/core/read/breeding';
-import { listGroups } from '@steading/core/read/groups';
+import { formatMass, SPECIES_TRAITS } from '@homefarm/contracts';
+import { inGroup, listAnimals } from '@homefarm/core/read/animals';
+import { latestWeightBySubject, listWeights } from '@homefarm/core/read/breeding';
+import { listGroups } from '@homefarm/core/read/groups';
 import { Primary } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';

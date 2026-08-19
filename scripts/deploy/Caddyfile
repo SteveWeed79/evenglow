@@ -33,6 +33,43 @@
 # itself — so Caddy's challenge cannot complete, and if it did, the hop count
 # below would be wrong.
 
+# ── Anything this box adds, which a deploy must not eat ─────────────────────
+#
+# **`deploy.sh` renders this file and installs it over the running one on every
+# tick.** That is deliberate and it is why this file is here rather than only in
+# `setup-box.sh` — a Caddyfile that only the one-time setup installed went stale
+# the day `/app` was added, and the box answered 404 for a route Caddy was
+# supposed to serve.
+#
+# The cost was that a site block added by hand could not survive five minutes.
+# `DEPLOY-THE-SERVER.md` told operators to append an `ops.example.com` block for
+# the operations board, and the next deploy silently removed it.
+#
+# So this file owns the API's own block and **nothing else**, and everything
+# local to one box lives in `/etc/caddy/conf.d/*.caddy`, which no deploy writes
+# to. Add a file, `systemctl reload caddy`, done — and it is still there
+# tomorrow.
+#
+# ## Three things about `import` that decide whether this works
+#
+# **An empty glob is not an error.** Caddy errors on an `import` of a named file
+# that is missing, and treats a glob matching nothing as a no-op — so a box with
+# no local blocks, or no `conf.d` at all, validates and serves exactly as it did
+# before. That is what makes it safe to ship this line to every box at once.
+#
+# **The path is absolute because a relative one would resolve against the wrong
+# directory.** Caddy resolves a relative import against the file the import
+# appears in, and `deploy.sh` validates a rendered copy at `/tmp/Caddyfile.next`
+# — so `conf.d/*.caddy` would look in `/tmp` at validate time and in `/etc/caddy`
+# at serve time, which is the shape of bug that passes every check and then
+# fails on the box.
+#
+# **`*.caddy`, not `*`.** Caddy's globbing includes dotfiles, unlike a shell's,
+# so a bare `*` picks up an editor's `.ops.caddy.swp` and hands Caddy a binary
+# file. Requiring the suffix means a swap file, a `~` backup and a `.bak` are
+# all ignored.
+import /etc/caddy/conf.d/*.caddy
+
 api.example.com {
 	# ── The app itself, for a phone to install ──────────────────────────────
 	#
@@ -59,17 +96,17 @@ api.example.com {
 	#
 	# ## Outside the repository, on purpose
 	#
-	# `/var/lib/steading/dist` rather than anywhere under /opt/steading. The
+	# `/var/lib/homefarm/dist` rather than anywhere under /opt/homefarm. The
 	# deploy timer pulls into that tree every five minutes, so an APK kept there
 	# would be one `git clean` from gone — and a directory Caddy serves should
 	# not be a directory a deploy writes to.
 	#
-	#   sudo install -d -m 0755 /var/lib/steading/dist
+	#   sudo install -d -m 0755 /var/lib/homefarm/dist
 	#
 	# Put a build there with `scripts/deploy/publish-apk.sh`, which is where the
 	# naming and the symlink are explained.
 	handle_path /app/* {
-		root * /var/lib/steading/dist
+		root * /var/lib/homefarm/dist
 
 		# A link to a build that is no longer here lands on the install page
 		# rather than on nothing.
@@ -142,14 +179,14 @@ api.example.com {
 	}
 
 	# Caddy sets X-Forwarded-For itself. The service must be told to believe
-	# exactly one hop — `TRUSTED_PROXY_HOPS=1` in /etc/steading/api.env — or
+	# exactly one hop — `TRUSTED_PROXY_HOPS=1` in /etc/homefarm/api.env — or
 	# `request.ip` is 127.0.0.1 for every request and every rate limiter in the
 	# service counts the whole internet as one caller. See env.ts.
 
 	encode zstd gzip
 
 	log {
-		output file /var/log/caddy/steading.log {
+		output file /var/log/caddy/homefarm.log {
 			roll_size 10MiB
 			roll_keep 5
 		}

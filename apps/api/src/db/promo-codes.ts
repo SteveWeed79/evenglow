@@ -1,7 +1,7 @@
 import { createHash, randomInt } from 'node:crypto';
 import type { Collection } from 'mongodb';
-import type { PromoGrant } from '@steading/contracts';
-import { JOIN_CODE_ALPHABET, PROMO_CODE_LENGTH } from '@steading/contracts';
+import type { PromoGrant } from '@homefarm/contracts';
+import { JOIN_CODE_ALPHABET, PROMO_CODE_LENGTH } from '@homefarm/contracts';
 import { db } from './client';
 
 /**

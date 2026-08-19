@@ -4,7 +4,7 @@ import {
   inventoryCreateSchema,
   maintenanceCreateSchema,
   type Species,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 import { localStore } from '../db/store';
 import { newestServiceCompletions } from './completions';
 

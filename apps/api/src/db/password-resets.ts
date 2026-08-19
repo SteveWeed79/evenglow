@@ -1,5 +1,5 @@
 import type { Collection } from 'mongodb';
-import { RESET_CODE_ALPHABET, RESET_CODE_LENGTH, RESET_MAX_ATTEMPTS } from '@steading/contracts';
+import { RESET_CODE_ALPHABET, RESET_CODE_LENGTH, RESET_MAX_ATTEMPTS } from '@homefarm/contracts';
 import { hashCode, mintCode } from '../auth/one-time-code';
 import { db } from './client';
 

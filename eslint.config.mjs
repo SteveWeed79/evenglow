@@ -166,7 +166,7 @@ const eslintConfig = defineConfig([
           ],
           patterns: [
             {
-              group: ['@steading/api', '@steading/api/*'],
+              group: ['@homefarm/api', '@homefarm/api/*'],
               message: 'Shared code must not import server modules.',
             },
           ],
@@ -223,7 +223,7 @@ const eslintConfig = defineConfig([
         {
           name: 'crypto',
           message:
-            'Hermes has no `crypto` global — this is the bug that stopped every save on device. Use expo-crypto, or newId() from @steading/contracts.',
+            'Hermes has no `crypto` global — this is the bug that stopped every save on device. Use expo-crypto, or newId() from @homefarm/contracts.',
         },
         {
           name: 'Buffer',

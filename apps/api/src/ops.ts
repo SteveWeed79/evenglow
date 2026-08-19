@@ -26,7 +26,7 @@ const app = await buildOpsServer(env);
 const host = process.env.OPS_HOST ?? '127.0.0.1';
 
 await app.listen({ port: env.OPS_PORT, host });
-console.log(`steading operations board on ${host}:${env.OPS_PORT}`);
+console.log(`homefarm operations board on ${host}:${env.OPS_PORT}`);
 
 /**
  * The same clean-shutdown handling the API has, and for the same reason: a unit

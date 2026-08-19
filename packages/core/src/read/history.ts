@@ -24,7 +24,7 @@ import {
   type StockReason,
   type UnitSystem,
   weightCreateSchema,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 import { localStore } from '../db/store';
 import { listAnimals } from './animals';
 import { listGroups } from './groups';
@@ -559,7 +559,7 @@ export async function listHistory(
        * A service, every time — which is the record somebody hands over with a
        * tractor.
        *
-       * `Steading-Masterplan.md` advertises a full service history for resale
+       * `Evenglow-Masterplan.md` advertises a full service history for resale
        * and the `maintenance` builder above says why it could not be produced:
        * one overwritten field per schedule. Six springs of oil changes are six
        * rows now.

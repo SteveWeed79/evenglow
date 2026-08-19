@@ -69,7 +69,7 @@ apps/mobile/android/
 apps/mobile/ios/
 
 # Local development database made by `pnpm farm`
-.steading-data/
+.homefarm-data/
 
 # JetBrains IDEs
 .idea/

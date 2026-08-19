@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { File, Paths } from 'expo-file-system';
 import { isAvailableAsync, shareAsync } from 'expo-sharing';
-import { backupFilename, buildBackup, serialiseBackup } from '@steading/core/backup/file';
-import { readExposure } from '@steading/core/backup/exposure';
+import { backupFilename, buildBackup, serialiseBackup } from '@homefarm/core/backup/file';
+import { readExposure } from '@homefarm/core/backup/exposure';
 import {
   planRestore,
   readBackup,
   type RestorePlan,
   runRestore,
-} from '@steading/core/backup/restore';
-import { localStore } from '@steading/core/db/store';
+} from '@homefarm/core/backup/restore';
+import { localStore } from '@homefarm/core/db/store';
 import { Confirm, Failure, Primary, Secondary } from '../components/Form';
 import { Loading } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { THEMES, type Theme, type ThemeName } from '@steading/mobile/theme/tokens';
+import { THEMES, type Theme, type ThemeName } from '@homefarm/mobile/theme/tokens';
 
 /**
  * R7, which has had a "Test" column saying *contrast check in CI* since the

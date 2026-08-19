@@ -6,8 +6,8 @@ import {
   type MassEntryUnit,
   massEntryToUg,
   newId,
-} from '@steading/contracts';
-import { listPlantings, listVarieties } from '@steading/core/read/growing';
+} from '@homefarm/contracts';
+import { listPlantings, listVarieties } from '@homefarm/core/read/growing';
 import { Choice, Failure, Field, NumberField, Primary, TextField, useSaver } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { useUnits } from '../hooks/useUnits';

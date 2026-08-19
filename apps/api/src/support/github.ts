@@ -1,5 +1,6 @@
-import type { SupportBundle } from '@steading/contracts';
+import type { SupportBundle } from '@homefarm/contracts';
 import { HttpError } from '../http';
+import { PRODUCT_NAME } from '@homefarm/contracts';
 
 /**
  * Filing a ticket as a GitHub issue (`docs/SUPPORT-LOOP.md` S3, S4 and §3).
@@ -141,7 +142,7 @@ async function fileRecords(
   const gist = await call(config, '/gists', {
     method: 'POST',
     body: {
-      description: `Steading support records — ${fingerprint}`,
+      description: `${PRODUCT_NAME} support records — ${fingerprint}`,
       public: false,
       files: { 'records.json': { content: records } },
     },

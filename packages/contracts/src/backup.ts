@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { entitySchema, MUTATION_SCHEMA_VERSION } from './mutation';
+import { PRODUCT_NAME } from './product';
 
 /**
  * A farm's records, as a file it can carry to another phone.
@@ -12,7 +13,7 @@ import { entitySchema, MUTATION_SCHEMA_VERSION } from './mutation';
  * records back.
  *
  * That leaves exactly one farm with no way home: the one that never made an
- * account (A2.1). Its records live in `steading-{orgId}.db` on one handset and
+ * account (A2.1). Its records live in `homefarm-{orgId}.db` on one handset and
  * nowhere else, and Android hands an app no callback before it is uninstalled
  * — so there is no moment to warn at. The only version that works is a copy
  * the farm can take whenever it likes.
@@ -54,7 +55,7 @@ import { entitySchema, MUTATION_SCHEMA_VERSION } from './mutation';
  * behind, and a restore is a different device.
  */
 
-export const BACKUP_FORMAT = 'steading.farm-records';
+export const BACKUP_FORMAT = 'homefarm.farm-records';
 
 /**
  * Bumped when the shape changes in a way an older app cannot read.
@@ -118,7 +119,7 @@ export const backupFileSchema = z
      * **Recorded, not used to choose a database, and the honest version of
      * that is worth stating.** A restore lands the records in whatever farm
      * the target handset is already on; it does not reopen
-     * `steading-{this}.db`. For the only farm this feature exists for — one
+     * `homefarm-{this}.db`. For the only farm this feature exists for — one
      * that never made an account — the id is arbitrary either way: nothing on
      * a server has ever heard of it, and the id the device later claims is
      * whichever one it is holding (A2.2).
@@ -154,7 +155,7 @@ export type BackupFile = z.infer<typeof backupFileSchema>;
  */
 export function backupRefusal(file: BackupFile): string | null {
   if (file.formatVersion > BACKUP_FORMAT_VERSION) {
-    return 'That backup was written by a newer version of Steading. Update the app and try again.';
+    return `That backup was written by a newer version of ${PRODUCT_NAME}. Update the app and try again.`;
   }
   if (file.mutationSchemaVersion > MUTATION_SCHEMA_VERSION) {
     return 'That backup holds records this version cannot read. Update the app and try again.';

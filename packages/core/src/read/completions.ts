@@ -1,4 +1,4 @@
-import { serviceCompletionCreateSchema, taskCompletionCreateSchema } from '@steading/contracts';
+import { serviceCompletionCreateSchema, taskCompletionCreateSchema } from '@homefarm/contracts';
 import { localStore } from '../db/store';
 
 /**

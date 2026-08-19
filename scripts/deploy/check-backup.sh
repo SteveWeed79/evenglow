@@ -2,7 +2,7 @@
 #
 # Fails when the last backup is too old.
 #
-#   sudo /opt/steading/scripts/deploy/check-backup.sh
+#   sudo /opt/homefarm/scripts/deploy/check-backup.sh
 #
 # ## Why a script that exists to fail
 #
@@ -20,8 +20,8 @@
 # different level of visibility from a line in a journal nobody opens.
 #
 #   systemctl --failed
-#   systemctl status steading-backup-check
-#   journalctl -u steading-backup -n 50
+#   systemctl status homefarm-backup-check
+#   journalctl -u homefarm-backup -n 50
 #
 # Reading the marker rather than the bucket is deliberate. `backup-mongo.sh`
 # writes it only after reading the object back out of S3, so its timestamp
@@ -30,20 +30,20 @@
 # about a backup that is fine.
 set -euo pipefail
 
-MARKER="${STEADING_BACKUP_MARKER:-/var/lib/steading/.last-backup}"
+MARKER="${HOMEFARM_BACKUP_MARKER:-/var/lib/homefarm/.last-backup}"
 
 # Thirty-six hours, for a nightly backup. Twenty-four would fire on any run that
 # started late — a reboot, a long dump, the timer's own randomised delay — and a
 # check that cries wolf is a check somebody disables. Thirty-six means one
 # missed night is reported and a merely slow one is not.
-MAX_AGE_HOURS="${STEADING_BACKUP_MAX_AGE_HOURS:-36}"
+MAX_AGE_HOURS="${HOMEFARM_BACKUP_MAX_AGE_HOURS:-36}"
 
 if [ ! -f "$MARKER" ]; then
   printf 'No backup has ever completed on this box.\n\n' >&2
   printf 'Either the timer is not enabled:\n\n' >&2
-  printf '    sudo systemctl enable --now steading-backup.timer\n\n' >&2
+  printf '    sudo systemctl enable --now homefarm-backup.timer\n\n' >&2
   printf 'or every run so far has failed:\n\n' >&2
-  printf '    journalctl -u steading-backup -n 50\n\n' >&2
+  printf '    journalctl -u homefarm-backup -n 50\n\n' >&2
   exit 1
 fi
 
@@ -61,8 +61,8 @@ AGE_HOURS=$(( (NOW - LAST) / 3600 ))
 if [ "$AGE_HOURS" -gt "$MAX_AGE_HOURS" ]; then
   printf 'The last successful backup was %s hours ago (limit %s).\n\n' "$AGE_HOURS" "$MAX_AGE_HOURS" >&2
   printf 'What it says:\n\n' >&2
-  journalctl -u steading-backup -n 30 --no-pager >&2 || true
-  printf '\nTo run one now:\n\n    sudo systemctl start steading-backup\n\n' >&2
+  journalctl -u homefarm-backup -n 30 --no-pager >&2 || true
+  printf '\nTo run one now:\n\n    sudo systemctl start homefarm-backup\n\n' >&2
   exit 1
 fi
 

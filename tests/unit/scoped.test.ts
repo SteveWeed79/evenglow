@@ -6,7 +6,7 @@ import {
   scopedOn,
   TenancyViolationError,
   type Tenanted,
-} from '@steading/api/db/scoped';
+} from '@homefarm/api/db/scoped';
 
 /**
  * The guard layer is the whole of D2, so it is tested directly rather than

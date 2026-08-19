@@ -6,10 +6,10 @@ import {
   type CareKind,
   careApplies,
   careIntervalDays,
-} from '@steading/contracts';
-import { type Group, listGroups } from '@steading/core/read/groups';
+} from '@homefarm/contracts';
+import { type Group, listGroups } from '@homefarm/core/read/groups';
 import { Chip, Failure, Field } from '../components/Form';
-import { describeLogFailure } from '@steading/core/sync/failure';
+import { describeLogFailure } from '@homefarm/core/sync/failure';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';

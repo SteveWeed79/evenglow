@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { BACKUP_FORMAT_VERSION, MUTATION_SCHEMA_VERSION, newId } from '@steading/contracts';
-import { backupFilename, buildBackup, serialiseBackup } from '@steading/core/backup/file';
-import { planRestore, readBackup, runRestore } from '@steading/core/backup/restore';
-import { enqueue } from '@steading/core/sync/queue';
-import { localStore } from '@steading/core/db/store';
+import { BACKUP_FORMAT_VERSION, MUTATION_SCHEMA_VERSION, newId } from '@homefarm/contracts';
+import { backupFilename, buildBackup, serialiseBackup } from '@homefarm/core/backup/file';
+import { planRestore, readBackup, runRestore } from '@homefarm/core/backup/restore';
+import { enqueue } from '@homefarm/core/sync/queue';
+import { localStore } from '@homefarm/core/db/store';
 import { freshStore, readAllRecords } from '../support/store';
+import { PRODUCT_NAME } from '@homefarm/contracts';
 
 /**
  * A farm, out to a file and back again.
@@ -120,7 +121,9 @@ describe('what goes in the file', () => {
   });
 
   it('names itself for the day it was written', () => {
-    expect(backupFilename(Date.UTC(2026, 7, 7))).toBe('steading-farm-2026-08-07.json');
+    expect(backupFilename(Date.UTC(2026, 7, 7))).toBe(
+      `${PRODUCT_NAME.toLowerCase()}-farm-2026-08-07.json`,
+    );
   });
 });
 

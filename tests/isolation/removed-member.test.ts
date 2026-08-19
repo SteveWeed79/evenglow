@@ -1,6 +1,6 @@
 import { ulid } from 'ulid';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import type { OrgDoc, UserDoc } from '@steading/api/db/identity';
+import type { OrgDoc, UserDoc } from '@homefarm/api/db/identity';
 import { startTestDb } from '../support/mongo';
 
 /**
@@ -25,11 +25,11 @@ import { startTestDb } from '../support/mongo';
  * anybody who signed up that way exactly as stuck as before.
  */
 
-const harness = await startTestDb('steading_removed_member');
+const harness = await startTestDb('homefarm_removed_member');
 
 if (harness) {
   process.env.MONGODB_URI = harness.uri;
-  process.env.MONGODB_DB = 'steading_removed_member';
+  process.env.MONGODB_DB = 'homefarm_removed_member';
 }
 
 const SECRET = 'a-test-secret-long-enough-for-hs256-abcdef';
@@ -44,13 +44,13 @@ const HAND_EMAIL = `hand-${HAND}@example.test`.toLowerCase();
 const describeDb = harness ? describe : describe.skip;
 
 async function server() {
-  const { buildServer } = await import('@steading/api/server');
-  const { readEnv } = await import('@steading/api/env');
+  const { buildServer } = await import('@homefarm/api/server');
+  const { readEnv } = await import('@homefarm/api/env');
   return buildServer(
     readEnv({
       AUTH_SECRET: SECRET,
       MONGODB_URI: harness!.uri,
-      MONGODB_DB: 'steading_removed_member',
+      MONGODB_DB: 'homefarm_removed_member',
       CORS_ORIGINS: 'https://app.test',
     }),
   );
@@ -82,7 +82,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   if (!harness) return;
-  const { hashPassword } = await import('@steading/api/auth/password');
+  const { hashPassword } = await import('@homefarm/api/auth/password');
   const hash = await hashPassword(PASSWORD);
 
   await harness.db.collection('refreshTokens').deleteMany({});
@@ -153,7 +153,7 @@ describeDb('after somebody is removed from a farm', () => {
    */
   it('puts them on their own farm rather than the one they left', async () => {
     const app = await server();
-    const { verifyAccessToken } = await import('@steading/api/auth/tokens');
+    const { verifyAccessToken } = await import('@homefarm/api/auth/tokens');
     await removeTheHand(app);
 
     const mine = ulid();
@@ -247,7 +247,7 @@ describeDb('after somebody is removed from a farm', () => {
     const app = await server();
 
     const second = ulid();
-    const { hashPassword } = await import('@steading/api/auth/password');
+    const { hashPassword } = await import('@homefarm/api/auth/password');
     await harness.db.collection<UserDoc>('users').insertOne({
       _id: second,
       email: `second-${second}@example.test`.toLowerCase(),

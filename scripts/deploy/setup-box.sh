@@ -3,8 +3,8 @@
 # The farm server, from a fresh Oracle Always Free instance to a working
 # https:// address. Run it once, on the box, as a user with sudo:
 #
-#   git clone https://github.com/SteveWeed79/steading /opt/steading
-#   sudo /opt/steading/scripts/deploy/setup-box.sh api.swbuild.dev
+#   git clone https://github.com/SteveWeed79/evenglow /opt/homefarm
+#   sudo /opt/homefarm/scripts/deploy/setup-box.sh api.swbuild.dev
 #
 # Idempotent — safe to run again after a failure or a change. Every step says
 # what it is doing and stops on the first thing that does not work, because a
@@ -13,7 +13,7 @@
 #
 # ## What this does NOT do
 #
-# It does not write `/etc/steading/api.env`. That file holds the database URI
+# It does not write `/etc/homefarm/api.env`. That file holds the database URI
 # and the token signing secret, and a script that generated or copied secrets
 # would put them in a shell history, a log, or this repository. The script
 # creates it empty at mode 0600 and tells you what to put in it.
@@ -28,8 +28,8 @@
 set -euo pipefail
 
 DOMAIN="${1:-}"
-REPO_DIR="${STEADING_DIR:-/opt/steading}"
-SERVICE_USER="steading"
+REPO_DIR="${HOMEFARM_DIR:-/opt/homefarm}"
+SERVICE_USER="homefarm"
 NODE_MAJOR=22
 
 say() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
@@ -51,7 +51,7 @@ if [ -z "$DOMAIN" ]; then
 fi
 
 [ -d "$REPO_DIR/.git" ] || die "No checkout at $REPO_DIR. Clone the repo there first:
-    sudo git clone https://github.com/SteveWeed79/steading $REPO_DIR"
+    sudo git clone https://github.com/SteveWeed79/evenglow $REPO_DIR"
 
 # ── 1. The firewall Oracle does not tell you about ──────────────────────────
 #
@@ -133,7 +133,7 @@ say "Installing the API's dependencies"
 cd "$REPO_DIR"
 # Filtered: without it this pulls Expo and React Native onto a server that
 # imports neither. The trailing dots mean "and what it depends on".
-corepack pnpm install --frozen-lockfile --filter "@steading/api..."
+corepack pnpm install --frozen-lockfile --filter "@homefarm/api..."
 [ -f "$REPO_DIR/node_modules/tsx/dist/cli.mjs" ] \
   || die "tsx is not where the service unit expects it ($REPO_DIR/node_modules/tsx/dist/cli.mjs).
   That means the install did not hoist. Check .npmrc still sets node-linker=hoisted."
@@ -152,7 +152,7 @@ git config --system --get-all safe.directory 2>/dev/null | grep -qxF "$REPO_DIR"
 # Every command in `docs/OPERATOR.md` — farm:ls, farm:show, farm:grant,
 # db:usage, db:indexes — runs `tsx --env-file-if-exists=../../.env.local`. On a
 # developer's machine that file is the config. On this box the config lives in
-# /etc/steading/api.env instead, so all of them came up with
+# /etc/homefarm/api.env instead, so all of them came up with
 #
 #   Error: MONGODB_URI is not set. Copy .env.example to .env.local ...
 #
@@ -166,18 +166,18 @@ git config --system --get-all safe.directory 2>/dev/null | grep -qxF "$REPO_DIR"
 # root-owned so only sudo reads it, and `deploy.sh`'s chown touches the link
 # rather than the file behind it.
 if [ ! -e "$REPO_DIR/.env.local" ]; then
-  ln -s /etc/steading/api.env "$REPO_DIR/.env.local"
-  note "linked .env.local -> /etc/steading/api.env, so sudo pnpm farm:ls works"
+  ln -s /etc/homefarm/api.env "$REPO_DIR/.env.local"
+  note "linked .env.local -> /etc/homefarm/api.env, so sudo pnpm farm:ls works"
 fi
 note "ready"
 
 # ── 5. The secrets file, created empty ──────────────────────────────────────
 say "Configuration"
-install -d -m 0750 /etc/steading
-if [ -f /etc/steading/api.env ]; then
-  note "/etc/steading/api.env already exists — left exactly as it is"
+install -d -m 0750 /etc/homefarm
+if [ -f /etc/homefarm/api.env ]; then
+  note "/etc/homefarm/api.env already exists — left exactly as it is"
 else
-  cat > /etc/steading/api.env <<'ENV'
+  cat > /etc/homefarm/api.env <<'ENV'
 # Read by systemd, never committed. Mode 0600.
 #
 # Two values are required and the service will not start without them.
@@ -195,10 +195,10 @@ MONGODB_URI=
 
 # **Which database inside that cluster, and this is NOT taken from the URI.**
 #
-# `client.ts` calls `client.db(process.env.MONGODB_DB ?? 'steading')` — so a
+# `client.ts` calls `client.db(process.env.MONGODB_DB ?? 'homefarm')` — so a
 # connection string ending in /something is connected to and then ignored. The
 # two are separate settings and the default is only right if the database is
-# actually called `steading`.
+# actually called `homefarm`.
 #
 # It caught the first real deployment. A cluster named `steadingdb` holding a
 # database also named `steadingdb` is an ordinary thing to end up
@@ -211,7 +211,7 @@ MONGODB_URI=
 # an empty string is a value — so it would be used. `client.ts` guards against
 # that now; leaving the line commented means nothing depends on the guard.
 #
-# Uncomment and fill in when the database is not called `steading`. Check
+# Uncomment and fill in when the database is not called `homefarm`. Check
 # rather than assume:
 #   mongosh "<uri>" --eval 'db.adminCommand({listDatabases:1}).databases.forEach(d=>print(d.name))'
 #MONGODB_DB=
@@ -238,11 +238,11 @@ PORT=3001
 #
 # A fine-grained token from
 # https://github.com/settings/personal-access-tokens/new
-#   Repository access -> Only select repositories -> steading
+#   Repository access -> Only select repositories -> homefarm
 #   Permissions -> Repository permissions -> Issues: Read and write
 # and nothing else. It files issues and that is the whole of what it can do.
 #SUPPORT_GITHUB_TOKEN=
-#SUPPORT_REPO=SteveWeed79/steading
+#SUPPORT_REPO=SteveWeed79/evenglow
 
 # Whether a farm's own records may ride along with a report (S5).
 #
@@ -252,26 +252,26 @@ PORT=3001
 # counts, never content — and this switch is the other half.
 #SUPPORT_ACCEPT_RECORDS=
 ENV
-  chmod 0600 /etc/steading/api.env
-  note "created /etc/steading/api.env — FILL IT IN before starting the service"
+  chmod 0600 /etc/homefarm/api.env
+  note "created /etc/homefarm/api.env — FILL IT IN before starting the service"
 fi
 
 # ── 6. The service ──────────────────────────────────────────────────────────
 say "Installing the service"
-sed "s#/opt/steading#${REPO_DIR}#g" \
-  "$REPO_DIR/scripts/deploy/steading-api.service" > /etc/systemd/system/steading-api.service
-sed "s#/opt/steading#${REPO_DIR}#g" \
-  "$REPO_DIR/scripts/deploy/steading-deploy.service" > /etc/systemd/system/steading-deploy.service
-cp "$REPO_DIR/scripts/deploy/steading-deploy.timer" /etc/systemd/system/steading-deploy.timer
+sed "s#/opt/homefarm#${REPO_DIR}#g" \
+  "$REPO_DIR/scripts/deploy/homefarm-api.service" > /etc/systemd/system/homefarm-api.service
+sed "s#/opt/homefarm#${REPO_DIR}#g" \
+  "$REPO_DIR/scripts/deploy/homefarm-deploy.service" > /etc/systemd/system/homefarm-deploy.service
+cp "$REPO_DIR/scripts/deploy/homefarm-deploy.timer" /etc/systemd/system/homefarm-deploy.timer
 systemctl daemon-reload
-systemctl enable steading-api >/dev/null
+systemctl enable homefarm-api >/dev/null
 note "enabled (starts on boot)"
 
 # Installed but NOT started. Automatic deployment onto a box whose two secrets
 # are still blank would restart a service that cannot come up, every five
 # minutes, and bury the real reason under the noise. Turn it on once the thing
 # is known to work.
-note "steading-deploy.timer installed but not started — see DEPLOY-THE-SERVER"
+note "homefarm-deploy.timer installed but not started — see DEPLOY-THE-SERVER"
 
 # ── 7. Caddy, and with it the certificate ───────────────────────────────────
 say "Caddy, for $DOMAIN"
@@ -296,8 +296,15 @@ chown caddy:caddy /var/log/caddy 2>/dev/null || true
 # $REPO_DIR every five minutes, so a build kept in that tree would be one
 # `git clean` from gone. Nothing publishes here automatically; that is
 # `scripts/deploy/publish-apk.sh`, run by hand after an EAS build.
-install -d -m 0755 /var/lib/steading/dist
-chown caddy:caddy /var/lib/steading/dist 2>/dev/null || true
+install -d -m 0755 /var/lib/homefarm/dist
+chown caddy:caddy /var/lib/homefarm/dist 2>/dev/null || true
+
+# Where this box keeps site blocks the repository does not own — the operations
+# board's, most likely. `deploy.sh` renders the Caddyfile over the running one
+# every five minutes and imports this directory without ever writing to it, so
+# anything put here survives a deploy and anything put in the Caddyfile itself
+# does not. Created empty; an empty glob is not an error to Caddy.
+install -d -m 0755 /etc/caddy/conf.d
 
 sed "s/api\.example\.com/${DOMAIN}/" "$REPO_DIR/scripts/deploy/Caddyfile" > /etc/caddy/Caddyfile
 systemctl enable caddy >/dev/null
@@ -309,11 +316,11 @@ cat <<DONE
 
 $(printf '\033[1m')Set up. Three things left, and only you can do them.$(printf '\033[0m')
 
-  1. Put the two values in /etc/steading/api.env
+  1. Put the two values in /etc/homefarm/api.env
 
-       sudo nano /etc/steading/api.env
-       sudo systemctl start steading-api
-       systemctl status steading-api
+       sudo nano /etc/homefarm/api.env
+       sudo systemctl start homefarm-api
+       systemctl status homefarm-api
 
   2. Open 443 in the ORACLE CONSOLE, which no script on this box can reach.
      Networking -> Virtual Cloud Networks -> your VCN -> Security Lists ->
@@ -327,7 +334,7 @@ $(printf '\033[1m')Set up. Three things left, and only you can do them.$(printf 
      forgetting it looks exactly like the server being down.
 
   3. Install the database on this box, if it is not there yet:
-       sudo MONGODB_DB=steadingdb /opt/steading/scripts/deploy/setup-mongo.sh
+       sudo MONGODB_DB=steadingdb /opt/homefarm/scripts/deploy/setup-mongo.sh
      It binds mongod to 127.0.0.1 and prints the connection string once.
      Nothing to open in any firewall for it, which is the point.
 
@@ -343,7 +350,7 @@ $(printf '\033[1m')Then check it from anywhere:$(printf '\033[0m')
 
 $(printf '\033[1m')Once it works, deployments can look after themselves:$(printf '\033[0m')
 
-       sudo systemctl enable --now steading-deploy.timer
+       sudo systemctl enable --now homefarm-deploy.timer
 
   The box then follows the 'release' branch, which CI moves only after a green
   build. Nothing inbound is opened and GitHub is given no key to this machine.

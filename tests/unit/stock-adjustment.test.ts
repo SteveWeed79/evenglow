@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { isAppendOnly, newId, stockAdjustmentCreateSchema } from '@steading/contracts';
-import { enqueue } from '@steading/core/sync/queue';
-import { listInventory } from '@steading/core/read/iron';
-import { listHistory } from '@steading/core/read/history';
+import { isAppendOnly, newId, stockAdjustmentCreateSchema } from '@homefarm/contracts';
+import { enqueue } from '@homefarm/core/sync/queue';
+import { listInventory } from '@homefarm/core/read/iron';
+import { listHistory } from '@homefarm/core/read/history';
 import { freshStore } from '../support/store';
 
 /**

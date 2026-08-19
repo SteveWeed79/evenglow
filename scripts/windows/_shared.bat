@@ -122,7 +122,7 @@ exit /b 0
 :: the app and then 404'd on an asset inside it:
 ::
 ::   ENOENT: no such file or directory, scandir
-::     'C:\steading\node_modules\.pnpm\react-native@0.86.2_...\
+::     'C:\evenglow\node_modules\.pnpm\react-native@0.86.2_...\
 ::      node_modules\react-native\Libraries\LogBox\UI\LogBoxImages'
 ::
 :: A correctly hoisted tree has NO `.pnpm\react-native@*` directory at all —
@@ -153,7 +153,7 @@ if not errorlevel 1 set "layout_wrong=1"
 if defined layout_wrong (
   if not exist "pnpm-workspace.yaml" (
     echo.
-    echo   PROBLEM: this script is not running from the Steading folder,
+    echo   PROBLEM: this script is not running from the Evenglow folder,
     echo   so it has stopped rather than deleting anything.
     echo.
     echo   Currently in: %CD%
@@ -488,7 +488,7 @@ echo.
 echo   If it never asks and the tablet cannot reach the server,
 echo   open Command Prompt AS ADMINISTRATOR and paste this once:
 echo.
-echo     netsh advfirewall firewall add rule name="Steading farm server" dir=in action=allow protocol=TCP localport=3001
+echo     netsh advfirewall firewall add rule name="Evenglow farm server" dir=in action=allow protocol=TCP localport=3001
 echo.
 exit /b 0
 

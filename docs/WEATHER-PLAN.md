@@ -47,7 +47,7 @@ This document exists because the ask — "roll a weather tab into the plan" —
 collides with two things already written down, and CLAUDE.md says to stop and
 say so rather than work around them.
 
-- `docs/Steading-Masterplan.md` §"What we are not building" lists **"Satellite
+- `docs/Evenglow-Masterplan.md` §"What we are not building" lists **"Satellite
   and weather imagery — an integration surface, not a record."**
 - `docs/UX-SPEC.md` §4: **"Everything else is one level below these four. If a
   feature needs a fifth tab, it needs a rethink."**

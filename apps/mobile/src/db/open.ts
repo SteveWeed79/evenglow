@@ -1,7 +1,7 @@
 import { Directory, Paths } from 'expo-file-system';
 import * as SQLite from 'expo-sqlite';
-import type { SqlDriver } from '@steading/core/db/driver';
-import { reportEngineError } from '@steading/core/sync/report';
+import type { SqlDriver } from '@homefarm/core/db/driver';
+import { reportEngineError } from '@homefarm/core/sync/report';
 import {
   applyPragmas,
   createExpoDriver,
@@ -39,7 +39,7 @@ export function databaseNameFor(orgId: string): string {
   if (!/^[0-9A-HJKMNP-TV-Z]{26}$/.test(orgId)) {
     throw new Error('An org id must be a ULID before it can name a database file.');
   }
-  return `steading-${orgId}.db`;
+  return `homefarm-${orgId}.db`;
 }
 
 export async function openExpoSqlDriver(databaseName: string): Promise<SqlDriver> {
@@ -86,7 +86,7 @@ export async function forgetDatabase(orgId: string): Promise<void> {
  * Every farm this device has a database for.
  *
  * **The one question nothing could ask.** A farm's id lives in secure storage
- * and its records live in `steading-{orgId}.db`, so the id is the only pointer
+ * and its records live in `homefarm-{orgId}.db`, so the id is the only pointer
  * to the file — and when the pointer goes, `ensureLocalOrgId` mints a fresh
  * one and the app opens an empty farm beside a full one, silently. That is a
  * loss with no error, no warning and nothing on any screen, which is the worst
@@ -104,6 +104,6 @@ export async function knownFarmIds(): Promise<string[]> {
 
   return directory
     .list()
-    .map((entry) => /^steading-([0-9A-HJKMNP-TV-Z]{26})\.db$/.exec(entry.name)?.[1])
+    .map((entry) => /^homefarm-([0-9A-HJKMNP-TV-Z]{26})\.db$/.exec(entry.name)?.[1])
     .filter((id): id is string => id !== undefined);
 }

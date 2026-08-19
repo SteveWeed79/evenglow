@@ -1,4 +1,4 @@
-import type { SyncRefusal } from '@steading/contracts';
+import type { SyncRefusal } from '@homefarm/contracts';
 import { localStore } from '../db/store';
 import { reportEngineError } from './report';
 import { backoffDelay, flushOnce, type SyncTransport } from './flush';

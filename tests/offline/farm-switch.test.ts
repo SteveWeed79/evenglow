@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId } from '@steading/contracts';
-import { setLocalStore, localStore, storeGeneration } from '@steading/core/db/store';
-import { openSqliteStore } from '@steading/core/db/sqlite-store';
-import { flushOnce } from '@steading/core/sync/flush';
-import { pullOnce } from '@steading/core/sync/pull';
-import { enqueue, queueDepth } from '@steading/core/sync/queue';
+import { newId } from '@homefarm/contracts';
+import { setLocalStore, localStore, storeGeneration } from '@homefarm/core/db/store';
+import { openSqliteStore } from '@homefarm/core/db/sqlite-store';
+import { flushOnce } from '@homefarm/core/sync/flush';
+import { pullOnce } from '@homefarm/core/sync/pull';
+import { enqueue, queueDepth } from '@homefarm/core/sync/queue';
 import { freshStore, readRecordsByEntity } from '../support/store';
 import { nodeIds, nodeSqlDriver } from '../support/sqlite';
 
@@ -178,7 +178,7 @@ describe('wiping a farm off a shared device (C5)', () => {
       id: newId(),
       at: Date.now(),
       fingerprint: 'abc',
-      bundle: '{"app":"steading"}',
+      bundle: '{"app":"homefarm"}',
       records: '{"flocks":[{"name":"Alpha"}]}',
       attempts: 0,
     });

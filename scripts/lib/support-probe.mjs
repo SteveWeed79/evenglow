@@ -7,7 +7,7 @@
  * ## The gap this closes
  *
  * `Check my setup` read `SUPPORT_GITHUB_TOKEN` out of `.env.local` and said
- * "reporting files issues to SteveWeed79/steading". That file configures the
+ * "reporting files issues to SteveWeed79/evenglow". That file configures the
  * server on *this PC*. Once `Use the farm server` pointed the build at the
  * deployed box, the check went on reporting the laptop's configuration for a
  * server the app no longer spoke to — so it read OK on the exact morning

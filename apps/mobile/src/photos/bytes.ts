@@ -1,4 +1,4 @@
-import type { PhotoBytes } from '@steading/core/sync/photos';
+import type { PhotoBytes } from '@homefarm/core/sync/photos';
 import { hasBytes, photoFile } from './store';
 
 /**

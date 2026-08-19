@@ -7,9 +7,9 @@ import {
   supportBundleSchema,
   taskDues,
   type SupportBundle,
-} from '@steading/contracts';
-import { titleFor } from '@steading/api/support/github';
-import { readEnv } from '@steading/api/env';
+} from '@homefarm/contracts';
+import { titleFor } from '@homefarm/api/support/github';
+import { readEnv } from '@homefarm/api/env';
 
 /**
  * The support bundle, and the fingerprint that decides whether a crash loop
@@ -145,8 +145,8 @@ describe('the hash under it', () => {
   it('is stable, short, and the same on any engine', () => {
     // No `crypto`, no BigInt, nothing asynchronous — this runs on Hermes while
     // assembling a bundle on a device that may be about to crash again.
-    expect(hash64('steading')).toBe(hash64('steading'));
-    expect(hash64('steading').length).toBeLessThanOrEqual(16);
+    expect(hash64('homefarm')).toBe(hash64('homefarm'));
+    expect(hash64('homefarm').length).toBeLessThanOrEqual(16);
     expect(hash64('a')).not.toBe(hash64('b'));
   });
 
@@ -348,12 +348,12 @@ describe('reading the tracker config', () => {
 
   it('splits owner from repo and refuses anything else', () => {
     expect(
-      readEnv({ ...base, SUPPORT_GITHUB_TOKEN: 'x', SUPPORT_REPO: 'SteveWeed79/steading' })
+      readEnv({ ...base, SUPPORT_GITHUB_TOKEN: 'x', SUPPORT_REPO: 'SteveWeed79/evenglow' })
         .supportConfig,
-    ).toMatchObject({ owner: 'SteveWeed79', repo: 'steading' });
+    ).toMatchObject({ owner: 'SteveWeed79', repo: 'evenglow' });
 
     expect(() =>
-      readEnv({ ...base, SUPPORT_GITHUB_TOKEN: 'x', SUPPORT_REPO: 'steading' }),
+      readEnv({ ...base, SUPPORT_GITHUB_TOKEN: 'x', SUPPORT_REPO: 'homefarm' }),
     ).toThrow(/owner\/repo/);
   });
 

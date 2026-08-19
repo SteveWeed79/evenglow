@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { SqlOps } from '@steading/core/db/driver';
-import { type CancelTimer, createGate, SqlStalledError } from '@steading/core/db/gate';
-import { createExpoDriver } from '@steading/mobile/db/expo-driver';
+import type { SqlOps } from '@homefarm/core/db/driver';
+import { type CancelTimer, createGate, SqlStalledError } from '@homefarm/core/db/gate';
+import { createExpoDriver } from '@homefarm/mobile/db/expo-driver';
 import { fakeExpoConnection, tracingExpoConnection } from '../support/expo-sqlite';
 
 /**

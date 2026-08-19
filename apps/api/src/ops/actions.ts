@@ -1,4 +1,4 @@
-import { formatPromoCode, promoGrantSchema } from '@steading/contracts';
+import { formatPromoCode, promoGrantSchema } from '@homefarm/contracts';
 import { z } from 'zod';
 import { findOrgById, setSyncGrant } from '../db/identity';
 import { createPromoCode, mintPromoCode } from '../db/promo-codes';

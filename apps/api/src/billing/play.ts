@@ -1,13 +1,13 @@
 import { SignJWT, importPKCS8 } from 'jose';
 import { z } from 'zod';
-import type { Subscription, SubscriptionState } from '@steading/contracts';
+import type { Subscription, SubscriptionState } from '@homefarm/contracts';
 import { HttpError } from '../http';
 
 /**
  * Google Play as a rail, behind a seam (D13).
  *
  * The rules about what a subscription *buys* live in
- * `@steading/contracts/billing` and are pure. This file is the adapter that
+ * `@homefarm/contracts/billing` and are pure. This file is the adapter that
  * turns what Google says into one of those four states, and nothing else in
  * the server knows Play exists.
  *

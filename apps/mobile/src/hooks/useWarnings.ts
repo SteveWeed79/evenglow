@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { hazardsCoveredByAlerts, type Warning, warningsFor } from '@steading/contracts';
+import { hazardsCoveredByAlerts, type Warning, warningsFor } from '@homefarm/contracts';
 import { useDues } from './useDues';
 import { useGroups } from './useGroups';
 import { useGrowing } from './useGrowing';

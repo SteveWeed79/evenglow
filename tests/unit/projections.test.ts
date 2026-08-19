@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { ENTITIES, isAppendOnly } from '@steading/contracts';
+import { ENTITIES, isAppendOnly } from '@homefarm/contracts';
 import {
   decideHourReading,
   decideProjection,
   ENTITY_COLLECTIONS,
   type ExistingDoc,
-} from '@steading/api/sync/projections';
-import { COLLECTIONS } from '@steading/api/db/scoped';
+} from '@homefarm/api/sync/projections';
+import { COLLECTIONS } from '@homefarm/api/db/scoped';
 
 const NOTHING = { existing: null };
 const PRESENT: { existing: ExistingDoc } = { existing: { _id: 'id-1' } };

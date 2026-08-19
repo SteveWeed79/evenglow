@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { canInvite, canRenameFarm, farmNameSchema, renameFarmSchema } from '@steading/contracts';
+import { canInvite, canRenameFarm, farmNameSchema, renameFarmSchema } from '@homefarm/contracts';
 import { seedSecureStore } from '../support/native/modules';
 import { claimsSnapshot, readCachedClaims, subscribeToClaims } from '../../apps/mobile/src/auth/store';
 import { rememberFarmName } from '../../apps/mobile/src/auth/session';
@@ -100,7 +100,7 @@ describe('remembering it on this device', () => {
   };
 
   beforeEach(() => {
-    seedSecureStore({ 'steading.claims': JSON.stringify(CLAIMS) });
+    seedSecureStore({ 'homefarm.claims': JSON.stringify(CLAIMS) });
   });
 
   it('replaces the name and tells everything watching', async () => {

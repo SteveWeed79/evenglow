@@ -8,11 +8,11 @@ import {
   productsOf,
   longestWithdrawal,
   SPECIES_TRAITS,
-} from '@steading/contracts';
-import { groupPhrase } from '@steading/core/voice';
-import { latestWeightBySubject, listWeights } from '@steading/core/read/breeding';
-import { type Group, lastFedByGroup, listGroups, lossesByGroup, produceToday } from '@steading/core/read/groups';
-import { withdrawalsBySubject } from '@steading/core/read/withdrawals';
+} from '@homefarm/contracts';
+import { groupPhrase } from '@homefarm/core/voice';
+import { latestWeightBySubject, listWeights } from '@homefarm/core/read/breeding';
+import { type Group, lastFedByGroup, listGroups, lossesByGroup, produceToday } from '@homefarm/core/read/groups';
+import { withdrawalsBySubject } from '@homefarm/core/read/withdrawals';
 import { Row } from '../components/Form';
 import { Icon } from '../components/Icon';
 import { Loading, Missing } from '../components/Missing';

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { resetApiBase } from '@steading/core/api';
+import { resetApiBase } from '@homefarm/core/api';
 import { configureApi, resetApiFault } from '../../apps/mobile/src/boot/config';
 import { SyncChip } from '../../apps/mobile/src/components/SyncChip';
 import { DiagnosticsScreen } from '../../apps/mobile/src/screens/DiagnosticsScreen';

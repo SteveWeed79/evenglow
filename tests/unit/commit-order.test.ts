@@ -1,13 +1,13 @@
 import type { Db } from 'mongodb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SessionClaims } from '@steading/api/auth/claims';
-import { scopedOn } from '@steading/api/db/scoped';
-import { applyBatch } from '@steading/api/sync/apply';
+import type { SessionClaims } from '@homefarm/api/auth/claims';
+import { scopedOn } from '@homefarm/api/db/scoped';
+import { applyBatch } from '@homefarm/api/sync/apply';
 import {
   inCommitOrder,
   nextServerTs,
   resetCommitOrder,
-} from '@steading/api/sync/commit-order';
+} from '@homefarm/api/sync/commit-order';
 import { makeMutation } from '../support/fixtures';
 
 /**

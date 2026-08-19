@@ -14,7 +14,7 @@ token can either. See §5 for when that stops being the right answer.
 **All of these run from the repository root**, not from `apps/api`:
 
 ```
-cd /c/steading          # or wherever the checkout is
+cd /c/homefarm          # or wherever the checkout is
 pnpm farm:ls
 ```
 
@@ -33,7 +33,7 @@ To run one from a laptop anyway, forward the port and point at the forward:
 
 ```
 ssh -L 27017:127.0.0.1:27017 ubuntu@api.swbuild.dev
-MONGODB_URI=mongodb://127.0.0.1:27017 MONGODB_DB=steadingdb pnpm farm:ls
+MONGODB_URI=mongodb://127.0.0.1:27017 MONGODB_DB=homefarmdb pnpm farm:ls
 ```
 
 That is a deliberate narrowing rather than a regression: the database is
@@ -41,7 +41,7 @@ reachable from exactly one machine, and getting to it means holding SSH to that
 machine.
 
 **On the farm server that file is a symlink**, created by `setup-box.sh`,
-pointing at `/etc/steading/api.env` — the same config the service itself reads.
+pointing at `/etc/homefarm/api.env` — the same config the service itself reads.
 So `sudo pnpm farm:ls` works on the box with nothing exported, and cannot
 disagree with what the API is using. Without it every one of these commands
 stops with *"MONGODB_URI is not set"*, and the workaround is two exports retyped
@@ -65,7 +65,7 @@ what it should be.
 > `MONGODB_URI` before anything that writes.**
 >
 > The one exception is `pnpm db:verify`, which uses a database called
-> `steading_verify` and drops it — it deliberately ignores `MONGODB_DB` so it
+> `homefarm_verify` and drops it — it deliberately ignores `MONGODB_DB` so it
 > cannot be aimed at real records.
 
 **Which shell.** Anything: PowerShell, Git Bash, cmd, a Linux shell. On Windows
@@ -75,7 +75,7 @@ here depends on the shell you use.
 **Which machine.** Any machine with a checkout and a route to the database —
 that is the point of them reading `MONGODB_URI` rather than assuming localhost.
 The server itself is an Oracle Cloud Always Free ARM instance, settled in
-`Steading-Masterplan.md` §5 and costed in `ACCESS-AND-BILLING.md` §4.1; the
+`Evenglow-Masterplan.md` §5 and costed in `ACCESS-AND-BILLING.md` §4.1; the
 commands do not have to run there and mostly will not.
 
 The deployment mechanism now exists, and §4a is the short version of it: a
@@ -231,13 +231,13 @@ Caddyfile proxies it**, deliberately — so it is not on the internet and puttin
 it there is a decision made in the proxy, not in this repository.
 
 ```
-sudo systemctl status steading-ops              is it even running
+sudo systemctl status homefarm-ops              is it even running
 ssh -L 3002:127.0.0.1:3002 you@the-box          from your own machine
                                                 then http://localhost:3002
 ```
 
-If the unit is not installed, `scripts/deploy/steading-ops.service` is it, and
-`systemctl disable --now steading-ops` is a complete answer to "take the admin
+If the unit is not installed, `scripts/deploy/homefarm-ops.service` is it, and
+`systemctl disable --now homefarm-ops` is a complete answer to "take the admin
 surface off this box".
 
 ### `pnpm db:password`
@@ -271,7 +271,7 @@ Exercises the real server data path — the scoped tenancy layer, index
 application, and the sync applier — against whatever `MONGODB_URI` points at,
 and reports plainly.
 
-**Safe against a live cluster.** It uses a database called `steading_verify` and
+**Safe against a live cluster.** It uses a database called `homefarm_verify` and
 drops it, deliberately ignoring `MONGODB_DB` so it cannot be aimed at real
 records.
 
@@ -359,8 +359,8 @@ used to be a managed cluster's IP allowlist, and the database moving onto the
 box removed it:
 
 ```
-sudo git clone https://github.com/SteveWeed79/steading /opt/steading
-sudo /opt/steading/scripts/deploy/setup-box.sh api.swbuild.dev
+sudo git clone https://github.com/SteveWeed79/evenglow /opt/homefarm
+sudo /opt/homefarm/scripts/deploy/setup-box.sh api.swbuild.dev
 ```
 
 `scripts/deploy/` holds what it installs: a systemd unit, a Caddyfile that
@@ -387,7 +387,7 @@ Three things about it are not obvious and each one cost a failed build:
 - **All four workspace manifests must be in the build context**, including
   `apps/mobile/package.json`, even though the install is filtered to the API.
   `pnpm deploy` re-resolves the whole workspace and the root `package.json`
-  names `@steading/mobile`. Omit it and the deploy step fails *after* a
+  names `@homefarm/mobile`. Omit it and the deploy step fails *after* a
   successful install, which is a confusing place to land.
 - **`tsx` is a production dependency**, deliberately. This service imports
   extensionless (`from './env'`) under `moduleResolution: bundler`, which
@@ -461,15 +461,15 @@ app falls back to its share sheet — which works, and is not the loop.
 
 1. Make a fine-grained token at
    <https://github.com/settings/personal-access-tokens/new>:
-   - **Repository access** → Only select repositories → `steading`
+   - **Repository access** → Only select repositories → `homefarm`
    - **Permissions** → Repository permissions → **Issues: Read and write**
    - Nothing else. It files issues and that is all it can do.
 2. Add two lines **on the machine running the server the app is built against**
-   — `.env.local` on a PC, `/etc/steading/api.env` on the box:
+   — `.env.local` on a PC, `/etc/homefarm/api.env` on the box:
 
    ```
    SUPPORT_GITHUB_TOKEN=github_pat_...
-   SUPPORT_REPO=SteveWeed79/steading
+   SUPPORT_REPO=SteveWeed79/evenglow
    ```
 
 3. Restart the farm server. `Check my setup` will say where reports go.
@@ -480,11 +480,11 @@ reaches the app, which is why the route is unauthenticated and the token is not.
 ### It is per server, and the check used to lie about which one
 
 Configuring this in a laptop checkout configures the laptop. A build pointed at
-the deployed box is asking the box, whose `/etc/steading/api.env` is a different
+the deployed box is asking the box, whose `/etc/homefarm/api.env` is a different
 file that `setup-box.sh` leaves commented out.
 
 `Check my setup` read the laptop's `.env.local` no matter where the build
-pointed, so it printed **reporting files issues to SteveWeed79/steading** on the
+pointed, so it printed **reporting files issues to SteveWeed79/evenglow** on the
 morning a handset was being told *this server has nowhere to file a report*. It
 now reads `apps/mobile/.env` first and, when that is a real deployment, asks
 that server instead — an empty `POST /support`, which cannot become a ticket:

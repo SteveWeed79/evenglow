@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from '@homefarm/contracts';
 /**
  * The board, as one self-contained page.
  *
@@ -39,7 +40,7 @@ export function boardPage(nonce: string): string {
 <meta name="robots" content="noindex, nofollow">
 <!-- An empty icon, so a browser does not ask for one this process will not serve. -->
 <link rel="icon" href="data:,">
-<title>Steading — operations</title>
+<title>${PRODUCT_NAME} — operations</title>
 <style nonce="${nonce}">
   :root {
     color-scheme: light dark;
@@ -104,7 +105,7 @@ export function boardPage(nonce: string): string {
 <body>
 
 <div id="signin" class="card">
-  <h1>Steading operations</h1>
+  <h1>${PRODUCT_NAME} operations</h1>
   <p class="hint">An administrator account on this server. Nothing here shows a farm's records.</p>
   <form id="signin-form">
     <input id="email" type="email" autocomplete="username" placeholder="Email" required>
@@ -116,7 +117,7 @@ export function boardPage(nonce: string): string {
 
 <main id="board" hidden>
   <header>
-    <h1>Steading operations</h1>
+    <h1>${PRODUCT_NAME} operations</h1>
     <span class="sub" id="who"></span>
     <span class="sub" style="margin-left:auto"><button class="quiet" id="refresh">Refresh</button></span>
   </header>

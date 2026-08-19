@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
-import { lastFedByGroup, listGroups } from '@steading/core/read/groups';
-import { listInventory } from '@steading/core/read/iron';
+import { lastFedByGroup, listGroups } from '@homefarm/core/read/groups';
+import { listInventory } from '@homefarm/core/read/iron';
 import {
   Choice,
   Failure,

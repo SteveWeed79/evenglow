@@ -31,7 +31,7 @@ const here = (path: string) => fileURLToPath(new URL(path, import.meta.url));
  * else's requires.
  */
 const imageRequires = {
-  name: 'steading:image-requires',
+  name: 'homefarm:image-requires',
   transform(code: string, id: string): string | null {
     if (!id.includes('/apps/mobile/') || !/require\((['"])[^'"]+\.png\1\)/.test(code)) return null;
     return code.replace(

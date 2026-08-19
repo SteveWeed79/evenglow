@@ -2,20 +2,20 @@
 #
 # A new version onto a box that is already set up.
 #
-#   sudo /opt/steading/scripts/deploy/deploy.sh
+#   sudo /opt/homefarm/scripts/deploy/deploy.sh
 #
 # Pull, install, restart, check. Four steps, and the fourth is the one that
 # matters: it verifies the service is actually answering afterwards rather than
 # assuming a restart that returned 0 means a server that works.
 #
 # `setup-box.sh` is the first run. This is every run after it — by hand, or
-# every five minutes from `steading-deploy.timer`, which is the same command
+# every five minutes from `homefarm-deploy.timer`, which is the same command
 # either way so there is nothing that only happens in one of them.
 
 set -euo pipefail
 
-REPO_DIR="${STEADING_DIR:-/opt/steading}"
-SERVICE_USER="steading"
+REPO_DIR="${HOMEFARM_DIR:-/opt/homefarm}"
+SERVICE_USER="homefarm"
 PORT="${PORT:-3001}"
 
 # ── Which ref this box follows ──────────────────────────────────────────────
@@ -24,11 +24,11 @@ PORT="${PORT:-3001}"
 # (see .github/workflows/ci.yml), so a red build cannot reach a farm during the
 # minutes between a bad merge and somebody noticing.
 #
-# Override it in /etc/steading/deploy.env to point a box at `dev` or at a
+# Override it in /etc/homefarm/deploy.env to point a box at `dev` or at a
 # branch under test. That file is also where the timer reads its settings, so
 # there is one place to look rather than an argument somebody has to remember.
-[ -f /etc/steading/deploy.env ] && . /etc/steading/deploy.env
-REF="${STEADING_REF:-release}"
+[ -f /etc/homefarm/deploy.env ] && . /etc/homefarm/deploy.env
+REF="${HOMEFARM_REF:-release}"
 
 # ── Which app this box is allowed to serve ──────────────────────────────────
 #
@@ -37,7 +37,7 @@ REF="${STEADING_REF:-release}"
 # anything that names a different application. Exported rather than merely set,
 # because that check runs in a child process and a `deploy.env` override that
 # only this script could see would be an override that does nothing.
-export STEADING_APP_ID="${STEADING_APP_ID:-com.steading.app}"
+export HOMEFARM_APP_ID="${HOMEFARM_APP_ID:-dev.swbuild.homefarm}"
 
 say() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 note() { printf '   %s\n' "$*"; }
@@ -51,10 +51,10 @@ cd "$REPO_DIR"
 # ── Git will not touch a repository it thinks belongs to somebody else ───────
 #
 # **This is not optional and it broke the timer before it ever ran once.** The
-# checkout is owned by the `steading` service user; this script runs as root.
+# checkout is owned by the `homefarm` service user; this script runs as root.
 # Since CVE-2022-24765 git refuses that combination outright:
 #
-#   fatal: detected dubious ownership in repository at '/opt/steading'
+#   fatal: detected dubious ownership in repository at '/opt/homefarm'
 #
 # Under `sudo` from a terminal it is a confusing error. Under systemd it is
 # invisible — a timer that fails every five minutes into the journal and never
@@ -151,7 +151,7 @@ NOW="$(git rev-parse --short HEAD)"
 # that is already there, and the ownership fix has nothing to fix.
 if [ "$CHANGED" -eq 1 ]; then
   say "Dependencies"
-  corepack pnpm install --frozen-lockfile --filter "@steading/api..."
+  corepack pnpm install --frozen-lockfile --filter "@homefarm/api..."
   chown -R "$SERVICE_USER:$SERVICE_USER" "$REPO_DIR"
 fi
 
@@ -173,15 +173,56 @@ fi
 # that look like a much bigger failure than it is.
 if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
   say "Caddy"
-  DOMAIN="$(sed -n 's/^\([a-z0-9.-]*\) {$/\1/p' /etc/caddy/Caddyfile | head -1)"
+
+  # Where a box keeps what only that box needs, and the reason the overwrite
+  # below is survivable at all. Created BEFORE the validate, because the
+  # rendered file imports it — see the Caddyfile's own note on why an empty
+  # glob is fine but a relative path would not be.
+  install -d -m 0755 /etc/caddy/conf.d
+
+  # ── Which name to render for, and a refusal rather than a guess ───────────
+  #
+  # The template owns exactly ONE site block, so a correctly managed box has
+  # exactly one in its running file. This used to take `head -1` of them, which
+  # is right only as long as that stays true — and `DEPLOY-THE-SERVER.md` spent
+  # months telling operators to add a second one by hand for the operations
+  # board.
+  #
+  # **Two blocks, and `head -1` is a coin toss with the farm on it.** Appended,
+  # the deploy silently deleted the board's block. *Prepended*, it read
+  # `ops.example.com` as the domain and rendered the API's entire config for
+  # that name — every handset loses its server, reported as `reloaded for
+  # ops.example.com`. Verified against both orderings before this was written.
+  #
+  # So a second block is not something to work around. It means the box predates
+  # `conf.d` and this deploy does not know which name is the API's. It keeps a
+  # copy, says what to do, and leaves the Caddyfile alone — a config that stops
+  # being updated is a real cost, and it is the smaller one, bounded by a single
+  # manual step and loud every five minutes until somebody takes it.
+  BLOCKS="$(sed -n 's/^\([a-z0-9.-]*\) {$/\1/p' /etc/caddy/Caddyfile)"
+  COUNT="$(printf '%s\n' "$BLOCKS" | grep -c . || true)"
+  DOMAIN="$(printf '%s\n' "$BLOCKS" | head -1)"
 
   if [ -z "$DOMAIN" ]; then
     note "could not read the domain out of /etc/caddy/Caddyfile — left alone"
+  elif [ "$COUNT" -gt 1 ]; then
+    # One fixed name, never overwritten: the first copy is the one taken while
+    # the extra blocks were still in the file. Outside conf.d deliberately — a
+    # backup in there ending in `.caddy` would be imported, re-declaring the
+    # API's own block and leaving Caddy a config it refuses to load.
+    if [ ! -f /etc/caddy/Caddyfile.local-blocks.bak ]; then
+      cp -a /etc/caddy/Caddyfile /etc/caddy/Caddyfile.local-blocks.bak
+    fi
+    note "/etc/caddy/Caddyfile has ${COUNT} site blocks ($(printf '%s\n' "$BLOCKS" | tr '\n' ' ')) — this deploy will not guess which is the API's, so it left the file alone"
+    note "copy at /etc/caddy/Caddyfile.local-blocks.bak — move the blocks that are not the API's into /etc/caddy/conf.d/<name>.caddy, leave one in the Caddyfile, then reload caddy"
   else
     sed "s/api\.example\.com/${DOMAIN}/" "$REPO_DIR/scripts/deploy/Caddyfile" > /tmp/Caddyfile.next
 
+    # Validated against the whole config, imports included — so a syntax error
+    # in a local block under conf.d is caught here rather than by a reload that
+    # leaves the box serving nothing.
     if ! caddy validate --config /tmp/Caddyfile.next --adapter caddyfile >/dev/null 2>&1; then
-      note "the Caddyfile in this commit is not valid — left the running one alone"
+      note "the rendered Caddyfile is not valid — left the running one alone (check /etc/caddy/conf.d)"
     elif cmp -s /tmp/Caddyfile.next /etc/caddy/Caddyfile; then
       note "unchanged"
     else
@@ -194,8 +235,8 @@ if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
 
   # Where publish-apk.sh puts a build. Created here as well as in setup-box.sh
   # so a box built before /app existed grows one without being rebuilt.
-  install -d -m 0755 /var/lib/steading/dist
-  chown caddy:caddy /var/lib/steading/dist 2>/dev/null || true
+  install -d -m 0755 /var/lib/homefarm/dist
+  chown caddy:caddy /var/lib/homefarm/dist 2>/dev/null || true
 
   # The install page, before there is anything to install — and after.
   #
@@ -223,7 +264,7 @@ if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
   # renders the page for both callers. This can no longer write a page it does
   # not know the contents of.
   STAMP=""
-  [ -f /var/lib/steading/.version ] && STAMP="$(cat /var/lib/steading/.version)"
+  [ -f /var/lib/homefarm/.version ] && STAMP="$(cat /var/lib/homefarm/.version)"
 
   # ── The shelf is asked when the note is missing ──────────────────────────
   #
@@ -231,8 +272,8 @@ if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
   # has no note for the one it is serving — and would show a blank version until
   # the next app release, which on a server-only change is never.
   #
-  # The APK on the shelf knows perfectly well what it is: `steading.apk` is a
-  # symlink to `steading-<version>-<code>.apk`, so the name is the answer. Read
+  # The APK on the shelf knows perfectly well what it is: `homefarm.apk` is a
+  # symlink to `homefarm-<version>-<code>.apk`, so the name is the answer. Read
   # rather than remembered, which also means a box whose note is lost recovers
   # on the next tick instead of staying blank.
   #
@@ -248,9 +289,9 @@ if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
   # said `Version 0.1.15-19` where the ordinary path says
   # `Version 0.1.15 · build 19` would look like the box had changed its mind
   # about what it was serving.
-  if [ -z "$STAMP" ] && [ -L /var/lib/steading/dist/steading.apk ]; then
-    ON_SHELF="$(basename "$(readlink /var/lib/steading/dist/steading.apk)" .apk)"
-    ON_SHELF="${ON_SHELF#steading-}"
+  if [ -z "$STAMP" ] && [ -L /var/lib/homefarm/dist/homefarm.apk ]; then
+    ON_SHELF="$(basename "$(readlink /var/lib/homefarm/dist/homefarm.apk)" .apk)"
+    ON_SHELF="${ON_SHELF#homefarm-}"
     case "$ON_SHELF" in
       [0-9]*.*-*)
         SHELF_CODE="${ON_SHELF##*-}"
@@ -263,12 +304,12 @@ if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
     esac
   fi
 
-  "${REPO_DIR}/scripts/deploy/render-install-page.sh" /var/lib/steading/dist "$STAMP" || true
+  "${REPO_DIR}/scripts/deploy/render-install-page.sh" /var/lib/homefarm/dist "$STAMP" || true
 fi
 
 if [ "$CHANGED" -eq 1 ]; then
   say "Restarting"
-  systemctl restart steading-api
+  systemctl restart homefarm-api
 fi
 
 # ── the part that is not optional ───────────────────────────────────────────
@@ -321,7 +362,7 @@ fi
 # No token, and that is a property worth naming: `EXPO_TOKEN` is off this box
 # entirely. A public repository's releases are readable by anybody, so there is
 # no longer a credential here for anything to leak. `GITHUB_TOKEN` in
-# `/etc/steading/deploy.env` is honoured if this repository is ever made
+# `/etc/homefarm/deploy.env` is honoured if this repository is ever made
 # private, and is not needed otherwise.
 say "The app"
 
@@ -346,7 +387,7 @@ APK_CODE="${REST##*$'\t'}"
 # ── What was fetched last, by the build's own identity ──────────────────────
 #
 # **This guard was a filename, and a filename is not an identity.** The check
-# looked for steading-<version>-<code>.apk; when the version could not be
+# looked for homefarm-<version>-<code>.apk; when the version could not be
 # worked out the file was written under a timestamp instead, so the check never
 # matched and the timer downloaded the same ninety megabytes again every six
 # minutes. A box left overnight had five identical copies of one build and had
@@ -364,12 +405,12 @@ APK_CODE="${REST##*$'\t'}"
 # the next deploy rather than something to publish. It sat in `dist/` when it
 # was written, which served the artefact url at /app/.last-artifact to anybody
 # who asked.
-LAST="/var/lib/steading/.last-artifact"
+LAST="/var/lib/homefarm/.last-artifact"
 
 # A box that published before the move keeps its marker rather than deciding it
 # has never fetched anything and pulling ninety megabytes to find out.
-if [ ! -f "$LAST" ] && [ -f /var/lib/steading/dist/.last-artifact ]; then
-  mv /var/lib/steading/dist/.last-artifact "$LAST"
+if [ ! -f "$LAST" ] && [ -f /var/lib/homefarm/dist/.last-artifact ]; then
+  mv /var/lib/homefarm/dist/.last-artifact "$LAST"
 fi
 
 if [ -z "$APK_URL" ]; then
@@ -378,7 +419,7 @@ if [ -z "$APK_URL" ]; then
   note "nothing to publish for this commit"
 elif [ -f "$LAST" ] && [ "$(cat "$LAST" 2>/dev/null)" = "$APK_URL" ]; then
   note "already serving ${APK_VERSION:-that build}"
-elif [ -n "$APK_VERSION" ] && [ -f "/var/lib/steading/dist/steading-${APK_VERSION}-${APK_CODE}.apk" ]; then
+elif [ -n "$APK_VERSION" ] && [ -f "/var/lib/homefarm/dist/homefarm-${APK_VERSION}-${APK_CODE}.apk" ]; then
   # Kept as well as the url check: a box that published before this file
   # existed has the APK and no marker, and should not re-fetch to learn that.
   printf '%s' "$APK_URL" > "$LAST"
@@ -390,7 +431,7 @@ else
   # `publish-apk.sh` reads it with `aapt2` when there is one — and there is
   # not, on this box, by its own stated decision: "the box has no Android SDK
   # and is not getting one". Without a label it therefore fell all the way
-  # through to a timestamp name, steading-20260814-0412.apk, which is unique,
+  # through to a timestamp name, homefarm-20260814-0412.apk, which is unique,
   # sortable and tells nobody anything — and the install page's version stamp,
   # guarded on the same read, never appeared at all.
   #
@@ -450,10 +491,10 @@ if curl -fsS --max-time 3 "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; the
   printf '\n\033[1;31mThe service is up but cannot reach the database.\033[0m\n\n'
   printf 'It is on %s, and the code is almost certainly fine —\n' "$NOW"
   printf 'going back to %s will not fix this.\n\n' "$WAS"
-  printf 'Check MONGODB_URI and MONGODB_DB in /etc/steading/api.env, then:\n\n'
-  printf '    sudo systemctl restart steading-api\n\n'
+  printf 'Check MONGODB_URI and MONGODB_DB in /etc/homefarm/api.env, then:\n\n'
+  printf '    sudo systemctl restart homefarm-api\n\n'
   printf 'What it says:\n\n'
-  journalctl -u steading-api -n 30 --no-pager
+  journalctl -u homefarm-api -n 30 --no-pager
   exit 1
 fi
 
@@ -464,6 +505,6 @@ fi
 printf '\n\033[1;31mThe service did not come back.\033[0m\n\n'
 printf 'It is on %s. The previous version was %s.\n\n' "$NOW" "$WAS"
 printf 'What it says:\n\n'
-journalctl -u steading-api -n 30 --no-pager
-printf '\nTo go back:\n\n    cd %s && sudo git checkout %s && sudo systemctl restart steading-api\n\n' "$REPO_DIR" "$WAS"
+journalctl -u homefarm-api -n 30 --no-pager
+printf '\nTo go back:\n\n    cd %s && sudo git checkout %s && sudo systemctl restart homefarm-api\n\n' "$REPO_DIR" "$WAS"
 exit 1

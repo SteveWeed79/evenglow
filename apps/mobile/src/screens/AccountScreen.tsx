@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
-import { looksLikeJoinCode, ROLE_WORDS } from '@steading/contracts';
-import { readExposure } from '@steading/core/backup/exposure';
+import { looksLikeJoinCode, ROLE_WORDS } from '@homefarm/contracts';
+import { readExposure } from '@homefarm/core/backup/exposure';
 import { Choice, Failure, Field, Primary, Secondary, TextField, useSaver } from '../components/Form';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';

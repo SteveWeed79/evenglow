@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId, taskDues } from '@steading/contracts';
-import { listTasks } from '@steading/core/read/tasks';
-import { enqueue } from '@steading/core/sync/queue';
+import { newId, taskDues } from '@homefarm/contracts';
+import { listTasks } from '@homefarm/core/read/tasks';
+import { enqueue } from '@homefarm/core/sync/queue';
 import { freshStore } from '../support/store';
 import { mount } from '../support/screen';
 import { JobsScreen } from '../../apps/mobile/src/screens/JobsScreen';

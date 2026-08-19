@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId, serviceDue } from '@steading/contracts';
-import { listServiceCompletions, listTaskCompletions } from '@steading/core/read/completions';
-import { listHistory } from '@steading/core/read/history';
-import { listServices } from '@steading/core/read/iron';
-import { listTasks } from '@steading/core/read/tasks';
-import { enqueue } from '@steading/core/sync/queue';
+import { newId, serviceDue } from '@homefarm/contracts';
+import { listServiceCompletions, listTaskCompletions } from '@homefarm/core/read/completions';
+import { listHistory } from '@homefarm/core/read/history';
+import { listServices } from '@homefarm/core/read/iron';
+import { listTasks } from '@homefarm/core/read/tasks';
+import { enqueue } from '@homefarm/core/sync/queue';
 import { freshStore } from '../support/store';
 import { mount, routeProps } from '../support/screen';
 import { JobsScreen } from '../../apps/mobile/src/screens/JobsScreen';
@@ -17,7 +17,7 @@ import { TodayScreen } from '../../apps/mobile/src/screens/TodayScreen';
  * `task.completedAt` and `maintenance.lastDoneAtDate` were single values each
  * completion overwrote, so the app could only ever remember the last time. A
  * machine serviced every spring for six years showed one date, and
- * `Steading-Masterplan.md` advertises a service record to hand over with a
+ * `Evenglow-Masterplan.md` advertises a service record to hand over with a
  * tractor that could not be produced from it. `read/history.ts` stated the
  * limitation twice, once against each entity, and named the fix: *"an
  * append-only completion record — the shape `careLog` already is for animals."*

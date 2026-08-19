@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { alertCoverage, type Alert, type AlertSeverity } from '@steading/contracts';
+import { alertCoverage, type Alert, type AlertSeverity } from '@homefarm/contracts';
 import { Icon } from './Icon';
 import { Secondary } from './Form';
 import { Touch } from './Touch';
-import { localStore } from '@steading/core/db/store';
+import { localStore } from '@homefarm/core/db/store';
 import { useLive } from '../hooks/useLive';
 import { useWeather } from '../hooks/useWeather';
 import { useTheme } from '../theme/ThemeProvider';

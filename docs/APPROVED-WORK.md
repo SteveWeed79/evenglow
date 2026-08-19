@@ -85,8 +85,8 @@ on the exact failure they then permit.
       it with zero — unrepairable in-app, since `assignableRoles('admin')` is
       `['admin', 'hand']` and self-promotion is refused as `self`. The only
       reason that has probably not already happened is a third error in the same
-      snippet: it hardcodes `getSiblingDB("steading")` while the box runs
-      `steadingdb`, so the write lands in a database nothing reads.
+      snippet: it hardcodes `getSiblingDB("homefarm")` while the box runs
+      `homefarmdb`, so the write lands in a database nothing reads.
 
 - [x] **Six defects from a read of the whole server.** **GA**
       A pass over all of `apps/api` after the mail and verification work.
@@ -347,23 +347,43 @@ on the exact failure they then permit.
       restore, and watch the bytes arrive. And `ACCESS-AND-BILLING.md` §4.1a-i
       is now wrong in the app's favour and wants the correction §12c asks for.
 
-- [ ] **`deploy.sh` deletes any Caddy site block added by hand.** *(found by the
-      audit above; pre-existing, not introduced by it)*
+- [x] **`deploy.sh` deleted any Caddy site block added by hand.** **GA**
+      *(found by the audit above; pre-existing, not introduced by it)*
       Every deploy re-renders `/etc/caddy/Caddyfile` from the repository's
       single-site template and `install`s it over the running file. So the
       `ops.example.com` block `DEPLOY-THE-SERVER.md` offers as the alternative to
       an SSH tunnel **cannot survive a deploy** — it is gone within five minutes
-      of the next `steading-deploy.timer` tick, with `reloaded for ${DOMAIN}` as
+      of the next `homefarm-deploy.timer` tick, with `reloaded for ${DOMAIN}` as
       the only trace.
       **And the domain is read with `head -1`**, off the running file:
       `sed -n 's/^\([a-z0-9.-]*\) {$/\1/p' | head -1`. An operator who
       *prepended* the ops block rather than appending it gets the API's Caddyfile
       rendered for the ops hostname — every handset offline, reported as a
       successful reload.
-      Not urgent while the tunnel is the documented default, and it is a trap
-      laid for exactly the person who reads to the end of that section. The fix
-      is either a second rendered site block the template owns, or a
-      `caddy.d/`-style include the deploy leaves alone.
+      **The include, and a refusal rather than a guess.** The template now ends
+      its preamble with `import /etc/caddy/conf.d/*.caddy`; both `setup-box.sh`
+      and `deploy.sh` create that directory and neither ever writes into it, so
+      a local block survives every tick. Absolute path deliberately — Caddy
+      resolves a relative import against the file it appears in, and the deploy
+      validates a rendered copy in `/tmp`, so a relative one would look in the
+      wrong directory at exactly one of the two moments. `*.caddy` rather than
+      `*` because Caddy's globbing includes dotfiles and would hand it an
+      editor's swap file. An empty glob is not an error, which is what makes it
+      safe to ship to every box at once.
+      **The `head -1` half is not worked around, it is refused.** Two site
+      blocks means the box predates `conf.d` and the deploy does not know which
+      name is the API's — so it keeps a copy at
+      `/etc/caddy/Caddyfile.local-blocks.bak`, says which blocks it found and
+      what to do, and **leaves the Caddyfile alone**. A config that stops being
+      updated is a real cost and it is the smaller one: bounded by one manual
+      step, loud every five minutes until somebody takes it, and it cannot take
+      a farm's server offline.
+      **Tested by running the shipped shell**, not by restating it —
+      `tests/unit/caddy-deploy.test.ts` lifts the decision block out of
+      `deploy.sh` with `sed` and drives it against all three file shapes. Five
+      of its ten assertions fail against the code they replaced, including both
+      hazards: the appended block being deleted, and the prepended one causing
+      the API's config to be rendered for the board's hostname.
 
 ## 2. Start on the same day — the only work with a calendar attached
 
@@ -385,13 +405,39 @@ period rather than a task.
 - [x] **Clear the name — it did not clear, and the name is now Evenglow.**
       `[13]` — checked 19 August 2026. **Brechy LLC has a pre-launch page for an
       app called Steading**, same product and same "Scottish for farmstead"
-      pitch (`brechy.com/apps/steading`). They have not launched; they are a
+      pitch (`brechy.com/apps/homefarm`). They have not launched; they are a
       company and this project is not one yet (`[14]`). **Decided: the app
       becomes Evenglow.** The rename itself is not done — see §3.
-- [ ] **Carry out the rename to Evenglow.** **Before the first Play upload**,
-      and not urgent before then: a package name is permanent from that moment,
-      while a display name is changeable at any release. `[13]` has the audit of
-      what the name touches and the four things that are load-bearing.
+- [x] **Carry out the rename to Evenglow.** **GA**
+      **The package is `dev.swbuild.homefarm`, not `com.evenglow.app`** — the
+      publisher and the category rather than the brand. A package name is
+      permanent from the first Play upload, so it is the one identifier that has
+      to survive a change of name, and this project has already had a name taken
+      out from under it by somebody who reached it independently. Evenglow is
+      clear today; so was Steading. Overrules the first draft of `[13]`'s audit.
+      **The brand is one constant**, `PRODUCT_NAME` in
+      `contracts/src/product.ts`, so the next rename is a line rather than an
+      audit. Twenty user-visible strings read it.
+      **`[13]`'s audit missed six of them.** It counted `apps/mobile` and
+      `apps/api` and never opened `packages/core` — where `restore.ts` refuses a
+      foreign backup by name twice, `db/errors.ts` names the app in a version
+      refusal, `support/tickets.ts` titles every ticket, and
+      `weather/provider.ts` sends it as a User-Agent to an external API.
+      **The package change reaches past `app.json`**: twenty-eight references
+      across fifteen files, every one of them genuinely about package identity —
+      the adb lines in `apk.yml`, `publish-apk.sh`, `deploy.sh`, `apk-check.mjs`
+      and three Windows `.bat` helpers, `GOOGLE_PLAY_PACKAGE` in `env.ts` and
+      `.env.example`, and five test fixtures.
+      **Deliberately unmoved**, per that audit's four: the
+      `homefarm-<version>-<code>.apk` stem, because `deploy.sh` decides the
+      shelf is current by stripping it; the `slug`, bound to
+      `extra.eas.projectId`; the `scheme`, which is in every OAuth redirect URI;
+      the systemd units and `/opt`, `/etc`, `/var/lib` paths; and the 371 files
+      carrying `@homefarm/*`. None is visible to a farm.
+      **What it costs the two devices that have it:** a different package is a
+      different app to Android, so the tablet and the tester's phone get a fresh
+      install with an empty database rather than an upgrade. Nothing is lost
+      that a backup and restore does not carry across, and it happens once.
 - [ ] **Decide the business entity.** `[14]` — Play needs a payee.
 
 ## 3. Release mechanics
@@ -459,7 +505,7 @@ period rather than a task.
       Schedules stay mutable; completions become history. Today
       `task.completedAt`, `maintenance.lastDoneAtHours` and `lastDoneAtDate`
       each overwrite, so a machine serviced for six years can show one date —
-      and `Steading-Masterplan.md` advertises a full service record for resale
+      and `Evenglow-Masterplan.md` advertises a full service record for resale
       that therefore cannot be produced.
       **It also removes one of §1's two live clearing symptoms** *(noted 16
       August)*. An un-complete is `{ completedAt: undefined }` today, which is
@@ -915,7 +961,7 @@ period rather than a task.
 - [ ] **A minimum client version the server can require**, and an in-app update
       check against the shelf. `[23]`, `[24]`
       **The first half is built** *(16 August)*: the client states its version
-      in `x-steading-client`, `MINIMUM_CLIENT_VERSION` sets a floor that is
+      in `x-homefarm-client`, `MINIMUM_CLIENT_VERSION` sets a floor that is
       empty and inert on every server today, and a batch from below it gets a
       426 and the `appTooOld` refusal — **held exactly as an unsubscribed farm
       is held**, queued and uncounted, because the mutations are valid and only

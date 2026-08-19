@@ -1,10 +1,10 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { SqlDriver } from '@steading/core/db/driver';
-import { openSqliteStore } from '@steading/core/db/sqlite-store';
-import { localStore, resetLocalStore, setLocalStore } from '@steading/core/db/store';
-import { ENTITIES } from '@steading/contracts';
+import type { SqlDriver } from '@homefarm/core/db/driver';
+import { openSqliteStore } from '@homefarm/core/db/sqlite-store';
+import { localStore, resetLocalStore, setLocalStore } from '@homefarm/core/db/store';
+import { ENTITIES } from '@homefarm/contracts';
 import { nodeIds, nodeSqlDriver } from './sqlite';
 
 /**
@@ -28,7 +28,7 @@ export async function freshStore(): Promise<void> {
   resetLocalStore();
   if (driver) await driver.close().catch(() => undefined);
 
-  file = join(mkdtempSync(join(tmpdir(), 'steading-')), 'store.db');
+  file = join(mkdtempSync(join(tmpdir(), 'homefarm-')), 'store.db');
   driver = nodeSqlDriver(file);
   setLocalStore(await openSqliteStore(driver, nodeIds()));
 }

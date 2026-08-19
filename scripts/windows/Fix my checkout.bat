@@ -1,11 +1,11 @@
 @echo off
 setlocal enabledelayedexpansion
-title Steading - fix my checkout
+title Evenglow - fix my checkout
 cd /d "%~dp0..\.."
 
 echo.
 echo   ============================================
-echo     STEADING - fix my checkout
+echo     EVENGLOW - fix my checkout
 echo   ============================================
 echo.
 echo   Use this when an update refuses with
@@ -19,7 +19,7 @@ echo       to make
 echo.
 echo   WHAT IT KEEPS:
 echo     - your settings file ^(apps\mobile\.env^)
-echo     - your farm's database ^(.steading-data^)
+echo     - your farm's database ^(.homefarm-data^)
 echo     - anything you have committed
 echo.
 echo   If you HAVE edited code on purpose and not
@@ -43,7 +43,7 @@ if errorlevel 1 (
 :: that is where a guard belongs, not because it is known to be needed.
 if not exist "pnpm-workspace.yaml" (
   echo.
-  echo   PROBLEM: this is not the Steading folder, so nothing has been
+  echo   PROBLEM: this is not the Evenglow folder, so nothing has been
   echo   changed and nothing has been deleted.
   echo.
   echo   Currently in: %CD%

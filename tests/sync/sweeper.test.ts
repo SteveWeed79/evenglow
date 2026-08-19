@@ -1,11 +1,11 @@
 import { ulid } from 'ulid';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import type { SessionClaims } from '@steading/api/auth/claims';
-import { scopedOn } from '@steading/api/db/scoped';
-import { applyBatch } from '@steading/api/sync/apply';
-import { PENDING } from '@steading/api/sync/outcome';
-import { readSnapshotPage } from '@steading/api/sync/snapshot';
-import { SWEEP_AFTER_MS, SWEEP_CEILING, sweepAllFarms, sweepFarm } from '@steading/api/sync/sweep';
+import type { SessionClaims } from '@homefarm/api/auth/claims';
+import { scopedOn } from '@homefarm/api/db/scoped';
+import { applyBatch } from '@homefarm/api/sync/apply';
+import { PENDING } from '@homefarm/api/sync/outcome';
+import { readSnapshotPage } from '@homefarm/api/sync/snapshot';
+import { SWEEP_AFTER_MS, SWEEP_CEILING, sweepAllFarms, sweepFarm } from '@homefarm/api/sync/sweep';
 import { makeMutation } from '../support/fixtures';
 import { startTestDb } from '../support/mongo';
 
@@ -29,7 +29,7 @@ import { startTestDb } from '../support/mongo';
  * five files sharing one name is a bug this repository has already had.
  */
 
-const harness = await startTestDb('steading_sweeper');
+const harness = await startTestDb('homefarm_sweeper');
 
 /**
  * The app's own client, pointed at this suite's database.
@@ -41,14 +41,14 @@ const harness = await startTestDb('steading_sweeper');
  * and the role is re-derived through `findUserById` — which is identity rather
  * than tenant data and goes through `db()`.
  *
- * So the fixtures went into `steading_sweeper` while the sweeper looked in
+ * So the fixtures went into `homefarm_sweeper` while the sweeper looked in
  * whatever `db()` resolved to, found no user, and stamped every row `rejected`
  * as an author who had left the farm. Correct behaviour, wrong database. Every
  * other suite that touches identity sets these two the same way.
  */
 if (harness) {
   process.env.MONGODB_URI = harness.uri;
-  process.env.MONGODB_DB = 'steading_sweeper';
+  process.env.MONGODB_DB = 'homefarm_sweeper';
 }
 
 const describeDb = harness ? describe : describe.skip;

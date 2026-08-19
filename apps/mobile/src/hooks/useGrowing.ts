@@ -6,8 +6,8 @@ import {
   type Planting,
   readSite,
   type Site,
-} from '@steading/core/read/growing';
-import { subscribe } from '@steading/core/sync/engine';
+} from '@homefarm/core/read/growing';
+import { subscribe } from '@homefarm/core/sync/engine';
 
 /**
  * The growing view, from the local projection.

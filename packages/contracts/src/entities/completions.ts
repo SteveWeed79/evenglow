@@ -8,7 +8,7 @@ import { z } from 'zod';
  * `task.completedAt` and `maintenance.lastDoneAtDate` are single values that
  * each completion overwrites. A machine serviced every spring for six years
  * shows one date — the last one — and the five before it were never anywhere
- * to be lost from. `Steading-Masterplan.md` advertises a full service record to
+ * to be lost from. `Evenglow-Masterplan.md` advertises a full service record to
  * hand over with a tractor, and that record could not be produced from a field
  * that holds one number.
  *

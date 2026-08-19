@@ -18,7 +18,8 @@ import {
   canAssign,
   canInvite,
   type PendingInvite,
-} from '@steading/contracts';
+  PRODUCT_NAME,
+} from '@homefarm/contracts';
 import { requireClaims, requireMutationClaims } from '../auth/require';
 import { hashPassword } from '../auth/password';
 import { startSession } from '../auth/refresh';
@@ -65,7 +66,7 @@ import { inOrgOrder } from '../org-lane';
  * D7 built the role matrix and never built this, so until now the only way to
  * let a farmhand log the morning's eggs was to hand over the owner's password.
  *
- * Every policy decision here is in `@steading/contracts/membership` and is
+ * Every policy decision here is in `@homefarm/contracts/membership` and is
  * re-evaluated on the request that acts, against the database rather than
  * against the token (invariant 8). The client has the same functions and uses
  * them only to decide what to draw.
@@ -160,7 +161,7 @@ export async function memberRoutes(app: FastifyInstance, env: Env): Promise<void
        */
       if (await findUserByEmail(email)) {
         return reply.status(409).send({
-          error: 'That email already has a Steading account. Sign in with it instead.',
+          error: `That email is already registered with ${PRODUCT_NAME}. Sign in with it instead.`,
         });
       }
 
@@ -202,7 +203,7 @@ export async function memberRoutes(app: FastifyInstance, env: Env): Promise<void
 
         if (isDuplicateKey(error)) {
           return reply.status(409).send({
-            error: 'That email already has a Steading account. Sign in with it instead.',
+            error: `That email is already registered with ${PRODUCT_NAME}. Sign in with it instead.`,
           });
         }
         throw error;
@@ -256,7 +257,7 @@ export async function memberRoutes(app: FastifyInstance, env: Env): Promise<void
        */
       if (await findUserByEmail(email)) {
         return reply.status(409).send({
-          error: 'That email already has a Steading account. Sign in with it instead.',
+          error: `That email is already registered with ${PRODUCT_NAME}. Sign in with it instead.`,
         });
       }
 
@@ -287,7 +288,7 @@ export async function memberRoutes(app: FastifyInstance, env: Env): Promise<void
 
         if (isDuplicateKey(error)) {
           return reply.status(409).send({
-            error: 'That email already has a Steading account. Sign in with it instead.',
+            error: `That email is already registered with ${PRODUCT_NAME}. Sign in with it instead.`,
           });
         }
         throw error;

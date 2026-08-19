@@ -1,14 +1,14 @@
 import { ulid } from 'ulid';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { SessionClaims } from '@steading/api/auth/claims';
-import { scopedOn } from '@steading/api/db/scoped';
-import { applyBatch } from '@steading/api/sync/apply';
-import { newId } from '@steading/contracts';
-import { localStore } from '@steading/core/db/store';
-import { flushOnce } from '@steading/core/sync/flush';
-import { discardRejected, listRejected } from '@steading/core/sync/inbox';
-import { pullOnce } from '@steading/core/sync/pull';
-import { enqueue } from '@steading/core/sync/queue';
+import type { SessionClaims } from '@homefarm/api/auth/claims';
+import { scopedOn } from '@homefarm/api/db/scoped';
+import { applyBatch } from '@homefarm/api/sync/apply';
+import { newId } from '@homefarm/contracts';
+import { localStore } from '@homefarm/core/db/store';
+import { flushOnce } from '@homefarm/core/sync/flush';
+import { discardRejected, listRejected } from '@homefarm/core/sync/inbox';
+import { pullOnce } from '@homefarm/core/sync/pull';
+import { enqueue } from '@homefarm/core/sync/queue';
 import { type Farm, twoDevices } from '../support/devices';
 import { makeMutation } from '../support/fixtures';
 import { startTestDb } from '../support/mongo';
@@ -53,7 +53,7 @@ import { type Wire, wireTo } from '../support/wire';
  * Adding one is a production change and belongs with the sweeper that uses it.
  */
 
-const harness = await startTestDb('steading_two_devices');
+const harness = await startTestDb('homefarm_two_devices');
 const describeDb = harness ? describe : describe.skip;
 
 const ORG = ulid();

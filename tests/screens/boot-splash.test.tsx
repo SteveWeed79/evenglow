@@ -5,6 +5,7 @@ import { writeLook } from '../../apps/mobile/src/theme/look';
 import { THEMES } from '../../apps/mobile/src/theme/tokens';
 import { freshStore } from '../support/store';
 import { files, resetSplash, splash } from '../support/native/modules';
+import { PRODUCT_NAME } from '@homefarm/contracts';
 
 /**
  * When the splash comes down.
@@ -120,7 +121,7 @@ describe('the splash over a cold start', () => {
 
     const screen = await mountBoot();
 
-    expect(screen.text).toContain('Steading could not start');
+    expect(screen.text).toContain(`${PRODUCT_NAME} could not start`);
     expect(splash.hidden).toBeGreaterThan(0);
     screen.unmount();
   });

@@ -1,5 +1,5 @@
-import { createGate, type GateOptions } from '@steading/core/db/gate';
-import type { SqlDriver, SqlOps, SqlValue } from '@steading/core/db/driver';
+import { createGate, type GateOptions } from '@homefarm/core/db/gate';
+import type { SqlDriver, SqlOps, SqlValue } from '@homefarm/core/db/driver';
 
 /**
  * A `SqlDriver` over `expo-sqlite`. The device backing for `LocalStore`.
@@ -250,7 +250,7 @@ export async function applyPragmas(db: SqliteConnection): Promise<void> {
   if (mode !== 'wal') {
     // Warn, never throw. A farm's records opening in a slower journal mode is
     // enormously better than a farm's records not opening.
-    console.warn(`[steading] SQLite journal_mode is "${mode ?? 'unknown'}", expected "wal".`);
+    console.warn(`[homefarm] SQLite journal_mode is "${mode ?? 'unknown'}", expected "wal".`);
   }
 
   /**

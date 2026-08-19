@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
-import { canRenameFarm } from '@steading/contracts';
+import { canRenameFarm } from '@homefarm/contracts';
 import { Confirm, Failure, Field, Secondary, TextField, useSaver } from './Form';
 import { Body, Panel } from './Panel';
 import { call } from '../auth/call';

@@ -16,7 +16,7 @@ import {
   ROLES,
   type MembershipChange,
   type Role,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 
 /**
  * Who may add, promote and remove whom.
@@ -207,7 +207,7 @@ describe('invite shapes', () => {
  */
 describe('the invite token', () => {
   it('is 256 bits from a CSPRNG, and never repeats', async () => {
-    const { mintInviteToken } = await import('@steading/api/db/invites');
+    const { mintInviteToken } = await import('@homefarm/api/db/invites');
 
     const tokens = new Set(Array.from({ length: 500 }, () => mintInviteToken()));
     expect(tokens.size).toBe(500);
@@ -221,7 +221,7 @@ describe('the invite token', () => {
 
   /** A database disclosure must not hand over usable invites. */
   it('stores a hash that cannot be turned back into the token', async () => {
-    const { hashInviteToken, mintInviteToken } = await import('@steading/api/db/invites');
+    const { hashInviteToken, mintInviteToken } = await import('@homefarm/api/db/invites');
 
     const token = mintInviteToken();
     const hash = hashInviteToken(token);
@@ -238,7 +238,7 @@ describe('the invite token', () => {
    * stranger. Case and surrounding space are not a different person.
    */
   it('matches an email regardless of case and space, and nothing else', async () => {
-    const { emailMatches } = await import('@steading/api/db/invites');
+    const { emailMatches } = await import('@homefarm/api/db/invites');
 
     expect(emailMatches('Sam@Example.test', ' sam@example.test ')).toBe(true);
     expect(emailMatches('sam@example.test', 'sam@example.tes')).toBe(false);
@@ -259,7 +259,7 @@ describe('the invite token', () => {
  */
 describe('join codes', () => {
   it('draws from an alphabet with no character that can be misread', async () => {
-    const { mintJoinCode } = await import('@steading/api/db/join-codes');
+    const { mintJoinCode } = await import('@homefarm/api/db/join-codes');
 
     for (let i = 0; i < 200; i += 1) {
       const code = mintJoinCode();
@@ -279,7 +279,7 @@ describe('join codes', () => {
   });
 
   it('mints something different every time', async () => {
-    const { mintJoinCode } = await import('@steading/api/db/join-codes');
+    const { mintJoinCode } = await import('@homefarm/api/db/join-codes');
 
     const seen = new Set(Array.from({ length: 500 }, () => mintJoinCode()));
     // Not a randomness test — a guard against a constant, which is the way
@@ -288,7 +288,7 @@ describe('join codes', () => {
   });
 
   it('stores a hash that cannot be turned back into the code', async () => {
-    const { hashJoinCode, mintJoinCode } = await import('@steading/api/db/join-codes');
+    const { hashJoinCode, mintJoinCode } = await import('@homefarm/api/db/join-codes');
 
     const code = mintJoinCode();
     const hash = hashJoinCode(code);

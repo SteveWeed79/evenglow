@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { newId } from '@steading/contracts';
-import { openSqliteStore } from '@steading/core/db/sqlite-store';
-import { setLocalStore, resetLocalStore } from '@steading/core/db/store';
-import { nudge, setOnline, startSync, stopSync } from '@steading/core/sync/engine';
-import { enqueue, queueDepth } from '@steading/core/sync/queue';
+import { newId } from '@homefarm/contracts';
+import { openSqliteStore } from '@homefarm/core/db/sqlite-store';
+import { setLocalStore, resetLocalStore } from '@homefarm/core/db/store';
+import { nudge, setOnline, startSync, stopSync } from '@homefarm/core/sync/engine';
+import { enqueue, queueDepth } from '@homefarm/core/sync/queue';
 import { nodeIds, nodeSqlDriver } from '../support/sqlite';
-import type { SyncTransport } from '@steading/core/sync/flush';
+import type { SyncTransport } from '@homefarm/core/sync/flush';
 
 /**
  * "Try sending now", which is the button somebody presses when they do not

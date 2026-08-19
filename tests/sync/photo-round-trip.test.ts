@@ -1,15 +1,15 @@
 import { ulid } from 'ulid';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { SessionClaims } from '@steading/api/auth/claims';
-import type { UserDoc } from '@steading/api/db/identity';
-import { scopedOn } from '@steading/api/db/scoped';
-import { newId } from '@steading/contracts';
-import { resetApiBase, setAccessToken, setApiBase } from '@steading/core/api';
-import { flushOnce } from '@steading/core/sync/flush';
-import { type PhotoBytes, setPhotoBytes, transferPhotos } from '@steading/core/sync/photos';
-import { pullOnce } from '@steading/core/sync/pull';
-import { enqueue } from '@steading/core/sync/queue';
-import { listPhotos } from '@steading/core/read/photos';
+import type { SessionClaims } from '@homefarm/api/auth/claims';
+import type { UserDoc } from '@homefarm/api/db/identity';
+import { scopedOn } from '@homefarm/api/db/scoped';
+import { newId } from '@homefarm/contracts';
+import { resetApiBase, setAccessToken, setApiBase } from '@homefarm/core/api';
+import { flushOnce } from '@homefarm/core/sync/flush';
+import { type PhotoBytes, setPhotoBytes, transferPhotos } from '@homefarm/core/sync/photos';
+import { pullOnce } from '@homefarm/core/sync/pull';
+import { enqueue } from '@homefarm/core/sync/queue';
+import { listPhotos } from '@homefarm/core/read/photos';
 import { type Device, type Farm, twoDevices } from '../support/devices';
 import { startTestDb } from '../support/mongo';
 import { type Wire, wireTo } from '../support/wire';
@@ -46,11 +46,11 @@ import { type Wire, wireTo } from '../support/wire';
  * the token (invariant 8).
  */
 
-const harness = await startTestDb('steading_photo_round_trip');
+const harness = await startTestDb('homefarm_photo_round_trip');
 
 if (harness) {
   process.env.MONGODB_URI = harness.uri;
-  process.env.MONGODB_DB = 'steading_photo_round_trip';
+  process.env.MONGODB_DB = 'homefarm_photo_round_trip';
 }
 
 const describeDb = harness ? describe : describe.skip;
@@ -91,20 +91,20 @@ function cameraRoll(): PhotoBytes & { ids(): string[] } {
 let app: Awaited<ReturnType<typeof buildApp>>;
 
 async function buildApp() {
-  const { buildServer } = await import('@steading/api/server');
-  const { readEnv } = await import('@steading/api/env');
+  const { buildServer } = await import('@homefarm/api/server');
+  const { readEnv } = await import('@homefarm/api/env');
   return buildServer(
     readEnv({
       AUTH_SECRET: SECRET,
       MONGODB_URI: harness!.uri,
-      MONGODB_DB: 'steading_photo_round_trip',
+      MONGODB_DB: 'homefarm_photo_round_trip',
       CORS_ORIGINS: 'https://app.test',
     }),
   );
 }
 
 async function tokenFor(user: typeof HAND | typeof OWNER): Promise<string> {
-  const { mintAccessToken } = await import('@steading/api/auth/tokens');
+  const { mintAccessToken } = await import('@homefarm/api/auth/tokens');
   return mintAccessToken({ userId: user._id, orgId: user.orgId, role: user.role }, SECRET);
 }
 

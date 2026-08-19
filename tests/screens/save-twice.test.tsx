@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId } from '@steading/contracts';
-import { enqueue } from '@steading/core/sync/queue';
-import { localStore } from '@steading/core/db/store';
+import { newId } from '@homefarm/contracts';
+import { enqueue } from '@homefarm/core/sync/queue';
+import { localStore } from '@homefarm/core/db/store';
 import { freshStore } from '../support/store';
 import { mount, routeProps } from '../support/screen';
 import { PlantingScreen } from '../../apps/mobile/src/screens/PlantingScreen';

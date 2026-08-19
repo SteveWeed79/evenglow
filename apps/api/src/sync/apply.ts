@@ -13,7 +13,7 @@ import {
   type Mutation,
   type MutationResult,
   type Op,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 import type { SessionClaims } from '../auth/claims';
 import { blobsFor } from '../db/blobs';
 import type { Scoped, Tenanted } from '../db/scoped';

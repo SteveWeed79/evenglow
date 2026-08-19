@@ -8,8 +8,8 @@
  * drifted would be the one quietly checking less.
  */
 
-import { newId } from '@steading/contracts';
-import { enqueue } from '@steading/core/sync/queue';
+import { newId } from '@homefarm/contracts';
+import { enqueue } from '@homefarm/core/sync/queue';
 import { routeProps } from './screen';
 
 import { AddAnimalScreen } from '../../apps/mobile/src/screens/AddAnimalScreen';

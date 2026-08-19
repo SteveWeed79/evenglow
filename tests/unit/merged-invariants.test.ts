@@ -13,10 +13,10 @@ import {
   payloadSchemaFor,
   type Entity,
   type TreatmentRecord,
-} from '@steading/contracts';
-import type { SessionClaims } from '@steading/api/auth/claims';
-import { scopedOn } from '@steading/api/db/scoped';
-import { applyBatch } from '@steading/api/sync/apply';
+} from '@homefarm/contracts';
+import type { SessionClaims } from '@homefarm/api/auth/claims';
+import { scopedOn } from '@homefarm/api/db/scoped';
+import { applyBatch } from '@homefarm/api/sync/apply';
 import { makeMutation } from '../support/fixtures';
 
 /**

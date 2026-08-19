@@ -11,7 +11,7 @@ different lists with different readers and they interleave: most of what follows
 is small, and several phases are prose and configuration rather than code.
 
 **Numbering.** Phases are lettered A–O so they never read as
-`Steading-Masterplan.md` Phases 1–4. Everything here sits inside or after that
+`Evenglow-Masterplan.md` Phases 1–4. Everything here sits inside or after that
 document's **Phase 4 — Hardening & Release**, which is where the app is now.
 
 **Every item is in exactly one phase**, except `[15]`, which is explained at the

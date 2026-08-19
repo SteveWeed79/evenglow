@@ -1,8 +1,8 @@
 import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
-import { feedNeededUg, formatMass, gramsToUg, newId, poundsToUg } from '@steading/contracts';
-import { currentFeedPlans, listGroups } from '@steading/core/read/groups';
-import { listInventory } from '@steading/core/read/iron';
+import { feedNeededUg, formatMass, gramsToUg, newId, poundsToUg } from '@homefarm/contracts';
+import { currentFeedPlans, listGroups } from '@homefarm/core/read/groups';
+import { listInventory } from '@homefarm/core/read/iron';
 import {
   Choice,
   Confirm,

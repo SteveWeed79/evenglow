@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { newId } from '@steading/contracts';
+import { newId } from '@homefarm/contracts';
 import { knownFarmIds } from '../../apps/mobile/src/db/open';
 import {
   ensureLocalOrgId,
@@ -12,7 +12,7 @@ import { files, seedSecureStore } from '../support/native/modules';
  * The farm on disk that nothing points at.
  *
  * A farm's id lives in secure storage and its records live in
- * `steading-{orgId}.db`, so the id is the only pointer to the file. When the
+ * `homefarm-{orgId}.db`, so the id is the only pointer to the file. When the
  * id goes and the file does not — a cleared keystore, a restored backup, a
  * reinstall that kept app files — `ensureLocalOrgId` used to mint a fresh one
  * and the app opened an empty farm beside a full one.
@@ -35,7 +35,7 @@ afterEach(() => {
 
 /** A farm's database, as it sits on disk with no id pointing at it. */
 function farmOnDisk(orgId: string): void {
-  files.set(`${SQLITE}steading-${orgId}.db`, 'a year of eggs');
+  files.set(`${SQLITE}homefarm-${orgId}.db`, 'a year of eggs');
 }
 
 describe('a farm whose id was lost', () => {
@@ -82,7 +82,7 @@ describe('what it refuses to guess', () => {
   /** A file that is not one of ours is not a farm. */
   it('ignores anything that is not a farm database', async () => {
     files.set(`${SQLITE}kv.db`, 'x');
-    files.set(`${SQLITE}steading-not-a-ulid.db`, 'x');
+    files.set(`${SQLITE}homefarm-not-a-ulid.db`, 'x');
 
     expect(await knownFarmIds()).toEqual([]);
   });
@@ -95,7 +95,7 @@ describe('what it refuses to guess', () => {
  * Joining somebody else's farm has to move the active pointer — leaving it
  * would mean the next sign-out reopening a farm this device no longer belongs
  * to — but it used to *delete* the id, and the id is the only thing naming
- * `steading-{orgId}.db`. Every record behind it was stranded permanently, and
+ * `homefarm-{orgId}.db`. Every record behind it was stranded permanently, and
  * the adoption above cannot help: after a join there are two databases on
  * disk, so it correctly refuses to guess and mints a third.
  */
@@ -160,7 +160,7 @@ describe('the farm you had before you joined another', () => {
     const older = newId();
     farmOnDisk(recent);
     farmOnDisk(older);
-    seedSecureStore({ 'steading.retiredOrgs': JSON.stringify([recent, older]) });
+    seedSecureStore({ 'homefarm.retiredOrgs': JSON.stringify([recent, older]) });
 
     expect(await ensureLocalOrgId()).toBe(recent);
   });
@@ -171,13 +171,13 @@ describe('the farm you had before you joined another', () => {
    * where opening a file named after a corrupted string is not.
    */
   it('treats an unreadable list as no list at all', async () => {
-    seedSecureStore({ 'steading.retiredOrgs': 'not json' });
+    seedSecureStore({ 'homefarm.retiredOrgs': 'not json' });
     expect(await retiredOrgIds()).toEqual([]);
 
-    seedSecureStore({ 'steading.retiredOrgs': JSON.stringify({ orgId: newId() }) });
+    seedSecureStore({ 'homefarm.retiredOrgs': JSON.stringify({ orgId: newId() }) });
     expect(await retiredOrgIds()).toEqual([]);
 
-    seedSecureStore({ 'steading.retiredOrgs': JSON.stringify(['nope', 42, null]) });
+    seedSecureStore({ 'homefarm.retiredOrgs': JSON.stringify(['nope', 42, null]) });
     expect(await retiredOrgIds()).toEqual([]);
   });
 
@@ -191,7 +191,7 @@ describe('the farm you had before you joined another', () => {
     farmOnDisk(mine);
     await ensureLocalOrgId();
     await retireLocalOrgId();
-    files.delete(`${SQLITE}steading-${mine}.db`);
+    files.delete(`${SQLITE}homefarm-${mine}.db`);
 
     const other = newId();
     farmOnDisk(other);

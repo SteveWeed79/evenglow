@@ -5,7 +5,7 @@ import {
   listVarieties,
   occupants,
   type Planting,
-} from '@steading/core/read/growing';
+} from '@homefarm/core/read/growing';
 import { Row } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';

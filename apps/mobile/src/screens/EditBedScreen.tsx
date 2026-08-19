@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { listBeds, listPlantings, occupants } from '@steading/core/read/growing';
+import { listBeds, listPlantings, occupants } from '@homefarm/core/read/growing';
 import {
   Confirm,
   Failure,

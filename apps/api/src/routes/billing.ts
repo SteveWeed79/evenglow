@@ -6,7 +6,7 @@ import {
   promoRedeemSchema,
   subscriptionFromPromo,
   syncRefusalMessage,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 import { redeemPromoCode } from '../db/promo-codes';
 import { requireClaims, requireMutationClaims } from '../auth/require';
 import { readPlaySubscription } from '../billing/play';
@@ -20,7 +20,7 @@ import { errorBody, HttpError } from '../http';
  * What a farm has paid for (D13).
  *
  * Three routes and they do very little, because the interesting decisions are
- * elsewhere: what a subscription buys is in `@steading/contracts/billing`, and
+ * elsewhere: what a subscription buys is in `@homefarm/contracts/billing`, and
  * what Google's states mean is in `billing/play.ts`. This is the plumbing
  * between them.
  *

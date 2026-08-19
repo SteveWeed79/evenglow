@@ -1,14 +1,14 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { expectedHarvestAt, formatMass, PLANTING_STATUSES } from '@steading/contracts';
+import { expectedHarvestAt, formatMass, PLANTING_STATUSES } from '@homefarm/contracts';
 import {
   harvestTotals,
   listBeds,
   listHarvests,
   listPlantings,
   listVarieties,
-} from '@steading/core/read/growing';
-import { saidConfirmation } from '@steading/core/voice';
+} from '@homefarm/core/read/growing';
+import { saidConfirmation } from '@homefarm/core/voice';
 import {
   Chip,
   Confirm,

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { resetApiBase, setApiBase } from '@steading/core/api';
-import { resetLocalStore } from '@steading/core/db/store';
+import { resetApiBase, setApiBase } from '@homefarm/core/api';
+import { resetLocalStore } from '@homefarm/core/db/store';
 import { refreshSession } from '../../apps/mobile/src/auth/session';
 import { seedSecureStore } from '../support/native/modules';
 
@@ -48,8 +48,8 @@ beforeEach(() => {
   resetLocalStore();
   setApiBase('https://api.example.test');
   seedSecureStore({
-    'steading.refreshToken': 'a-refresh-token-from-another-server',
-    'steading.claims': JSON.stringify({ userId: 'u1', orgId: ORG, role: 'owner' }),
+    'homefarm.refreshToken': 'a-refresh-token-from-another-server',
+    'homefarm.claims': JSON.stringify({ userId: 'u1', orgId: ORG, role: 'owner' }),
   });
 });
 
@@ -83,7 +83,7 @@ describe('a server that refuses, before the store is open', () => {
    */
   it('does not throw when the token is gone but claims remain', async () => {
     seedSecureStore({
-      'steading.claims': JSON.stringify({ userId: 'u1', orgId: ORG, role: 'owner' }),
+      'homefarm.claims': JSON.stringify({ userId: 'u1', orgId: ORG, role: 'owner' }),
     });
     vi.stubGlobal('fetch', async () => {
       throw new Error('should not be called — there is no token to send');

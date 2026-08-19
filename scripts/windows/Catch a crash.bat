@@ -1,11 +1,11 @@
 @echo off
 setlocal enabledelayedexpansion
-title Steading - catch a crash
+title Evenglow - catch a crash
 cd /d "%~dp0..\.."
 
 echo.
 echo   ============================================
-echo     STEADING - catch a crash
+echo     EVENGLOW - catch a crash
 echo   ============================================
 echo.
 echo   For when the app closes itself, restarts, or loses
@@ -69,10 +69,10 @@ echo   Then come back here and press any key.
 echo.
 pause
 
-set "REPORT=%TEMP%\steading-crash.txt"
+set "REPORT=%TEMP%\homefarm-crash.txt"
 
 echo. > "%REPORT%"
-echo === Steading crash report === >> "%REPORT%"
+echo === Evenglow crash report === >> "%REPORT%"
 echo Device: !PHONE! >> "%REPORT%"
 echo. >> "%REPORT%"
 

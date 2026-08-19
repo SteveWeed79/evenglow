@@ -1,11 +1,11 @@
 @echo off
 setlocal enabledelayedexpansion
-title Steading - farm server
+title Evenglow - farm server
 cd /d "%~dp0..\.."
 
 echo.
 echo   ============================================
-echo     STEADING - start the farm server
+echo     EVENGLOW - start the farm server
 echo   ============================================
 echo.
 echo   The app needs this running before you can

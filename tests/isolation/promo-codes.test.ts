@@ -17,11 +17,11 @@ import { startTestDb } from '../support/mongo';
  * dropped response cost somebody a subscription.
  */
 
-const harness = await startTestDb('steading_promo');
+const harness = await startTestDb('homefarm_promo');
 
 if (harness) {
   process.env.MONGODB_URI = harness.uri;
-  process.env.MONGODB_DB = 'steading_promo';
+  process.env.MONGODB_DB = 'homefarm_promo';
 }
 
 const describeDb = harness ? describe : describe.skip;
@@ -35,7 +35,7 @@ beforeEach(async () => {
 });
 
 async function promo() {
-  return import('@steading/api/db/promo-codes');
+  return import('@homefarm/api/db/promo-codes');
 }
 
 describeDb('spending a code', () => {

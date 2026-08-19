@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { INDEXES, indexPlan, leadingKey } from '@steading/api/db/indexes';
-import { COLLECTIONS } from '@steading/api/db/scoped';
-import { PENDING } from '@steading/api/sync/outcome';
+import { INDEXES, indexPlan, leadingKey } from '@homefarm/api/db/indexes';
+import { COLLECTIONS } from '@homefarm/api/db/scoped';
+import { PENDING } from '@homefarm/api/sync/outcome';
 
 /**
  * C3 — index discipline. Asserted against the definitions rather than a live

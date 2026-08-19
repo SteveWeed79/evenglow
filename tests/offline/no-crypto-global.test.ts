@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openSqliteStore } from '@steading/core/db/sqlite-store';
+import { openSqliteStore } from '@homefarm/core/db/sqlite-store';
 import { nodeSqlDriver } from '../support/sqlite';
 
 /**

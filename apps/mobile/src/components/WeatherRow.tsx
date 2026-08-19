@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { CONDITION_WORDS, degrees, fallsAs, forecastFor, highLowWords } from '@steading/contracts';
+import { CONDITION_WORDS, degrees, fallsAs, forecastFor, highLowWords } from '@homefarm/contracts';
 import { Icon, type IconName } from './Icon';
 import { Touch } from './Touch';
 import { useTheme } from '../theme/ThemeProvider';

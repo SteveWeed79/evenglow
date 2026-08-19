@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { newId } from '@steading/contracts';
-import type { SqlDriver, SqlOps } from '@steading/core/db/driver';
-import type { LocalStore } from '@steading/core/db/port';
-import { openSqliteStore } from '@steading/core/db/sqlite-store';
-import { createExpoDriver } from '@steading/mobile/db/expo-driver';
+import { newId } from '@homefarm/contracts';
+import type { SqlDriver, SqlOps } from '@homefarm/core/db/driver';
+import type { LocalStore } from '@homefarm/core/db/port';
+import { openSqliteStore } from '@homefarm/core/db/sqlite-store';
+import { createExpoDriver } from '@homefarm/mobile/db/expo-driver';
 import { nodeIds, nodeSqlDriver } from '../support/sqlite';
 import { fakeExpoConnection } from '../support/expo-sqlite';
 

@@ -6,7 +6,7 @@ Decided and built August 2026. The design below was written while the decisions
 were being made rather than reconstructed afterwards; §5 says where each part
 of it now lives.
 
-**Companion docs:** `Steading-Masterplan.md` (the invariants) · `UX-SPEC.md`
+**Companion docs:** `Evenglow-Masterplan.md` (the invariants) · `UX-SPEC.md`
 (the voice) · `ACCESS-AND-BILLING.md` (who the farm is) · `ROADMAP.md`.
 
 ---

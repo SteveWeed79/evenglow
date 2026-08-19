@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
-import { listInventory, listMachines, listServices } from '@steading/core/read/iron';
-import { newId, partsNote } from '@steading/contracts';
+import { listInventory, listMachines, listServices } from '@homefarm/core/read/iron';
+import { newId, partsNote } from '@homefarm/contracts';
 import { Confirm, Failure, Field, NumberField, Primary, Toggle, useSaver } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
@@ -94,7 +94,7 @@ export function ServiceDoneScreen({ route }: ScreenProps<'ServiceDone'>): React.
        *
        * This wrote `lastDoneAtDate` onto the `maintenance` record, which every
        * service overwrote — so a tractor serviced every spring for six years
-       * carried one date, and the resale service record `Steading-Masterplan.md`
+       * carried one date, and the resale service record `Evenglow-Masterplan.md`
        * advertises could not be produced from it. `listServices` still shows
        * `lastDoneAtDate` and `lastDoneAtHours`, filled from the newest of these,
        * so the panel above and `serviceDue` read exactly what they always did.

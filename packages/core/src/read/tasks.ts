@@ -1,4 +1,4 @@
-import { taskCreateSchema } from '@steading/contracts';
+import { taskCreateSchema } from '@homefarm/contracts';
 import { localStore } from '../db/store';
 import { newestTaskCompletions } from './completions';
 

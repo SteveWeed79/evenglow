@@ -7,7 +7,7 @@ import {
   productionLogCreateSchema,
   PRODUCE_KINDS,
   type Entity,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 import type { z } from 'zod';
 import { localStore } from '../db/store';
 import { listGroups } from './groups';

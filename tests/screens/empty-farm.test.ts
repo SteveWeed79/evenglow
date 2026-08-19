@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId } from '@steading/contracts';
+import { newId } from '@homefarm/contracts';
 import { knownFarmIds } from '../../apps/mobile/src/db/open';
 import { disposeIfMarked } from '../../apps/mobile/src/db/store';
 import {
@@ -45,7 +45,7 @@ import { files, seedSecureStore } from '../support/native/modules';
 const SQLITE = 'file:///documents/SQLite/';
 
 function farmOnDisk(orgId: string): void {
-  files.set(`${SQLITE}steading-${orgId}.db`, 'a year of eggs');
+  files.set(`${SQLITE}homefarm-${orgId}.db`, 'a year of eggs');
 }
 
 beforeEach(() => {

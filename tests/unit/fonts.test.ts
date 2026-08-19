@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { FONTS } from '@steading/mobile/theme/tokens';
+import { FONTS } from '@homefarm/mobile/theme/tokens';
 
 /**
  * Every named face ships, and every shipped face is named.
@@ -21,11 +21,11 @@ const FONT_DIR = 'apps/mobile/assets/fonts';
 
 /** Family name → the file that must provide it. */
 const EXPECTED: Record<string, string> = {
-  [FONTS.display]: 'Fraunces-Soft30Wonk1-Bold.ttf',
+  [FONTS.display]: 'Fraunces-Opsz30Soft100Wonk1-Bold.ttf',
   [FONTS.body]: 'AlegreyaSans-Regular.ttf',
   [FONTS.bodyBold]: 'AlegreyaSans-Bold.ttf',
-  [FONTS.data]: 'IBMPlexMono-Regular.ttf',
-  [FONTS.dataBold]: 'IBMPlexMono-Bold.ttf',
+  [FONTS.data]: 'RecursiveMonoCasual-Medium.ttf',
+  [FONTS.dataBold]: 'RecursiveMonoCasual-Bold.ttf',
 };
 
 describe('the type ramp has faces behind it', () => {
@@ -56,7 +56,7 @@ describe('the type ramp has faces behind it', () => {
     expect(licences.sort()).toEqual([
       'OFL-AlegreyaSans.txt',
       'OFL-Fraunces.txt',
-      'OFL-IBMPlexMono.txt',
+      'OFL-Recursive.txt',
     ]);
 
     for (const licence of licences) {

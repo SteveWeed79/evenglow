@@ -17,7 +17,7 @@
  *   pnpm farm:show 01J0000000000000000000ORG1
  */
 
-import { entitlementOf } from '@steading/contracts';
+import { entitlementOf } from '@homefarm/contracts';
 import { db } from './client.ts';
 import { findOrgById, listUsersInOrg } from './identity.ts';
 import { COLLECTIONS } from './scoped.ts';

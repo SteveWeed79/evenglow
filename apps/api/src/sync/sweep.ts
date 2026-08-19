@@ -1,5 +1,5 @@
 import { hostname } from 'node:os';
-import { canMutate, isUploadStamp, type Role, roleRefusal } from '@steading/contracts';
+import { canMutate, isUploadStamp, type Role, roleRefusal } from '@homefarm/contracts';
 import type { SessionClaims } from '../auth/claims';
 import { findUserById, listOrgIds } from '../db/identity';
 import type { Scoped } from '../db/scoped';

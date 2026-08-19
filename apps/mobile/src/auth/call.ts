@@ -1,4 +1,4 @@
-import { apiBase, currentAccessToken } from '@steading/core/api';
+import { apiBase, currentAccessToken } from '@homefarm/core/api';
 import { refreshSession } from './session';
 
 /**

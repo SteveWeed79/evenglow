@@ -1,4 +1,4 @@
-import type { Role } from '@steading/contracts';
+import type { Role } from '@homefarm/contracts';
 
 /**
  * The verified identity behind a request.

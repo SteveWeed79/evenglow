@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultGroupName } from '@steading/core/naming';
+import { defaultGroupName } from '@homefarm/core/naming';
 
 /**
  * Two groups called "Chickens".

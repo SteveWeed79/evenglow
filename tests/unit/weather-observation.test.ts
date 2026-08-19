@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { OBSERVATION_STALE_MS } from '@steading/contracts';
+import { OBSERVATION_STALE_MS } from '@homefarm/contracts';
 import {
   forgetWeather,
   OBSERVATION_GAP_MS,
   readObservation,
   refreshObservation,
-} from '@steading/core/weather';
+} from '@homefarm/core/weather';
 import { freshStore } from '../support/store';
 
 /**

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { careDues, incubationDues, newId, serviceDue } from '@steading/contracts';
-import { listAnimals, possibleDams } from '@steading/core/read/animals';
+import { careDues, incubationDues, newId, serviceDue } from '@homefarm/contracts';
+import { listAnimals, possibleDams } from '@homefarm/core/read/animals';
 import {
   fertilityRate,
   hatchRate,
@@ -8,12 +8,12 @@ import {
   listBreedings,
   listIncubations,
   listWeights,
-} from '@steading/core/read/breeding';
-import { lastCareBySubject, listCareLogs } from '@steading/core/read/care';
-import { lastFedByGroup, lossesByGroup, produceToday } from '@steading/core/read/groups';
-import { harvestTotals, listHarvests } from '@steading/core/read/growing';
-import { listInventory, listServices, runningLow } from '@steading/core/read/iron';
-import { enqueue } from '@steading/core/sync/queue';
+} from '@homefarm/core/read/breeding';
+import { lastCareBySubject, listCareLogs } from '@homefarm/core/read/care';
+import { lastFedByGroup, lossesByGroup, produceToday } from '@homefarm/core/read/groups';
+import { harvestTotals, listHarvests } from '@homefarm/core/read/growing';
+import { listInventory, listServices, runningLow } from '@homefarm/core/read/iron';
+import { enqueue } from '@homefarm/core/sync/queue';
 import { freshStore } from '../support/store';
 
 /**

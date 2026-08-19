@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { SYNC_REFUSALS, subscriptionFromPromo } from '@steading/contracts';
-import { type FarmSyncState, farmSyncState, syncAccess } from '@steading/api/billing/access';
-import { readEnv } from '@steading/api/env';
-import type { OrgDoc } from '@steading/api/db/identity';
+import { SYNC_REFUSALS, subscriptionFromPromo } from '@homefarm/contracts';
+import { type FarmSyncState, farmSyncState, syncAccess } from '@homefarm/api/billing/access';
+import { readEnv } from '@homefarm/api/env';
+import type { OrgDoc } from '@homefarm/api/db/identity';
 
 /**
  * One decision, two routes, and they used to disagree.
@@ -39,7 +39,7 @@ const farm = (over: Partial<OrgDoc> = {}): OrgDoc => ({
 const withPlay = {
   ...base,
   GOOGLE_PLAY_SERVICE_ACCOUNT: '{"client_email":"a@b.com","private_key":"k"}',
-  GOOGLE_PLAY_PACKAGE: 'com.steading.app',
+  GOOGLE_PLAY_PACKAGE: 'dev.swbuild.homefarm',
 };
 
 describe('a server deliberately left open', () => {

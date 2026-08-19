@@ -1,5 +1,5 @@
 import { StyleSheet, View } from 'react-native';
-import { duesFor } from '@steading/contracts';
+import { duesFor } from '@homefarm/contracts';
 import { DueRow } from './DueRow';
 import { Loading } from './Missing';
 import { Body, Panel } from './Panel';

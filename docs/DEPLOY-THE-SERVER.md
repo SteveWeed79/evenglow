@@ -62,11 +62,11 @@ whatever it was running, so a disconnect during `migrate-to-local-mongo.sh` or
 
 ```
 sudo apt-get install -y tmux
-tmux new -s steading      # Ctrl-B then D detaches; close the laptop
-tmux attach -t steading   # it kept running
+tmux new -s homefarm      # Ctrl-B then D detaches; close the laptop
+tmux attach -t homefarm   # it kept running
 ```
 
-Deployments do not need this — `steading-deploy.timer` runs them from systemd,
+Deployments do not need this — `homefarm-deploy.timer` runs them from systemd,
 so they neither know nor care whether anybody is connected.
 
 **Upgrade the Oracle account to Pay As You Go before you rely on this.** Oracle
@@ -134,16 +134,16 @@ One script, and it is the same one the live box was moved onto:
 
 ```
 sudo apt-get update && sudo apt-get install -y git
-sudo git clone https://github.com/SteveWeed79/steading /opt/steading
-sudo MONGODB_DB=steadingdb /opt/steading/scripts/deploy/setup-mongo.sh
+sudo git clone https://github.com/SteveWeed79/evenglow /opt/homefarm
+sudo MONGODB_DB=homefarmdb /opt/homefarm/scripts/deploy/setup-mongo.sh
 ```
 
 Installs MongoDB 8, binds it to **127.0.0.1 only**, caps the WiredTiger cache,
 and creates the application user. The connection string that comes out of it is
 a loopback one, and it is what goes in `MONGODB_URI` at step 5.
 
-**Pass `MONGODB_DB` if your database is not to be called `steading`** — this
-deployment's is `steadingdb`, and `env.ts` reads `MONGODB_URI` and `MONGODB_DB`
+**Pass `MONGODB_DB` if your database is not to be called `homefarm`** — this
+deployment's is `homefarmdb`, and `env.ts` reads `MONGODB_URI` and `MONGODB_DB`
 independently, so a mismatch is a server that connects and serves an empty
 database while reporting nothing wrong.
 
@@ -166,11 +166,11 @@ them an unauthenticated database admin shell.
 The checkout is already there from step 3, so this is the one line:
 
 ```
-sudo /opt/steading/scripts/deploy/setup-box.sh api.swbuild.dev
+sudo /opt/homefarm/scripts/deploy/setup-box.sh api.swbuild.dev
 ```
 
 It is idempotent — safe to run again after a failure or a change. It installs
-Node 22, pnpm, the API's dependencies, a `steading` service user, the systemd
+Node 22, pnpm, the API's dependencies, a `homefarm` service user, the systemd
 unit and Caddy, and it opens 80 and 443 on **the instance's own iptables**.
 
 That last one is worth knowing about on its own. Oracle's Ubuntu images ship
@@ -183,7 +183,7 @@ after everything else was done right.
 `@esbuild/linux-arm64` are both in the lockfile as optional dependencies, so
 ARM gets the right binaries and no toolchain is needed. Checked, not assumed.
 
-**The script does not write any secrets.** It creates `/etc/steading/api.env`
+**The script does not write any secrets.** It creates `/etc/homefarm/api.env`
 empty at mode 0600 and tells you what goes in it — a script that generated or
 copied secrets would leave them in a shell history or a log.
 
@@ -192,13 +192,13 @@ copied secrets would leave them in a shell history or a log.
 ## 5. The two values
 
 ```
-sudo nano /etc/steading/api.env
+sudo nano /etc/homefarm/api.env
 ```
 
 | | |
 |---|---|
 | `AUTH_SECRET` | 32 characters or more. `openssl rand -base64 48` |
-| `MONGODB_URI` | The loopback string `setup-mongo.sh` printed at step 3, password included. Add `MONGODB_DB=` on its own line when the database is not called `steading` — this box's is `steadingdb` |
+| `MONGODB_URI` | The loopback string `setup-mongo.sh` printed at step 3, password included. Add `MONGODB_DB=` on its own line when the database is not called `homefarm` — this box's is `homefarmdb` |
 
 Two more are already in the file and should stay:
 
@@ -244,8 +244,8 @@ says so rather than half-working.
 
 **`AUTH_SECRET` signs every token. Changing it later signs every device out.**
 
-**If your data is not in a database called `steading`, add `MONGODB_DB=` too.**
-`env.ts` defaults it to `steading`, and the template above does not mention it —
+**If your data is not in a database called `homefarm`, add `MONGODB_DB=` too.**
+`env.ts` defaults it to `homefarm`, and the template above does not mention it —
 so a cluster whose records live under another name connects successfully, serves
 an empty database, and reports nothing wrong.
 
@@ -279,8 +279,8 @@ your own machine. `docs/OPERATOR.md` §4 has the rest.
 ## 6. Start it, and check from somewhere else
 
 ```
-sudo systemctl start steading-api
-systemctl status steading-api
+sudo systemctl start homefarm-api
+systemctl status homefarm-api
 ```
 
 Then from your own machine, not the box.
@@ -330,22 +330,22 @@ fails. The two endpoints together tell you which half is broken.
 | | |
 |---|---|
 | `200` and `{"ok":true,"database":"reachable"}` | Done with the server |
-| `503` and `{"ok":false,"database":"unreachable"}` | The process is fine; `MONGODB_URI` or `MONGODB_DB` in `/etc/steading/api.env` is not |
+| `503` and `{"ok":false,"database":"unreachable"}` | The process is fine; `MONGODB_URI` or `MONGODB_DB` in `/etc/homefarm/api.env` is not |
 | Takes about five seconds first | Normal — that is the driver's server-selection timeout on the first connection |
 
 The reply says `unreachable` and nothing else on purpose. This endpoint needs no
 token and is on the open internet, and a Mongo connection error names the host,
 the replica set and sometimes the user. The reason is in
-`sudo journalctl -u steading-api -n 50`.
+`sudo journalctl -u homefarm-api -n 50`.
 
 `deploy.sh` polls `/ready` after every restart, so a deploy that cannot reach
 the database fails at the deploy rather than at the first farm to log an egg.
 Fly's health check stays on `/health`, because it is wired to a machine restart
 and restarting a process fixes nothing about a database.
-| `502 Bad Gateway` | Caddy is up, the API is not. `sudo journalctl -u steading-api -n 50` |
+| `502 Bad Gateway` | Caddy is up, the API is not. `sudo journalctl -u homefarm-api -n 50` |
 
 `502` is the likeliest one after a first run, because the service will not start
-until `/etc/steading/api.env` has both values in it.
+until `/etc/homefarm/api.env` has both values in it.
 
 ---
 
@@ -355,8 +355,8 @@ until `/etc/steading/api.env` has both values in it.
 `preview-farm` and `production` profiles. Build a tester APK:
 
 ```
-pnpm --filter @steading/mobile exec eas login
-pnpm --filter @steading/mobile exec eas build --profile preview-farm --platform android
+pnpm --filter @homefarm/mobile exec eas login
+pnpm --filter @homefarm/mobile exec eas build --profile preview-farm --platform android
 ```
 
 EAS builds it and prints a URL. That URL is the link — message it, open it on
@@ -398,13 +398,13 @@ the loop.
 
 **This is configured per server, and that is the part that catches people.**
 Setting it in a repo checkout on a laptop configures the laptop. The moment the
-app is pointed at this box, the box's `/etc/steading/api.env` is the file being
+app is pointed at this box, the box's `/etc/homefarm/api.env` is the file being
 asked — and `setup-box.sh` leaves both lines commented out, so a box that has
 never been told is the normal state of a new one.
 
 1. Make a fine-grained token at
    <https://github.com/settings/personal-access-tokens/new>:
-   - **Repository access** → Only select repositories → `steading`
+   - **Repository access** → Only select repositories → `homefarm`
    - **Permissions** → Repository permissions → **Issues: Read and write**
 
    Nothing else. It files issues and that is the whole of what it can do.
@@ -412,18 +412,18 @@ never been told is the normal state of a new one.
 2. On the box, uncomment and fill in the two lines the setup script left:
 
    ```
-   sudo nano /etc/steading/api.env
+   sudo nano /etc/homefarm/api.env
    ```
 
    ```
    SUPPORT_GITHUB_TOKEN=github_pat_...
-   SUPPORT_REPO=SteveWeed79/steading
+   SUPPORT_REPO=SteveWeed79/evenglow
    ```
 
 3. Restart, because the environment is read once at startup:
 
    ```
-   sudo systemctl restart steading-api
+   sudo systemctl restart homefarm-api
    ```
 
 4. Check it from the PC without filing anything:
@@ -585,25 +585,25 @@ has no source to read from** — it is kept because a restore-into-a-new-box is
 the same shape, and because the checks it makes are the ones worth copying.
 
 ```
-sudo MONGODB_DB=steadingdb /opt/steading/scripts/deploy/setup-mongo.sh
+sudo MONGODB_DB=homefarmdb /opt/homefarm/scripts/deploy/setup-mongo.sh
 ```
 
-**Pass `MONGODB_DB` if your database is not called `steading`** — the same value
-that is in `/etc/steading/api.env`. The account it creates is granted on that
+**Pass `MONGODB_DB` if your database is not called `homefarm`** — the same value
+that is in `/etc/homefarm/api.env`. The account it creates is granted on that
 database *and only that one*, so getting it wrong means the restore in the next
 step fails with "not authorized" against a database the account was never given.
 
 Installs MongoDB 8, binds it to **127.0.0.1 only**, caps the WiredTiger cache at
 2 GB so it does not compete with the API for the same 12 GB, turns authorization
-on, and creates the `steading` account — printing its connection string once,
-because the only place it should live is `/etc/steading/api.env`.
+on, and creates the `homefarm` account — printing its connection string once,
+because the only place it should live is `/etc/homefarm/api.env`.
 
 ```bash
-export MONGODB_DB=steadingdb
-export ATLAS_URI="$(sudo grep -oP '^MONGODB_URI=\K.*' /etc/steading/api.env)"
+export MONGODB_DB=homefarmdb
+export ATLAS_URI="$(sudo grep -oP '^MONGODB_URI=\K.*' /etc/homefarm/api.env)"
 export LOCAL_URI='<the string setup-mongo.sh printed>'
 
-sudo -E /opt/steading/scripts/deploy/migrate-to-local-mongo.sh
+sudo -E /opt/homefarm/scripts/deploy/migrate-to-local-mongo.sh
 ```
 
 **Exported, not written on the `sudo` line.** `sudo -E VAR=… script` passes
@@ -621,7 +621,7 @@ Both URIs go through the environment rather than argv, because argv is visible
 in `ps` to every user on the box — the same rule `backup-mongo.sh` and
 `db:seed` follow.
 
-**If your records are not in a database called `steading`, pass `MONGODB_DB`
+**If your records are not in a database called `homefarm`, pass `MONGODB_DB`
 too.** The connection string and the database name are separate settings in
 this app — `env.ts` reads `MONGODB_URI` and `MONGODB_DB` independently — and a
 managed cluster's string commonly names no database at all. The script settles
@@ -664,12 +664,12 @@ anywhere that has ever held these records.
 
 > **As of today this is not yet configured.** Both timers are installed and the
 > script stops on the first variable it needs, so the state reports itself
-> rather than failing quietly — but `STEADING_BACKUP_BUCKET` and
-> `STEADING_BACKUP_RECIPIENT` are unset, which means **no backup has been
+> rather than failing quietly — but `HOMEFARM_BACKUP_BUCKET` and
+> `HOMEFARM_BACKUP_RECIPIENT` are unset, which means **no backup has been
 > taken**. One box, one volume, one copy. This is the top of the list before a
 > farm that is not yours depends on it.
 
-Enable `steading-backup.timer` **and** `steading-backup-check.timer` together —
+Enable `homefarm-backup.timer` **and** `homefarm-backup-check.timer` together —
 "Before a farm that is not yours depends on this", below, has the settings and
 the restore drill. The second timer is not optional decoration: without it a
 backup that quietly stops is indistinguishable from one that is working.
@@ -727,16 +727,61 @@ sudo resize2fs /dev/sda1        # ext4. `sudo xfs_growfs /` if df -Th says xfs
 
 ---
 
+## A box set up before the rename
+
+Everything above is written in the current names. A box built before
+19 August 2026 is on the old ones — `/opt/steading`, `/etc/steading`,
+`/var/lib/steading`, a `steading` service account, eight `steading-*` units and
+a database called `steadingdb` — and **the deploy timer cannot carry it across**.
+The deploy pulls into the checkout it already has and installs the unit files it
+finds there; after the rename those files are named `homefarm-*`, so a box left
+alone ends up running old units that point at a checkout whose contents moved
+underneath them.
+
+One script does the whole crossing, and it reports before it touches anything:
+
+```
+sudo /opt/steading/scripts/deploy/rename-to-homefarm.sh          # what it would do
+sudo /opt/steading/scripts/deploy/rename-to-homefarm.sh --go     # do it
+sudo /opt/homefarm/scripts/deploy/deploy.sh                      # re-render Caddy
+```
+
+The API is down between the first and third commands — a minute or two, plus
+however long the database copy takes.
+
+**It copies the database and leaves the old one.** MongoDB has no rename, so
+`steadingdb` is dumped into `homefarm` and stays exactly where it is; the
+document counts of every collection are compared before the API is allowed to
+start. That old database is the way back — point `MONGODB_DB` at it and restart
+— so it is not dropped by the script, or on the same day, or by anyone who has
+not yet watched the new one carry real use:
+
+```
+mongosh "$MONGODB_URI" --eval 'db.getSiblingDB("steadingdb").dropDatabase()'
+```
+
+There is no undo for that line and no second copy.
+
+**It does not make a new database user.** The `steading` Mongo account keeps its
+name and its password and is granted rights on the new database. Creating a
+`homefarm` account instead would mean a new password reaching `api.env` intact
+in the middle of an outage, with the old one unrecoverable if it did not —
+rotating a credential and renaming a product are two operations, and doing them
+in one window is how a box ends up locked out of its own records. Rename the
+account later, on a quiet day, or never: it is a credential, not a brand.
+
+---
+
 ## Deploying
 
 Two halves, and they are deliberately separate: **you decide when something
 ships; the box works out how to fetch it.**
 
 ```
-sudo cp /opt/steading/scripts/deploy/steading-deploy.{service,timer} /etc/systemd/system/
+sudo cp /opt/homefarm/scripts/deploy/homefarm-deploy.{service,timer} /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now steading-deploy.timer
-systemctl list-timers steading-deploy
+sudo systemctl enable --now homefarm-deploy.timer
+systemctl list-timers homefarm-deploy
 ```
 
 That is the box half, once. It then checks for a new release every five
@@ -816,8 +861,8 @@ Yes, and there are two versions of it depending on how much the box is carrying.
 **While nothing depends on the server**, point it at a branch:
 
 ```
-echo 'STEADING_REF=dev' | sudo tee /etc/steading/deploy.env
-sudo systemctl start steading-deploy
+echo 'HOMEFARM_REF=dev' | sudo tee /etc/homefarm/deploy.env
+sudo systemctl start homefarm-deploy
 ```
 
 `deploy.sh` reads that file, so the timer picks it up on the next tick. Put it
@@ -829,10 +874,10 @@ it. At that stage the second version is worth the hour:
 
 - a second `A` record, `api-dev.swbuild.dev`, at the same box
 - a second site block in the Caddyfile, proxying to `127.0.0.1:3002`
-- a copy of the unit as `steading-api-dev`, with `PORT=3002`, its own
-  `/etc/steading/api-dev.env`, and `MONGODB_DB=steading_dev` so it cannot touch
+- a copy of the unit as `homefarm-api-dev`, with `PORT=3002`, its own
+  `/etc/homefarm/api-dev.env`, and `MONGODB_DB=homefarm_dev` so it cannot touch
   real records
-- a copy of the timer with `STEADING_REF=dev` against a second checkout
+- a copy of the timer with `HOMEFARM_REF=dev` against a second checkout
 
 Twelve gigabytes and two cores carry both without noticing — the constraint was
 never compute. **Use a separate database, not a separate collection prefix.**
@@ -858,15 +903,15 @@ reporting success. But the short version is: let the timer do it.
 To force a deployment now instead of waiting up to five minutes:
 
 ```
-sudo systemctl start steading-deploy
+sudo systemctl start homefarm-deploy
 ```
 
 ### Watching it
 
 ```
-journalctl -u steading-deploy -n 50        # what the last runs did
-journalctl -u steading-deploy -f           # follow the next one
-systemctl list-timers steading-deploy      # when it last ran, when it next will
+journalctl -u homefarm-deploy -n 50        # what the last runs did
+journalctl -u homefarm-deploy -f           # follow the next one
+systemctl list-timers homefarm-deploy      # when it last ran, when it next will
 ```
 
 A failed deployment leaves the previous version running and prints the last
@@ -878,7 +923,7 @@ reverting fixes nothing and hides which of the two it was.
 
 ## Editing files on the box from Windows (WinSCP)
 
-`/etc/steading/api.env` holds an auth secret, a database password and a GitHub
+`/etc/homefarm/api.env` holds an auth secret, a database password and a GitHub
 token. None of those is typeable and all of them arrive by copy and paste, which
 is precisely what `nano` in an SSH window is worst at. WinSCP opens the file in
 a normal Windows editor where Ctrl+V does what it says.
@@ -907,7 +952,7 @@ beside the original. **It converts a copy — the original keeps working for
 
 ### 2. The part that will otherwise look like you got it wrong
 
-`/etc/steading` is `0750 root:root` and the file inside it is `0600`. `ubuntu`
+`/etc/homefarm` is `0750 root:root` and the file inside it is `0600`. `ubuntu`
 cannot read it, so a correctly configured WinSCP still shows **permission
 denied** on that folder. That is the box being right, not the setup being wrong.
 
@@ -929,14 +974,14 @@ Save the site so none of the above has to be found twice.
 
 ### 3. Edit, then check what you left behind
 
-Navigate to `/etc/steading`, select `api.env`, press **F4**. Paste, save, close —
+Navigate to `/etc/homefarm`, select `api.env`, press **F4**. Paste, save, close —
 WinSCP uploads on save.
 
 Then, in the SSH window:
 
 ```
-sudo ls -l /etc/steading/api.env
-sudo systemctl restart steading-api
+sudo ls -l /etc/homefarm/api.env
+sudo systemctl restart homefarm-api
 ```
 
 **Expect `-rw------- 1 root root`.** An upload can come back `0644`, and a
@@ -944,8 +989,8 @@ world-readable file holding a database password is a worse outcome than the
 typing this was meant to avoid. If it moved:
 
 ```
-sudo chown root:root /etc/steading/api.env
-sudo chmod 0600 /etc/steading/api.env
+sudo chown root:root /etc/homefarm/api.env
+sudo chmod 0600 /etc/homefarm/api.env
 ```
 
 The service reads its environment once at startup, so nothing you edit here
@@ -958,8 +1003,8 @@ Leave the SFTP server setting alone, drop the file in `/home/ubuntu/` where
 mode and owner:
 
 ```
-sudo install -m 0600 -o root -g root /home/ubuntu/api.env /etc/steading/api.env
-sudo systemctl restart steading-api
+sudo install -m 0600 -o root -g root /home/ubuntu/api.env /etc/homefarm/api.env
+sudo systemctl restart homefarm-api
 ```
 
 Two steps instead of one, and the permissions cannot drift because they are
@@ -1055,7 +1100,7 @@ The board admits **operators** and nobody else — an owner's token is valid,
 signed by this server, and still refused. Name one:
 
 ```
-cd /opt/steading
+cd /opt/homefarm
 sudo pnpm ops:admin you@example.com     # the account must already exist
 sudo pnpm ops:admin --list              # who has it now
 ```
@@ -1065,7 +1110,7 @@ sudo pnpm ops:admin --list              # who has it now
 > It said the board admits `role: 'admin'` and gave you:
 >
 > ```
-> db.getSiblingDB("steading").users.updateOne(
+> db.getSiblingDB("homefarm").users.updateOne(
 >   { email: "you@example.com" }, { $set: { role: "admin" } })
 > ```
 >
@@ -1080,8 +1125,8 @@ sudo pnpm ops:admin --list              # who has it now
 >    **zero**, and no remaining member can put it back —
 >    `assignableRoles('admin')` is `['admin', 'hand']`, and promoting yourself is
 >    refused as `self`. Repairing it needs another raw write.
-> 3. **It names the wrong database.** `getSiblingDB("steading")` is hardcoded,
->    and this box runs `MONGODB_DB=steadingdb` — so on a correctly configured
+> 3. **It names the wrong database.** `getSiblingDB("homefarm")` is hardcoded,
+>    and this box runs `MONGODB_DB=homefarmdb` — so on a correctly configured
 >    server the write lands in a database nothing reads, which is the only reason
 >    (2) has probably not already happened to you.
 >
@@ -1097,26 +1142,29 @@ chose.
 ### The unit
 
 ```
-sudo cp /opt/steading/scripts/deploy/steading-ops.service /etc/systemd/system/
+sudo cp /opt/homefarm/scripts/deploy/homefarm-ops.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now steading-ops
+sudo systemctl enable --now homefarm-ops
 curl -s localhost:3002/health          # {"ok":true}
 ```
 
-It reads the same `/etc/steading/api.env`, which it must: a token minted against
+It reads the same `/etc/homefarm/api.env`, which it must: a token minted against
 a different `AUTH_SECRET` is not one this process will accept, and a different
 `MONGODB_URI` would have it describing a server nobody uses.
 
 ### Reaching it
 
 The honest default is **not to publish it at all** — `ssh -L 3002:127.0.0.1:3002
-steading-box` and open `http://localhost:3002`. No certificate, no hostname, no
+homefarm-box` and open `http://localhost:3002`. No certificate, no hostname, no
 public port, and the board is reachable exactly by people who can already log
 into the box.
 
-If you would rather have a URL, it is its own site block on its own name:
+If you would rather have a URL, it is its own site block on its own name — and
+it goes in **`/etc/caddy/conf.d/`, never in the Caddyfile itself**:
 
 ```
+sudo install -d -m 0755 /etc/caddy/conf.d
+sudo tee /etc/caddy/conf.d/ops.caddy >/dev/null <<'EOF'
 ops.example.com {
 	# Optional and cheap. Breaks when your ISP rotates you, which is the
 	# trade — a tailnet survives that and is one more daemon to run.
@@ -1126,7 +1174,30 @@ ops.example.com {
 	reverse_proxy 127.0.0.1:3002
 	encode zstd gzip
 }
+EOF
+sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+sudo systemctl reload caddy
 ```
+
+> #### This page used to say "append it to the Caddyfile", and a deploy ate it
+>
+> `deploy.sh` renders `/etc/caddy/Caddyfile` from the repository and installs it
+> over the running one **on every tick** — which is deliberate, and is why a
+> Caddyfile change reaches the box at all. A block appended by hand was therefore
+> gone within five minutes, with `reloaded for api.example.com` as the only
+> trace, and the board's URL started answering 404 for no reason anybody could
+> see.
+>
+> Worse if you *prepended* it: the deploy reads the domain to render with as the
+> first site block in the running file, so the API's config would have been
+> rendered for `ops.example.com` and every handset would have lost its server —
+> reported as a successful reload.
+>
+> The Caddyfile now ends its preamble with `import /etc/caddy/conf.d/*.caddy`,
+> and the deploy creates that directory and never writes into it. If you already
+> had a block in the Caddyfile, the next deploy keeps a copy at
+> `/etc/caddy/Caddyfile.local-blocks.bak` and says so — move the block out of it
+> into `conf.d` and reload.
 
 **`TRUSTED_PROXY_HOPS=1` has to be right for this to mean anything.** With it
 wrong, `request.ip` is `127.0.0.1` for every request and every limiter in the
@@ -1155,7 +1226,7 @@ reaches it, which is asserted rather than intended — see
 ## Keeping it going
 
 ```
-sudo /opt/steading/scripts/deploy/deploy.sh
+sudo /opt/homefarm/scripts/deploy/deploy.sh
 ```
 
 Pull, install, restart, and then **check that it actually came back** — a
@@ -1166,7 +1237,7 @@ database*, not merely *started*.
 
 If it does not come back the script says which of the two failed. A process that
 answers `/health` but not `/ready` is running the new code fine and cannot reach
-Mongo, so it points at `/etc/steading/api.env` and does **not** offer the
+Mongo, so it points at `/etc/homefarm/api.env` and does **not** offer the
 rollback — going back would restore code that was never the problem. Otherwise
 it prints the last thirty log lines and the command to return to the previous
 commit.
@@ -1196,35 +1267,35 @@ Put the settings in their own file — not `api.env`, because the bucket
 credentials have no business beside the auth secret and vice versa:
 
 ```bash
-sudo install -m 0600 /dev/null /etc/steading/backup.env
-sudo nano /etc/steading/backup.env
+sudo install -m 0600 /dev/null /etc/homefarm/backup.env
+sudo nano /etc/homefarm/backup.env
 ```
 
 ```
 MONGODB_URI=…                    the same value api.env has
-STEADING_BACKUP_BUCKET=s3://your-bucket/steading
-STEADING_BACKUP_RECIPIENT=age1…  the PUBLIC half
+HOMEFARM_BACKUP_BUCKET=s3://your-bucket/homefarm
+HOMEFARM_BACKUP_RECIPIENT=age1…  the PUBLIC half
 AWS_ACCESS_KEY_ID=…              an IAM user that can only PutObject on the prefix
 AWS_SECRET_ACCESS_KEY=…
 AWS_DEFAULT_REGION=…
 ```
 
-**No `STEADING_BACKUP_IDENTITY`.** The private half of the age key must never
+**No `HOMEFARM_BACKUP_IDENTITY`.** The private half of the age key must never
 be on this machine — that is the entire argument for encrypting to a public
 key, and it is why a restore is a deliberate act performed somewhere else. Put
 it in a password manager. You need it once, on the worst day.
 
 ```bash
-sudo cp /opt/steading/scripts/deploy/steading-backup.{service,timer} /etc/systemd/system/
-sudo cp /opt/steading/scripts/deploy/steading-backup-check.{service,timer} /etc/systemd/system/
+sudo cp /opt/homefarm/scripts/deploy/homefarm-backup.{service,timer} /etc/systemd/system/
+sudo cp /opt/homefarm/scripts/deploy/homefarm-backup-check.{service,timer} /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now steading-backup.timer steading-backup-check.timer
-sudo systemctl start steading-backup      # don't wait until 02:00 to find out
+sudo systemctl enable --now homefarm-backup.timer homefarm-backup-check.timer
+sudo systemctl start homefarm-backup      # don't wait until 02:00 to find out
 ```
 
 #### How you find out it stopped
 
-`steading-backup-check` runs at 09:00 and **exits non-zero when the last
+`homefarm-backup-check` runs at 09:00 and **exits non-zero when the last
 successful backup is more than thirty-six hours old**, which puts the box into
 `systemctl --failed`. That is deliberate: there is no mail sender here and no
 monitoring agent, so systemd's own state is the one channel an operator already
@@ -1232,8 +1303,8 @@ reads and any monitoring added later already watches.
 
 ```bash
 systemctl --failed                          # a stale backup shows up here
-systemctl status steading-backup-check
-journalctl -u steading-backup -n 50
+systemctl status homefarm-backup-check
+journalctl -u homefarm-backup -n 50
 ```
 
 Thirty-six hours rather than twenty-four, so a run that started late — a
@@ -1255,10 +1326,10 @@ not a gap to close.
 On a machine that is not this one, with the identity to hand:
 
 ```bash
-export STEADING_BACKUP_IDENTITY=/path/to/age-identity
-export STEADING_BACKUP_BUCKET=s3://your-bucket/steading
+export HOMEFARM_BACKUP_IDENTITY=/path/to/age-identity
+export HOMEFARM_BACKUP_BUCKET=s3://your-bucket/homefarm
 ./scripts/backup-mongo.sh list
-./scripts/backup-mongo.sh restore steading-2026-08-05T02-00-00Z.age
+./scripts/backup-mongo.sh restore homefarm-2026-08-05T02-00-00Z.age
 ```
 
 Restore into a **fresh** database and point a scratch API at it. The script
@@ -1279,15 +1350,15 @@ backups it silently ruined are all of them.
 |---|---|
 | `curl` hangs, no response at all | The Oracle ingress rule (step 2). Then the instance iptables: `sudo iptables -L INPUT -n --line-numbers` |
 | Certificate error, or Caddy will not start | DNS. `dig +short api.swbuild.dev` must return the box. Then `journalctl -u caddy -n 50` |
-| `{"ok":true}` but everything else fails | Ask `/ready`. A `503` there confirms the database: `systemctl status mongod` first, then a wrong `MONGODB_URI` or `MONGODB_DB` in `/etc/steading/api.env` |
-| Service will not start | `systemctl status steading-api` then `journalctl -u steading-api -n 50`. Usually an empty `AUTH_SECRET` |
+| `{"ok":true}` but everything else fails | Ask `/ready`. A `503` there confirms the database: `systemctl status mongod` first, then a wrong `MONGODB_URI` or `MONGODB_DB` in `/etc/homefarm/api.env` |
+| Service will not start | `systemctl status homefarm-api` then `journalctl -u homefarm-api -n 50`. Usually an empty `AUTH_SECRET` |
 | Restarting in a loop | It stops itself after five in a minute. The reason is in `systemctl status` |
-| Connects fine, but the farm is empty | `MONGODB_DB`. The default is `steading`; a cluster holding records under another name serves an empty one without complaining (step 5) |
+| Connects fine, but the farm is empty | `MONGODB_DB`. The default is `homefarm`; a cluster holding records under another name serves an empty one without complaining (step 5) |
 | Two accounts on one email address, or nothing ever expires | `pnpm db:indexes` was never run (step 5b). Run it — it is idempotent |
 | App says **Not set up** | The APK was built without an origin — that is `preview`, not `preview-farm` |
 | Sync refused with a 402 | Billing, and only possible once `GOOGLE_PLAY_SERVICE_ACCOUNT` is set. With no Play config `access.ts` returns `syncing: true` for every farm, so a 402 here means something else |
-| Deploy timer runs, nothing ever deploys | `journalctl -u steading-deploy -n 30`. Either the box is ahead of `release` — never `git pull` there — or git is refusing the checkout's ownership |
-| `systemctl --failed` lists `steading-backup-check` | No backup for over 36 hours. `journalctl -u steading-backup -n 50` — usually `/etc/steading/backup.env` is missing a variable, or the IAM user cannot write the prefix |
+| Deploy timer runs, nothing ever deploys | `journalctl -u homefarm-deploy -n 30`. Either the box is ahead of `release` — never `git pull` there — or git is refusing the checkout's ownership |
+| `systemctl --failed` lists `homefarm-backup-check` | No backup for over 36 hours. `journalctl -u homefarm-backup -n 50` — usually `/etc/homefarm/backup.env` is missing a variable, or the IAM user cannot write the prefix |
 | Everybody is rate limited at once, or one stranger locks the farm out | `TRUSTED_PROXY_HOPS` is lower than the number of proxies actually in front (step 5). `request.ip` has collapsed to the proxy |
 | Password guessing is never throttled | `TRUSTED_PROXY_HOPS` is *higher* than the proxies you run, so callers are choosing their own `request.ip`. Nothing looks wrong; check the number against the topology |
 | One farm sees another's records | Stop and report it. That is the invariant everything else is built on |

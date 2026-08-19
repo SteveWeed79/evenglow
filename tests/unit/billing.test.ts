@@ -13,9 +13,9 @@ import {
   subscriptionSchema,
   syncRefusalMessage,
   type Subscription,
-} from '@steading/contracts';
-import { readPlayConfig, subscriptionFrom } from '@steading/api/billing/play';
-import { readEnv } from '@steading/api/env';
+} from '@homefarm/contracts';
+import { readPlayConfig, subscriptionFrom } from '@homefarm/api/billing/play';
+import { readEnv } from '@homefarm/api/env';
 
 /**
  * What a subscription buys, and what happens when it stops (D13).
@@ -236,7 +236,7 @@ describe('the stored shape', () => {
 describe('what Google says, and what it means', () => {
   const purchase = (state: string, expiry?: string) => ({
     subscriptionState: state,
-    lineItems: [{ productId: 'steading.year', ...(expiry === undefined ? {} : { expiryTime: expiry }) }],
+    lineItems: [{ productId: 'homefarm.year', ...(expiry === undefined ? {} : { expiryTime: expiry }) }],
   });
 
   it('treats an active subscription as active', () => {
@@ -309,7 +309,7 @@ describe('what Google says, and what it means', () => {
   it('records the rail, so a second one is additive rather than a migration', () => {
     expect(subscriptionFrom(purchase('SUBSCRIPTION_STATE_ACTIVE'), NOW)).toMatchObject({
       source: 'play',
-      productId: 'steading.year',
+      productId: 'homefarm.year',
       updatedAt: NOW,
     });
   });
@@ -321,14 +321,14 @@ describe('reading the Play credentials', () => {
   it('is absent rather than broken when the server takes no payments', () => {
     // A supported state: the billing routes answer 501 and every farm stays on
     // the free tier, which is what the app does today.
-    expect(readPlayConfig(undefined, 'com.steading.app')).toBeNull();
+    expect(readPlayConfig(undefined, 'dev.swbuild.homefarm')).toBeNull();
     expect(readPlayConfig(JSON.stringify({ client_email: 'a@b.test', private_key: key }), undefined)).toBeNull();
   });
 
   it('unescapes a key pasted through a shell', () => {
     const config = readPlayConfig(
       JSON.stringify({ client_email: 'a@b.test', private_key: key.replace(/\n/g, '\\n') }),
-      'com.steading.app',
+      'dev.swbuild.homefarm',
     );
     expect(config?.privateKey).toContain('\n');
     expect(config?.privateKey).not.toContain('\\n');
@@ -337,13 +337,13 @@ describe('reading the Play credentials', () => {
   it('names the field and never the value when it is malformed', () => {
     // This object holds a private key. An error message that quoted it would
     // put it in a log.
-    expect(() => readPlayConfig('{"client_email":"a@b.test"}', 'com.steading.app')).toThrow(
+    expect(() => readPlayConfig('{"client_email":"a@b.test"}', 'dev.swbuild.homefarm')).toThrow(
       /client_email and private_key/,
     );
-    expect(() => readPlayConfig('not json', 'com.steading.app')).toThrow(/valid JSON/);
+    expect(() => readPlayConfig('not json', 'dev.swbuild.homefarm')).toThrow(/valid JSON/);
 
     try {
-      readPlayConfig('{"private_key":"SECRETVALUE"}', 'com.steading.app');
+      readPlayConfig('{"private_key":"SECRETVALUE"}', 'dev.swbuild.homefarm');
     } catch (error) {
       expect((error as Error).message).not.toContain('SECRETVALUE');
     }

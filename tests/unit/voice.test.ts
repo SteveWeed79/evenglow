@@ -6,7 +6,7 @@ import {
   SAID,
   saidConfirmation,
   spellCount,
-} from '@steading/core/voice';
+} from '@homefarm/core/voice';
 
 /**
  * UX-SPEC §6 — the whimsy budget.

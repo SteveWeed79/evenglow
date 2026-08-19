@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { listInventory, listMachines, listServices, type Machine } from '@steading/core/read/iron';
-import { partsNote } from '@steading/contracts';
+import { listInventory, listMachines, listServices, type Machine } from '@homefarm/core/read/iron';
+import { partsNote } from '@homefarm/contracts';
 import { Primary, Row } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Notes } from '../components/Notes';

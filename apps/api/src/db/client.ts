@@ -10,7 +10,7 @@ import { MongoClient, type Db } from 'mongodb';
  */
 
 declare global {
-  var __steadingMongoClient: Promise<MongoClient> | undefined;
+  var __homefarmMongoClient: Promise<MongoClient> | undefined;
 }
 
 function connect(): Promise<MongoClient> {
@@ -36,7 +36,7 @@ function connect(): Promise<MongoClient> {
    * request and never closed any of them. Development was fine, which is the
    * worst shape a bug of this kind can have.
    */
-  const existing = globalThis.__steadingMongoClient;
+  const existing = globalThis.__homefarmMongoClient;
   if (existing) return existing;
 
   /**
@@ -49,7 +49,7 @@ function connect(): Promise<MongoClient> {
    * worked.
    */
   const created = new MongoClient(uri, { serverSelectionTimeoutMS: 5_000 }).connect();
-  globalThis.__steadingMongoClient = created;
+  globalThis.__homefarmMongoClient = created;
 
   /**
    * A failed connect must not be cached, or the first request while Mongo is
@@ -57,8 +57,8 @@ function connect(): Promise<MongoClient> {
    * promise and the service never recovers without a restart.
    */
   void created.catch(() => {
-    if (globalThis.__steadingMongoClient === created) {
-      globalThis.__steadingMongoClient = undefined;
+    if (globalThis.__homefarmMongoClient === created) {
+      globalThis.__homefarmMongoClient = undefined;
     }
   });
 
@@ -82,13 +82,13 @@ function connect(): Promise<MongoClient> {
  * reading from.
  *
  * Found while pointing the first real deployment at an Atlas cluster whose
- * database is `steadingdb` rather than `steading`. The name does NOT come from
- * the connection string — a URI ending `/steadingdb` is connected to and then
+ * database is `homefarm` rather than the default. The name does NOT come from
+ * the connection string — a URI ending `/homefarm` is connected to and then
  * ignored, because this line is the only thing that chooses.
  */
 export function databaseName(source: Record<string, string | undefined> = process.env): string {
   const configured = source.MONGODB_DB?.trim();
-  return configured === undefined || configured === '' ? 'steading' : configured;
+  return configured === undefined || configured === '' ? 'homefarm' : configured;
 }
 
 export async function db(): Promise<Db> {

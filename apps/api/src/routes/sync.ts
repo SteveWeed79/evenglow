@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { CLIENT_VERSION_HEADER, isClientTooOld, syncRefusalMessage } from '@steading/contracts';
+import { CLIENT_VERSION_HEADER, isClientTooOld, syncRefusalMessage } from '@homefarm/contracts';
 import { requireClaims, requireMutationClaims } from '../auth/require';
 import { syncAccess } from '../billing/access';
 import { findOrgById, recordLastSeen } from '../db/identity';
@@ -77,7 +77,7 @@ export async function syncRoutes(app: FastifyInstance, env: Env): Promise<void> 
      *
      * ## A server that takes no payments does not charge for anything
      *
-     * **Without this, a self-hosted Steading is a server nobody can ever sync
+     * **Without this, a self-hosted Evenglow is a server nobody can ever sync
      * to.** There is no Play Console behind somebody's own box, so no farm on
      * it can subscribe, so the gate would refuse every flush forever — and
      * `ACCESS-AND-BILLING.md` is built around exactly that box. The billing

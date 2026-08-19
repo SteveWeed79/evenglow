@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { reportTrouble } from '../hooks/useTrouble';
-import { describeLogFailure } from '@steading/core/sync/failure';
+import { describeLogFailure } from '@homefarm/core/sync/failure';
 import { Icon, type IconName } from './Icon';
 import { Body, Panel } from './Panel';
 import { useRevealOnFocus } from './reveal';
@@ -719,7 +719,7 @@ export interface Saver {
    * Runs the writes, then `onDone` — or reports why it could not.
    *
    * `say` is the one sentence this form is allowed on success, from
-   * `@steading/core/voice`. Omit it on any form that leaves: the screen
+   * `@homefarm/core/voice`. Omit it on any form that leaves: the screen
    * underneath changing is the confirmation, and a sentence rendered onto a
    * view that unmounts in the same frame is shown to nobody.
    */

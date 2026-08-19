@@ -1,18 +1,18 @@
 @echo off
 setlocal enabledelayedexpansion
-title Steading - run on my phone
+title Evenglow - run on my phone
 cd /d "%~dp0..\.."
 
 echo.
 echo   ============================================
-echo     STEADING - run the app on your phone
+echo     EVENGLOW - run the app on your phone
 echo   ============================================
 echo.
 echo   Plug the phone or tablet in with a USB cable and turn
-echo   on USB debugging. If Steading is not on it yet, this
+echo   on USB debugging. If Evenglow is not on it yet, this
 echo   window installs it; if it is, this window connects it.
 echo.
-echo   Steading installs as its OWN app. It does not run inside
+echo   Evenglow installs as its OWN app. It does not run inside
 echo   Expo Go and cannot be opened by scanning a code with Expo
 echo   Go or with the camera - Expo Go is one shared sandbox that
 echo   wipes itself when it updates, and it took a farm's records
@@ -44,12 +44,12 @@ echo.
 :: `Packages: -72` on a clean checkout - see the note in Run on emulator.
 
 ::
-:: Is Steading actually ON the phone? Ask, rather than assume.
+:: Is Evenglow actually ON the phone? Ask, rather than assume.
 ::
 :: This window used to go straight to the QR code, on the strength of a
 :: sentence in its own header saying the app had to be installed first. A
 :: tablet arrived with Expo Go on it, a USB cable plugged in, and this script
-:: run - and the QR did nothing, because the QR is for Steading's own dev
+:: run - and the QR did nothing, because the QR is for Evenglow's own dev
 :: client and NOTHING else can open it. Not the camera app, not Expo Go.
 ::
 :: The capability was here the whole time: `expo run:android` installs to
@@ -165,7 +165,7 @@ call "%~dp0_shared.bat" :keep_chosen_address
 if errorlevel 1 call "%~dp0_shared.bat" :set_usb_address !PHONE!
 
 set "NEEDBUILD="
-adb -s !PHONE! shell pm list packages 2>nul | findstr /c:"com.steading.app" >nul
+adb -s !PHONE! shell pm list packages 2>nul | findstr /c:"dev.swbuild.homefarm" >nul
 if errorlevel 1 set "NEEDBUILD=1"
 
 rem Checked out here rather than inside the branch below, because `goto` out of
@@ -191,7 +191,7 @@ if exist "%LOCALAPPDATA%\Android\Sdk" set "ANDROID_HOME=%LOCALAPPDATA%\Android\S
 
 if 1==1 (
   echo.
-  echo   Steading is not on this device yet, so it is being built
+  echo   Evenglow is not on this device yet, so it is being built
   echo   and installed now. This takes several minutes the first
   echo   time and is quick afterwards.
   echo.
@@ -270,10 +270,10 @@ if defined USB_METRO (
 echo.
 echo   A big square QR CODE will appear below in a moment.
 echo.
-echo   Open STEADING ITSELF on the phone and scan from the screen
+echo   Open EVENGLOW ITSELF on the phone and scan from the screen
 echo   it shows when it cannot find this computer. The phone's
 echo   camera app will not open it, and neither will Expo Go -
-echo   this code is for Steading's own app and nothing else can
+echo   this code is for Evenglow's own app and nothing else can
 echo   read it.
 echo.
 echo   Leave this window OPEN while you use the app.

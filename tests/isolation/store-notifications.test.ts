@@ -20,11 +20,11 @@ import { startTestDb } from '../support/mongo';
  * what ends up stored — the second was already safe and the first was not.
  */
 
-const harness = await startTestDb('steading_store_notifications');
+const harness = await startTestDb('homefarm_store_notifications');
 
 if (harness) {
   process.env.MONGODB_URI = harness.uri;
-  process.env.MONGODB_DB = 'steading_store_notifications';
+  process.env.MONGODB_DB = 'homefarm_store_notifications';
 }
 
 const describeDb = harness ? describe : describe.skip;
@@ -33,7 +33,7 @@ const SECRET = 'a-test-secret-long-enough-for-hs256-abcdef';
 
 /** Syntactically valid, so the billing routes are live. Google is never reached. */
 const PLAY_ACCOUNT = JSON.stringify({
-  client_email: 'billing@steading-test.iam.gserviceaccount.com',
+  client_email: 'billing@homefarm-test.iam.gserviceaccount.com',
   private_key: '-----BEGIN PRIVATE KEY-----\nnot-a-real-key\n-----END PRIVATE KEY-----',
 });
 
@@ -55,8 +55,8 @@ const AUDIENCE = 'https://farm.example.test/billing/notifications';
  */
 async function server(over: Record<string, string> = {}) {
   const Fastify = (await import('fastify')).default;
-  const { billingRoutes } = await import('@steading/api/routes/billing');
-  const { readEnv } = await import('@steading/api/env');
+  const { billingRoutes } = await import('@homefarm/api/routes/billing');
+  const { readEnv } = await import('@homefarm/api/env');
 
   const app = Fastify({ logger: false });
   await billingRoutes(
@@ -64,9 +64,9 @@ async function server(over: Record<string, string> = {}) {
     readEnv({
       AUTH_SECRET: SECRET,
       MONGODB_URI: harness!.uri,
-      MONGODB_DB: 'steading_store_notifications',
+      MONGODB_DB: 'homefarm_store_notifications',
       GOOGLE_PLAY_SERVICE_ACCOUNT: PLAY_ACCOUNT,
-      GOOGLE_PLAY_PACKAGE: 'com.steading.app',
+      GOOGLE_PLAY_PACKAGE: 'dev.swbuild.homefarm',
       ...over,
     }),
     {
@@ -127,7 +127,7 @@ describeDb('a store notification with no push token', () => {
    */
   it('is still accepted when the server has no audience configured', async () => {
     const answer = await notify({
-      packageName: 'com.steading.app',
+      packageName: 'dev.swbuild.homefarm',
       subscriptionNotification: { purchaseToken: 'a-token-nobody-has-submitted' },
     });
 
@@ -151,7 +151,7 @@ describeDb('a store notification with no push token', () => {
    */
   it('never reaches Google when the server expects a token and got none', async () => {
     const answer = await notify(
-      { packageName: 'com.steading.app', subscriptionNotification: { purchaseToken: TOKEN } },
+      { packageName: 'dev.swbuild.homefarm', subscriptionNotification: { purchaseToken: TOKEN } },
       { over: { GOOGLE_PUBSUB_AUDIENCE: AUDIENCE } },
     );
 
@@ -165,7 +165,7 @@ describeDb('a store notification with no push token', () => {
   /** And the same request without a gate does reach it — or the test above proves nothing. */
   it('does reach Google when no audience is configured, which is what makes the gate real', async () => {
     const answer = await notify({
-      packageName: 'com.steading.app',
+      packageName: 'dev.swbuild.homefarm',
       subscriptionNotification: { purchaseToken: TOKEN },
     });
 
@@ -175,7 +175,7 @@ describeDb('a store notification with no push token', () => {
 
   it('never reaches Google for something that is not a bearer token', async () => {
     await notify(
-      { packageName: 'com.steading.app', subscriptionNotification: { purchaseToken: TOKEN } },
+      { packageName: 'dev.swbuild.homefarm', subscriptionNotification: { purchaseToken: TOKEN } },
       { authorization: 'Basic bm90LWFuLW9pZGMtdG9rZW4=', over: { GOOGLE_PUBSUB_AUDIENCE: AUDIENCE } },
     );
 
@@ -197,7 +197,7 @@ describeDb('a store notification with no push token', () => {
       .sign(new TextEncoder().encode(SECRET));
 
     await notify(
-      { packageName: 'com.steading.app', subscriptionNotification: { purchaseToken: TOKEN } },
+      { packageName: 'dev.swbuild.homefarm', subscriptionNotification: { purchaseToken: TOKEN } },
       { authorization: `Bearer ${forged}`, over: { GOOGLE_PUBSUB_AUDIENCE: AUDIENCE } },
     );
 
@@ -262,7 +262,7 @@ describeDb('how many notifications one caller may send', () => {
         method: 'POST',
         url: '/billing/notifications',
         payload: envelope({
-          packageName: 'com.steading.app',
+          packageName: 'dev.swbuild.homefarm',
           subscriptionNotification: { purchaseToken: 'a-token-nobody-has-submitted' },
         }) as never,
       });

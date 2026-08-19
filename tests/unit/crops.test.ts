@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CROP_DEFAULTS, cropDefaults, LIBRARY_VARIETIES } from '@steading/contracts';
+import { CROP_DEFAULTS, cropDefaults, LIBRARY_VARIETIES } from '@homefarm/contracts';
 import { expand } from '../../packages/contracts/src/library/crops';
 import { CATALOGUE_VARIETIES } from '../../packages/contracts/src/library/cultivars';
 

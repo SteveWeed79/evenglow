@@ -3,11 +3,11 @@ import {
   type EnvelopeMigration,
   migrateEnvelope,
   UnmigratableEnvelopeError,
-} from '@steading/core/db/migrate';
-import { enqueue, queueDepth, unsentCount } from '@steading/core/sync/queue';
-import { flushOnce } from '@steading/core/sync/flush';
-import { listRejected } from '@steading/core/sync/inbox';
-import { MUTATION_SCHEMA_VERSION, newId } from '@steading/contracts';
+} from '@homefarm/core/db/migrate';
+import { enqueue, queueDepth, unsentCount } from '@homefarm/core/sync/queue';
+import { flushOnce } from '@homefarm/core/sync/flush';
+import { listRejected } from '@homefarm/core/sync/inbox';
+import { MUTATION_SCHEMA_VERSION, newId } from '@homefarm/contracts';
 import {
   corruptRecordRow,
   metaCount,

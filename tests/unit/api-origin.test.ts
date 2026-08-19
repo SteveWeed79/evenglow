@@ -53,7 +53,7 @@ describe('addresses the run scripts may overwrite', () => {
     for (const remote of [
       'https://api.swbuild.dev',
       'https://api-dev.swbuild.dev',
-      'https://steading-api.fly.dev',
+      'https://homefarm-api.fly.dev',
       // Public IPs are somebody's server too.
       'http://203.0.113.10:3001',
     ]) {

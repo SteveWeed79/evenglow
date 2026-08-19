@@ -3,7 +3,7 @@
 What is left, in the order it should be built, and why that order.
 
 Written after a day on a handset that found eight device-only defects and
-finished the record. It supersedes nothing: `Steading-Masterplan.md` still holds
+finished the record. It supersedes nothing: `Evenglow-Masterplan.md` still holds
 the settled decisions, `UX-SPEC.md` the binding rules, `COMPETITIVE-ANALYSIS.md`
 the reason each feature exists, `ACCESS-AND-BILLING.md` how a farm gets in and
 where the money is. This says what has not been done yet.
@@ -436,7 +436,7 @@ Ordered by cost, cheapest first, and all four are now done:
    501 and the button is not drawn, so a farm running its own box without a
    Google project sees email and password and nothing broken.
 2. ~~**Local-first first run.**~~ **Done, and it was the large one.** First
-   launch mints an org ULID, opens `steading-{that}.db`, and the whole app
+   launch mints an org ULID, opens `homefarm-{that}.db`, and the whole app
    works — with no server address configured at all, which is every fresh
    clone. `Boot` no longer has a signed-out state, because there is nothing to
    be signed out *of*.
@@ -484,15 +484,15 @@ Ordered by cost, cheapest first, and all four are now done:
    the opposite of this line the whole time, which is how it survived.
 
    The mechanism is done, and the word means something different from last
-   time: `steading-backup.timer` runs it nightly, the script reads the object
-   back out of S3 before calling it a backup, and `steading-backup-check.timer`
+   time: `homefarm-backup.timer` runs it nightly, the script reads the object
+   back out of S3 before calling it a backup, and `homefarm-backup-check.timer`
    fails a unit when the last one is more than thirty-six hours old. A
    **restore drill stays manual and periodic** — see `DEPLOY-THE-SERVER.md` —
    because the age identity is deliberately not on the box and no automated
    test can hold it.
 
-   **And "done" still does not mean a farm has a backup.** `STEADING_BACKUP_BUCKET`
-   and `STEADING_BACKUP_RECIPIENT` are unset on the box, so the timer fires and
+   **And "done" still does not mean a farm has a backup.** `HOMEFARM_BACKUP_BUCKET`
+   and `HOMEFARM_BACKUP_RECIPIENT` are unset on the box, so the timer fires and
    the script stops on the variable it needs: **no backup has been taken.** That
    is a state which reports itself rather than failing silently, which is the
    whole design — but it is not the same thing as a copy existing.
@@ -1036,5 +1036,5 @@ rearrange columns in the spreadsheet they already have open.
   Export gives the copy off the device, which is the real want.
   `forgetDatabase` already exists for the case that genuinely needs it: handing
   the tablet on.
-- **Anything in `Steading-Masterplan.md` §"What we are not building".** That
+- **Anything in `Evenglow-Masterplan.md` §"What we are not building".** That
   section is a decision, not an oversight.

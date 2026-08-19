@@ -72,7 +72,7 @@ in the path**, so no quota can refuse it.
 backup that had never been taken.
 
 **First run:
-[31922188936](https://github.com/SteveWeed79/steading/actions/runs/31922188936)
+[31922188936](https://github.com/SteveWeed79/evenglow/actions/runs/31922188936)
 — failed, and the outcome is now recorded rather than left to be looked up.**
 
 Dispatched from `main` at `9daed0c`. It got through the secrets check, the
@@ -95,7 +95,7 @@ below rather than left as a theory that quietly stopped being true.
 
 Two more things about that run:
 
-- It never produced an artefact, so there is no `steading-0.1.13-18.apk`
+- It never produced an artefact, so there is no `homefarm-0.1.13-18.apk`
   anywhere and no `v0.1.13+18` tag. The next run derives 18 again — 18 because
   `EAS_LAST_CODE` is 17, the code EAS consumed on the submission the quota
   refused.
@@ -108,7 +108,7 @@ Two more things about that run:
 #### The second promote, which got further and named the real cause
 
 Run
-[31925150611](https://github.com/SteveWeed79/steading/actions/runs/31925150611),
+[31925150611](https://github.com/SteveWeed79/evenglow/actions/runs/31925150611),
 the first promote through `ci.yml` → `apk.yml`. `verify`, `container` and
 `release` all green — the version moved to **0.1.14** and `release` was pushed,
 so the server half shipped. `app / build` then failed at the same step and with
@@ -172,10 +172,10 @@ Two things that run settled, both worth keeping:
 
 #### Run 3 was green. The build half is done
 
-[31927760927](https://github.com/SteveWeed79/steading/actions/runs/31927760927),
+[31927760927](https://github.com/SteveWeed79/evenglow/actions/runs/31927760927),
 at `f149da8`. Build, sign, verify, publish — all of it — and
-**[`v0.1.14+18`](https://github.com/SteveWeed79/steading/releases/tag/v0.1.14%2B18)
-carries `steading-0.1.14-18.apk`**, published 05:10 on 16 August.
+**[`v0.1.14+18`](https://github.com/SteveWeed79/evenglow/releases/tag/v0.1.14%2B18)
+carries `homefarm-0.1.14-18.apk`**, published 05:10 on 16 August.
 
 The key was right the whole time. `ANDROID_CERT_SHA256` matches the APK's
 certificate exactly, 64 characters, no formatting problem — so the comparison
@@ -233,7 +233,7 @@ The step added above ran **`pnpm stamp`**, and there is no `stamp` script in the
 root manifest — it is in `apps/mobile/package.json`. From the repository root
 that exits 254 with `ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL`, which is a hard
 failure of the step, so **the next APK run would have died at step 10 of 14**
-before Gradle. It is now `pnpm --filter @steading/mobile stamp`.
+before Gradle. It is now `pnpm --filter @homefarm/mobile stamp`.
 
 Nothing caught it because nothing could: run 1 predates the step, and there has
 been no run since. It is the third time in this one pipeline that a change was
@@ -328,7 +328,7 @@ Fastify behind it.
 | The whole request path | `curl https://api.swbuild.dev/health` from a machine that is not the box |
 | The database reachable **from the service process**, not just the box | `POST /auth/login` with a junk email returned *"That email or password is not right."* — that route reads `users`, so a clean 401 proves the connection |
 | The server data path against the real database | `pnpm db:verify` — 55/55, including cross-tenant isolation, idempotent replay, role refusals and archive-not-delete |
-| Indexes on the real database | `pnpm db:indexes` reported *Indexes applied to "steadingdb"* |
+| Indexes on the real database | `pnpm db:indexes` reported *Indexes applied to "homefarmdb"* |
 
 > **The last three were run while the data was still on Atlas.** The database
 > has since moved onto the box (below), and none of them has been re-run against
@@ -345,9 +345,9 @@ Fastify behind it.
 | Hostname | `api.swbuild.dev` |
 | DNS | **GoDaddy** holds the zone (`ns71`/`ns72.domaincontrol.com`). Vercel is only the registrar's tenant on the apex — a record added on Vercel's side would be ignored |
 | VCN | `vcn-20260115-1714`, Default Security List, ingress on 22 / 80 / 443 |
-| Database | **`mongod` on this box**, bound to `127.0.0.1`, standalone, **database `steadingdb`**. Atlas is gone |
-| Checkout | `/opt/steading`, tracking `main` |
-| Config | `/etc/steading/api.env`, mode 0600 — `AUTH_SECRET`, `MONGODB_URI`, `MONGODB_DB=steadingdb`, `TRUSTED_PROXY_HOPS=1`, `PORT=3001` |
+| Database | **`mongod` on this box**, bound to `127.0.0.1`, standalone, **database `homefarmdb`**. Atlas is gone |
+| Checkout | `/opt/homefarm`, tracking `main` |
+| Config | `/etc/homefarm/api.env`, mode 0600 — `AUTH_SECRET`, `MONGODB_URI`, `MONGODB_DB=homefarmdb`, `TRUSTED_PROXY_HOPS=1`, `PORT=3001` |
 
 **The database is on the box, and Atlas has been deleted.** That was
 `DEPLOY-THE-SERVER.md`'s *"Moving the database onto the box"* — `setup-mongo.sh`
@@ -363,12 +363,12 @@ Three things follow, and each of them changes an answer this file used to give:
   disks; this is one `mongod`, on one volume, on one instance. See the backups
   item below, which is the same item it always was and now the only one.
 
-**`MONGODB_DB=steadingdb` is load-bearing.** `env.ts` defaults it to `steading`,
+**`MONGODB_DB=homefarmdb` is load-bearing.** `env.ts` defaults it to `homefarm`,
 and this box's database is not called that. Without the line the service starts,
 connects, serves an empty database and reports nothing wrong.
 
 **There is a systemd drop-in on this box that must not be lost yet:**
-`/etc/systemd/system/steading-api.service.d/netlink.conf`. It adds `AF_NETLINK`
+`/etc/systemd/system/homefarm-api.service.d/netlink.conf`. It adds `AF_NETLINK`
 to `RestrictAddressFamilies`, without which the service binds its port and then
 exits 1. The real fix is in PR #100; the drop-in can go once that merges and
 `deploy.sh` has run.
@@ -390,9 +390,9 @@ unattended:
 | `app` job (`apk.yml`) | prebuild, 13 min of Gradle, sign, verify |
 | Release published | `v0.1.15+19`, **tagged at `6bc6b2d`** |
 | The box, on its own timer | deployed `6bc6b2d` before anybody logged in |
-| `deploy.sh` | `v0.1.15+19 -> steading-0.1.15-19.apk`, 92 MB fetched, published |
+| `deploy.sh` | `v0.1.15+19 -> homefarm-0.1.15-19.apk`, 92 MB fetched, published |
 
-`https://api.swbuild.dev/app` now serves `steading-0.1.15-19.apk`. **That
+`https://api.swbuild.dev/app` now serves `homefarm-0.1.15-19.apk`. **That
 address is the install link** — a constant, unlike an EAS artefact url, which
 is new every build and dies after thirty days.
 
@@ -419,7 +419,7 @@ seen on the real box rather than only in tests.
 > stamp all come from one place, and gives a box with no Android SDK the same
 > output as a machine with one. **The filename is deliberately unchanged** —
 > `deploy.sh`'s "already serving" check compares against
-> `steading-<version>-<code>.apk`, and renaming it would have made every box
+> `homefarm-<version>-<code>.apk`, and renaming it would have made every box
 > re-download ninety megabytes on the next tick.
 >
 > `deploy.sh`'s own recovery stamp — the one that reads the symlink when
@@ -496,9 +496,9 @@ Told to do, never confirmed done — worth checking rather than assuming:
       Atlas allowlist too. With the database on the box and reached over
       loopback, that failure mode has gone with it.)*
 - [ ] **Dedupe `MONGODB_DB` in `api.env`.** It was written twice, both
-      `steadingdb`, so the value is right and systemd takes the last one — but a
+      `homefarmdb`, so the value is right and systemd takes the last one — but a
       later edit to the first line would be silently overridden.
-      `sudo grep -c '^MONGODB_DB=' /etc/steading/api.env` should print `1`.
+      `sudo grep -c '^MONGODB_DB=' /etc/homefarm/api.env` should print `1`.
 - [ ] **`rm -f /tmp/dbs.cjs`** — a throwaway script used to list databases.
 - [ ] **Confirm the reboot survives.** `uptime -p` after a `sudo reboot`, then
       `/health` from elsewhere. The unit is enabled and the iptables rules were
@@ -515,10 +515,10 @@ Known and deliberately deferred:
   seen these records.
 
   `scripts/backup-mongo.sh` is written and **now scheduled** —
-  `steading-backup.timer` nightly, `steading-backup-check.timer` failing a unit
+  `homefarm-backup.timer` nightly, `homefarm-backup-check.timer` failing a unit
   when the last one is over thirty-six hours old. What remains is genuinely
   configuration: an S3 bucket and an `age` keypair, public half on the box in
-  `/etc/steading/backup.env`, private half in a password manager. Until those
+  `/etc/homefarm/backup.env`, private half in a password manager. Until those
   exist the timer runs and the script stops on the variable it needs, which is
   a state that reports itself.
 
@@ -554,7 +554,7 @@ Known and deliberately deferred:
 - **A leftover `UDP 5520` "Hytale Ingress" rule** on the live security list.
   Nothing listens on it, so it is a hole to nowhere rather than an exposure.
   Worth removing with the VCN cleanup.
-- **After PR #100 merges:** run `sudo /opt/steading/scripts/deploy/deploy.sh`,
+- **After PR #100 merges:** run `sudo /opt/homefarm/scripts/deploy/deploy.sh`,
   then delete the netlink drop-in, then **re-run `pnpm db:indexes`** — that is
   what creates the unique partial index on `orgs.playPurchaseToken`, and it
   wants to exist *before* Play billing is configured, not after.
@@ -569,7 +569,7 @@ this deployment actually hit, in case they recur:
 | What you see | It is |
 |---|---|
 | Service binds then exits 1, five restarts, `uv_interface_addresses` errno 97 | The missing `AF_NETLINK`. The drop-in above, or PR #100 |
-| Green `/health`, zero farms | `MONGODB_DB` — the database is `steadingdb`, not `steading` |
+| Green `/health`, zero farms | `MONGODB_DB` — the database is `homefarmdb`, not `homefarm` |
 | Two accounts on one email, or nothing ever expires | `pnpm db:indexes` was never run against the real database |
 
 Operational commands are in `OPERATOR.md`. `pnpm farm:ls` and

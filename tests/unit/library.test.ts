@@ -21,7 +21,7 @@ import {
   varietyPayload,
   type FrostDates,
   type LibraryBreed,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 
 /**
  * The bundled reference library.

@@ -1,7 +1,7 @@
 # Check for a new release every five minutes.
 #
-#   sudo systemctl enable --now steading-deploy.timer
-#   systemctl list-timers steading-deploy      # when it last ran and next will
+#   sudo systemctl enable --now homefarm-deploy.timer
+#   systemctl list-timers homefarm-deploy      # when it last ran and next will
 #
 # Five minutes is a compromise between "a fix I just merged is live" and "the
 # box is not hammering GitHub". A run that finds nothing new costs one `git
@@ -17,8 +17,8 @@
 # right the whole time.
 
 [Unit]
-Description=Check for a new Steading release
-Documentation=https://github.com/SteveWeed79/steading/blob/main/docs/DEPLOY-THE-SERVER.md
+Description=Check for a new Evenglow release
+Documentation=https://github.com/SteveWeed79/evenglow/blob/main/docs/DEPLOY-THE-SERVER.md
 
 [Timer]
 # Not immediately at boot. The box has just started; mongod, the API and Caddy

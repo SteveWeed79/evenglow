@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId } from '@steading/contracts';
-import { readSite, readSiteOrBlank } from '@steading/core/read/growing';
-import { enqueue } from '@steading/core/sync/queue';
+import { newId } from '@homefarm/contracts';
+import { readSite, readSiteOrBlank } from '@homefarm/core/read/growing';
+import { enqueue } from '@homefarm/core/sync/queue';
 import { freshStore } from '../support/store';
 import { mount } from '../support/screen';
 import { MyFarmScreen } from '../../apps/mobile/src/screens/MyFarmScreen';
@@ -163,7 +163,7 @@ describe('the promise about data', () => {
 
     // Invariant 13. Hiding is not deleting, and this is the assertion that
     // makes the sentence on the screen true.
-    const { listGroups } = await import('@steading/core/read/groups');
+    const { listGroups } = await import('@homefarm/core/read/groups');
     expect((await listGroups()).map((g) => g.id)).toContain(groupId);
   });
 });

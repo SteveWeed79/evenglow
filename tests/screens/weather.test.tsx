@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { newId } from '@steading/contracts';
-import { readSite } from '@steading/core/read/growing';
-import { enqueue } from '@steading/core/sync/queue';
-import { forgetWeather } from '@steading/core/weather';
+import { newId } from '@homefarm/contracts';
+import { readSite } from '@homefarm/core/read/growing';
+import { enqueue } from '@homefarm/core/sync/queue';
+import { forgetWeather } from '@homefarm/core/weather';
 import { freshStore } from '../support/store';
 import { mount } from '../support/screen';
 import { resetWeatherState } from '../../apps/mobile/src/weather/store';

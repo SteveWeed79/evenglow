@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SUPPORT_BUNDLE_VERSION, type SupportBundle } from '@steading/contracts';
-import { resetApiBase, setApiBase } from '@steading/core/api';
+import { SUPPORT_BUNDLE_VERSION, type SupportBundle } from '@homefarm/contracts';
+import { resetApiBase, setApiBase } from '@homefarm/core/api';
 import {
   flushTickets,
   listTickets,
   pendingTickets,
   raiseTicket,
   ticketAsText,
-} from '@steading/core/support/tickets';
+} from '@homefarm/core/support/tickets';
 import { freshStore, readOutboxBySeq, simulateRestart } from '../support/store';
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { reuseVerdict } from '@steading/api/auth/refresh';
+import { reuseVerdict } from '@homefarm/api/auth/refresh';
 
 /**
  * The decision that either keeps a farm signed in or sends it to a password

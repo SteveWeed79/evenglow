@@ -1,7 +1,8 @@
 import { ulid } from 'ulid';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import type { UserDoc } from '@steading/api/db/identity';
+import type { UserDoc } from '@homefarm/api/db/identity';
 import { startTestDb } from '../support/mongo';
+import { PRODUCT_NAME } from '@homefarm/contracts';
 
 /**
  * The one surface on this box that reads every farm.
@@ -17,11 +18,11 @@ import { startTestDb } from '../support/mongo';
  * only thing between an owner and every other farm's numbers is the role check.
  */
 
-const harness = await startTestDb('steading_ops_board');
+const harness = await startTestDb('homefarm_ops_board');
 
 if (harness) {
   process.env.MONGODB_URI = harness.uri;
-  process.env.MONGODB_DB = 'steading_ops_board';
+  process.env.MONGODB_DB = 'homefarm_ops_board';
 }
 
 const describeDb = harness ? describe : describe.skip;
@@ -50,19 +51,19 @@ type TestUser = (typeof USERS)[keyof typeof USERS];
 const emailOf = (user: TestUser) => `${user._id.toLowerCase()}@example.test`;
 
 async function buildApp() {
-  const { buildOpsServer } = await import('@steading/api/ops/server');
-  const { readEnv } = await import('@steading/api/env');
+  const { buildOpsServer } = await import('@homefarm/api/ops/server');
+  const { readEnv } = await import('@homefarm/api/env');
   return buildOpsServer(
     readEnv({
       AUTH_SECRET: SECRET,
       MONGODB_URI: harness!.uri,
-      MONGODB_DB: 'steading_ops_board',
+      MONGODB_DB: 'homefarm_ops_board',
     }),
   );
 }
 
 async function tokenFor(user: TestUser): Promise<string> {
-  const { mintAccessToken } = await import('@steading/api/auth/tokens');
+  const { mintAccessToken } = await import('@homefarm/api/auth/tokens');
   return mintAccessToken({ userId: user._id, orgId: user.orgId, role: user.role }, SECRET);
 }
 
@@ -90,8 +91,8 @@ async function post(path: string, payload: unknown, user?: TestUser) {
 }
 
 beforeEach(async () => {
-  const { hashPassword } = await import('@steading/api/auth/password');
-  const { insertOrg, insertUser } = await import('@steading/api/db/identity');
+  const { hashPassword } = await import('@homefarm/api/auth/password');
+  const { insertOrg, insertUser } = await import('@homefarm/api/db/identity');
 
   for (const name of [
     'users',
@@ -312,7 +313,7 @@ describeDb('the page', () => {
     const answer = await get('/');
 
     expect(answer.status).toBe(200);
-    expect(answer.body).toContain('Steading operations');
+    expect(answer.body).toContain(`${PRODUCT_NAME} operations`);
   });
 
   /** Nothing about a farm reaches the browser before somebody has signed in. */
@@ -345,7 +346,7 @@ describeDb('an operator who no longer is one', () => {
   it('is refused the board once the row says otherwise', async () => {
     // The token still says admin, because it was minted before this.
     const token = await tokenFor(USERS.admin);
-    const { setOperator } = await import('@steading/api/db/identity');
+    const { setOperator } = await import('@homefarm/api/db/identity');
     await setOperator(emailOf(USERS.admin), null);
 
     const app = await buildApp();
@@ -362,7 +363,7 @@ describeDb('an operator who no longer is one', () => {
   /** And the two routes that write, which is where it actually mattered. */
   it('cannot mint a promotion code with a stale token', async () => {
     const token = await tokenFor(USERS.admin);
-    const { setOperator } = await import('@steading/api/db/identity');
+    const { setOperator } = await import('@homefarm/api/db/identity');
     await setOperator(emailOf(USERS.admin), null);
 
     const app = await buildApp();
@@ -380,7 +381,7 @@ describeDb('an operator who no longer is one', () => {
 
   it('cannot grant a farm free sync with a stale token', async () => {
     const token = await tokenFor(USERS.admin);
-    const { setOperator } = await import('@steading/api/db/identity');
+    const { setOperator } = await import('@homefarm/api/db/identity');
     await setOperator(emailOf(USERS.admin), null);
 
     const app = await buildApp();
@@ -441,7 +442,7 @@ describeDb('what the board says about the sweep', () => {
   });
 
   it('reports a pass recorded by another process', async () => {
-    const { recordSweep } = await import('@steading/api/db/sweep-status');
+    const { recordSweep } = await import('@homefarm/api/db/sweep-status');
     await recordSweep({
       at: new Date(),
       host: 'the-api-unit',
@@ -462,7 +463,7 @@ describeDb('what the board says about the sweep', () => {
   });
 
   it('carries a failed pass, which is the one worth seeing', async () => {
-    const { recordSweep } = await import('@steading/api/db/sweep-status');
+    const { recordSweep } = await import('@homefarm/api/db/sweep-status');
     await recordSweep({
       at: new Date(),
       host: 'the-api-unit',
@@ -478,7 +479,7 @@ describeDb('what the board says about the sweep', () => {
 
   /** A pass that stopped at its ceiling is not the same as one that finished. */
   it('says when the last pass stopped short', async () => {
-    const { recordSweep } = await import('@steading/api/db/sweep-status');
+    const { recordSweep } = await import('@homefarm/api/db/sweep-status');
     await recordSweep({
       at: new Date(),
       host: 'the-api-unit',
@@ -622,7 +623,7 @@ describeDb('a farm admin, which any owner can create', () => {
    * plain `hand` on their own farm is the ordinary case — most operators are.
    */
   it('is not what the board reads, in either direction', async () => {
-    const { setOperator } = await import('@steading/api/db/identity');
+    const { setOperator } = await import('@homefarm/api/db/identity');
     await setOperator(emailOf(USERS.hand), new Date());
 
     expect((await get('/board', USERS.hand)).status).toBe(200);
@@ -639,7 +640,7 @@ describeDb('a farm admin, which any owner can create', () => {
  */
 describeDb('who may be made an operator', () => {
   it('is nobody, on a fresh server', async () => {
-    const { listOperators } = await import('@steading/api/db/identity');
+    const { listOperators } = await import('@homefarm/api/db/identity');
     await harness!.db.collection('users').updateMany({}, { $unset: { operatorSince: '' } });
 
     expect(await listOperators()).toHaveLength(0);
@@ -647,7 +648,7 @@ describeDb('who may be made an operator', () => {
   });
 
   it('is granted and taken back by email', async () => {
-    const { setOperator } = await import('@steading/api/db/identity');
+    const { setOperator } = await import('@homefarm/api/db/identity');
 
     expect(await setOperator(emailOf(USERS.owner), new Date())).toBe(true);
     expect((await get('/board', USERS.owner)).status).toBe(200);
@@ -657,7 +658,7 @@ describeDb('who may be made an operator', () => {
   });
 
   it('says so when the address belongs to nobody', async () => {
-    const { setOperator } = await import('@steading/api/db/identity');
+    const { setOperator } = await import('@homefarm/api/db/identity');
     expect(await setOperator('nobody@example.test', new Date())).toBe(false);
   });
 
@@ -667,7 +668,7 @@ describeDb('who may be made an operator', () => {
    * bought, now doing a second job.
    */
   it('stops a board session already in flight', async () => {
-    const { setOperator } = await import('@steading/api/db/identity');
+    const { setOperator } = await import('@homefarm/api/db/identity');
     const token = await tokenFor(USERS.admin);
 
     const app = await buildApp();

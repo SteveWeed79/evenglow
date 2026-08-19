@@ -93,13 +93,13 @@ describe('the tag format, now shared', () => {
 describe('turning the origin remote into a repository', () => {
   it('reads the forms git actually prints', () => {
     for (const remote of [
-      'https://github.com/SteveWeed79/steading',
-      'https://github.com/SteveWeed79/steading.git',
-      'https://github.com/SteveWeed79/steading/',
-      'git@github.com:SteveWeed79/steading.git',
-      'ssh://git@github.com/SteveWeed79/steading.git',
+      'https://github.com/SteveWeed79/evenglow',
+      'https://github.com/SteveWeed79/evenglow.git',
+      'https://github.com/SteveWeed79/evenglow/',
+      'git@github.com:SteveWeed79/evenglow.git',
+      'ssh://git@github.com/SteveWeed79/evenglow.git',
     ]) {
-      expect(repoSlug(remote), remote).toBe('SteveWeed79/steading');
+      expect(repoSlug(remote), remote).toBe('SteveWeed79/evenglow');
     }
   });
 
@@ -114,10 +114,10 @@ describe('turning the origin remote into a repository', () => {
    */
   it('refuses a remote that is not GitHub', () => {
     for (const remote of [
-      'https://github.com.example.net/SteveWeed79/steading.git',
-      'https://gitlab.com/SteveWeed79/steading.git',
-      'git@example.com:SteveWeed79/steading.git',
-      '/srv/git/steading.git',
+      'https://github.com.example.net/SteveWeed79/evenglow.git',
+      'https://gitlab.com/SteveWeed79/evenglow.git',
+      'git@example.com:SteveWeed79/evenglow.git',
+      '/srv/git/homefarm.git',
       '',
     ]) {
       expect(repoSlug(remote), remote).toBeNull();
@@ -128,7 +128,7 @@ describe('turning the origin remote into a repository', () => {
     for (const remote of [
       'https://github.com/SteveWeed79',
       'https://github.com/owner/name/tree/main',
-      'git@github.com:steading.git',
+      'git@github.com:homefarm.git',
     ]) {
       expect(repoSlug(remote), remote).toBeNull();
     }
@@ -176,10 +176,10 @@ describe('finding the release for a tag', () => {
 
 describe('the APK on a release', () => {
   const asset = (over: Record<string, unknown> = {}) => ({
-    name: 'steading-0.1.13-18.apk',
+    name: 'homefarm-0.1.13-18.apk',
     state: 'uploaded',
     browser_download_url:
-      'https://github.com/SteveWeed79/steading/releases/download/v0.1.13%2B18/steading-0.1.13-18.apk',
+      'https://github.com/SteveWeed79/evenglow/releases/download/v0.1.13%2B18/homefarm-0.1.13-18.apk',
     ...over,
   });
 
@@ -203,12 +203,12 @@ describe('the APK on a release', () => {
   it('takes the one that is there', () => {
     const found = accepted({ assets: [asset()] });
     expect(found.url).toMatch(/^https:\/\/github\.com\//);
-    expect(found.name).toBe('steading-0.1.13-18.apk');
+    expect(found.name).toBe('homefarm-0.1.13-18.apk');
   });
 
   it('ignores whatever else is attached', () => {
     expect(accepted({ assets: [{ name: 'notes.txt' }, asset()] }).name).toBe(
-      'steading-0.1.13-18.apk',
+      'homefarm-0.1.13-18.apk',
     );
   });
 
@@ -218,7 +218,7 @@ describe('the APK on a release', () => {
    * farm's shelf that nobody decided to put there.
    */
   it('refuses two rather than choosing', () => {
-    expect(refused({ assets: [asset(), asset({ name: 'steading-0.1.13-19.apk' })] })).toMatch(
+    expect(refused({ assets: [asset(), asset({ name: 'homefarm-0.1.13-19.apk' })] })).toMatch(
       /refusing to guess/,
     );
   });

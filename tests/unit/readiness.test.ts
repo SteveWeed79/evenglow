@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { readEnv } from '@steading/api/env';
-import { buildServer } from '@steading/api/server';
+import { readEnv } from '@homefarm/api/env';
+import { buildServer } from '@homefarm/api/server';
 import { startTestDb } from '../support/mongo';
 
 /**
@@ -24,7 +24,7 @@ import { startTestDb } from '../support/mongo';
 const SECRET = 'a-test-secret-long-enough-for-hs256-abcdef';
 
 /** Fails at the driver's scheme check, so the test costs no timeout. */
-const NO_SUCH_DATABASE = 'mongo://farmer@cluster.example.invalid/steading';
+const NO_SUCH_DATABASE = 'mongo://farmer@cluster.example.invalid/homefarm';
 
 function env(uri: string, dbName?: string) {
   return readEnv({
@@ -50,13 +50,13 @@ function useDatabaseUri(uri: string, dbName?: string): void {
     savedName = process.env.MONGODB_DB;
     process.env.MONGODB_URI = uri;
     if (dbName !== undefined) process.env.MONGODB_DB = dbName;
-    globalThis.__steadingMongoClient = undefined;
+    globalThis.__homefarmMongoClient = undefined;
   });
 
   afterEach(() => {
     restore('MONGODB_URI', savedUri);
     restore('MONGODB_DB', savedName);
-    globalThis.__steadingMongoClient = undefined;
+    globalThis.__homefarmMongoClient = undefined;
   });
 }
 
@@ -107,7 +107,7 @@ describe('a process that cannot reach its database', () => {
 });
 
 /** Its own database name, so nothing here can collide with another suite's. */
-const harness = await startTestDb('steading_readiness');
+const harness = await startTestDb('homefarm_readiness');
 const describeDb = harness ? describe : describe.skip;
 
 afterAll(async () => {
@@ -115,10 +115,10 @@ afterAll(async () => {
 });
 
 describeDb('a process that can', () => {
-  useDatabaseUri(harness?.uri ?? '', 'steading_readiness');
+  useDatabaseUri(harness?.uri ?? '', 'homefarm_readiness');
 
   it('answers /ready once the connection opens', async () => {
-    const app = await buildServer(env(harness!.uri, 'steading_readiness'));
+    const app = await buildServer(env(harness!.uri, 'homefarm_readiness'));
 
     const res = await app.inject({ method: 'GET', url: '/ready' });
 

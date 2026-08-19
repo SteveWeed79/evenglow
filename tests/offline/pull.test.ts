@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { pulledThrough, pullOnce, type PullTransport } from '@steading/core/sync/pull';
-import { enqueue, queueDepth } from '@steading/core/sync/queue';
-import { flushOnce } from '@steading/core/sync/flush';
-import { MUTATION_SCHEMA_VERSION, newId, type PulledMutation } from '@steading/contracts';
+import { pulledThrough, pullOnce, type PullTransport } from '@homefarm/core/sync/pull';
+import { enqueue, queueDepth } from '@homefarm/core/sync/queue';
+import { flushOnce } from '@homefarm/core/sync/flush';
+import { MUTATION_SCHEMA_VERSION, newId, type PulledMutation } from '@homefarm/contracts';
 import { freshStore, readAllRecords } from '../support/store';
 
 const DEVICE = '00000000-0000-4000-8000-0000000000ff';

@@ -137,7 +137,7 @@ if (isEntryPoint()) {
   const env = readEnv();
   const app = await buildServer(env);
   await app.listen({ port: env.PORT, host: '0.0.0.0' });
-  console.log(`steading api listening on :${env.PORT}`);
+  console.log(`homefarm api listening on :${env.PORT}`);
 
   /**
    * Here rather than in `buildServer`, so importing this module in a test binds
@@ -155,8 +155,8 @@ if (isEntryPoint()) {
    * **Every clean restart was being recorded as a failure**, which is the sort
    * of thing that costs nothing until the day it matters:
    *
-   *   steading-api.service: Main process exited, code=exited, status=143/n/a
-   *   steading-api.service: Failed with result 'exit-code'.
+   *   homefarm-api.service: Main process exited, code=exited, status=143/n/a
+   *   homefarm-api.service: Failed with result 'exit-code'.
    *
    * 143 is 128 + SIGTERM. Node installs no handler for it, so the default
    * action terminates the process and systemd sees a non-zero exit. Nothing

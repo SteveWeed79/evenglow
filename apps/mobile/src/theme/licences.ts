@@ -33,9 +33,9 @@ export const FONT_LICENCES: readonly FontLicence[] = [
     source: 'https://github.com/huertatipografica/Alegreya-Sans',
   },
   {
-    family: 'IBM Plex Mono',
-    notice: 'Copyright \u00a9 2017 IBM Corp. with Reserved Font Name "Plex"',
-    source: 'https://github.com/IBM/plex',
+    family: 'Recursive Mono Casual',
+    notice: 'Copyright 2019 The Recursive Project Authors',
+    source: 'https://github.com/arrowtype/recursive',
   },
 ];
 

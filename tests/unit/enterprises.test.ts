@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ENTERPRISES, type Enterprise } from '@steading/contracts';
+import { ENTERPRISES, type Enterprise } from '@homefarm/contracts';
 import { TAB_MARKS, tabs } from '../../apps/mobile/src/navigation/tab-marks';
 
 /**

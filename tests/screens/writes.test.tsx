@@ -1,21 +1,21 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId, poundsToUg, serviceDue } from '@steading/contracts';
-import { listAnimals } from '@steading/core/read/animals';
-import { listBreedings, listIncubations, listWeights } from '@steading/core/read/breeding';
-import { listCareLogs } from '@steading/core/read/care';
-import { listHistory } from '@steading/core/read/history';
+import { newId, poundsToUg, serviceDue } from '@homefarm/contracts';
+import { listAnimals } from '@homefarm/core/read/animals';
+import { listBreedings, listIncubations, listWeights } from '@homefarm/core/read/breeding';
+import { listCareLogs } from '@homefarm/core/read/care';
+import { listHistory } from '@homefarm/core/read/history';
 import {
   currentFeedPlans,
   lastFedByGroup,
   listGroups,
   lossesByGroup,
   produceToday,
-} from '@steading/core/read/groups';
-import { listBeds, listHarvests, listPlantings, listVarieties, readSite } from '@steading/core/read/growing';
-import { listInventory, listMachines, listServices } from '@steading/core/read/iron';
-import { listTasks } from '@steading/core/read/tasks';
-import { enqueue } from '@steading/core/sync/queue';
-import { localStore } from '@steading/core/db/store';
+} from '@homefarm/core/read/groups';
+import { listBeds, listHarvests, listPlantings, listVarieties, readSite } from '@homefarm/core/read/growing';
+import { listInventory, listMachines, listServices } from '@homefarm/core/read/iron';
+import { listTasks } from '@homefarm/core/read/tasks';
+import { enqueue } from '@homefarm/core/sync/queue';
+import { localStore } from '@homefarm/core/db/store';
 import { freshStore } from '../support/store';
 import { mount, routeProps } from '../support/screen';
 import { navCalls, setBackable } from '../support/native/navigation';
@@ -1333,11 +1333,11 @@ describe('shearing', () => {
     await screen.press('save-clip');
     screen.unmount();
 
-    const { listHistory } = await import('@steading/core/read/history');
+    const { listHistory } = await import('@homefarm/core/read/history');
     const days = await listHistory('imperial');
     expect(days[0]?.events[0]?.title).toContain('Shorn');
 
-    const { buildExport } = await import('@steading/core/export/csv');
+    const { buildExport } = await import('@homefarm/core/export/csv');
     expect((await buildExport()).some((s) => s.name === 'shearing')).toBe(true);
   });
 });

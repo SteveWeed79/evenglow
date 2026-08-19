@@ -8,10 +8,10 @@ import { describeProbe, readSupportEnv } from '../../scripts/lib/support-probe.m
  * ## The fault this closes
  *
  * `Check my setup` read `SUPPORT_GITHUB_TOKEN` out of this PC's `.env.local`
- * and printed "reporting files issues to SteveWeed79/steading". That file
+ * and printed "reporting files issues to SteveWeed79/evenglow". That file
  * configures the server running on the laptop. Once `Use the farm server`
  * pointed the build at the deployed box — a different machine, with its own
- * `/etc/steading/api.env` and nothing in it — the check went on reporting the
+ * `/etc/homefarm/api.env` and nothing in it — the check went on reporting the
  * laptop's configuration for a server the app no longer spoke to.
  *
  * So it read OK on the exact morning a handset was being told *this server has
@@ -22,10 +22,10 @@ import { describeProbe, readSupportEnv } from '../../scripts/lib/support-probe.m
 describe('reading the two support lines out of a dotenv file', () => {
   it('reports a configured pair without ever returning the token', () => {
     const read = readSupportEnv(
-      ['AUTH_SECRET=nope', 'SUPPORT_GITHUB_TOKEN=github_pat_11ABC', 'SUPPORT_REPO=SteveWeed79/steading'].join('\n'),
+      ['AUTH_SECRET=nope', 'SUPPORT_GITHUB_TOKEN=github_pat_11ABC', 'SUPPORT_REPO=SteveWeed79/evenglow'].join('\n'),
     );
 
-    expect(read).toEqual({ token: true, repo: 'SteveWeed79/steading' });
+    expect(read).toEqual({ token: true, repo: 'SteveWeed79/evenglow' });
     // This output gets pasted into a chat window, so the value must not be in
     // the shape at all rather than merely not printed by today's caller.
     expect(JSON.stringify(read)).not.toContain('github_pat');
@@ -37,14 +37,14 @@ describe('reading the two support lines out of a dotenv file', () => {
    * ready to file, which is the same false OK in a different disguise.
    */
   it('does not read a commented-out line as configuration', () => {
-    const example = ['# SUPPORT_GITHUB_TOKEN=', '# SUPPORT_REPO=SteveWeed79/steading'].join('\n');
+    const example = ['# SUPPORT_GITHUB_TOKEN=', '# SUPPORT_REPO=SteveWeed79/evenglow'].join('\n');
 
     expect(readSupportEnv(example)).toEqual({ token: false, repo: null });
   });
 
   /** The box template comments them without a space, systemd style. */
   it('does not read #SUPPORT_REPO= either', () => {
-    expect(readSupportEnv('#SUPPORT_REPO=SteveWeed79/steading').repo).toBeNull();
+    expect(readSupportEnv('#SUPPORT_REPO=SteveWeed79/evenglow').repo).toBeNull();
   });
 
   it('calls an empty value unset, because systemd would pass it as one', () => {

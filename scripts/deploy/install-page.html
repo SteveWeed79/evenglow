@@ -2,7 +2,7 @@
 <!--
   What a tester sees at https://api.swbuild.dev/app
 
-  Served by Caddy from /var/lib/steading/dist; put there by publish-apk.sh,
+  Served by Caddy from /var/lib/homefarm/dist; put there by publish-apk.sh,
   which refreshes it on every publish so it is reviewed in the repo rather than
   edited on the box and forgotten.
 
@@ -32,7 +32,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Install Steading</title>
+    <title>Install Evenglow</title>
     <style>
       :root {
         --ground: #ede6d2;
@@ -118,10 +118,10 @@
     </style>
   </head>
   <body>
-    <h1>Steading</h1>
+    <h1>Evenglow</h1>
     <p class="sub">Farm records that work without a signal.</p>
 
-    <a class="get" id="get" href="steading.apk">Install on this phone</a>
+    <a class="get" id="get" href="homefarm.apk">Install on this phone</a>
     <!-- Filled in by publish-apk.sh from the APK itself, so it describes the
          file actually being served rather than whatever was last committed.
          Left empty on a box with nothing published. -->
@@ -197,7 +197,7 @@
        */
       (function () {
         if (typeof fetch !== 'function') return;
-        fetch('steading.apk', { method: 'HEAD' })
+        fetch('homefarm.apk', { method: 'HEAD' })
           .then(function (response) {
             var type = response.headers.get('content-type') || '';
             if (type.indexOf('android.package-archive') !== -1) return;

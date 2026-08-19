@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId } from '@steading/contracts';
-import { localStore } from '@steading/core/db/store';
+import { newId } from '@homefarm/contracts';
+import { localStore } from '@homefarm/core/db/store';
 import { freshStore } from '../support/store';
 
 /**

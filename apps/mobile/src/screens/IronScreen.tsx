@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { listInventory, listMachines, type Machine, runningLow } from '@steading/core/read/iron';
+import { listInventory, listMachines, type Machine, runningLow } from '@homefarm/core/read/iron';
 import { Primary, Row } from '../components/Form';
 import { Grid } from '../components/Grid';
 import { Icon } from '../components/Icon';

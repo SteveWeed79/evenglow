@@ -2,7 +2,7 @@
 #
 # MongoDB on the box, beside the API.
 #
-#   sudo /opt/steading/scripts/deploy/setup-mongo.sh
+#   sudo /opt/homefarm/scripts/deploy/setup-mongo.sh
 #
 # The second half of `ACCESS-AND-BILLING.md` §4.1a, which always said both
 # Fastify and MongoDB run on the one free instance. This is now the only place
@@ -37,22 +37,22 @@ BIND_IP="127.0.0.1"
 # argon2 and the page cache. WiredTiger otherwise claims
 # max(0.5 × (RAM − 1 GB), 256 MB) — around 5.5 GB here — which it does not need
 # for a working set this size and which competes with the API for the same RAM.
-CACHE_GB="${STEADING_MONGO_CACHE_GB:-2}"
+CACHE_GB="${HOMEFARM_MONGO_CACHE_GB:-2}"
 
 # **Which database the application account is granted on, and it is not always
-# `steading`.**
+# `homefarm`.**
 #
 # The API chooses its database from MONGODB_DB, independently of the connection
 # string (`db/client.ts`). A cluster named `steadingdb` holding a
 # database also named `steadingdb` is an ordinary thing to end up with — and
-# this script used to grant readWrite on `steading` regardless, so the restore
+# this script used to grant readWrite on `homefarm` regardless, so the restore
 # that followed failed with "not authorized" against a database the account had
 # never been given.
 #
 # Pass it the same way the API and the migration take it:
 #
 #   sudo MONGODB_DB=steadingdb ./setup-mongo.sh
-DB_NAME="${MONGODB_DB:-steading}"
+DB_NAME="${MONGODB_DB:-homefarm}"
 
 say() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 note() { printf '   %s\n' "$*"; }
@@ -96,13 +96,13 @@ command -v mongodump >/dev/null 2>&1 || die "mongodump is missing. The mongodb-o
 # created, then again with it on. See the account section for why the obvious
 # order does not work.
 say "Configuring"
-BACKUP="/etc/mongod.conf.before-steading"
+BACKUP="/etc/mongod.conf.before-homefarm"
 [ -f "$BACKUP" ] || cp /etc/mongod.conf "$BACKUP"
 
 write_conf() {
   cat > /etc/mongod.conf <<CONF
 # Written by scripts/deploy/setup-mongo.sh. The original is at
-# /etc/mongod.conf.before-steading.
+# /etc/mongod.conf.before-homefarm.
 
 storage:
   dbPath: /var/lib/mongodb
@@ -151,7 +151,7 @@ systemctl enable mongod >/dev/null
 # and MongoDB refuses it:
 #
 #   MongoServerError: not authorized on admin to execute command
-#   { createUser: "steading", roles: [ { role: "readWrite", db: "steadingdb" } ] }
+#   { createUser: "homefarm", roles: [ { role: "readWrite", db: "steadingdb" } ] }
 #
 # The localhost exception — which is what lets anyone create the first account
 # on a fresh deployment with auth enabled — permits creating **a user who can
@@ -179,15 +179,15 @@ wait_for_mongo
 note "authorization off while the account is created"
 
 say "Application account"
-EXISTS="$(mongosh --quiet admin --eval 'db.getSiblingDB("admin").system.users.countDocuments({user:"steading"})' 2>/dev/null || echo 0)"
+EXISTS="$(mongosh --quiet admin --eval 'db.getSiblingDB("admin").system.users.countDocuments({user:"homefarm"})' 2>/dev/null || echo 0)"
 
 if [ "$EXISTS" = "0" ]; then
   # Generated here and printed once. Not written to any file by this script —
-  # you paste it into /etc/steading/api.env, which is the only place it lives.
+  # you paste it into /etc/homefarm/api.env, which is the only place it lives.
   PASSWORD="$(openssl rand -base64 36 | tr -d '/+=' | head -c 40)"
   mongosh --quiet admin --eval "
     db.createUser({
-      user: 'steading',
+      user: 'homefarm',
       pwd: '${PASSWORD}',
       roles: [
         { role: 'readWrite', db: '${DB_NAME}' },
@@ -199,20 +199,20 @@ if [ "$EXISTS" = "0" ]; then
 
   cat <<KEY
 
-$(printf '\033[1m')Put this in /etc/steading/api.env, then start the API:$(printf '\033[0m')
+$(printf '\033[1m')Put this in /etc/homefarm/api.env, then start the API:$(printf '\033[0m')
 
-MONGODB_URI=mongodb://steading:${PASSWORD}@127.0.0.1:27017/${DB_NAME}?authSource=admin
+MONGODB_URI=mongodb://homefarm:${PASSWORD}@127.0.0.1:27017/${DB_NAME}?authSource=admin
 
   It is printed once and stored nowhere else. If you lose it, re-create the
   user rather than guessing:
 
-    mongosh admin --eval 'db.dropUser("steading")'
+    mongosh admin --eval 'db.dropUser("homefarm")'
     sudo $0
 
 KEY
 else
   note "already exists — password left alone"
-  note "the URI shape is: mongodb://steading:<password>@127.0.0.1:27017/${DB_NAME}?authSource=admin"
+  note "the URI shape is: mongodb://homefarm:<password>@127.0.0.1:27017/${DB_NAME}?authSource=admin"
 fi
 
 # ── and now lock it ─────────────────────────────────────────────────────────
@@ -239,7 +239,7 @@ $(printf '\033[1m')Next:$(printf '\033[0m')
 
   1. Only if you are moving off a managed cluster, bring the data across:
 
-       sudo /opt/steading/scripts/deploy/migrate-to-local-mongo.sh
+       sudo /opt/homefarm/scripts/deploy/migrate-to-local-mongo.sh
 
      A fresh box has nothing to migrate and starts empty.
 

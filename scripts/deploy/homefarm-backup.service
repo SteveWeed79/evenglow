@@ -1,10 +1,10 @@
-# One nightly backup. Started by steading-backup.timer, not by hand — though
-# `sudo systemctl start steading-backup` is the right way to force one.
+# One nightly backup. Started by homefarm-backup.timer, not by hand — though
+# `sudo systemctl start homefarm-backup` is the right way to force one.
 #
-#   sudo cp scripts/deploy/steading-backup.{service,timer} /etc/systemd/system/
-#   sudo cp scripts/deploy/steading-backup-check.{service,timer} /etc/systemd/system/
+#   sudo cp scripts/deploy/homefarm-backup.{service,timer} /etc/systemd/system/
+#   sudo cp scripts/deploy/homefarm-backup-check.{service,timer} /etc/systemd/system/
 #   sudo systemctl daemon-reload
-#   sudo systemctl enable --now steading-backup.timer steading-backup-check.timer
+#   sudo systemctl enable --now homefarm-backup.timer homefarm-backup-check.timer
 #
 # ## Why this file exists at all
 #
@@ -16,7 +16,7 @@
 #
 # ## Where the settings come from
 #
-# `/etc/steading/backup.env`, its own file rather than `api.env`, because the
+# `/etc/homefarm/backup.env`, its own file rather than `api.env`, because the
 # two hold different secrets for different jobs — the API's database password
 # and auth secret have no business in a unit that talks to S3, and the bucket
 # credentials have no business in the API. `EnvironmentFile` with a leading `-`
@@ -24,31 +24,31 @@
 # sentence naming the variable, rather than systemd refusing to start the unit.
 #
 #   MONGODB_URI                  the same value api.env has
-#   STEADING_BACKUP_BUCKET       s3://bucket/prefix
-#   STEADING_BACKUP_RECIPIENT    the age PUBLIC key, age1...
+#   HOMEFARM_BACKUP_BUCKET       s3://bucket/prefix
+#   HOMEFARM_BACKUP_RECIPIENT    the age PUBLIC key, age1...
 #   AWS_ACCESS_KEY_ID            an IAM user that can only PutObject on the prefix
 #   AWS_SECRET_ACCESS_KEY
 #   AWS_DEFAULT_REGION
 #
-# **No STEADING_BACKUP_IDENTITY.** The private half of the age key must never be
+# **No HOMEFARM_BACKUP_IDENTITY.** The private half of the age key must never be
 # on this machine — that is the whole argument for encrypting to a public key,
 # and it is why a restore is a deliberate act somewhere else.
 
 [Unit]
-Description=Encrypted off-box backup of the Steading database
-Documentation=https://github.com/SteveWeed79/steading/blob/main/docs/DEPLOY-THE-SERVER.md
+Description=Encrypted off-box backup of the Evenglow database
+Documentation=https://github.com/SteveWeed79/evenglow/blob/main/docs/DEPLOY-THE-SERVER.md
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
 
-# Root, to read /etc/steading and write the marker under /var/lib/steading. It
+# Root, to read /etc/homefarm and write the marker under /var/lib/homefarm. It
 # is a scheduled job with no listening socket, so it has no attack surface of
 # its own beyond the bucket it writes to.
 User=root
-EnvironmentFile=-/etc/steading/backup.env
-ExecStart=/opt/steading/scripts/backup-mongo.sh backup
+EnvironmentFile=-/etc/homefarm/backup.env
+ExecStart=/opt/homefarm/scripts/backup-mongo.sh backup
 
 # A dump of a farm's records over a home connection, with room for a slow one.
 # It must not still be running when tomorrow's starts underneath it.
@@ -56,4 +56,4 @@ TimeoutStartSec=3600
 
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=steading-backup
+SyslogIdentifier=homefarm-backup

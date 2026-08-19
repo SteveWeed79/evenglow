@@ -3,7 +3,7 @@ import {
   VERIFY_CODE_ALPHABET,
   VERIFY_CODE_LENGTH,
   VERIFY_MAX_ATTEMPTS,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 import { hashCode, mintCode } from '../auth/one-time-code';
 import { db } from './client';
 

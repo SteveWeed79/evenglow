@@ -1,6 +1,6 @@
 import { ulid } from 'ulid';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import type { UserDoc } from '@steading/api/db/identity';
+import type { UserDoc } from '@homefarm/api/db/identity';
 import { startTestDb } from '../support/mongo';
 
 /**
@@ -21,11 +21,11 @@ import { startTestDb } from '../support/mongo';
  * proves it does.
  */
 
-const harness = await startTestDb('steading_photo_bytes');
+const harness = await startTestDb('homefarm_photo_bytes');
 
 if (harness) {
   process.env.MONGODB_URI = harness.uri;
-  process.env.MONGODB_DB = 'steading_photo_bytes';
+  process.env.MONGODB_DB = 'homefarm_photo_bytes';
 }
 
 const SECRET = 'a-test-secret-long-enough-for-hs256-abcdef';
@@ -45,20 +45,20 @@ type TestUser = (typeof USERS)[keyof typeof USERS];
 const BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
 
 async function buildApp() {
-  const { buildServer } = await import('@steading/api/server');
-  const { readEnv } = await import('@steading/api/env');
+  const { buildServer } = await import('@homefarm/api/server');
+  const { readEnv } = await import('@homefarm/api/env');
   return buildServer(
     readEnv({
       AUTH_SECRET: SECRET,
       MONGODB_URI: harness!.uri,
-      MONGODB_DB: 'steading_photo_bytes',
+      MONGODB_DB: 'homefarm_photo_bytes',
       CORS_ORIGINS: 'https://app.test',
     }),
   );
 }
 
 async function tokenFor(user: TestUser): Promise<string> {
-  const { mintAccessToken } = await import('@steading/api/auth/tokens');
+  const { mintAccessToken } = await import('@homefarm/api/auth/tokens');
   return mintAccessToken({ userId: user._id, orgId: user.orgId, role: user.role }, SECRET);
 }
 
@@ -249,7 +249,7 @@ describeDb('photo bytes', () => {
       await record(id, ORG_A);
       await put(USERS.ownerA, id);
 
-      const { blobsFor } = await import('@steading/api/db/blobs');
+      const { blobsFor } = await import('@homefarm/api/db/blobs');
 
       expect(await (await blobsFor(ORG_B)).get(id)).toBeNull();
       expect(await (await blobsFor(ORG_B)).head(id)).toBeNull();
@@ -265,7 +265,7 @@ describeDb('photo bytes', () => {
       await record(id, ORG_A);
       await put(USERS.ownerA, id);
 
-      const { blobsFor } = await import('@steading/api/db/blobs');
+      const { blobsFor } = await import('@homefarm/api/db/blobs');
       await (await blobsFor(ORG_B)).remove(id);
 
       expect((await get(USERS.ownerA, id)).body.equals(BYTES)).toBe(true);
@@ -475,8 +475,8 @@ describeDb('deleting a photo', () => {
   });
 
   async function archive(id: string): Promise<void> {
-    const { scopedOn } = await import('@steading/api/db/scoped');
-    const { applyBatch } = await import('@steading/api/sync/apply');
+    const { scopedOn } = await import('@homefarm/api/db/scoped');
+    const { applyBatch } = await import('@homefarm/api/sync/apply');
     const { makeMutation } = await import('../support/fixtures');
 
     await applyBatch(

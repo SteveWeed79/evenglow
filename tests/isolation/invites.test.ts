@@ -1,6 +1,6 @@
 import { ulid } from 'ulid';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import type { UserDoc } from '@steading/api/db/identity';
+import type { UserDoc } from '@homefarm/api/db/identity';
 import { startTestDb } from '../support/mongo';
 
 /**
@@ -16,11 +16,11 @@ import { startTestDb } from '../support/mongo';
  * is about.
  */
 
-const harness = await startTestDb('steading_invites');
+const harness = await startTestDb('homefarm_invites');
 
 if (harness) {
   process.env.MONGODB_URI = harness.uri;
-  process.env.MONGODB_DB = 'steading_invites';
+  process.env.MONGODB_DB = 'homefarm_invites';
 }
 
 const SECRET = 'a-test-secret-long-enough-for-hs256-abcdef';
@@ -38,13 +38,13 @@ const email = (id: string): string => `u-${id}@example.test`.toLowerCase();
 const describeDb = harness ? describe : describe.skip;
 
 async function server() {
-  const { buildServer } = await import('@steading/api/server');
-  const { readEnv } = await import('@steading/api/env');
+  const { buildServer } = await import('@homefarm/api/server');
+  const { readEnv } = await import('@homefarm/api/env');
   return buildServer(
     readEnv({
       AUTH_SECRET: SECRET,
       MONGODB_URI: harness!.uri,
-      MONGODB_DB: 'steading_invites',
+      MONGODB_DB: 'homefarm_invites',
       CORS_ORIGINS: 'https://app.test',
     }),
   );
@@ -52,7 +52,7 @@ async function server() {
 
 /** A real access token, minted the way sign-in mints one. */
 async function tokenFor(userId: string, orgId: string, role: 'owner' | 'admin' | 'hand') {
-  const { startSession } = await import('@steading/api/auth/refresh');
+  const { startSession } = await import('@homefarm/api/auth/refresh');
   const { accessToken } = await startSession({ userId, orgId, role }, SECRET);
   return `Bearer ${accessToken}`;
 }
@@ -63,7 +63,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   if (!harness) return;
-  const { hashPassword } = await import('@steading/api/auth/password');
+  const { hashPassword } = await import('@homefarm/api/auth/password');
   const hash = await hashPassword(PASSWORD);
 
   await harness.db.collection('invites').deleteMany({});

@@ -6,11 +6,16 @@
  *
  * ## The mark is a letter, and it is the app's own letter
  *
- * An S in Fraunces Soft — the face every heading in the app is set in, taken
- * from the same `.ttf` the handset loads. Not traced, not approximated: the
- * outline is read out of the font at build time, so the icon cannot quietly
- * stop matching the app the way a hand-drawn logo does the first time somebody
- * changes the type.
+ * `PRODUCT_NAME`'s first character in Fraunces Soft — the face every heading in
+ * the app is set in, taken from the same `.ttf` the handset loads. Not traced,
+ * not approximated: the outline is read out of the font at build time, so the
+ * icon cannot quietly stop matching the app the way a hand-drawn logo does the
+ * first time somebody changes the type.
+ *
+ * It is read from the brand rather than written down because it already drifted
+ * once. The mark was a hardcoded `S`, for Steading, and it stayed an S through
+ * the rename — a launcher icon for a product with no S in its name, which no
+ * check could catch because nothing here knew what the letter was for.
  *
  * A high-contrast serif at 48dp is a real risk — hairlines are the first thing
  * to disappear — and it survives because the letter is drawn LARGE within its
@@ -24,8 +29,8 @@
  *
  * The lamplight splash goes one step further and is *backlit*: the letter in
  * the theme's `ink`, with the lantern burning behind it. That is the app's
- * whole motif — a lit sign on a dark building, which is what a steading is
- * after dark — and lamplight already carries the haze as a token,
+ * whole motif — a lit sign on a dark building, which is what the name says
+ * outright — and lamplight already carries the haze as a token,
  * `glow: rgba(233,178,60,0.30)`, used behind the lit lamp and under the
  * tally's brass. The splash is the first place a farm sees it.
  *
@@ -46,13 +51,14 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PRODUCT_NAME } from '../packages/contracts/src/product.ts';
 import { glyphCoverage } from './lib/glyph.mjs';
 import { halo, over } from './lib/glow.mjs';
 import { compose, encodePng } from './lib/png-write.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const MOBILE = path.join(ROOT, 'apps/mobile');
-const FONT = path.join(MOBILE, 'assets/fonts/Fraunces-Soft30Wonk1-Bold.ttf');
+const FONT = path.join(MOBILE, 'assets/fonts/Fraunces-Opsz30Soft100Wonk1-Bold.ttf');
 
 /** Expo requires exactly this for every app icon. */
 const SIZE = 1024;
@@ -61,7 +67,7 @@ const SIZE = 1024;
  * How much of the canvas the letter spans, per use.
  *
  * `FULL` is a square icon that nothing will mask, so it takes the ordinary
- * margin a letterform wants around it — an S filling its tile edge to edge
+ * margin a letterform wants around it — a letter filling its tile edge to edge
  * reads as cramped rather than confident.
  *
  * `FOREGROUND` is the masked one, and 56% sits under the 61.1% (66/108) that
@@ -69,6 +75,14 @@ const SIZE = 1024;
  * the limit would pass the check and still put the letter's shoulder on the
  * curve of a squircle mask.
  */
+/**
+ * The letter, and it is derived rather than chosen.
+ *
+ * `product.ts` is the one place the brand is written, so the icon follows a
+ * rename instead of surviving one.
+ */
+const MARK = PRODUCT_NAME[0];
+
 const FULL_SPAN = Math.round(SIZE * 0.62);
 const FOREGROUND_SPAN = Math.round(SIZE * 0.56);
 
@@ -104,7 +118,7 @@ function backlight(coverage, size) {
 const assets = [
   {
     // iOS and the generic slot: the app's ordinary daylight face.
-    file: 'assets/icon/steading.png',
+    file: 'assets/icon/homefarm.png',
     span: FULL_SPAN,
     ink: DAYLIGHT_INK,
     ground: DAYLIGHT_GROUND,
@@ -112,7 +126,7 @@ const assets = [
   {
     // Android adaptive. Transparent, because `backgroundColor` in app.json is
     // what sits behind it and the mask cuts them together.
-    file: 'assets/icon/steading-foreground.png',
+    file: 'assets/icon/homefarm-foreground.png',
     span: FOREGROUND_SPAN,
     ink: LANTERN,
     ground: null,
@@ -125,7 +139,7 @@ const assets = [
      * White is the convention; anything else is discarded, so a coloured
      * monochrome layer is a mark somebody spent time on that no phone renders.
      */
-    file: 'assets/icon/steading-monochrome.png',
+    file: 'assets/icon/homefarm-monochrome.png',
     span: FOREGROUND_SPAN,
     ink: '#ffffff',
     ground: null,
@@ -133,7 +147,7 @@ const assets = [
   {
     // The splash marks. Drawn at 1024 and shown at `imageWidth`, so the same
     // file serves every density without a set of @2x variants.
-    file: 'assets/splash/steading-daylight.png',
+    file: 'assets/splash/homefarm-daylight.png',
     span: FULL_SPAN,
     ink: DAYLIGHT_INK,
     ground: null,
@@ -142,7 +156,7 @@ const assets = [
     // The lit one. Ink rather than brass for the letter — the brass is the
     // light *behind* it, and a brass letter on a brass haze has nothing to
     // separate the two.
-    file: 'assets/splash/steading-lamplight.png',
+    file: 'assets/splash/homefarm-lamplight.png',
     span: FULL_SPAN,
     ink: LAMPLIGHT_INK,
     ground: null,
@@ -153,7 +167,7 @@ const assets = [
 for (const asset of assets) {
   const coverage = glyphCoverage({
     file: FONT,
-    character: 'S',
+    character: MARK,
     size: SIZE,
     span: asset.span,
   });
@@ -167,5 +181,6 @@ for (const asset of assets) {
   console.log(`wrote ${asset.file}${asset.glow === true ? ' (backlit)' : ''}`);
 }
 
-console.log(`\nGrounds: daylight ${DAYLIGHT_GROUND}, lamplight ${LAMPLIGHT_GROUND}.`);
+console.log(`\nMark: ${MARK}, for ${PRODUCT_NAME}.`);
+console.log(`Grounds: daylight ${DAYLIGHT_GROUND}, lamplight ${LAMPLIGHT_GROUND}.`);
 console.log('Run `pnpm check:assets` to hold them to the safe zone.');

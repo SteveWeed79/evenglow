@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { gramsToUg, newId, poundsToUg } from '@steading/contracts';
-import { enqueue } from '@steading/core/sync/queue';
-import { localStore } from '@steading/core/db/store';
+import { gramsToUg, newId, poundsToUg } from '@homefarm/contracts';
+import { enqueue } from '@homefarm/core/sync/queue';
+import { localStore } from '@homefarm/core/db/store';
 import { freshStore } from '../support/store';
 import { mount, routeProps } from '../support/screen';
 import { HarvestScreen } from '../../apps/mobile/src/screens/HarvestScreen';

@@ -1,11 +1,11 @@
 @echo off
 setlocal enabledelayedexpansion
-title Steading - use my own computer
+title Evenglow - use my own computer
 cd /d "%~dp0..\.."
 
 echo.
 echo   ============================================
-echo     STEADING - point the app back at this computer
+echo     EVENGLOW - point the app back at this computer
 echo   ============================================
 echo.
 echo   The way back from "Use the farm server".

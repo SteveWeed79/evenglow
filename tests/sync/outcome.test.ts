@@ -1,16 +1,16 @@
 import { ulid } from 'ulid';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import type { SessionClaims } from '@steading/api/auth/claims';
-import { scopedOn } from '@steading/api/db/scoped';
-import { applyBatch } from '@steading/api/sync/apply';
+import type { SessionClaims } from '@homefarm/api/auth/claims';
+import { scopedOn } from '@homefarm/api/db/scoped';
+import { applyBatch } from '@homefarm/api/sync/apply';
 import {
   OUTCOMES,
   PENDING,
   REPLICATED_OUTCOMES,
   WITHHELD_OUTCOMES,
   shouldReplicate,
-} from '@steading/api/sync/outcome';
-import { readSnapshotPage } from '@steading/api/sync/snapshot';
+} from '@homefarm/api/sync/outcome';
+import { readSnapshotPage } from '@homefarm/api/sync/snapshot';
 import { makeMutation } from '../support/fixtures';
 import { startTestDb } from '../support/mongo';
 
@@ -25,11 +25,11 @@ import { startTestDb } from '../support/mongo';
  *
  * Its own database name, because these suites wipe collections in `beforeEach`
  * and several files pointed at one server would wipe each other's fixtures
- * mid-test. Five files used to share `steading_isolation` for exactly that
+ * mid-test. Five files used to share `homefarm_isolation` for exactly that
  * reason; they no longer do (B-3), and every call site now names its own.
  */
 
-const harness = await startTestDb('steading_outcome');
+const harness = await startTestDb('homefarm_outcome');
 const describeDb = harness ? describe : describe.skip;
 
 const ORG_A = ulid();

@@ -14,6 +14,7 @@ export * from './client-version';
 export * from './roles';
 export * from './billing';
 export * from './membership';
+export * from './product';
 export * from './recovery';
 export * from './verification';
 export * from './support';

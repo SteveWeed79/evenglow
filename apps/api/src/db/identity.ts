@@ -1,5 +1,5 @@
 import type { Collection } from 'mongodb';
-import { parseVersion, type Role, type Subscription } from '@steading/contracts';
+import { parseVersion, type Role, type Subscription } from '@homefarm/contracts';
 import { db } from './client';
 
 /**

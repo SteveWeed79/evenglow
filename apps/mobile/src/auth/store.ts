@@ -1,6 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 import { z } from 'zod';
-import { roleSchema } from '@steading/contracts';
+import { roleSchema } from '@homefarm/contracts';
 
 /**
  * Token storage, and the only file that names `expo-secure-store`.
@@ -27,20 +27,20 @@ import { roleSchema } from '@steading/contracts';
  * would get a 403 on the first write.
  */
 
-const REFRESH_KEY = 'steading.refreshToken';
-const CLAIMS_KEY = 'steading.claims';
-const LOCAL_ORG_KEY = 'steading.localOrg';
+const REFRESH_KEY = 'homefarm.refreshToken';
+const CLAIMS_KEY = 'homefarm.claims';
+const LOCAL_ORG_KEY = 'homefarm.localOrg';
 
 /**
  * Farms this device minted and then moved away from.
  *
  * **The id is the only pointer to a farm's database** — the file is
- * `steading-{orgId}.db` and nothing else names it — so deleting the id on a
+ * `homefarm-{orgId}.db` and nothing else names it — so deleting the id on a
  * join stranded every record behind it permanently, with no error and nothing
  * on any screen. The active pointer still has to move, or signing out would
  * reopen the wrong farm; what it must not do is go in the bin.
  */
-const RETIRED_ORGS_KEY = 'steading.retiredOrgs';
+const RETIRED_ORGS_KEY = 'homefarm.retiredOrgs';
 
 /**
  * Parsed on read, never trusted (invariant 11).

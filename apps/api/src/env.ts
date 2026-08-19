@@ -29,8 +29,8 @@ const envSchema = z.object({
    */
   MONGODB_DB: z
     .string()
-    .default('steading')
-    .transform((value) => (value.trim() === '' ? 'steading' : value.trim())),
+    .default('homefarm')
+    .transform((value) => (value.trim() === '' ? 'homefarm' : value.trim())),
   PORT: z.coerce.number().int().positive().default(3001),
   /**
    * Where the operations board listens, and it is a **different port on
@@ -84,7 +84,7 @@ const envSchema = z.object({
    * what the app does today.
    */
   GOOGLE_PLAY_SERVICE_ACCOUNT: z.string().default(''),
-  /** The package the purchase must belong to. `com.steading.app`. */
+  /** The package the purchase must belong to. `dev.swbuild.homefarm`. */
   GOOGLE_PLAY_PACKAGE: z.string().default(''),
   /**
    * What a Pub/Sub push token must be addressed to, if push tokens are on.

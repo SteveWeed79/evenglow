@@ -109,7 +109,7 @@ function squarePng(size: number, square: number, filter: 0 | 1 | 2 | 3 | 4): Buf
   ]);
 }
 
-const dir = mkdtempSync(path.join(tmpdir(), 'steading-png-'));
+const dir = mkdtempSync(path.join(tmpdir(), 'homefarm-png-'));
 
 function write(name: string, buffer: Buffer): string {
   const file = path.join(dir, name);

@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { formatRange, libraryBreed, SPECIES_TRAITS } from '@steading/contracts';
-import type { Group } from '@steading/core/read/groups';
-import { groupPhrase } from '@steading/core/voice';
+import { formatRange, libraryBreed, SPECIES_TRAITS } from '@homefarm/contracts';
+import type { Group } from '@homefarm/core/read/groups';
+import { groupPhrase } from '@homefarm/core/voice';
 import { Primary } from '../components/Form';
 import { Grid } from '../components/Grid';
 import { Icon } from '../components/Icon';

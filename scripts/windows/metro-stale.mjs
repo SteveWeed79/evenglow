@@ -15,7 +15,7 @@ import { cacheIsStale } from '../lib/metro-stale.mjs';
  * Deliberately quiet. This runs inside a window somebody is waiting on, and
  * the whole point is to remove noise rather than add a line about removing it.
  */
-const STAMP = join(tmpdir(), 'steading-metro-node.txt');
+const STAMP = join(tmpdir(), 'homefarm-metro-node.txt');
 
 let wrote = null;
 try {

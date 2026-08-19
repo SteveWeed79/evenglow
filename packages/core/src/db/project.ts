@@ -1,4 +1,4 @@
-import { type Entity, type Op, partitionClears } from '@steading/contracts';
+import { type Entity, type Op, partitionClears } from '@homefarm/contracts';
 import { type LocalRecord, recordKey } from './records';
 
 /**

@@ -1,10 +1,10 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { BREEDING_METHODS, GESTATION_DAYS, newId } from '@steading/contracts';
-import { listAnimals, possibleDams } from '@steading/core/read/animals';
-import { listBreedings } from '@steading/core/read/breeding';
-import { listGroups } from '@steading/core/read/groups';
-import { saidConfirmation } from '@steading/core/voice';
+import { BREEDING_METHODS, GESTATION_DAYS, newId } from '@homefarm/contracts';
+import { listAnimals, possibleDams } from '@homefarm/core/read/animals';
+import { listBreedings } from '@homefarm/core/read/breeding';
+import { listGroups } from '@homefarm/core/read/groups';
+import { saidConfirmation } from '@homefarm/core/voice';
 import { Choice, Confirm, Confirmation, DayPick, Failure, Field, Primary, Stepper, TextField, useSaver } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';

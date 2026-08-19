@@ -19,7 +19,7 @@ import {
   weightCreateSchema,
   type Due,
   type GrowOutGroup,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 
 /**
  * Births, hatches, growth, and the grow-out clock.

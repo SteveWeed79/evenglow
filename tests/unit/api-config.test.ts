@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { apiBase, resetApiBase } from '@steading/core/api';
+import { apiBase, resetApiBase } from '@homefarm/core/api';
 import {
   apiFault,
   configureApi,
   explainFault,
   resetApiFault,
   resolveApiConfig,
-} from '@steading/mobile/boot/config';
+} from '@homefarm/mobile/boot/config';
 
 /**
  * An offline-first app must open without a server.
@@ -128,13 +128,13 @@ const ensureLocalOrgId = vi.fn(async () => 'localOrg');
 const setSyncHeld = vi.fn(async (_refusal: string | null) => undefined);
 const getSyncHeld = vi.fn(async (): Promise<string | null> => null);
 
-vi.mock('@steading/mobile/auth/session', () => ({
+vi.mock('@homefarm/mobile/auth/session', () => ({
   refreshSession: () => refreshSession(),
 }));
-vi.mock('@steading/mobile/auth/local-org', () => ({
+vi.mock('@homefarm/mobile/auth/local-org', () => ({
   ensureLocalOrgId: () => ensureLocalOrgId(),
 }));
-vi.mock('@steading/mobile/db/store', () => ({
+vi.mock('@homefarm/mobile/db/store', () => ({
   openLocalStore: (orgId: string) => openLocalStore(orgId),
 }));
 /**
@@ -142,20 +142,20 @@ vi.mock('@steading/mobile/db/store', () => ({
  * account, so the chip can say "on this phone" instead of "1,400 waiting"
  * forever. That is the only reason it is here.
  */
-vi.mock('@steading/core/db/store', () => ({
+vi.mock('@homefarm/core/db/store', () => ({
   localStore: () => ({
     getSyncHeld: () => getSyncHeld(),
     setSyncHeld: (refusal: string | null) => setSyncHeld(refusal),
   }),
 }));
-vi.mock('@steading/mobile/sync/triggers', () => ({
+vi.mock('@homefarm/mobile/sync/triggers', () => ({
   startTriggers: () => startTriggers(),
 }));
-vi.mock('@steading/core/sync/engine', () => ({
+vi.mock('@homefarm/core/sync/engine', () => ({
   startSync: () => startSync(),
   stopSync: () => stopSync(),
 }));
-vi.mock('@steading/core/sync/storage', () => ({
+vi.mock('@homefarm/core/sync/storage', () => ({
   setStorageBacking: (backing: string) => setStorageBacking(backing),
 }));
 
@@ -169,7 +169,7 @@ describe('booting with no server address', () => {
   });
 
   it('opens the farm anyway when somebody is already signed in', async () => {
-    const { start } = await import('@steading/mobile/boot/start');
+    const { start } = await import('@homefarm/mobile/boot/start');
     refreshSession.mockResolvedValue(CLAIMS);
 
     const started = await start('');
@@ -181,7 +181,7 @@ describe('booting with no server address', () => {
   });
 
   it('starts nothing that touches the network', async () => {
-    const { start } = await import('@steading/mobile/boot/start');
+    const { start } = await import('@homefarm/mobile/boot/start');
     refreshSession.mockResolvedValue(CLAIMS);
 
     const started = await start('');
@@ -211,7 +211,7 @@ describe('booting with no server address', () => {
    * is gitignored — now opens a working farm.
    */
   it('opens the farm the device minted, with no session and no server', async () => {
-    const { start } = await import('@steading/mobile/boot/start');
+    const { start } = await import('@homefarm/mobile/boot/start');
     refreshSession.mockResolvedValue(null);
 
     const started = await start('');
@@ -242,7 +242,7 @@ describe('booting without an account', () => {
    * after a cold start is already right.
    */
   it('records that there is no account, so the chip does not say "waiting"', async () => {
-    const { start } = await import('@steading/mobile/boot/start');
+    const { start } = await import('@homefarm/mobile/boot/start');
 
     await start('http://10.0.2.2:3001');
 
@@ -250,7 +250,7 @@ describe('booting without an account', () => {
   });
 
   it('opens the minted farm and leaves the loop alone', async () => {
-    const { start } = await import('@steading/mobile/boot/start');
+    const { start } = await import('@homefarm/mobile/boot/start');
 
     const started = await start('http://10.0.2.2:3001');
 
@@ -271,7 +271,7 @@ describe('booting without an account', () => {
   });
 
   it('carries the minted id forward rather than minting a second one', async () => {
-    const { start } = await import('@steading/mobile/boot/start');
+    const { start } = await import('@homefarm/mobile/boot/start');
 
     await start('http://10.0.2.2:3001');
     await start('http://10.0.2.2:3001');
@@ -297,7 +297,7 @@ describe('booting normally', () => {
    * answer and only a successful flush withdraws them — see flush.ts.
    */
   it('clears a stale no-account hold once somebody signs in', async () => {
-    const { start } = await import('@steading/mobile/boot/start');
+    const { start } = await import('@homefarm/mobile/boot/start');
     refreshSession.mockResolvedValue(CLAIMS);
     getSyncHeld.mockResolvedValue('noAccount');
 
@@ -307,7 +307,7 @@ describe('booting normally', () => {
   });
 
   it('leaves a payment hold alone, because only the server can lift one', async () => {
-    const { start } = await import('@steading/mobile/boot/start');
+    const { start } = await import('@homefarm/mobile/boot/start');
     refreshSession.mockResolvedValue(CLAIMS);
     getSyncHeld.mockResolvedValue('unsubscribed');
 
@@ -317,7 +317,7 @@ describe('booting normally', () => {
   });
 
   it('starts the loop and the triggers', async () => {
-    const { start } = await import('@steading/mobile/boot/start');
+    const { start } = await import('@homefarm/mobile/boot/start');
     refreshSession.mockResolvedValue(CLAIMS);
 
     const started = await start('http://10.0.2.2:3001');
@@ -328,7 +328,7 @@ describe('booting normally', () => {
   });
 
   it('stops both when torn down', async () => {
-    const { start } = await import('@steading/mobile/boot/start');
+    const { start } = await import('@homefarm/mobile/boot/start');
     refreshSession.mockResolvedValue(CLAIMS);
 
     const started = await start('http://10.0.2.2:3001');
@@ -338,7 +338,7 @@ describe('booting normally', () => {
   });
 
   it('shows the door, and no fault, when nobody is signed in', async () => {
-    const { start } = await import('@steading/mobile/boot/start');
+    const { start } = await import('@homefarm/mobile/boot/start');
     refreshSession.mockResolvedValue(null);
 
     const started = await start('http://10.0.2.2:3001');

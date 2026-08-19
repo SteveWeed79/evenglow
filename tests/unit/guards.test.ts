@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { ESLint } from 'eslint';
 import { describe, expect, it } from 'vitest';
-import { readEnv } from '@steading/api/env';
+import { readEnv } from '@homefarm/api/env';
 
 /**
  * The guards are asserted, not assumed.
@@ -41,7 +41,7 @@ export function probe(): string | null {
 
 const INDEXEDDB_VIOLATION = `
 export function probe(): IDBOpenDBRequest {
-  return indexedDB.open('steading');
+  return indexedDB.open('homefarm');
 }
 `;
 

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import type { Warning } from '@steading/contracts';
+import type { Warning } from '@homefarm/contracts';
 import { Touch } from './Touch';
 import { useWarnings } from '../hooks/useWarnings';
 import { useTheme } from '../theme/ThemeProvider';

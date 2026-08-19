@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
  * shared mongod and picks a database by *name*, so the per-file harness
  * isolates the client and not the data. These suites wipe collections in
  * `beforeEach`, so two files on one name wipe each other's fixtures mid-test.
- * Five shared `steading_isolation` for a long time, and `fileParallelism: false`
+ * Five shared `homefarm_isolation` for a long time, and `fileParallelism: false`
  * was quietly holding it together.
  *
  * A test rather than a convention, because the failure it prevents is invisible
@@ -25,7 +25,7 @@ import { describe, expect, it } from 'vitest';
 const TESTS = fileURLToPath(new URL('..', import.meta.url));
 
 /** The name a caller gets by not choosing one — and the production one. */
-const DEFAULT_DB_NAME = 'steading';
+const DEFAULT_DB_NAME = 'homefarm';
 
 function testFiles(dir: string): string[] {
   const found: string[] = [];
@@ -64,7 +64,7 @@ describe('the database names the suites ask for', () => {
   });
 
   /**
-   * `startTestDb()` with no argument means `steading` — the production name.
+   * `startTestDb()` with no argument means `homefarm` — the production name.
    * The harness drops its database on `stop()`, and refuses to drop that one
    * for exactly this reason; a suite naming it explicitly would be asking for
    * the guard to save it.

@@ -13,7 +13,7 @@ import {
   thi,
   type Warning,
   warningsFor,
-} from '@steading/contracts';
+} from '@homefarm/contracts';
 
 /**
  * What the forecast means for this farm.

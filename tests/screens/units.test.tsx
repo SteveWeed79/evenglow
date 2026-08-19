@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { newId } from '@steading/contracts';
-import { enqueue } from '@steading/core/sync/queue';
+import { newId } from '@homefarm/contracts';
+import { enqueue } from '@homefarm/core/sync/queue';
 import { freshStore } from '../support/store';
 import { mount, routeProps } from '../support/screen';
 import { AnimalsScreen } from '../../apps/mobile/src/screens/AnimalsScreen';
@@ -39,7 +39,7 @@ async function farm(units?: 'metric' | 'imperial'): Promise<void> {
     entity: 'site',
     op: 'create',
     targetId: newId(),
-    payload: { name: 'Steading', ...(units === undefined ? {} : { units }) },
+    payload: { name: 'Rowan Bank', ...(units === undefined ? {} : { units }) },
   });
 
   await enqueue({

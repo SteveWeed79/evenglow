@@ -28,21 +28,50 @@ import { FONTS } from './tokens';
  * Full faces rather than Latin subsets. The saving would be real — Alegreya
  * Sans carries a lot of scripts — but the app already renders `µ`, `°`, `×`,
  * `–`, `—`, `’`, `…`, `−`, `·`, `§` and `ñ`, and a subset that dropped one
- * would show a tofu box on a handset and nowhere else. 760 KB against an APK
+ * would show a tofu box on a handset and nowhere else. 925 KB against an APK
  * measured in tens of megabytes is not the place to economise.
  *
  * ## Fraunces
  *
- * Cut from the variable font at the design's own declaration —
- * `'SOFT' 30, 'WONK' 1, 'wght' 700` — because React Native cannot set
- * variation axes at runtime. `opsz` is the axis the design does not name and
- * one value has to serve every size the face is used at, from the 19px lede
- * to the ~86px tally; it is pinned at 30, just above the heading band where
- * the face appears most often.
+ * Cut from the variable font at `'opsz' 30, 'SOFT' 100, 'WONK' 1, 'wght' 700`,
+ * because React Native cannot set variation axes at runtime — `fontFamily`
+ * resolves to exactly one file.
  *
- * If the tally ever looks under-inked next to the headings, the fix is a
- * second instance cut at a larger `opsz` and a `displayLarge` token — not a
- * different pin here, which would only move the compromise.
+ * `opsz` is the axis the design does not name and one value has to serve every
+ * size the face is used at, from the 19px lede to the ~86px tally; it is pinned
+ * at 30, just above the heading band where the face appears most often. If the
+ * tally ever looks under-inked next to the headings, the fix is a second
+ * instance cut at a larger `opsz` and a `displayLarge` token — not a different
+ * pin here, which would only move the compromise.
+ *
+ * `SOFT` was the design's declared 30 and is now 100, the axis at its maximum.
+ * It rounds the terminals and does nothing else — in particular it does **not**
+ * thicken a stroke, so it is not an answer to the hairline risk a high-contrast
+ * serif carries at 24dp. It was raised for warmth, on a name that means the
+ * light at the end of the day, and for no other reason.
+ *
+ * ## Recursive Mono Casual
+ *
+ * The data face, replacing IBM Plex Mono. Plex is drawn to read as engineered
+ * and does it well; this face carries 101 of the app's type styles — more than
+ * body — so it was the app's dominant voice saying the one thing the app is
+ * not.
+ *
+ * Recursive's `MONO` and `CASL` axes are exactly this trade, and it ships cut
+ * at `MONO 1, CASL 1`: monospaced, because the figures still stand in columns,
+ * and casual, because nothing else about a farm's tallies is technical.
+ *
+ * **Weight 500 in the regular slot, not 400.** Beside Plex Regular, Recursive
+ * at 400 is visibly lighter and loses colour on the figures; 500 matches it.
+ * That is not a preference — the face carries the counts, and `TYPE.body` has a
+ * 17dp floor because these are read outdoors at arm's length.
+ *
+ * ## Re-cutting any of them
+ *
+ * `scripts/cut-fonts.py` holds the coordinates and runs. The instance a file
+ * was cut at is in its name, all four axes of it, because the one axis the old
+ * display file left out of its name is the one that later had to be recovered
+ * by diffing outlines.
  */
 /* eslint-disable @typescript-eslint/no-require-imports --
  * Metro resolves bundled assets through `require()`, and an `import` cannot
@@ -53,11 +82,11 @@ import { FONTS } from './tokens';
  * the two in step.
  */
 export const FONT_ASSETS = {
-  [FONTS.display]: require('../../assets/fonts/Fraunces-Soft30Wonk1-Bold.ttf'),
+  [FONTS.display]: require('../../assets/fonts/Fraunces-Opsz30Soft100Wonk1-Bold.ttf'),
   [FONTS.body]: require('../../assets/fonts/AlegreyaSans-Regular.ttf'),
   [FONTS.bodyBold]: require('../../assets/fonts/AlegreyaSans-Bold.ttf'),
-  [FONTS.data]: require('../../assets/fonts/IBMPlexMono-Regular.ttf'),
-  [FONTS.dataBold]: require('../../assets/fonts/IBMPlexMono-Bold.ttf'),
+  [FONTS.data]: require('../../assets/fonts/RecursiveMonoCasual-Medium.ttf'),
+  [FONTS.dataBold]: require('../../assets/fonts/RecursiveMonoCasual-Bold.ttf'),
 } as const;
 /* eslint-enable @typescript-eslint/no-require-imports */
 

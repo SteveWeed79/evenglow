@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseSnapshotCursor } from '@steading/api/sync/snapshot';
+import { parseSnapshotCursor } from '@homefarm/api/sync/snapshot';
 
 /**
  * The hydration cursor's validation, without a database.
