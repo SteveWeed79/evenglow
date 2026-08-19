@@ -45,6 +45,49 @@ Nothing already ticked was re-opened.
 Each of these was confirmed by reading the code. Two are in files that comment
 on the exact failure they then permit.
 
+- [x] **The operations board was gated on a role farmers hand out.** **GA**
+      Found while writing the script that would have granted the board to
+      somebody — there was none, and building one surfaced why.
+      `requireAdmin` checked `role === 'admin'`, and **`admin` is a farm role**:
+      the manager an owner appoints on the Members screen.
+      `assignableRoles('owner')` returns all three roles and
+      `assignableRoles('admin')` returns `['admin', 'hand']`, so any owner could
+      mint one and any admin could mint another, self-propagating. That account
+      would have read **every farm on the server**, granted free sync to any of
+      them, and minted unlimited subscription codes — cross-tenant escalation
+      reachable from an ordinary farm screen, on the one surface `scoped()`
+      deliberately does not protect. The suite's own header said *"the only
+      thing between an owner and every other farm's numbers is the role
+      check"*; it was, and the role was one farmers hand out.
+      **Not remotely exploitable as deployed** — the board binds `127.0.0.1:3002`
+      and nothing in the Caddyfile proxies it — which is the only thing that
+      held it, and exposing the board is the whole point of having built it.
+      **The fix is a separate fact, not a fourth role.** `operatorSince` on the
+      user document, set by `pnpm ops:admin` and by nothing else: no payload
+      schema, no `/members/:id/role`, not the access token. A farm's admin
+      manages a farm; an operator runs the box; most operators are a plain
+      `hand` on their own farm. Revoking it stops a board session in flight,
+      because the board re-reads the row on every request — a property the
+      previous PR added for a different reason, now doing a second job.
+      **There was no way to grant it *in the codebase*** — `db:seed` creates an
+      owner and nothing ever assigned `admin` — which is why the board had never
+      been opened. `pnpm ops:admin` is the key, and `--list` answers "who else
+      has this", because a grant nobody can audit is a grant nobody can revoke.
+      **"No way to grant it at all" was the claim and it was wrong**, found by
+      the audit of this commit rather than by writing it. `DEPLOY-THE-SERVER.md`
+      documented a working grant the whole time — a raw `mongosh` `$set` of
+      `role: 'admin'` — so the premise that nobody could already hold access was
+      false, and that premise is what made this look like it needed no migration
+      note. Two consequences, both now written into that page: a box whose
+      operator followed it has an account that **silently stops working** at the
+      board's sign-in, with a refusal indistinguishable from a wrong password;
+      and the instruction **demotes the farm's only owner** to `admin`, leaving
+      it with zero — unrepairable in-app, since `assignableRoles('admin')` is
+      `['admin', 'hand']` and self-promotion is refused as `self`. The only
+      reason that has probably not already happened is a third error in the same
+      snippet: it hardcodes `getSiblingDB("steading")` while the box runs
+      `steadingdb`, so the write lands in a database nothing reads.
+
 - [x] **Six defects from a read of the whole server.** **GA**
       A pass over all of `apps/api` after the mail and verification work.
       **The board's sweep panel could never say anything.** `startSweeper()`
@@ -303,6 +346,24 @@ on the exact failure they then permit.
       run — build a file on a device that has synced photos, wipe the server,
       restore, and watch the bytes arrive. And `ACCESS-AND-BILLING.md` §4.1a-i
       is now wrong in the app's favour and wants the correction §12c asks for.
+
+- [ ] **`deploy.sh` deletes any Caddy site block added by hand.** *(found by the
+      audit above; pre-existing, not introduced by it)*
+      Every deploy re-renders `/etc/caddy/Caddyfile` from the repository's
+      single-site template and `install`s it over the running file. So the
+      `ops.example.com` block `DEPLOY-THE-SERVER.md` offers as the alternative to
+      an SSH tunnel **cannot survive a deploy** — it is gone within five minutes
+      of the next `steading-deploy.timer` tick, with `reloaded for ${DOMAIN}` as
+      the only trace.
+      **And the domain is read with `head -1`**, off the running file:
+      `sed -n 's/^\([a-z0-9.-]*\) {$/\1/p' | head -1`. An operator who
+      *prepended* the ops block rather than appending it gets the API's Caddyfile
+      rendered for the ops hostname — every handset offline, reported as a
+      successful reload.
+      Not urgent while the tunnel is the documented default, and it is a trap
+      laid for exactly the person who reads to the end of that section. The fix
+      is either a second rendered site block the template owns, or a
+      `caddy.d/`-style include the deploy leaves alone.
 
 ## 2. Start on the same day — the only work with a calendar attached
 

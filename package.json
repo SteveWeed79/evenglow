@@ -32,6 +32,7 @@
     "mobile:prebuild": "pnpm --filter @steading/mobile prebuild",
     "mobile:usb": "pnpm --filter @steading/mobile start:usb",
     "ops": "pnpm --filter @steading/api ops",
+    "ops:admin": "pnpm --filter @steading/api ops:admin",
     "promo:new": "pnpm --filter @steading/api promo:new",
     "test": "vitest run",
     "test:watch": "vitest",

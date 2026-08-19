@@ -195,6 +195,51 @@ whose email was the second word of the farm name and whose password was the
 real email address. Argv is also readable from a process list, and one of these
 three values is a password.
 
+### `pnpm ops:admin <email>`
+
+Who may open the operations board. Nobody, until you say so.
+
+```
+pnpm ops:admin --list                     who has it now
+pnpm ops:admin you@example.com            let them in
+pnpm ops:admin you@example.com --revoke   take it back
+```
+
+The account must already exist — this grants the board to somebody who has
+signed up, it does not create anybody. They sign in with the password they
+already use for the app.
+
+> #### An operator is not a farm's admin, and the board once thought it was
+>
+> `admin` is a **farm** role: the manager an owner appoints on the Members
+> screen. `requireAdmin` checked it, and `assignableRoles('owner')` returns all
+> three roles while `assignableRoles('admin')` returns `['admin', 'hand']` — so
+> any farm owner could mint one, any admin could mint another, and that account
+> would have read every farm on this server, granted free sync, and minted
+> subscription codes.
+>
+> The board reads `operatorSince` now. Nothing on the wire writes it: not a
+> payload schema, not `/members/:id/role`, not the access token. This command is
+> the only thing that sets it, which is the same authority model `farm:grant`
+> and `promo:new` have.
+>
+> A farm's admin manages a farm. An operator runs the box. Most operators are a
+> plain `hand` on their own farm, and the two facts say nothing about each other.
+
+**Then reach the board.** It binds `127.0.0.1:3002` and **nothing in the
+Caddyfile proxies it**, deliberately — so it is not on the internet and putting
+it there is a decision made in the proxy, not in this repository.
+
+```
+sudo systemctl status steading-ops              is it even running
+ssh -L 3002:127.0.0.1:3002 you@the-box          from your own machine
+                                                then http://localhost:3002
+```
+
+If the unit is not installed, `scripts/deploy/steading-ops.service` is it, and
+`systemctl disable --now steading-ops` is a complete answer to "take the admin
+surface off this box".
+
 ### `pnpm db:password`
 
 Sets an existing account's password. **This is the only password reset there

@@ -38,6 +38,38 @@ export interface UserDoc {
   role: Role;
   createdAt: Date;
   /**
+   * When this account was made an operator of **this server**, if ever.
+   *
+   * ## Not a role, and the first version of the board made it one
+   *
+   * `requireAdmin` checked `role === 'admin'` — and `admin` is a **farm** role,
+   * the manager a farm's owner appoints. `assignableRoles('owner')` returns all
+   * three roles and `assignableRoles('admin')` returns `['admin', 'hand']`, so
+   * any farm owner could mint one and any admin could mint another. That
+   * account would then have read every farm on the server, granted free sync,
+   * and minted subscription codes — cross-tenant escalation reachable from an
+   * ordinary Members screen, on the one surface `scoped()` deliberately does not
+   * protect.
+   *
+   * The two ideas were never the same and sharing a word made them look it. A
+   * farm's admin manages a farm. An operator runs the box. Somebody can be both,
+   * either, or — most usually — an operator who is a plain `hand` on their own
+   * farm, and the two facts have nothing to say about each other.
+   *
+   * ## Nothing on the wire can write it
+   *
+   * Not in any payload schema, not in `roleSchema`, not in the access token, not
+   * settable by `/members/:id/role`. `pnpm ops:admin` is the only thing that
+   * sets it, which needs a shell on the server — the same authority model
+   * `farm:grant` and `promo:new` already have, and the one the masterplan asks
+   * for: *"a grant that can be requested is a grant that can be requested by
+   * anybody."*
+   *
+   * A date rather than a boolean, so an operator list answers *when* as well as
+   * *who* — the same shape `syncGranted` uses one collection over.
+   */
+  operatorSince?: Date;
+  /**
    * When this address was proved readable by whoever owns the account.
    *
    * Absent means unproved, which is the state every password signup starts in
@@ -262,6 +294,41 @@ export async function changeUnverifiedEmail(userId: string, email: string): Prom
     { $set: { email: normalizeEmail(email) } },
   );
   return result.matchedCount === 1;
+}
+
+/**
+ * Makes somebody an operator of this server, or stops them being one.
+ *
+ * By **email**, because that is what an operator holds — a user id is a ULID
+ * nobody has written down, and `pnpm ops:admin` is typed by a person reading a
+ * message from the person asking. `null` takes it back.
+ *
+ * Returns false when no account has that address, so the caller can say so
+ * rather than reporting a grant that landed nowhere. A disabled account is
+ * deliberately still matchable: `disableUser` moves the address to
+ * `formerEmail`, so a removed person cannot be found here at all, and the board
+ * refuses a disabled account on every request regardless.
+ */
+export async function setOperator(email: string, at: Date | null): Promise<boolean> {
+  const result = await (await users()).updateOne(
+    { email: normalizeEmail(email) },
+    at === null ? { $unset: { operatorSince: '' } } : { $set: { operatorSince: at } },
+  );
+  return result.matchedCount === 1;
+}
+
+/**
+ * Everyone who can open the operations board.
+ *
+ * For the script that grants it, so an operator can see the whole list before
+ * and after — the question "who else has this" has no other answer, and a
+ * grant nobody can audit is one nobody can revoke with confidence.
+ */
+export async function listOperators(): Promise<UserDoc[]> {
+  return (await users())
+    .find({ operatorSince: { $exists: true } })
+    .sort({ operatorSince: 1 })
+    .toArray();
 }
 
 export async function findOrgById(id: string): Promise<OrgDoc | null> {

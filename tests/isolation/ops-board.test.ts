@@ -33,9 +33,16 @@ const ORG_A = ulid();
 const ORG_B = ulid();
 
 const USERS = {
-  admin: { _id: ulid(), orgId: ORG_A, role: 'admin' as const },
-  owner: { _id: ulid(), orgId: ORG_A, role: 'owner' as const },
-  hand: { _id: ulid(), orgId: ORG_B, role: 'hand' as const },
+  /** An operator of this server, who happens also to manage a farm. */
+  admin: { _id: ulid(), orgId: ORG_A, role: 'admin' as const, operator: true },
+  /**
+   * **A farm's admin and nothing more**, which is the account the first version
+   * of this board let through. Any owner can create one from the Members
+   * screen, so it is the account an attacker actually has.
+   */
+  farmAdmin: { _id: ulid(), orgId: ORG_B, role: 'admin' as const, operator: false },
+  owner: { _id: ulid(), orgId: ORG_A, role: 'owner' as const, operator: false },
+  hand: { _id: ulid(), orgId: ORG_B, role: 'hand' as const, operator: false },
 };
 
 type TestUser = (typeof USERS)[keyof typeof USERS];
@@ -111,6 +118,14 @@ beforeEach(async () => {
       orgId: user.orgId,
       role: user.role,
       createdAt: new Date(),
+      /**
+       * The operator flag, which is **not** the farm role beside it.
+       *
+       * `USERS.admin` is a farm admin AND an operator; `USERS.farmAdmin` is a
+       * farm admin and nothing more. Those two existing separately is the whole
+       * point of the fix — see the escalation suite below.
+       */
+      ...(user.operator ? { operatorSince: new Date() } : {}),
     } satisfies UserDoc);
   }
 });
@@ -310,24 +325,28 @@ describeDb('the page', () => {
 });
 
 /**
- * A token that says `admin` is not the same as an account that is one.
+ * An operator whose grant was taken back a minute ago.
  *
  * **The door was opened by the token alone**, which is invariant 8 inverted:
- * cached claims gate local UX, and the server re-derives identity and role on
- * every mutation. Two of the board's routes *are* mutations — one gives a farm
- * free sync, the other mints a subscription code — so somebody demoted or
- * removed a minute ago kept both for the fifteen minutes an access token lives.
+ * cached claims gate local UX, and the server re-derives on every mutation.
+ * Two of the board's routes *are* mutations — one gives a farm free sync, the
+ * other mints a subscription code — so somebody whose access ended kept both
+ * for the fifteen minutes an access token lives.
  *
  * The tokens below are genuine: minted by this server, correctly signed, not
  * expired. What changed underneath them is the row.
+ *
+ * **These revoked a farm role when they were written**, because the board read
+ * one. It reads `operatorSince` now, so they revoke that instead — the property
+ * being asserted never changed, only the lever that expresses it. The farm role
+ * having stopped mattering has its own test above.
  */
-describeDb('an administrator who no longer is one', () => {
+describeDb('an operator who no longer is one', () => {
   it('is refused the board once the row says otherwise', async () => {
     // The token still says admin, because it was minted before this.
     const token = await tokenFor(USERS.admin);
-    await harness!.db
-      .collection('users')
-      .updateOne({ _id: USERS.admin._id as never }, { $set: { role: 'owner' } });
+    const { setOperator } = await import('@steading/api/db/identity');
+    await setOperator(emailOf(USERS.admin), null);
 
     const app = await buildApp();
     const res = await app.inject({
@@ -343,9 +362,8 @@ describeDb('an administrator who no longer is one', () => {
   /** And the two routes that write, which is where it actually mattered. */
   it('cannot mint a promotion code with a stale token', async () => {
     const token = await tokenFor(USERS.admin);
-    await harness!.db
-      .collection('users')
-      .updateOne({ _id: USERS.admin._id as never }, { $set: { role: 'owner' } });
+    const { setOperator } = await import('@steading/api/db/identity');
+    await setOperator(emailOf(USERS.admin), null);
 
     const app = await buildApp();
     const res = await app.inject({
@@ -362,9 +380,8 @@ describeDb('an administrator who no longer is one', () => {
 
   it('cannot grant a farm free sync with a stale token', async () => {
     const token = await tokenFor(USERS.admin);
-    await harness!.db
-      .collection('users')
-      .updateOne({ _id: USERS.admin._id as never }, { $set: { role: 'owner' } });
+    const { setOperator } = await import('@steading/api/db/identity');
+    await setOperator(emailOf(USERS.admin), null);
 
     const app = await buildApp();
     const res = await app.inject({
@@ -548,5 +565,128 @@ describeDb('what the board sends with the page', () => {
     const first = await read();
     expect(first).toBeDefined();
     expect(await read()).not.toBe(first);
+  });
+});
+
+/**
+ * **The hole this board shipped with.**
+ *
+ * `requireAdmin` checked `role === 'admin'` — and `admin` is a **farm** role,
+ * the manager an owner appoints on the Members screen.
+ * `assignableRoles('owner')` returns all three roles and
+ * `assignableRoles('admin')` returns `['admin', 'hand']`, so any farm owner
+ * could mint one and any admin could mint another, self-propagating.
+ *
+ * That account would then have opened this board and read every farm on the
+ * server, granted free sync to any of them, and minted unlimited subscription
+ * codes. Cross-tenant escalation reachable from an ordinary farm screen, on the
+ * one surface `scoped()` deliberately does not protect — which is exactly what
+ * the top of this file says it exists to prevent:
+ *
+ * > *"the only thing between an owner and every other farm's numbers is the
+ * > role check."*
+ *
+ * It was, and the role was one farmers hand out.
+ */
+describeDb('a farm admin, which any owner can create', () => {
+  it('cannot open the board', async () => {
+    expect((await get('/board', USERS.farmAdmin)).status).toBe(403);
+  });
+
+  it('cannot mint a subscription code', async () => {
+    const answer = await post('/actions/promo', { months: 12, maxRedemptions: 1 }, USERS.farmAdmin);
+
+    expect(answer.status).toBe(403);
+    expect(await harness!.db.collection('promoCodes').countDocuments({})).toBe(0);
+  });
+
+  it('cannot grant another farm free sync', async () => {
+    const answer = await post('/actions/grant', { orgId: ORG_A, granted: true }, USERS.farmAdmin);
+
+    expect(answer.status).toBe(403);
+    const org = await harness!.db.collection('orgs').findOne({ _id: ORG_A as never });
+    expect(org?.syncGranted).toBeUndefined();
+  });
+
+  it('cannot even sign in to the board', async () => {
+    const answer = await post('/session', {
+      email: emailOf(USERS.farmAdmin),
+      password: PASSWORD,
+    });
+
+    expect(answer.status).toBe(401);
+  });
+
+  /**
+   * The farm role is now irrelevant in both directions. An operator who is a
+   * plain `hand` on their own farm is the ordinary case — most operators are.
+   */
+  it('is not what the board reads, in either direction', async () => {
+    const { setOperator } = await import('@steading/api/db/identity');
+    await setOperator(emailOf(USERS.hand), new Date());
+
+    expect((await get('/board', USERS.hand)).status).toBe(200);
+  });
+});
+
+/**
+ * The grant that opens the board, and the only thing that can make it.
+ *
+ * Asserted at the module rather than through a route on purpose: **there is no
+ * route**, and that is the property. If one is ever added, this suite says
+ * nothing about it and the one above starts failing, which is the right way
+ * round.
+ */
+describeDb('who may be made an operator', () => {
+  it('is nobody, on a fresh server', async () => {
+    const { listOperators } = await import('@steading/api/db/identity');
+    await harness!.db.collection('users').updateMany({}, { $unset: { operatorSince: '' } });
+
+    expect(await listOperators()).toHaveLength(0);
+    expect((await get('/board', USERS.admin)).status).toBe(403);
+  });
+
+  it('is granted and taken back by email', async () => {
+    const { setOperator } = await import('@steading/api/db/identity');
+
+    expect(await setOperator(emailOf(USERS.owner), new Date())).toBe(true);
+    expect((await get('/board', USERS.owner)).status).toBe(200);
+
+    expect(await setOperator(emailOf(USERS.owner), null)).toBe(true);
+    expect((await get('/board', USERS.owner)).status).toBe(403);
+  });
+
+  it('says so when the address belongs to nobody', async () => {
+    const { setOperator } = await import('@steading/api/db/identity');
+    expect(await setOperator('nobody@example.test', new Date())).toBe(false);
+  });
+
+  /**
+   * A session in flight stops working, because the board re-reads the row on
+   * every request rather than trusting the token — the same property that fix
+   * bought, now doing a second job.
+   */
+  it('stops a board session already in flight', async () => {
+    const { setOperator } = await import('@steading/api/db/identity');
+    const token = await tokenFor(USERS.admin);
+
+    const app = await buildApp();
+    const before = await app.inject({
+      method: 'GET',
+      url: '/board',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(before.statusCode).toBe(200);
+
+    await setOperator(emailOf(USERS.admin), null);
+
+    const after = await app.inject({
+      method: 'GET',
+      url: '/board',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    await app.close();
+
+    expect(after.statusCode).toBe(403);
   });
 });
