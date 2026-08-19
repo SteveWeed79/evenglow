@@ -164,6 +164,71 @@ otherwise plans the billing down to the refusal copy.
     software; the word is a dictionary term with farms, a wine and a brewing
     channel already on it. **The conflict is this one product, and it is total.**
 
+    ### The new name is **Evenglow**
+
+    Decided 19 August 2026, after about a hundred candidates. Clear on Google
+    Play, checked in the store itself. No exact trademark found; `EVENGLO`
+    (Fort Howard Paper, 1930, paper goods) is the nearest and is another century
+    and another class away.
+
+    **What the standard actually is**, because it drifted during the search and
+    the drift was wrong: a name does not have to be unused. Dove is soap and
+    chocolate. The test is whether it is taken **in software**, taken **in
+    farming**, or taken **in both at once** — and only the third forces a
+    rename. Steading fails the third. Nothing else considered did, which means
+    several candidates were retired here for search noise rather than conflict.
+
+    **Known and accepted about Evenglow.** *Even* reads to most Americans as
+    *level* rather than *evening*, which is why "even glow" is a skincare phrase
+    (Pureance, skinbetter both sell one). It is also phonetically close to
+    `EVENFLO`, the baby-products brand, and to Everglow — several companies and a
+    K-pop group. None of that blocks anything; it means the store listing does
+    the explaining, which is a communication cost taken with open eyes.
+
+    ### What the rename touches — audited 19 August, not yet carried out
+
+    **Config, and the only irreversible part:** `app.json` — `name`, `slug`,
+    `scheme`, `android.package`, `ios.bundleIdentifier`. `com.evenglow.app`
+    must be right *before the first Play upload*, because a package name cannot
+    be changed afterwards.
+
+    **User-visible strings, and the app is the smaller half.** Three in
+    `apps/mobile/src` — `Boot.tsx`'s accessibility label and its *"Steading could
+    not start"*, and `ExportScreen`'s share-sheet title. **About fifteen on the
+    server**, which nobody had counted: the six copies of *"That email already
+    has a Steading account"* across `auth.ts` and `members.ts`, `EMAIL_TAKEN` in
+    `contracts/verification.ts`, *"No Steading account uses that Google address
+    yet"*, the mail subjects *"Your Steading reset code"* and *"Confirm your
+    Steading email"* with their bodies, three on the ops page, and the support
+    gist description. **The farm reads the server's words more often than the
+    app's**, so a rename that stops at `apps/mobile` leaves the old name in every
+    email the product sends.
+
+    **Four things are load-bearing and must not be renamed casually:**
+
+    1. **The APK filename.** `apk-plan.mjs` builds `steading-<version>-<code>.apk`
+       and `deploy.sh` decides whether the shelf is current by comparing against
+       exactly that stem — it strips a literal `steading-` prefix and looks for
+       `/var/lib/steading/dist/steading-<version>-<code>.apk`. Renaming the
+       artefact makes every box re-fetch ninety megabytes, which is the trap
+       `DEPLOY-THE-SERVER.md` already recorded once. Either leave the artefact
+       name alone or change both sides in one commit and accept one re-download.
+    2. **The systemd units and paths** — `steading-api`, `steading-deploy.timer`,
+       `steading-backup*`, `/etc/steading`, `/opt/steading`, `/var/lib/steading`.
+       Invisible to any farm, and renaming them is a box migration rather than an
+       edit. Leave them.
+    3. **The EAS slug.** `extra.eas.projectId` is bound to the slug; changing one
+       without the other breaks `eas build`. The runner path (`apk.yml`) does not
+       care, but the EAS fallback does.
+    4. **`check-assets.mjs`** prints the expected `app.json` block with
+       `assets/icon/steading*.png` in it, so renaming the asset files means
+       updating that checker's guidance in the same commit.
+
+    **Deliberately staying `steading`:** the 371 files carrying `@steading/*`
+    workspace names, the `steading-{orgId}.db` filename, and the internal
+    database name. No user, reviewer or store listing ever sees them, and
+    churning them buys nothing but risk.
+
 14. **There is no business entity, and billing needs one.** Play payouts, tax
     identity, VAT/sales tax on a $39/year subscription, and the invoice a farm
     may want for its own books. Play handles collection and remittance in most

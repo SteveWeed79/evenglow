@@ -321,14 +321,16 @@ period rather than a task.
 - [ ] **Write the terms of service and EULA.** `[2]`
 - [ ] **Write the "not veterinary advice" line and place it.** `[16]`
       Settings, and beside the withdrawal banner. Two sentences.
-- [ ] **Clear the name — and it did not clear.** `[13]` — checked 19 August
-      2026. **Brechy LLC has a pre-launch page for an app called Steading**,
-      same product and same "Scottish for farmstead" pitch
-      (`brechy.com/apps/steading`). They have not launched; they are a company
-      and this project is not one yet (`[14]`). **Decide before the first Play
-      upload**, because a package name is permanent from that moment while the
-      display name is about eleven lines. Everything else in §2 can proceed
-      without the answer.
+- [x] **Clear the name — it did not clear, and the name is now Evenglow.**
+      `[13]` — checked 19 August 2026. **Brechy LLC has a pre-launch page for an
+      app called Steading**, same product and same "Scottish for farmstead"
+      pitch (`brechy.com/apps/steading`). They have not launched; they are a
+      company and this project is not one yet (`[14]`). **Decided: the app
+      becomes Evenglow.** The rename itself is not done — see §3.
+- [ ] **Carry out the rename to Evenglow.** **Before the first Play upload**,
+      and not urgent before then: a package name is permanent from that moment,
+      while a display name is changeable at any release. `[13]` has the audit of
+      what the name touches and the four things that are load-bearing.
 - [ ] **Decide the business entity.** `[14]` — Play needs a payee.
 
 ## 3. Release mechanics

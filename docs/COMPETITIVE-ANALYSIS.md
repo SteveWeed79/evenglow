@@ -65,12 +65,14 @@ reads as an agency's own product alongside client work.
 > **This is a name conflict before it is a competitive one, and the two want
 > separating.** As a competitor it is unlaunched vapour: a headline, a promise
 > and an email capture, against a signed APK on a farm's tablet. Nothing in §2
-> or §3 moves for it. As a name it is fatal to `[13]` — identical word,
+> or §3 moves for it. As a name it was fatal to `[13]` — identical word,
 > identical category, identical pitch, and the other side is a formed company
-> while this project's `[14]` (business entity) is still open. Whatever is
-> decided, it has to be decided **before the first Play upload**, because a
-> package name is permanent from that moment and a display name is eleven lines
-> until then.
+> while this project's `[14]` (business entity) is still open.
+>
+> **Settled 19 August: the app becomes Evenglow**, and the rename happens before
+> the first Play upload, because a package name is permanent from that moment
+> and a display name is cheap until then. `[13]` carries the decision, the
+> standard it was judged against, and the audit of what the rename touches.
 
 No USPTO filing was found for Brechy LLC, but the trademark databases are not
 reachable from the environment this was researched in, so absence is not
