@@ -43,8 +43,10 @@ export const taskUpdateSchema = updateSchemaOf(taskShape);
  * frame**, so it admits everything the app is built to send and refuses the one
  * thing that means the resize did not happen. It was 25 MB, which is sixty
  * times a typical photo and only reachable when something has already gone
- * wrong — and on the free Atlas tier a farm's whole 512 MB allowance is twenty
- * such files.
+ * wrong. *(The original argument added that twenty such files filled the free
+ * managed tier the server ran on. That tier is gone — the database is on the
+ * box now — and the ceiling stands on the resize argument alone, which is the
+ * half that was never about capacity.)*
  *
  * `ACCESS-AND-BILLING.md` §4.1a asked for exactly this: *"lower the contract
  * ceiling to match reality so an oversized photo is refused at the boundary

@@ -82,11 +82,20 @@ otherwise plans the billing down to the refusal copy.
    they raised. Under UK/EU rules this is a thirty-day obligation with a
    defined shape.
 
-7. **The lawful basis and the processor chain are undocumented.** MongoDB Atlas
-   (US), AWS S3 (backups), GitHub (support bundles and gists), Google
-   (sign-in), api.weather.gov and the US Census geocoder. Each is a processor
-   or a recipient; none is named in a document a farm could read, and there are
-   no data-processing agreements on file.
+7. **The lawful basis and the processor chain are undocumented.** Oracle Cloud
+   (the box the records sit on), AWS S3 (backups, once configured), GitHub
+   (support bundles and gists), Google (sign-in and Play billing),
+   api.weather.gov and the US Census geocoder. Each is a processor or a
+   recipient; none is named in a document a farm could read, and there are no
+   data-processing agreements on file.
+
+   **This list used to begin "MongoDB Atlas (US)", and that is no longer where
+   the records are** — the database was moved onto the box and the cluster
+   deleted. The correction matters more here than anywhere else in this file:
+   the processor list is what the privacy policy and the Data Safety
+   declaration are built from, and an inaccurate declaration is an enforcement
+   matter rather than a rejection. Naming a data processor that holds nothing
+   is exactly the kind of wrong that survives review and fails an audit.
 
 8. **Play requires an App Bundle for new apps, and the pipeline builds an
    APK.** `apk.yml` produces and signs `steading-<version>-<code>.apk`, which
@@ -362,13 +371,18 @@ implementation: none. This is the largest purely technical gap on the list.
     which are handled properly, and are the only thing that is.
 
 56. **Nothing enforces a per-org storage quota.** Documented as uninstrumented
-    for pricing; the operational half is that one farm uploading video fills a
-    512 MB cluster for everybody, and the failure reaches every other farm as
-    rejected mutations.
+    for pricing; the operational half is that one farm uploading video fills
+    **the box's disk** for everybody, and the failure reaches every other farm
+    as rejected mutations. *(Written against a 512 MB managed tier, which is
+    gone. The shape is identical and the headroom is tens of gigabytes rather
+    than half of one, so this moved from near-term to eventual — not from real
+    to imaginary. A disk with no quota still fills.)*
 
-57. **Mongo connection limits are unconsidered.** M0 caps concurrent
-    connections; nothing documents the pool size or what a burst of devices
-    flushing after an outage does to it.
+57. **Mongo connection limits are unconsidered.** Nothing documents the pool
+    size or what a burst of devices flushing after an outage does to it. *(The
+    free managed tier's 500-connection cap was the original worry; a local
+    `mongod` sets its own ceiling and the API is a single process, so the
+    question is now about the pool, not the tier.)*
 
 58. **No load test, ever.** Not a criticism at three farms. It becomes one the
     first time a snapshot of a ten-year farm meets a slow connection, and the
@@ -809,8 +823,9 @@ Each of these looked like an omission and is not:
 - **iOS** — deferred with a route (EAS Build), masterplan §5.
 - **Backups** — designed, scripted, scheduled, blocked on a bucket and an
   `age` key; restore untested and named as such.
-- **Photo storage growth and the M0 ceiling** — measured and documented in
-  `PICK-UP-HERE.md`.
+- **Photo storage growth** — measured and documented in `PICK-UP-HERE.md`. The
+  free-tier ceiling it was measured against no longer exists; the box's disk is
+  the number now.
 - **Reduce-motion** — implemented in `theme/motion.ts`.
 - **Dark mode** — implemented, and the splash has both.
 - **Multi-org membership** — refused structurally, with the reason.
@@ -1104,8 +1119,9 @@ the farm's records outliving the person who wrote the app.
 
 192. **`OPERATOR.md` is commands, not custody.** A second person could run the
      day-to-day; they could not take over the keystore, the `age` key, the
-     Atlas account, the DNS registrar, the Play account or the Google Cloud
-     project, because nothing lists them as things that have owners.
+     Oracle Cloud account that the box and its only copy of the records live
+     in, the DNS registrar, the Play account or the Google Cloud project,
+     because nothing lists them as things that have owners.
 
 193. **Nothing covers a fortnight of illness during lambing.** The support loop
      assumes somebody reads the issues.

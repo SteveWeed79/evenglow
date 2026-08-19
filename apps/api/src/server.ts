@@ -79,7 +79,8 @@ export async function buildServer(env: Env = readEnv()): Promise<FastifyInstance
    *
    * `/health` answers *is this process running*. It touches nothing, and it
    * stays that way: `fly.toml` gates a machine restart on it, and restarting
-   * the process because Atlas is slow is the wrong cure for the wrong fault.
+   * the process because the database is slow is the wrong cure for the wrong
+   * fault.
    *
    * `/ready` answers *can this process serve a request*, which needs the
    * database — because Mongo connects lazily (`db/client.ts`). `env.ts`

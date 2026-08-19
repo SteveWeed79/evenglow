@@ -236,6 +236,13 @@ Twenty-four gigabytes of RAM is absurd overkill for this. What Atlas's $96 a
 year would actually buy is **automated backups, point-in-time restore, and
 somebody else's patching** — and self-hosting means owning all three.
 
+> **Decided and executed.** The database runs on the box — `mongod` bound to
+> loopback, standalone — and the free managed cluster it started on has been
+> deleted. So the three things above are owned rather than bought, and the first
+> of them is not yet in place: no bucket, no key, no backup taken. The condition
+> below is therefore live and unmet, not aspirational. `DEPLOY-THE-SERVER.md`
+> §"Moving the database onto the box" is the record.
+
 **Self-host, and treat a backup as a condition of the first real farm.**
 `scripts/backup-mongo.sh` is that job: dump, encrypt, upload, and a restore
 beside it. Rotation is an S3 lifecycle rule on the prefix rather than logic in
@@ -255,7 +262,8 @@ stored as a sha256 of the token. Sensitivity is handled by encryption, which is
 reversible exactly when it needs to be.
 
 **The backup is also the migration path.** `mongodump` out, `mongorestore` into
-Atlas, change `MONGODB_URI`, restart — `apps/api/src/db/client.ts` takes the
+whatever comes next — another box, a managed cluster — change `MONGODB_URI`,
+restart. `apps/api/src/db/client.ts` takes the
 connection entirely from the environment and is the only module permitted to
 import `MongoClient`. A tested restore is a rehearsed migration, so there is no
 separate plan to keep current.

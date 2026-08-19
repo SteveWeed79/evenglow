@@ -16,8 +16,9 @@ import { MAX_PHOTO_BYTES, newId, photoCreateSchema, photoUpdateSchema } from '@s
  * refused before a barn's uplink has been spent on it. `ACCESS-AND-BILLING.md`
  * §4.1a asked for exactly that.
  *
- * The ceiling was 25 MB — sixty times a typical photo, and twenty such files
- * would fill an entire free-tier Atlas cluster.
+ * The ceiling was 25 MB — sixty times a typical photo. (It used to be argued
+ * against a free managed tier's 512 MB as well; the database is on the box now,
+ * and the resize argument is the one that survives.)
  */
 
 function photo(byteSize: number) {
