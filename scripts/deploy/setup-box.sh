@@ -165,8 +165,15 @@ git config --system --get-all safe.directory 2>/dev/null | grep -qxF "$REPO_DIR"
 # — `.env*` is gitignored so it cannot be committed, the target stays 0600 and
 # root-owned so only sudo reads it, and `deploy.sh`'s chown touches the link
 # rather than the file behind it.
-if [ ! -e "$REPO_DIR/.env.local" ]; then
-  ln -s /etc/homefarm/api.env "$REPO_DIR/.env.local"
+# `-e` alone is not enough, and the gap is not theoretical: `-e` follows the
+# link, so a **dangling** one reads as absent, and the bare `ln -s` that
+# followed then failed with "File exists" and took this whole script down with
+# it under `set -e`. That is exactly the state a box is left in after
+# `rename-to-homefarm.sh` moves `/etc/steading` out from under a link that names
+# it — so re-running setup-box, which is the documented repair, was the one
+# thing guaranteed to abort. `-L` sees the link itself, and `-sfn` replaces it.
+if [ ! -e "$REPO_DIR/.env.local" ] || [ -L "$REPO_DIR/.env.local" ]; then
+  ln -sfn /etc/homefarm/api.env "$REPO_DIR/.env.local"
   note "linked .env.local -> /etc/homefarm/api.env, so sudo pnpm farm:ls works"
 fi
 note "ready"
@@ -334,7 +341,9 @@ $(printf '\033[1m')Set up. Three things left, and only you can do them.$(printf 
      forgetting it looks exactly like the server being down.
 
   3. Install the database on this box, if it is not there yet:
-       sudo MONGODB_DB=steadingdb /opt/homefarm/scripts/deploy/setup-mongo.sh
+       sudo /opt/homefarm/scripts/deploy/setup-mongo.sh
+     A fresh box needs no MONGODB_DB at all — the code defaults to 'homefarm'.
+     Pass one only to match a database that already exists under another name.
      It binds mongod to 127.0.0.1 and prints the connection string once.
      Nothing to open in any firewall for it, which is the point.
 
