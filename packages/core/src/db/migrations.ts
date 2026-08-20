@@ -316,6 +316,49 @@ export const MIGRATIONS: readonly Migration[] = [
        )`,
     ],
   },
+  {
+    version: 8,
+    statements: [
+      /**
+       * How many times the server ANSWERED and the answer could not be read.
+       *
+       * `outbox.attempts` was doing this job and one other, and they are
+       * different questions. It counts every failed flush — a dropped
+       * connection, a 5xx, a batch the server could not parse — and exactly one
+       * reader consults it: the poison ceiling in `rejectExhausted`,
+       * `WHERE id = ? AND attempts >= ?`. So a farm that spent a morning out of
+       * signal reaches the ceiling having done nothing wrong, and the first
+       * unreadable answer sweeps the whole batch — up to a hundred good
+       * mutations — into the rejected inbox. A captive portal answering a JSON
+       * POST with an HTML login page is enough to do it.
+       *
+       * The 402 branch in `flush.ts` already names this hazard for its own
+       * case: *"a farm running free for a year would otherwise cross the
+       * ceiling and have its records swept into the inbox six flushes in"*. It
+       * is the same argument, and it applies to the two statuses that still
+       * count.
+       *
+       * Counting refusals apart keeps both numbers honest. `attempts` goes on
+       * meaning "times this has been tried", which is what a diagnostic wants;
+       * this means "times the server refused to read it", which is the only
+       * thing a poison ceiling should ripen on.
+       *
+       * **A table rather than a column on `outbox`**, for the reason
+       * `record_undo` gives above: every statement in this ladder must be
+       * `IF NOT EXISTS` so two `migrate()` calls racing at startup cannot fail
+       * each other, and SQLite has no `ADD COLUMN IF NOT EXISTS`.
+       *
+       * Sparse on purpose — a row appears the first time an answer cannot be
+       * read, so an ordinary outbox carries none of these. It leaves with the
+       * mutation it belongs to, in the same transaction, by whichever door that
+       * mutation takes.
+       */
+      `CREATE TABLE IF NOT EXISTS outbox_unreadable (
+         mutationId TEXT PRIMARY KEY NOT NULL,
+         answers    INTEGER NOT NULL
+       )`,
+    ],
+  },
 ];
 
 /** The version a fresh database is brought to. */
