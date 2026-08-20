@@ -45,8 +45,10 @@ describe('migration ladder', () => {
     await migrate(db);
 
     /**
-     * The four IndexedDB used, plus the three weather caches and the ticket
-     * queue.
+     * The four IndexedDB used, plus the three weather caches, the ticket
+     * queue, and the two side tables the ladder has added since — `record_undo`
+     * for the pre-image a discarded refusal restores, and `outbox_unreadable`
+     * for the refusal count the poison ceiling ripens on.
      *
      * `forecast`, `observation`, `alerts` and `tickets` are deliberately NOT
      * the engine's stores: they hold no records, never enter the outbox and
@@ -68,6 +70,7 @@ describe('migration ladder', () => {
       'meta',
       'observation',
       'outbox',
+      'outbox_unreadable',
       'quarantine',
       'record_gen',
       'record_undo',
@@ -92,7 +95,7 @@ describe('migration ladder', () => {
     await Promise.all([migrate(db), migrate(db)]);
 
     expect(await currentVersion(db)).toBe(SCHEMA_VERSION);
-    expect(await tableNames(db)).toHaveLength(10);
+    expect(await tableNames(db)).toHaveLength(11);
   });
 
   /**
