@@ -132,8 +132,25 @@ describeDb('two owners acting on each other at once', () => {
     expect(await liveOwners()).toBe(1);
 
     // And one of them was told why, rather than both being told yes.
-    const codes = [one.statusCode, two.statusCode].sort();
-    expect(codes).toEqual([204, 403]);
+    //
+    // **The refusal has two honest shapes here, and which one arrives is the
+    // race itself.** This asserted `403` alone and went red on a loaded runner
+    // once the interleaving went the other way — a real property stated one
+    // case too narrowly, not a defect:
+    //
+    // - **403** — the loser's authorization completed before the winner's
+    //   removal committed, so it met the last-owner guard and was refused by it.
+    // - **401** — the winner committed first, so by the time the loser reached
+    //   `requireMutationClaims` its own user row was gone. That path re-derives
+    //   identity from the database on every mutation (D4, invariant 8) and
+    //   answers *"This account is no longer active."*
+    //
+    // Both refuse, and the invariant asserted above holds either way. Pinning
+    // one of them would be asserting a scheduling order the server never
+    // promised.
+    const codes = [one.statusCode, two.statusCode].sort((a, b) => a - b);
+    expect(codes[0]).toBe(204);
+    expect([401, 403]).toContain(codes[1]);
 
     await app.close();
   });

@@ -106,6 +106,13 @@ ENV_FILE="/etc/${OLD}/api.env"
 [ -e "$ENV_FILE" ] || ENV_FILE="/etc/${NEW}/api.env"
 [ -f "$ENV_FILE" ] || die "no api.env under /etc/${OLD} or /etc/${NEW} — nothing to migrate"
 
+# Reported because it is the one thing here that a move silently breaks rather
+# than obviously breaks: an absolute symlink whose target is about to walk away.
+for c in "/opt/${OLD}" "/opt/${NEW}"; do
+  [ -L "$c/.env.local" ] || continue
+  note ".env.local -> $(readlink "$c/.env.local")  (re-pointed at /etc/${NEW}/api.env)"
+done
+
 # The database the API reads today. `databaseName()` in db/client.ts takes
 # MONGODB_DB and ignores the path on the URI, so this is the only line that
 # decides, and an absent or empty value means the code default.
@@ -178,7 +185,37 @@ for d in "/opt/${NEW}" "/var/lib/${NEW}"; do
   if [ -d "$d" ] && id "$NEW" >/dev/null 2>&1; then do_it chown -R "${NEW}:${NEW}" "$d"; fi
 done
 # Except the published APKs, which Caddy serves and setup-box.sh gives to caddy.
-if [ -d "/var/lib/${NEW}/dist" ]; then do_it chown -R caddy:caddy "/var/lib/${NEW}/dist"; fi
+#
+# **Non-fatal, and that matters more here than where it is copied from.**
+# `setup-box.sh` writes this same line as `chown … 2>/dev/null || true` because
+# a box may not have a caddy user yet. Here it ran bare under `set -e`, and the
+# place it stopped was the worst one available: three directories already moved,
+# the units not yet installed, the symlink below not yet re-pointed — a box
+# renamed on disk with nothing running and no obvious way back. Found by running
+# this script against a fake box rather than by reading it.
+if [ -d "/var/lib/${NEW}/dist" ]; then
+  do_it chown -R caddy:caddy "/var/lib/${NEW}/dist" 2>/dev/null || \
+    skip "no caddy user yet — deploy.sh will set the shelf's ownership when it publishes"
+fi
+
+# ── 4a. the one link that does not move with its directory ──────────────────
+#
+# `setup-box.sh` links `<checkout>/.env.local` at `/etc/<name>/api.env` with an
+# **absolute** target, so moving both trees leaves the link inside the moved
+# checkout still naming `/etc/steading/api.env` — which no longer exists. The
+# checkout moved, the target moved, and the sentence joining them did not.
+#
+# What breaks is quiet and only shows up later: `sudo pnpm farm:ls`,
+# `farm:grant`, `db:indexes` and every other operator command reads that link
+# and reports *"MONGODB_URI is not set"* on a box whose API is running
+# perfectly. Worse, the obvious repair — re-running `setup-box.sh` — used to
+# abort on it, because `-e` on a dangling link reads as absent and the `ln -s`
+# that followed then failed with "File exists". Both ends are fixed; this is
+# the end that knows the migration happened.
+if [ -e "/opt/${NEW}" ]; then
+  do_it ln -sfn "/etc/${NEW}/api.env" "/opt/${NEW}/.env.local"
+  note "/opt/${NEW}/.env.local  ->  /etc/${NEW}/api.env"
+fi
 
 # ── 5. the environment files ────────────────────────────────────────────────
 
