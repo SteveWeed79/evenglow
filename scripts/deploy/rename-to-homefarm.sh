@@ -6,8 +6,15 @@
 # what it is migrating from, and the day it stops naming it is the day it
 # stops working.
 #
-#   sudo /opt/steading/scripts/deploy/rename-to-homefarm.sh          # report only
-#   sudo /opt/steading/scripts/deploy/rename-to-homefarm.sh --go     # do it
+#   sudo /opt/steading/scripts/deploy/rename-to-homefarm.sh            # report only
+#   sudo /opt/steading/scripts/deploy/rename-to-homefarm.sh --go       # do it
+#   sudo /opt/steading/scripts/deploy/rename-to-homefarm.sh --go --keep-db
+#
+# `--keep-db` renames the box and leaves the database under its old name. The
+# name is cosmetic — `client.ts` selects on `MONGODB_DB` — and the copy is the
+# only irreversible half of this, so on a box whose Mongo account cannot grant
+# itself rights on a new database (which is every box `setup-mongo.sh` built)
+# this is the supported way through rather than a workaround.
 #
 # ## Why this exists as a script rather than a page of instructions
 #
@@ -44,7 +51,14 @@ set -euo pipefail
 OLD=steading
 NEW=homefarm
 GO=0
-[ "${1:-}" = "--go" ] && GO=1
+KEEP_DB=0
+for arg in "$@"; do
+  case "$arg" in
+    --go)      GO=1 ;;
+    --keep-db) KEEP_DB=1 ;;
+    *) printf '\n  ERROR: unknown option "%s". Use --go and/or --keep-db.\n\n' "$arg" >&2; exit 2 ;;
+  esac
+done
 
 BOLD=$(printf '\033[1m'); DIM=$(printf '\033[2m'); OFF=$(printf '\033[0m')
 say()  { printf '\n%s%s%s\n' "$BOLD" "$*" "$OFF"; }
@@ -121,12 +135,98 @@ OLD_DB="$(sed -n 's/^MONGODB_DB=\(.*\)$/\1/p' "$ENV_FILE" | tail -1)"
 MONGO_URI="$(sed -n 's/^MONGODB_URI=\(.*\)$/\1/p' "$ENV_FILE" | tail -1)"
 [ -n "$MONGO_URI" ] || die "$ENV_FILE has no MONGODB_URI"
 
-if [ "$OLD_DB" = "$NEW" ]; then
+if [ "$KEEP_DB" = 1 ]; then
+  skip "database stays '$OLD_DB' (--keep-db)"
+  COPY_DB=0
+elif [ "$OLD_DB" = "$NEW" ]; then
   skip "database is already '$NEW'"
   COPY_DB=0
 else
   note "database $OLD_DB  ->  $NEW  (copied; the old one is left in place)"
   COPY_DB=1
+fi
+
+# ── 1a. what would stop this halfway ────────────────────────────────────────
+#
+# **Every one of these used to be discovered mid-migration**, which is the one
+# way this script can hurt a farm. It is written as a report and a `--go`
+# precisely so it can refuse at the door; a check that runs at step 6 is not a
+# check, it is a trap with a description attached.
+#
+# Both of the failures that made this necessary were found by running it on a
+# live box, and both left the same wreckage — three directories moved, the
+# service account renamed, the units not yet installed, and nothing serving:
+#
+#   * `grantRolesToUser` authenticated as the API's OWN Mongo account. That
+#     account is created by `setup-mongo.sh` with `readWrite` and `dbAdmin` on
+#     one database and nothing else, so it cannot grant itself rights on a
+#     database that does not exist yet. It is not a permission that is usually
+#     present and occasionally missing — on a box built by these scripts it can
+#     never be there, so the copy could never have worked.
+#
+#   * `pnpm` links workspace packages by symlink, and on that box they resolved
+#     to absolute paths under the OLD tree. Moving the checkout dangled every
+#     one of them, so the API came up and died on `ERR_MODULE_NOT_FOUND` for
+#     `@homefarm/contracts` before it bound a port. Step 7 would have started it
+#     straight into that crash loop, after the database had been copied — a
+#     worse place to debug from than the one the grant failure stopped at.
+#
+# Reported in both modes, because the whole value is that the report tells you
+# it will not work while everything is still running.
+
+say "Checks"
+
+PREFLIGHT=0
+bad() { printf '  %sFAIL%s %s\n' "$BOLD" "$OFF" "$*"; PREFLIGHT=1; }
+
+# One probe per line, and every one of them says `command -v`, which is what
+# `tests/unit/rename-migration.test.ts` keys on when it proves nothing
+# destructive runs before the preview. A loop over a word list would put these
+# names on a line that reads like an invocation and is not one.
+command -v node >/dev/null 2>&1 && note "node is installed" || bad "node is not installed — the checkout has to be reinstalled once it moves"
+command -v corepack >/dev/null 2>&1 && note "corepack is installed" || bad "corepack is not installed — the checkout has to be reinstalled once it moves"
+
+if [ "$COPY_DB" = 1 ]; then
+  command -v mongosh >/dev/null 2>&1 && note "mongosh is installed" || bad "mongosh is not installed (apt-get install -y mongodb-mongosh)"
+  command -v mongodump >/dev/null 2>&1 && note "mongodump is installed" || bad "mongodump is not installed (apt-get install -y mongodb-database-tools)"
+  command -v mongorestore >/dev/null 2>&1 && note "mongorestore is installed" || bad "mongorestore is not installed (apt-get install -y mongodb-database-tools)"
+
+  # Asked now, and asked of the account that would have to do it. Granting on a
+  # database this user holds no role on needs `grantRole` there, which comes
+  # only from userAdminAnyDatabase or root.
+  if command -v mongosh >/dev/null 2>&1; then
+    ROLES="$(mongosh "$MONGO_URI" --quiet --eval '
+      db.runCommand({connectionStatus:1}).authInfo.authenticatedUserRoles
+        .map(function (r) { return r.role + "@" + r.db; }).join(",")
+    ' 2>/dev/null || true)"
+
+    case ",${ROLES}," in
+      *,root@admin,*|*,userAdminAnyDatabase@admin,*)
+        note "the API's Mongo account can grant itself rights on '${NEW}'" ;;
+      *)
+        bad "the API's Mongo account cannot grant itself rights on '${NEW}'.
+       It holds: ${ROLES:-<could not read its own roles>}
+       That grant needs root@admin or userAdminAnyDatabase@admin, and
+       setup-mongo.sh creates this account without either.
+
+       Re-run with --keep-db to rename the box and leave the database
+       called '${OLD_DB}'. The name is cosmetic — client.ts selects on
+       MONGODB_DB — and the copy is the only irreversible half of this." ;;
+    esac
+  fi
+fi
+
+if [ "$PREFLIGHT" != 0 ]; then
+  cat >&2 <<STOP
+
+  ${BOLD}Refusing to start.${OFF} Nothing has been changed, and the API is still up.
+
+  Every check above runs before the first unit is stopped, because the failures
+  they describe used to surface halfway through — with the box renamed on disk
+  and nothing serving.
+
+STOP
+  exit 1
 fi
 
 if [ "$GO" != 1 ]; then
@@ -236,12 +336,18 @@ for f in "/etc/${NEW}"/*.env; do
     # contains that substring, an unanchored rewrite silently changes it and the
     # API comes back unable to authenticate against a database whose credential
     # now exists nowhere but the `.pre-rename` copy.
-    sed -i \
-      -e 's/^STEADING_/HOMEFARM_/' \
-      -e "s#^MONGODB_DB=.*#MONGODB_DB=${NEW}#" \
-      -e "s#/${OLD_DB}?#/${NEW}?#" \
-      "$f"
-    grep -q '^MONGODB_DB=' "$f" || printf 'MONGODB_DB=%s\n' "$NEW" >> "$f"
+    sed -i -e 's/^STEADING_/HOMEFARM_/' "$f"
+
+    # Only when the database is actually being copied. Pointing the API at a
+    # database that was never made is how a rename becomes an outage, and it is
+    # exactly what --keep-db exists to avoid.
+    if [ "$COPY_DB" = 1 ]; then
+      sed -i \
+        -e "s#^MONGODB_DB=.*#MONGODB_DB=${NEW}#" \
+        -e "s#/${OLD_DB}?#/${NEW}?#" \
+        "$f"
+      grep -q '^MONGODB_DB=' "$f" || printf 'MONGODB_DB=%s\n' "$NEW" >> "$f"
+    fi
   fi
   note "$f (copy kept at $f.pre-rename)"
 done
@@ -295,6 +401,36 @@ if [ "$COPY_DB" = 1 ]; then
   fi
 fi
 
+# ── 6a. the workspace, which does not survive the move on its own ───────────
+#
+# `pnpm` links workspace packages by symlink. On the box this was written for
+# they were absolute paths into the OLD tree, so moving it left every one of
+# them dangling and the API died at its first import — `ERR_MODULE_NOT_FOUND`
+# for `@homefarm/contracts`, before it bound a port, on a loop until systemd's
+# start limiter gave up.
+#
+# The same command `deploy.sh` and `setup-box.sh` use, so this is the box's own
+# supported path rather than a third opinion about how to install. The chown
+# follows it because pnpm runs as root here and writes into `node_modules`;
+# without it the service user cannot read what was just built.
+
+say "Reinstalling the workspace"
+if [ "$GO" = 1 ]; then
+  ( cd "/opt/${NEW}" && corepack pnpm install --frozen-lockfile --filter "@${NEW}/api..." ) \
+    || die "the reinstall failed — the tree has moved and its workspace links are not rebuilt, so do NOT start the API. Fix the install, then re-run this script."
+  # Guarded exactly as the chown in step 4 is. A missing account here is a bare
+  # `chown: invalid user` and a silent `set -e` exit, after the tree has moved
+  # and the database has been copied — no message, nothing serving.
+  if id "$NEW" >/dev/null 2>&1; then
+    chown -R "${NEW}:${NEW}" "/opt/${NEW}"
+    note "workspace links rebuilt and owned by ${NEW}"
+  else
+    note "workspace links rebuilt (no ${NEW} account to own them)"
+  fi
+else
+  note "would run: corepack pnpm install --frozen-lockfile --filter \"@${NEW}/api...\" in /opt/${NEW}"
+fi
+
 # ── 7. up ───────────────────────────────────────────────────────────────────
 #
 # The unit files come out of the moved checkout, which is now the renamed one,
@@ -334,6 +470,19 @@ ${BOLD}Done.${OFF} Two things left, and one of them is not for today.
        systemctl status ${NEW}-api
        curl -fsS https://\$DOMAIN/health
 
+DONE
+
+# **Which database is safe to drop depends on whether one was copied**, and
+# printing the wrong answer here is worse than printing nothing.
+#
+# With `--keep-db` there is no second copy: `$OLD_DB` is not a spare left behind
+# for rollback, it is the database the API was just started against. The
+# paragraph below used to print unconditionally, so the one flag added to keep a
+# box safe ended by handing the operator a command that destroys the farm's only
+# dataset — days later, with the box healthy, following the script's own advice.
+if [ "$COPY_DB" = 1 ]; then
+  cat <<KEPT
+
   ${BOLD}The old database is still there, untouched.${OFF} That is deliberate — it is
   the way back. When the new one has carried a few days of real use:
 
@@ -341,4 +490,17 @@ ${BOLD}Done.${OFF} Two things left, and one of them is not for today.
 
   Not before. There is no undo for that line and no second copy.
 
-DONE
+KEPT
+else
+  cat <<LIVE
+
+  ${BOLD}The database is still called '${OLD_DB}', and it is the live one.${OFF}
+  Nothing was copied, so there is no spare and nothing here is safe to drop.
+
+  The box is renamed; the database name is not, and it does not need to be —
+  ${BOLD}client.ts${OFF} selects on MONGODB_DB, so the name is cosmetic. Renaming it later
+  means granting this box's Mongo account rights on the new name first, which
+  needs root or userAdminAnyDatabase.
+
+LIVE
+fi

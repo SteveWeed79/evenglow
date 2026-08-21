@@ -270,9 +270,35 @@ sed "s#/opt/homefarm#${REPO_DIR}#g" \
 sed "s#/opt/homefarm#${REPO_DIR}#g" \
   "$REPO_DIR/scripts/deploy/homefarm-deploy.service" > /etc/systemd/system/homefarm-deploy.service
 cp "$REPO_DIR/scripts/deploy/homefarm-deploy.timer" /etc/systemd/system/homefarm-deploy.timer
+
+# ── The backup pair, which nothing used to install ──────────────────────────
+#
+# **This script mentioned backups nowhere at all.** The four units were a manual
+# copy in the middle of a deployment document, so the documented build produced a
+# box with no backups — and, because the checker is one of the four, no alarm
+# either. `systemctl --failed` stayed clean. A box with no off-box copy of a
+# farm's records looked exactly like a working one, and that is how one was found
+# months later.
+#
+# `homefarm-backup-check` is enabled here and now, before `backup.env` exists and
+# before the timer beside it is started. That is deliberate: with no marker,
+# `check-backup.sh` says "No backup has ever completed on this box" and prints
+# the command that fixes it — which is the true state of a box that has just been
+# built, and the one thing the old arrangement could never say.
+#
+# `homefarm-backup.timer` is left for the operator, exactly like the deploy
+# timer above and for the same reason: a nightly job against an unwritten
+# `backup.env` is a failure a night, and the check already names it.
+for u in homefarm-backup.service homefarm-backup.timer \
+         homefarm-backup-check.service homefarm-backup-check.timer; do
+  sed "s#/opt/homefarm#${REPO_DIR}#g" "$REPO_DIR/scripts/deploy/$u" > "/etc/systemd/system/$u"
+done
+
 systemctl daemon-reload
 systemctl enable homefarm-api >/dev/null
 note "enabled (starts on boot)"
+systemctl enable --now homefarm-backup-check.timer >/dev/null
+note "homefarm-backup-check.timer enabled — it will report that no backup exists yet, which is true"
 
 # Installed but NOT started. Automatic deployment onto a box whose two secrets
 # are still blank would restart a service that cannot come up, every five
@@ -321,7 +347,7 @@ note "configured for $DOMAIN"
 # ── done ────────────────────────────────────────────────────────────────────
 cat <<DONE
 
-$(printf '\033[1m')Set up. Three things left, and only you can do them.$(printf '\033[0m')
+$(printf '\033[1m')Set up. Four things left, and only you can do them.$(printf '\033[0m')
 
   1. Put the two values in /etc/homefarm/api.env
 
@@ -346,6 +372,16 @@ $(printf '\033[1m')Set up. Three things left, and only you can do them.$(printf 
      Pass one only to match a database that already exists under another name.
      It binds mongod to 127.0.0.1 and prints the connection string once.
      Nothing to open in any firewall for it, which is the point.
+
+  4. Turn on backups. Until you do, this box holds the only server-side copy
+     of the farm's records, and homefarm-backup-check will say so once a day:
+
+       sudo nano /etc/homefarm/backup.env        # bucket, and the age PUBLIC key
+       sudo systemctl enable --now homefarm-backup.timer
+       sudo /opt/homefarm/scripts/backup-mongo.sh backup    # prove it before trusting it
+
+     The check timer is already running, so a backup that stops working is
+     reported rather than discovered when it is needed.
 
 $(printf '\033[1m')Then check it from anywhere:$(printf '\033[0m')
 

@@ -16,6 +16,7 @@ import {
   shearingDues,
   taskDues,
   todayList,
+  WITHDRAWAL_KINDS,
   withdrawalDue,
 } from '@homefarm/contracts';
 import { listAnimals } from '@homefarm/core/read/animals';
@@ -114,10 +115,28 @@ export function useDues(): DuesView {
      * written and tested (W2). Re-deriving it here would give the banner on a
      * group and the row on Today two chances to disagree about whether eggs
      * are safe to sell.
+     *
+     * **Every kind, not eggs alone.** This asked for `'egg'` and nothing else,
+     * so a dairy goat's milk withdrawal and a cull's meat withdrawal produced
+     * no row on Today at all — the produce was held, the group screen said so,
+     * and the morning list said nothing. `WITHDRAWAL_KINDS` is the list and
+     * `withdrawalDue` has always handled any of them; only the caller was
+     * poultry-shaped, which is the assumption `CLAUDE.md` names outright and
+     * the one place where being wrong is a regulatory event rather than an
+     * inconvenience.
+     *
+     * No species gate is needed and none is wanted: `activeWithdrawals` only
+     * returns a kind the treatment actually recorded days for, so a flock of
+     * hens raises nothing about milk without anybody having to say that hens
+     * do not give milk.
      */
-    const withdrawals = await withdrawalsBySubject(
-      'egg',
-      groups.map((g) => g.id),
+    const withdrawalsByKind = await Promise.all(
+      WITHDRAWAL_KINDS.map((kind) =>
+        withdrawalsBySubject(
+          kind,
+          groups.map((g) => g.id),
+        ),
+      ),
     );
     const lastCare = lastCareBySubject(careLogs);
     // A clip on a named animal counts for its group — a farm shears the whole
@@ -154,12 +173,14 @@ export function useDues(): DuesView {
     }
 
     for (const group of groups) {
-      for (const active of withdrawals.get(group.id) ?? []) {
-        // Null for a course still being dosed: the produce stays held and the
-        // banner says so, but there is no date for a row to point at. See
-        // `withdrawalDue`.
-        const row = withdrawalDue(active, group.name);
-        if (row !== null) rows.push(row);
+      for (const byKind of withdrawalsByKind) {
+        for (const active of byKind.get(group.id) ?? []) {
+          // Null for a course still being dosed: the produce stays held and the
+          // banner says so, but there is no date for a row to point at. See
+          // `withdrawalDue`.
+          const row = withdrawalDue(active, group.name);
+          if (row !== null) rows.push(row);
+        }
       }
 
       /**

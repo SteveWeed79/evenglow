@@ -277,8 +277,60 @@ describe('livestock', () => {
 
     expect(row.at).toBe(NOW + 4 * DAY);
     // Not actionable early: the produce is already being held.
-    expect(row.noticeDays).toBe(0);
+    expect(row.noticeDays).toBe(1);
     expect(urgencyOf(row, NOW)).toBe('later');
+  });
+
+  /**
+   * The day before it clears, and this is the case the notice window exists to
+   * make reachable at all.
+   *
+   * `noticeDays` was 0, which reads as the purest statement of "not actionable
+   * early" and is the one value that makes the row unreachable: `urgencyOf`
+   * calls a row `later` until `now >= at - noticeDays * DAY`, which at zero is
+   * `now >= at` — and `activeWithdrawals` drops the withdrawal the instant
+   * `at <= now`. The row therefore existed only while it was invisible and
+   * became visible only once it had ceased to exist. No farm ever saw one.
+   *
+   * Asserted at both ends of the final day rather than at a single instant,
+   * because a single sample is what let the original pass while saying nothing.
+   */
+  it('shows on the day before it clears, which is the only day it can', () => {
+    const clearsAt = NOW + 4 * DAY;
+    const row = withdrawalDue(
+      { kind: 'egg', medicationId: 'med1', medication: 'Baytril', subjectId: 'f1', clearsAt },
+      'Layers',
+    ) as Due;
+
+    // Two days out it is still the app repeating a banner the group screen has.
+    expect(urgencyOf(row, clearsAt - 2 * DAY)).toBe('later');
+
+    // Inside the last day, from either end of it, it is worth saying.
+    expect(urgencyOf(row, clearsAt - DAY)).toBe('soon');
+    expect(urgencyOf(row, clearsAt - 60_000)).toBe('soon');
+
+    // And it reaches Today rather than merely being 'soon' in the abstract.
+    expect(todayList([row], clearsAt - DAY)).toHaveLength(1);
+    expect(todayList([row], clearsAt - 60_000)).toHaveLength(1);
+  });
+
+  /**
+   * Milk and meat are rows too, and the builder always knew it — only the
+   * caller was poultry-shaped. See `useDues`.
+   */
+  it('builds a row for milk and for meat, not only for eggs', () => {
+    for (const kind of ['egg', 'meat', 'milk'] as const) {
+      const row = withdrawalDue(
+        { kind, medicationId: 'med1', medication: 'Baytril', subjectId: 'f1', clearsAt: NOW + DAY },
+        'The goats',
+      ) as Due;
+
+      expect(row.kind).toBe('withdrawal');
+      // The kind is in the key, so three holds on one treatment are three rows
+      // rather than one that overwrites the other two.
+      expect(row.key).toContain(kind);
+      expect(todayList([row], NOW + 30_000)).toHaveLength(1);
+    }
   });
 
   /**

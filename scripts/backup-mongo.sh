@@ -105,10 +105,30 @@ backup() {
   plain="$WORK/$name.gz"
   sealed="$WORK/$name.age"
 
-  # `--oplog` needs a replica set — run mongod as a single-node one. Without it
-  # collections are read at slightly different moments and the snapshot is not
-  # internally consistent.
-  mongodump --uri="$MONGODB_URI" --archive="$plain" --gzip --oplog --quiet
+  # **No `--oplog`, and it is not an oversight — it is what made every backup on
+  # every box fail.**
+  #
+  # It was here with a comment saying "`--oplog` needs a replica set — run mongod
+  # as a single-node one", an instruction no script implements and no document
+  # repeats. `setup-mongo.sh` installs a standalone and argues the case for it at
+  # length, so the flag was asking for a topology this project has decided
+  # against. Three independent things then refused it: `--oplog` is only
+  # supported against a replica-set member; it must read `local.oplog.rs`, and
+  # the account `setup-mongo.sh` creates holds `readWrite`+`dbAdmin` on one
+  # database and no role on `local`; and it is rejected outright when the target
+  # names a single database, which the URI on every box does.
+  #
+  # `mongodump` therefore exited non-zero, `set -Eeuo pipefail` aborted before
+  # the upload, and no archive was ever written — on a schedule, with the only
+  # thing that would have said so installed by the same step nobody ran.
+  #
+  # The consistency it was there for is not lost in any way that matters here.
+  # Every write this service makes is a single document (`sync/apply.ts` upserts
+  # one mutation and projects one record), so there is no multi-document
+  # invariant for a point-in-time snapshot to protect. Restoring to an oplog
+  # position would need a replica set, a `backup` role on `admin`, and a reversal
+  # of `setup-mongo.sh`'s recorded decision — all three, or none.
+  mongodump --uri="$MONGODB_URI" --archive="$plain" --gzip --quiet
 
   # A failed dump can still leave a small, structurally valid file. Uploading
   # one is worse than failing, because it looks like a backup in the listing.
@@ -183,7 +203,10 @@ restore() {
   age --decrypt --identity "$HOMEFARM_BACKUP_IDENTITY" --output "$plain" "$sealed"
 
   printf 'Restoring %s into %s\n' "$key" "${MONGODB_URI%%\?*}"
-  mongorestore --uri="$MONGODB_URI" --archive="$plain" --gzip --oplogReplay
+  # No `--oplogReplay`: the archive carries no oplog to replay, because the dump
+  # above takes none. Passing it against an archive without one is an error, so
+  # this was unusable for exactly as long as the dump was.
+  mongorestore --uri="$MONGODB_URI" --archive="$plain" --gzip
 
   # The EXIT trap would get this anyway; doing it here means the plaintext is
   # gone before the success message rather than after it.
