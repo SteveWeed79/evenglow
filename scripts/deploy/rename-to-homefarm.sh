@@ -418,8 +418,15 @@ say "Reinstalling the workspace"
 if [ "$GO" = 1 ]; then
   ( cd "/opt/${NEW}" && corepack pnpm install --frozen-lockfile --filter "@${NEW}/api..." ) \
     || die "the reinstall failed — the tree has moved and its workspace links are not rebuilt, so do NOT start the API. Fix the install, then re-run this script."
-  chown -R "${NEW}:${NEW}" "/opt/${NEW}"
-  note "workspace links rebuilt and owned by ${NEW}"
+  # Guarded exactly as the chown in step 4 is. A missing account here is a bare
+  # `chown: invalid user` and a silent `set -e` exit, after the tree has moved
+  # and the database has been copied — no message, nothing serving.
+  if id "$NEW" >/dev/null 2>&1; then
+    chown -R "${NEW}:${NEW}" "/opt/${NEW}"
+    note "workspace links rebuilt and owned by ${NEW}"
+  else
+    note "workspace links rebuilt (no ${NEW} account to own them)"
+  fi
 else
   note "would run: corepack pnpm install --frozen-lockfile --filter \"@${NEW}/api...\" in /opt/${NEW}"
 fi
@@ -463,6 +470,19 @@ ${BOLD}Done.${OFF} Two things left, and one of them is not for today.
        systemctl status ${NEW}-api
        curl -fsS https://\$DOMAIN/health
 
+DONE
+
+# **Which database is safe to drop depends on whether one was copied**, and
+# printing the wrong answer here is worse than printing nothing.
+#
+# With `--keep-db` there is no second copy: `$OLD_DB` is not a spare left behind
+# for rollback, it is the database the API was just started against. The
+# paragraph below used to print unconditionally, so the one flag added to keep a
+# box safe ended by handing the operator a command that destroys the farm's only
+# dataset — days later, with the box healthy, following the script's own advice.
+if [ "$COPY_DB" = 1 ]; then
+  cat <<KEPT
+
   ${BOLD}The old database is still there, untouched.${OFF} That is deliberate — it is
   the way back. When the new one has carried a few days of real use:
 
@@ -470,4 +490,17 @@ ${BOLD}Done.${OFF} Two things left, and one of them is not for today.
 
   Not before. There is no undo for that line and no second copy.
 
-DONE
+KEPT
+else
+  cat <<LIVE
+
+  ${BOLD}The database is still called '${OLD_DB}', and it is the live one.${OFF}
+  Nothing was copied, so there is no spare and nothing here is safe to drop.
+
+  The box is renamed; the database name is not, and it does not need to be —
+  ${BOLD}client.ts${OFF} selects on MONGODB_DB, so the name is cosmetic. Renaming it later
+  means granting this box's Mongo account rights on the new name first, which
+  needs root or userAdminAnyDatabase.
+
+LIVE
+fi

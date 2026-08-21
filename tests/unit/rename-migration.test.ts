@@ -219,6 +219,36 @@ describe('the live-box rename, as a script', () => {
    * dropped is a migration with no way back. Dropping it is left to a person,
    * later, deliberately.
    */
+  /**
+   * With `--keep-db` there is no second copy, so `$OLD_DB` is not a spare left
+   * behind for rollback — it is the database the API was just started against.
+   *
+   * The closing text used to print the drop unconditionally, which meant the
+   * one flag added to keep a box safe ended by handing the operator a command
+   * that destroys the farm's only dataset: days later, box healthy, following
+   * the script's own advice. Asserted on the source rather than by running it,
+   * because reaching that paragraph needs a live box.
+   */
+  it('only offers to drop a database when it actually made a copy', () => {
+    const source = readFileSync(SCRIPT, 'utf8');
+    const drop = source.indexOf('dropDatabase()');
+    expect(drop).toBeGreaterThan(0);
+
+    // Everything above the drop, with comments stripped: the nearest preceding
+    // guard has to be the one that knows a copy happened.
+    const above = source
+      .slice(0, drop)
+      .split('\n')
+      .filter((line) => !line.trimStart().startsWith('#'))
+      .join('\n');
+
+    const guard = above.lastIndexOf('if [ "$COPY_DB" = 1 ]');
+    const closed = above.lastIndexOf('\nfi');
+    expect(guard).toBeGreaterThan(0);
+    // The guard opens after the last one closed, so the drop is inside it.
+    expect(guard).toBeGreaterThan(closed);
+  });
+
   it('never drops the old database', () => {
     const source = readFileSync(SCRIPT, 'utf8');
     const executable = source
