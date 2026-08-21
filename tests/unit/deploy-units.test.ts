@@ -92,6 +92,55 @@ describe('the backup can actually run against the database this repo builds', ()
   });
 });
 
+describe('the auth-disabled window cannot outlive the script', () => {
+  /**
+   * `setup-mongo.sh` turns MongoDB's authorization OFF, creates the account,
+   * and turns it back on. It had no `trap`, so any death inside that window —
+   * a failed restart, a duplicate-user race, or a dropped SSH session, which
+   * this is documented as being run over and which the window's 30s of `sleep`
+   * makes easy to hit — left `authorization: disabled` on disk with `mongod`
+   * enabled. The database then came back unauthenticated on every subsequent
+   * reboot, indefinitely, with nothing saying so.
+   */
+  it('arms a trap before disabling, and clears it only after verifying', () => {
+    const source = executable(read('setup-mongo.sh'));
+
+    const armed = source.indexOf('trap restore_auth EXIT INT TERM HUP');
+    const disabled = source.indexOf('write_conf disabled');
+    const cleared = source.indexOf('trap - EXIT INT TERM HUP');
+    const verified = source.indexOf('unauthenticated read succeeded');
+
+    expect(armed).toBeGreaterThan(0);
+    // Armed before the window opens, or the window can open unprotected.
+    expect(armed).toBeLessThan(disabled);
+    // Released only after the check that proves the lock is back on.
+    expect(cleared).toBeGreaterThan(verified);
+  });
+
+  /**
+   * The other half: the verification `die`d only when the unauthenticated read
+   * SUCCEEDED, so a mongod that never came back was read as proof of
+   * enforcement and the script exited 0 reporting a locked database that
+   * nothing could reach.
+   */
+  it('separates "locked" from "unreachable" before claiming either', () => {
+    const source = executable(read('setup-mongo.sh'));
+    const ping = source.indexOf('mongod is not answering after the restart');
+    const locked = source.indexOf('Authorization is NOT in force');
+
+    expect(ping).toBeGreaterThan(0);
+    // Reachability is established first; only then is the refusal meaningful.
+    expect(ping).toBeLessThan(locked);
+  });
+
+  /** And a ping that never answers is a failure, not a fall-through to success. */
+  it('refuses a mongod that is active but not answering', () => {
+    expect(executable(read('setup-mongo.sh'))).toContain(
+      'has not answered a ping in 15s',
+    );
+  });
+});
+
 describe('deploy.sh can be pointed at the checkout it actually lives in', () => {
   /**
    * `deploy.env` was sourced thirteen lines below `REPO_DIR`, so the two
