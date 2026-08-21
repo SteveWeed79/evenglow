@@ -147,8 +147,18 @@ wait_for_mongo() {
     if mongosh --quiet --eval 'db.adminCommand({ping:1}).ok' >/dev/null 2>&1; then return 0; fi
     sleep 1
   done
+
+  # **`active` is not `answering`, and this used to return 0 for the difference.**
+  # Fifteen failed pings against a unit systemd calls active fell straight
+  # through to success — so a mongod still doing WiredTiger recovery, or
+  # listening somewhere else, was handed to the caller as ready. The caller
+  # after the final restart is the check that authorization is on, and that
+  # check reads "unreachable" as "locked" (see below), so the two together
+  # reported a locked database that nothing could reach.
   systemctl is-active --quiet mongod || die "mongod did not start. journalctl -u mongod -n 50"
-  return 0
+  die "mongod is running but has not answered a ping in 15s. It may still be
+  recovering, or may be listening somewhere other than 127.0.0.1:27017.
+  Check 'journalctl -u mongod -n 50' before running this again."
 }
 
 systemctl enable mongod >/dev/null
@@ -183,6 +193,35 @@ systemctl enable mongod >/dev/null
 # Doing it on every run rather than only the first is what makes this
 # idempotent from any starting state — including the broken one above, where
 # auth is already enabled and no account exists.
+# **Nothing used to guarantee this window closes.**
+#
+# The paragraph above says the window "costs nothing here" and then the next one
+# withdraws that premise: it runs on EVERY run, not only the first, so on a
+# re-run it is open over live farm records. And any death inside it left
+# `authorization: disabled` on disk with `mongod` already enabled — so the
+# database came back unauthenticated on every subsequent reboot, indefinitely,
+# with every process on the box able to read and write every farm.
+#
+# It is reachable without anything exotic: a failed restart, `wait_for_mongo`'s
+# own `die`, a duplicate-user race — or a dropped SSH session, since this is
+# documented as run by hand over SSH, carries no `nohup`, and the window holds
+# up to 30 seconds of `sleep`. That last one happened on the box this was
+# written for, on the same afternoon, in a different terminal.
+#
+# So the enabled config is the exit invariant. The trap covers the ordinary
+# failure, the signal, and the hangup; it is cleared only once the verification
+# below has actually passed.
+AUTH_WINDOW_OPEN=0
+restore_auth() {
+  [ "$AUTH_WINDOW_OPEN" = 1 ] || return 0
+  printf '\n  Putting authorization back before exiting — the window must not outlive this script.\n' >&2
+  write_conf enabled
+  systemctl restart mongod >/dev/null 2>&1 || true
+  printf '  Restored. Verify with: grep authorization /etc/mongod.conf\n\n' >&2
+}
+trap restore_auth EXIT INT TERM HUP
+
+AUTH_WINDOW_OPEN=1
 write_conf disabled
 systemctl restart mongod
 wait_for_mongo
@@ -236,12 +275,30 @@ write_conf enabled
 systemctl restart mongod
 wait_for_mongo
 
+# **Two questions, and this used to ask only one of them.**
+#
+# `die` fired only when the unauthenticated read SUCCEEDED, so every other
+# outcome — including mongod not answering at all — was read as proof of
+# enforcement. A server that never came back therefore printed "unauthenticated
+# access refused, as it should be" and exited 0. `wait_for_mongo` now refuses an
+# unreachable server outright, which closes that from the other side; this
+# separates the two answers here as well, because a check that cannot tell
+# "locked" from "gone" is not a check.
+if ! mongosh --quiet --eval 'db.adminCommand({ping:1}).ok' >/dev/null 2>&1; then
+  die "mongod is not answering after the restart, so whether authorization is in
+  force cannot be established. Check 'journalctl -u mongod -n 50'."
+fi
+
 if mongosh --quiet --eval 'db.getSiblingDB("admin").system.users.countDocuments({})' >/dev/null 2>&1; then
   die "Authorization is NOT in force — an unauthenticated read succeeded after the restart.
   Do not put data here yet. Check /etc/mongod.conf for 'authorization: enabled'
   and 'journalctl -u mongod -n 50'."
 fi
 note "on — unauthenticated access refused, as it should be"
+
+# Verified, so the window is genuinely shut and the trap has nothing left to do.
+AUTH_WINDOW_OPEN=0
+trap - EXIT INT TERM HUP
 
 cat <<DONE
 
