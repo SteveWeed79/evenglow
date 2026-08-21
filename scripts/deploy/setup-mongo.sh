@@ -21,6 +21,16 @@
 # it is the correct shape, and it is one process to reason about instead of
 # three.
 #
+# **A third thing wants one and does not get it: `mongodump --oplog`.** That is
+# written down here because leaving it out cost every backup on every box.
+# `backup-mongo.sh` passed the flag with a comment telling the operator to "run
+# mongod as a single-node one" — an instruction this file contradicts and no
+# script implements — so the dump failed every night, silently, with the timer
+# that would have reported it installed by a step nobody runs. The flag is gone
+# and a plain dump is what a standalone supports. Anything that reinstates it has
+# to reinstate a replica set, a `backup` role on `admin`, and a reversal of the
+# paragraph above — all three, or none.
+#
 # ## What this deliberately does NOT do
 #
 # It does not open port 27017 anywhere, and nothing else should either. An

@@ -14,7 +14,26 @@
 
 set -euo pipefail
 
-REPO_DIR="${HOMEFARM_DIR:-/opt/homefarm}"
+# ── Settings, read before anything that could default them ──────────────────
+#
+# **This used to sit thirteen lines further down, and the two settings above it
+# could therefore never be overridden.** `HOMEFARM_REF` and `HOMEFARM_APP_ID`
+# are read after it and work; `HOMEFARM_DIR` and `PORT` were read before it and
+# did not. `homefarm-deploy.service` carries no `EnvironmentFile=`, so sourcing
+# this file is the only channel there is, and `sudo HOMEFARM_DIR=… deploy.sh` is
+# refused by a default sudoers.
+#
+# That is not a tidiness point. `setup-box.sh` rewrites the unit's ExecStart to
+# the box's real checkout, so a box at another path correctly invokes its own
+# copy of this script — which then looked for `/opt/homefarm`, died, and failed
+# every five minutes for ever. The box could not deploy, so it could not receive
+# the fix for its own condition, and nothing surfaced it but a failed unit.
+[ -f /etc/homefarm/deploy.env ] && . /etc/homefarm/deploy.env
+
+# **Defaults to this script's own checkout**, so a copy that has been moved is
+# self-locating even with nothing set. The literal is kept as the last resort
+# only for a script invoked through a path that cannot be resolved.
+REPO_DIR="${HOMEFARM_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd || echo /opt/homefarm)}"
 SERVICE_USER="homefarm"
 PORT="${PORT:-3001}"
 
@@ -24,10 +43,9 @@ PORT="${PORT:-3001}"
 # (see .github/workflows/ci.yml), so a red build cannot reach a farm during the
 # minutes between a bad merge and somebody noticing.
 #
-# Override it in /etc/homefarm/deploy.env to point a box at `dev` or at a
-# branch under test. That file is also where the timer reads its settings, so
-# there is one place to look rather than an argument somebody has to remember.
-[ -f /etc/homefarm/deploy.env ] && . /etc/homefarm/deploy.env
+# Override it in /etc/homefarm/deploy.env, alongside everything else — that file
+# is also where the timer reads its settings, so there is one place to look
+# rather than an argument somebody has to remember.
 REF="${HOMEFARM_REF:-release}"
 
 # ── Which app this box is allowed to serve ──────────────────────────────────
