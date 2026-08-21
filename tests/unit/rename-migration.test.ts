@@ -35,14 +35,17 @@ const SCRIPT = join(REPO, 'scripts', 'deploy', 'rename-to-homefarm.sh');
  * the `do_it`/`note` reporting around them are dropped, because those need a
  * real `/etc`.
  */
-function rewrite(env: string, oldDb: string): string {
+function rewrite(env: string, oldDb: string, copyDb: 0 | 1 = 1): string {
   const block = execFileSync(
     'sed',
-    ['-n', '/STEADING_\\* -> HOMEFARM_\\*/,/^      "\\$f"$/p', SCRIPT],
+    ['-n', '/STEADING_\\* -> HOMEFARM_\\*/,/^    fi$/p', SCRIPT],
     { encoding: 'utf8' },
   );
   expect(block).toContain('sed -i');
   expect(block).toContain('MONGODB_DB');
+  // The database half is guarded, so the block must carry the guard with it —
+  // lifting only the seds would test a shape the script no longer has.
+  expect(block).toContain('COPY_DB');
 
   const dir = mkdtempSync(join(tmpdir(), 'rename-'));
   const file = join(dir, 'api.env');
@@ -55,9 +58,9 @@ function rewrite(env: string, oldDb: string): string {
       `set -euo pipefail
        NEW=homefarm
        OLD_DB=${JSON.stringify(oldDb)}
+       COPY_DB=${copyDb}
        f=${JSON.stringify(file)}
-${block}
-       grep -q '^MONGODB_DB=' "$f" || printf 'MONGODB_DB=%s\\n' "$NEW" >> "$f"`,
+${block}`,
     ],
     { encoding: 'utf8' },
   );
@@ -133,6 +136,40 @@ describe('the live-box rename, rewriting api.env', () => {
     expect(value(out, 'HOMESTEADING_UNRELATED')).toBe('keep');
   });
 
+  /**
+   * `--keep-db`, which is the path every box built by `setup-mongo.sh` has to
+   * take: that account holds `readWrite`+`dbAdmin` on one database and cannot
+   * grant itself rights on a new one, so the copy can never run and the
+   * database keeps its name.
+   *
+   * The rename of the box still happens; what must NOT happen is the API being
+   * pointed at a database nothing created. That is an outage, and it is the one
+   * this flag exists to prevent — so both database lines are left exactly as
+   * they were while the deploy variables still move.
+   */
+  it('leaves the database alone with --keep-db, and still renames the rest', () => {
+    const out = rewrite(
+      [`MONGODB_URI=${SECRET}`, 'MONGODB_DB=steadingdb', 'STEADING_BACKUP_BUCKET=s3://b', ''].join('\n'),
+      'steadingdb',
+      0,
+    );
+
+    expect(value(out, 'MONGODB_DB')).toBe('steadingdb');
+    expect(value(out, 'MONGODB_URI')).toBe(SECRET);
+    // The half that is safe either way still happens.
+    expect(value(out, 'HOMEFARM_BACKUP_BUCKET')).toBe('s3://b');
+  });
+
+  /**
+   * And it does not invent the line either. A box with no `MONGODB_DB` is
+   * relying on the code default; writing one in under `--keep-db` would pin it
+   * to a name the operator never chose.
+   */
+  it('does not add MONGODB_DB with --keep-db', () => {
+    const out = rewrite(`MONGODB_URI=${SECRET}\nPORT=3001\n`, 'steadingdb', 0);
+    expect(value(out, 'MONGODB_DB')).toBeNull();
+  });
+
   it('is safe to run twice', () => {
     const once = rewrite(`MONGODB_URI=${SECRET}\nMONGODB_DB=steadingdb\n`, 'steadingdb');
     const twice = rewrite(once, 'steadingdb');
@@ -153,6 +190,11 @@ describe('the live-box rename, as a script', () => {
       .slice(0, preview)
       .split('\n')
       .filter((line) => !line.trimStart().startsWith('#'))
+      // `command -v mongodump` names a destructive verb and runs nothing. The
+      // pre-flight checks are made of these, and they have to run before the
+      // preview or they are not checks — they are a trap with a description
+      // attached. What follows still catches an actual invocation.
+      .filter((line) => !line.includes('command -v'))
       .join('\n');
     for (const verb of [
       'systemctl disable',
