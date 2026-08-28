@@ -205,6 +205,15 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
    * has not arrived yet is indistinguishable from an orphan, so sweeping before
    * the feed runs out would delete records the server was about to send.
    *
+   * **It is only a safe condition because the server stopped lying about it**
+   * (H6). `readSnapshotPage` answered `false` when it had merely *stopped* at
+   * a row it could not decide yet, to save the round trip that re-reads up to
+   * the same row — and this read that as the log having run out, so a device
+   * whose records arrived by pull deleted every record whose log rows sat
+   * beyond the stall, and set `repairDone` so it never ran again. A stall says
+   * `more: true` now. Nothing here can tell the two apart, so nothing here can
+   * defend against that line being optimised back.
+   *
    * The other two ways a pass can end are already excluded by getting here at
    * all. Every deferral returns from inside the loop, and so does the pause at
    * a record this device still owes — which would otherwise leave the tail of

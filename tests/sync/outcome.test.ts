@@ -372,4 +372,78 @@ describeDb('a projection lost to a crash repairs itself', () => {
     expect(await harness!.db.collection('eggLogs').countDocuments({})).toBe(1);
     expect(await feed()).toEqual([mutation.id]);
   });
+
+  /**
+   * What the page says about itself when it stopped rather than ran out (H6).
+   *
+   * `more` is not only a paging hint. The client's one-time projection repair
+   * treats `false` as proof the log ran out, and on that proof deletes every
+   * local record the replay did not stamp and no outbox row names. Answering
+   * `false` at a stall — which this used to do, deliberately, to save a round
+   * trip — meant a device whose records arrived by pull lost every record
+   * whose log rows sat beyond the undecided one, and set `repairDone`, so the
+   * repair never ran again to put them back.
+   *
+   * The saved round trip is spent instead: the client asks once more, reads
+   * nothing, gets the cursor back unchanged, and stops on its own no-progress
+   * guard with `more` still true.
+   */
+  it('says there is more when it stopped at a row it could not decide', async () => {
+    const undecided = makeMutation({ payload: { occurredAt: 1, flockId: ulid(), count: 18 } });
+    const behindIt = makeMutation({ payload: { occurredAt: 2, flockId: ulid(), count: 19 } });
+
+    await harness!.db.collection('mutations').insertMany([
+      {
+        _id: undecided.id,
+        orgId: ORG_A,
+        targetId: undecided.targetId,
+        entity: undecided.entity,
+        op: undecided.op,
+        payload: undecided.payload,
+        deviceId: undecided.deviceId,
+        clientSeq: undecided.clientSeq,
+        clientTs: undecided.clientTs,
+        schemaVersion: undecided.schemaVersion,
+        userId: OWNER.userId,
+        serverTs: new Date(1_000),
+        outcome: 'pending',
+      },
+      {
+        _id: behindIt.id,
+        orgId: ORG_A,
+        targetId: behindIt.targetId,
+        entity: behindIt.entity,
+        op: behindIt.op,
+        payload: behindIt.payload,
+        deviceId: behindIt.deviceId,
+        clientSeq: behindIt.clientSeq,
+        clientTs: behindIt.clientTs,
+        schemaVersion: behindIt.schemaVersion,
+        userId: OWNER.userId,
+        serverTs: new Date(2_000),
+        outcome: 'insert',
+      },
+    ] as never);
+
+    const page = await readSnapshotPage(scope(), { since: 0, sinceId: null });
+
+    // Held behind the undecided row, which is the ordering this stall exists
+    // to protect — and the reason the client must not read the page as final.
+    expect(page.mutations).toEqual([]);
+    expect(page.more).toBe(true);
+    // And the cursor did not move past it, so the next page starts here again.
+    expect(page.through).toBe(0);
+    expect(page.throughId).toBeNull();
+  });
+
+  /** The other half of the same flag: run out, and say so. */
+  it('says there is no more when the log has genuinely run out', async () => {
+    const mutation = makeMutation({ payload: { occurredAt: 1, flockId: ulid(), count: 18 } });
+    await applyBatch(scope(), OWNER, [mutation]);
+
+    const page = await readSnapshotPage(scope(), { since: 0, sinceId: null });
+
+    expect(page.mutations.map((m) => m.id)).toEqual([mutation.id]);
+    expect(page.more).toBe(false);
+  });
 });
