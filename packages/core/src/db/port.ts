@@ -212,13 +212,33 @@ export interface LocalStore {
    */
   markSynced(at: number): Promise<void>;
 
-  /** Increments attempts and records the error, without changing status. */
+  /**
+   * Increments attempts and records the error, without changing status.
+   *
+   * `attempts` means "times delivery was tried and did not land" — offline, a
+   * 5xx, an answer nobody could read. It is what a diagnostics sheet wants and
+   * it is deliberately **not** what ripens the inbox: a fortnight in a valley
+   * with no signal must not park a farm's work.
+   */
   recordAttempt(batch: readonly QueuedMutation[], error: string): Promise<void>;
 
-  /** Marks anything at or past the attempt ceiling as rejected, so the queue can drain. */
+  /**
+   * Records that the server answered and left these undecided.
+   *
+   * The separate count `rejectExhausted` ripens on: an unreadable body, or a
+   * well-formed one that omitted the mutation. Only this is evidence that
+   * resending will never work — which is why being unreachable can no longer
+   * spend the same budget.
+   */
+  recordUndecided(batch: readonly QueuedMutation[]): Promise<void>;
+
+  /**
+   * Marks anything at or past the ceiling of undecided answers as rejected, so
+   * the queue can drain. Counted by `recordUndecided`, never by `recordAttempt`.
+   */
   rejectExhausted(
     batch: readonly QueuedMutation[],
-    maxAttempts: number,
+    maxAnswers: number,
     reason: string,
   ): Promise<void>;
 

@@ -269,6 +269,40 @@ describe('flush', () => {
     expect(inbox[0]?.rejectedReason).toContain('could not read');
   });
 
+  /**
+   * H8, end to end, and the reason the ceiling had to stop counting attempts.
+   *
+   * A farm with no signal spends the whole budget doing nothing wrong. The
+   * ceiling then had nothing left, so the very first answer the client could
+   * not read — a captive portal returning its login page to a JSON POST is
+   * enough — swept the batch into the rejected inbox. A hundred mutations is
+   * the cap, so that is up to a hundred mornings, filed as refusals nobody
+   * refused.
+   */
+  it('does not let a fortnight offline spend the poison ceiling', async () => {
+    for (let i = 0; i < 3; i++) await enqueue(eggLog());
+
+    const offline: SyncTransport = () => Promise.reject(new Error('Network error'));
+    for (let i = 0; i < MAX_ATTEMPTS * 3; i++) await flushOnce(offline);
+
+    // Nothing has gone wrong yet: the work is queued and nothing is parked.
+    expect(await queueDepth()).toBe(3);
+    expect(await listRejected()).toEqual([]);
+
+    // The portal, once.
+    const portal: SyncTransport = () =>
+      Promise.resolve({ status: 200, body: '<html>Sign in to the wifi</html>' });
+    await flushOnce(portal);
+
+    expect(await listRejected()).toEqual([]);
+    expect(await queueDepth()).toBe(3);
+
+    // And it still ripens on its own evidence, which is answers, not attempts.
+    for (let i = 1; i < MAX_ATTEMPTS; i++) await flushOnce(portal);
+
+    expect(await listRejected()).toHaveLength(3);
+  });
+
   it('does nothing when the queue is empty', async () => {
     const transport = vi.fn(respondAll('applied'));
     const outcome = await flushOnce(transport);

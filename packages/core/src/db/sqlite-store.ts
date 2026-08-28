@@ -79,43 +79,103 @@ interface RecordRow {
   deleted: number;
 }
 
-/** JSON text in, structured out. Anything unparseable is caller-quarantined. */
-function readJson(text: string): unknown {
+/**
+ * A JSON column read back, or the fact that it could not be.
+ *
+ * **The distinction has to be representable, and it was not.** `readJson`
+ * answered an unparseable column with `undefined`, and both row mappers put
+ * that answer under a key the schema declares `z.unknown()` — which accepts a
+ * key that is *present and undefined*, and only rejects one that is absent. So
+ * `queuedMutationSchema.safeParse` succeeded on a row whose payload text was
+ * corrupt, the quarantine below was never reached, and `toEnvelope` copied the
+ * `undefined` through to `JSON.stringify`, which drops the key entirely.
+ *
+ * The wire object then had no `payload` at all. The server parses a batch as a
+ * unit, so it answered 400 for all of it, and the client's unreadable-response
+ * branch eventually marked **every mutation in that batch — up to a hundred
+ * good ones — rejected.** One corrupt byte on disk, and a farm's morning is in
+ * the inbox.
+ *
+ * Absent and undefined being different to Zod but identical to
+ * `JSON.stringify` is what made it invisible; a shape that cannot express
+ * "unreadable" is what let it happen.
+ */
+type JsonRead = { ok: true; value: unknown } | { ok: false };
+
+function tryReadJson(text: string): JsonRead {
   try {
-    return JSON.parse(text) as unknown;
+    return { ok: true, value: JSON.parse(text) as unknown };
   } catch {
-    return undefined;
+    return { ok: false };
   }
 }
 
-function rowToMutation(row: OutboxRow): unknown {
+/**
+ * The lenient form, for the callers where unreadable genuinely means absent:
+ * `meta`, whose keys each fall back to a default, and the previous value in an
+ * update merge. Neither has a quarantine to take, and neither is a row a
+ * schema is about to be asked to vouch for.
+ */
+function readJson(text: string): unknown {
+  const read = tryReadJson(text);
+  return read.ok ? read.value : undefined;
+}
+
+/**
+ * A row mapped for parsing, or the reason it cannot be.
+ *
+ * `raw` is the row as it sits on disk — corrupt column and all — because that
+ * is what a quarantined row is worth keeping: the mapped object would have the
+ * unreadable column silently missing, which is the very thing that hid this.
+ */
+type Mapped =
+  | { ok: true; value: unknown }
+  | { ok: false; raw: unknown; reason: string };
+
+function rowToMutation(row: OutboxRow): Mapped {
+  const payload = tryReadJson(row.payload);
+  if (!payload.ok) {
+    return { ok: false, raw: { ...row }, reason: 'payload is not readable JSON' };
+  }
+
   return {
-    schemaVersion: row.schemaVersion,
-    id: row.id,
-    targetId: row.targetId,
-    entity: row.entity,
-    op: row.op,
-    payload: readJson(row.payload),
-    deviceId: row.deviceId,
-    clientSeq: row.clientSeq,
-    clientTs: row.clientTs,
-    status: row.status,
-    attempts: row.attempts,
-    enqueuedAt: row.enqueuedAt,
-    ...(row.lastError === null ? {} : { lastError: row.lastError }),
-    ...(row.rejectedReason === null ? {} : { rejectedReason: row.rejectedReason }),
-    ...(row.rejectedAt === null ? {} : { rejectedAt: row.rejectedAt }),
+    ok: true,
+    value: {
+      schemaVersion: row.schemaVersion,
+      id: row.id,
+      targetId: row.targetId,
+      entity: row.entity,
+      op: row.op,
+      payload: payload.value,
+      deviceId: row.deviceId,
+      clientSeq: row.clientSeq,
+      clientTs: row.clientTs,
+      status: row.status,
+      attempts: row.attempts,
+      enqueuedAt: row.enqueuedAt,
+      ...(row.lastError === null ? {} : { lastError: row.lastError }),
+      ...(row.rejectedReason === null ? {} : { rejectedReason: row.rejectedReason }),
+      ...(row.rejectedAt === null ? {} : { rejectedAt: row.rejectedAt }),
+    },
   };
 }
 
-function rowToRecord(row: RecordRow): unknown {
+function rowToRecord(row: RecordRow): Mapped {
+  const value = tryReadJson(row.value);
+  if (!value.ok) {
+    return { ok: false, raw: { ...row }, reason: 'value is not readable JSON' };
+  }
+
   return {
-    key: row.key,
-    entity: row.entity,
-    targetId: row.targetId,
-    value: readJson(row.value),
-    updatedAt: row.updatedAt,
-    deleted: row.deleted === 1,
+    ok: true,
+    value: {
+      key: row.key,
+      entity: row.entity,
+      targetId: row.targetId,
+      value: value.value,
+      updatedAt: row.updatedAt,
+      deleted: row.deleted === 1,
+    },
   };
 }
 
@@ -462,6 +522,43 @@ export async function openSqliteStore(
   }
 
   /**
+   * One more answer that did not decide this mutation.
+   *
+   * **Separate from `attempts` because they measure different things and one
+   * of them is a poison ceiling.** `attempts` counts deliveries that did not
+   * land — a network failure, a 5xx, a week in a valley with no signal — and
+   * a farm that spends a fortnight offline arrives at the ceiling having done
+   * nothing wrong. Ripening the inbox on that number meant the first answer
+   * the client could not read swept the whole batch, up to a hundred good
+   * mutations, into the rejected inbox. A captive portal answering a JSON POST
+   * with an HTML login page is enough.
+   *
+   * This counts only the answers the server actually gave that left the
+   * mutation undecided — an unreadable body, or a well-formed one that omitted
+   * it — which is the only evidence that resending will never work.
+   *
+   * Sparse: a row appears the first time it happens, so an ordinary outbox
+   * carries none. It leaves with the mutation, in the same transaction, by
+   * whichever door that mutation takes.
+   */
+  async function bumpUndecided(db: SqlOps, mutationIds: readonly string[]): Promise<void> {
+    for (const id of mutationIds) {
+      await db.run(
+        `INSERT INTO outbox_unreadable (mutationId, answers) VALUES (?, 1)
+         ON CONFLICT(mutationId) DO UPDATE SET answers = answers + 1`,
+        [id],
+      );
+    }
+  }
+
+  /** The tally goes when the mutation it belongs to is decided or leaves. */
+  async function forgetUndecided(db: SqlOps, mutationIds: readonly string[]): Promise<void> {
+    for (const id of mutationIds) {
+      await db.run('DELETE FROM outbox_unreadable WHERE mutationId = ?', [id]);
+    }
+  }
+
+  /**
    * Every mutation in `requests`, in one transaction, or none of them.
    *
    * `enqueue` is this with a list of one. Written the other way round —
@@ -621,11 +718,29 @@ export async function openSqliteStore(
         for (const mutation of batch) {
           const result: MutationResult | undefined = byId.get(mutation.id);
           if (!result) {
-            // Answered without mentioning it. Stays queued — resending is safe
-            // — but the attempt is counted so it cannot retry forever unseen.
+            /**
+             * Answered without mentioning it. Stays queued — resending is safe
+             * — but it is counted so it cannot retry forever unseen.
+             *
+             * **Counted twice now, in two columns that mean different things.**
+             * `attempts` goes on meaning "times this has been tried", which is
+             * what the diagnostics sheet shows and what a farmer is reading
+             * when they ask why a record is still waiting. `outbox_unreadable`
+             * means "times the server answered and said nothing about this",
+             * and it is the only one the poison ceiling ripens on — because a
+             * week in a valley with no signal fills the first column and is
+             * evidence of nothing at all.
+             *
+             * `attempts` is deliberately not reset here. It could be — an
+             * answer proves the server was reached — but the number a
+             * diagnostic wants is how often this has been tried, and zeroing
+             * it would make a row that has been going nowhere for a fortnight
+             * read as untouched.
+             */
             await tx.run('UPDATE outbox SET attempts = attempts + 1 WHERE id = ?', [
               mutation.id,
             ]);
+            await bumpUndecided(tx, [mutation.id]);
             continue;
           }
 
@@ -650,6 +765,7 @@ export async function openSqliteStore(
             // *rejected* row, because that one is still a decision the person
             // has not made — `retryRejected` may put it back on the wire.
             await forgetBefore(tx, [mutation.id]);
+            await forgetUndecided(tx, [mutation.id]);
             cleared += 1;
             continue;
           }
@@ -658,6 +774,10 @@ export async function openSqliteStore(
             'UPDATE outbox SET status = ?, rejectedReason = ?, rejectedAt = ? WHERE id = ?',
             ['rejected', result.reason ?? 'The server refused that record.', Date.now(), mutation.id],
           );
+          // Decided, so the count of answers that did not decide it is spent.
+          // A `retryRejected` must start from nothing, not from the tally that
+          // parked it.
+          await forgetUndecided(tx, [mutation.id]);
         }
 
         if (cleared > 0) await bumpCleared(tx, cleared);
@@ -682,13 +802,21 @@ export async function openSqliteStore(
       });
     },
 
-    async rejectExhausted(batch, maxAttempts, reason): Promise<void> {
+    async recordUndecided(batch): Promise<void> {
+      await driver.transaction(async (tx) => {
+        await bumpUndecided(tx, batch.map((mutation) => mutation.id));
+      });
+    },
+
+    async rejectExhausted(batch, maxAnswers, reason): Promise<void> {
       await driver.transaction(async (tx) => {
         for (const mutation of batch) {
           await tx.run(
             `UPDATE outbox SET status = 'rejected', rejectedReason = ?, rejectedAt = ?
-             WHERE id = ? AND attempts >= ?`,
-            [reason, Date.now(), mutation.id, maxAttempts],
+             WHERE id = ?
+               AND (SELECT COALESCE(MAX(answers), 0) FROM outbox_unreadable
+                    WHERE mutationId = outbox.id) >= ?`,
+            [reason, Date.now(), mutation.id, maxAnswers],
           );
         }
       });
@@ -698,8 +826,16 @@ export async function openSqliteStore(
       const rows = await driver.all<OutboxRow>(
         "SELECT * FROM outbox WHERE status = 'rejected' ORDER BY clientSeq",
       );
+      /**
+       * An unreadable row is left out rather than quarantined here: this is a
+       * listing a screen is reading, and deleting rows out from under it is
+       * `readOutboxBySeq`'s job — which covers `rejected` too, since it reads
+       * everything that is not `applied`. So a corrupt rejected row is gone by
+       * the next flush and visible in quarantine, not lost.
+       */
       return rows
-        .map((row) => queuedMutationSchema.safeParse(rowToMutation(row)))
+        .map((row) => rowToMutation(row))
+        .flatMap((mapped) => (mapped.ok ? [queuedMutationSchema.safeParse(mapped.value)] : []))
         .flatMap((parsed) => (parsed.success ? [parsed.data] : []));
     },
 
@@ -711,8 +847,10 @@ export async function openSqliteStore(
             id,
           ]);
         }
-        // A clean attempt count, or the retry inherits the ceiling that parked
-        // it and is refused before it is sent.
+        // A clean slate on both counters, or the retry inherits the ceiling
+        // that parked it and is refused before it is sent. `attempts` was the
+        // only one of the two before there were two.
+        await forgetUndecided(tx, [id]);
         await tx.run(
           `UPDATE outbox SET status = 'queued', attempts = 0,
              lastError = NULL, rejectedReason = NULL, rejectedAt = NULL
@@ -802,13 +940,21 @@ export async function openSqliteStore(
          * and the SQLite store did not: the ladder was left behind in the web
          * client and nothing carried it over. Found while retiring that client.
          */
+        const mapped = rowToMutation(row);
+        if (!mapped.ok) {
+          // Corrupt JSON on disk, caught before the schema is asked — the
+          // schema cannot tell an unreadable payload from an absent one.
+          corrupt.push({ key: row.id, raw: mapped.raw, reason: mapped.reason });
+          continue;
+        }
+
         let candidate: unknown;
         try {
-          candidate = migrateEnvelope(rowToMutation(row) as Record<string, unknown>);
+          candidate = migrateEnvelope(mapped.value as Record<string, unknown>);
         } catch {
           // Unmigratable: an envelope from a version this build has no step
           // for. Quarantine is right — it is unreadable, not merely old.
-          candidate = rowToMutation(row);
+          candidate = mapped.value;
         }
         const parsed = queuedMutationSchema.safeParse(candidate);
         if (parsed.success) {
@@ -825,6 +971,9 @@ export async function openSqliteStore(
       for (const bad of corrupt) {
         await quarantine(driver, 'outbox', bad.key, bad.raw, bad.reason);
         await driver.run('DELETE FROM outbox WHERE id = ?', [bad.key]);
+        // By whichever door: a quarantined row is gone from the outbox, so its
+        // tally has nothing left to be about.
+        await driver.run('DELETE FROM outbox_unreadable WHERE mutationId = ?', [bad.key]);
       }
 
       return good;
@@ -835,7 +984,14 @@ export async function openSqliteStore(
 
       const good: LocalRecord[] = [];
       for (const row of rows) {
-        const parsed = localRecordSchema.safeParse(rowToRecord(row));
+        const mapped = rowToRecord(row);
+        if (!mapped.ok) {
+          await quarantine(driver, 'records', row.key, mapped.raw, mapped.reason);
+          await driver.run('DELETE FROM records WHERE key = ?', [row.key]);
+          continue;
+        }
+
+        const parsed = localRecordSchema.safeParse(mapped.value);
         if (parsed.success) {
           good.push(parsed.data);
           continue;
@@ -844,7 +1000,7 @@ export async function openSqliteStore(
           driver,
           'records',
           row.key,
-          rowToRecord(row),
+          mapped.value,
           parsed.error.issues[0]?.message ?? 'unreadable',
         );
         await driver.run('DELETE FROM records WHERE key = ?', [row.key]);
@@ -1318,7 +1474,19 @@ export async function openSqliteStore(
       }>('SELECT * FROM quarantine ORDER BY quarantinedAt');
 
       return rows.flatMap((row) => {
-        const parsed = quarantinedSchema.safeParse({ ...row, raw: readJson(row.raw) });
+        /**
+         * The raw text stands in for itself when it will not parse.
+         *
+         * `raw` is `z.unknown()`, so an unreadable column would otherwise be
+         * handed over as `undefined` and the row would list with nothing in
+         * it — an entry in the corruption list whose evidence is missing,
+         * which is the same shape of loss this file's mappers were fixed for.
+         */
+        const raw = tryReadJson(row.raw);
+        const parsed = quarantinedSchema.safeParse({
+          ...row,
+          raw: raw.ok ? raw.value : row.raw,
+        });
         return parsed.success ? [parsed.data] : [];
       });
     },
@@ -1346,6 +1514,10 @@ export async function openSqliteStore(
          */
         for (const table of [
           'outbox',
+          // With `outbox`, because it is only ever about a row in it — and on
+          // this list from the change that first wrote to it, which is the
+          // lesson the comment above draws.
+          'outbox_unreadable',
           'records',
           'meta',
           // Added to this list in the same change that created it, which is the

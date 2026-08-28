@@ -20,10 +20,21 @@ import type { QueuedMutation } from '../db/records';
  */
 
 /**
- * After this many failed attempts a mutation is treated as poison and routed
- * to the inbox rather than retried forever. A batch the server will never
- * accept must not be able to wedge the queue behind it (A6: surfaced, not
- * silently dropped, and not silently stuck either).
+ * After this many answers that left it undecided, a mutation is treated as
+ * poison and routed to the inbox rather than retried forever. A batch the
+ * server will never accept must not be able to wedge the queue behind it (A6:
+ * surfaced, not silently dropped, and not silently stuck either).
+ *
+ * **Answers, not attempts, and that distinction is the whole of H8.** The
+ * ceiling used to ripen on `attempts`, which counts every delivery that did
+ * not land — including a week with no signal. So the budget was normally
+ * already spent by the time anything went wrong, and the *first* response the
+ * client could not read swept up to a hundred good mutations into the inbox. A
+ * captive portal answering a JSON POST with an HTML login page was enough to
+ * do it, and the 402 branch below already named the hazard for its own case.
+ *
+ * The name stays because every reader of it means the same thing it always
+ * meant; what changed is which number it is counting.
  */
 export const MAX_ATTEMPTS = 6;
 
@@ -244,6 +255,19 @@ async function runFlush(transport: SyncTransport): Promise<FlushOutcome> {
     // A 4xx with no per-mutation results (a malformed batch) is not retryable
     // in any useful sense, but it must not loop forever either.
     await recordAttempt(batch, `Unreadable response (${response.status})`);
+    /**
+     * Counted apart from the attempt above, and it is the count that decides.
+     *
+     * `attempts` still moves because a delivery still did not land, and the
+     * diagnostics sheet should say so. But something answered and left every
+     * one of these undecided, and that — not a fortnight of no signal — is
+     * what a poison ceiling is entitled to ripen on.
+     *
+     * Both counts move, as they do for a well-formed answer with a hole in
+     * it: `attempts` because a delivery was tried and did not land, this
+     * because something answered and decided nothing.
+     */
+    await recordUndecided(batch);
     await rejectExhausted(batch, `The server could not read that batch (${response.status}).`);
     return { ...outcome, deferred: `unreadable-${response.status}` };
   }
@@ -349,7 +373,12 @@ async function recordAttempt(batch: QueuedMutation[], error: string): Promise<vo
   await localStore().recordAttempt(batch, error);
 }
 
-/** Routes mutations past the attempt ceiling to the inbox so the queue can drain. */
+/** One more answer that decided nothing about these — the count that ripens. */
+async function recordUndecided(batch: QueuedMutation[]): Promise<void> {
+  await localStore().recordUndecided(batch);
+}
+
+/** Routes mutations past the undecided-answer ceiling to the inbox so the queue can drain. */
 async function rejectExhausted(batch: QueuedMutation[], reason: string): Promise<void> {
   await localStore().rejectExhausted(batch, MAX_ATTEMPTS, reason);
 }
