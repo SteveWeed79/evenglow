@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ENTITIES,
+  equipmentUpdateSchema,
   flockUpdateSchema,
   isAppendOnly,
   medicationUpdateSchema,
@@ -120,6 +121,112 @@ describe('what an update may clear', () => {
     expect(unclearable).toEqual([]);
     // Names a real number of fields rather than passing on an empty walk.
     expect(checked).toBeGreaterThan(30);
+  });
+});
+
+/**
+ * An update carries what was edited, and nothing else (H9).
+ *
+ * `.partial()` makes a key optional; it does **not** strip a `.default()`, and
+ * `ZodOptional` delegates to its inner schema for a missing key rather than
+ * short-circuiting:
+ *
+ *   z.optional(z.enum(['none','weekly']).default('none')).parse(undefined)
+ *     -> 'none'
+ *
+ * So every defaulted field wrote itself into every update that did not mention
+ * it, and the server `$set` what it was handed. The describe above states the
+ * rule that a defaulted field is not *clearable*; this one states the rule that
+ * it is not *sent*, and only one of the two was being enforced.
+ */
+describe('what an update must not invent', () => {
+  it('adds nothing to an empty payload', () => {
+    expect(taskUpdateSchema.parse({})).toEqual({});
+    expect(equipmentUpdateSchema.parse({})).toEqual({});
+  });
+
+  it('adds nothing beside the field that was edited', () => {
+    expect(taskUpdateSchema.parse({ title: 'Check the water trough' })).toEqual({
+      title: 'Check the water trough',
+    });
+    expect(equipmentUpdateSchema.parse({ name: 'Kubota' })).toEqual({ name: 'Kubota' });
+  });
+
+  /**
+   * The report that this cost a farm, spelled out.
+   *
+   * `JobsScreen` un-ticks a job by sending `{ completedAt: null }` — the legacy
+   * path, for a task with no completion event. That payload used to arrive as
+   * `{ completedAt: null, recurrence: 'none' }`, so un-ticking a weekly chore
+   * quietly converted it to a one-off; `taskDues` then returns nothing after
+   * its next completion and the job never appears again.
+   */
+  it('does not turn a weekly chore into a one-off when it is un-ticked', () => {
+    const sent = taskUpdateSchema.parse({ completedAt: null });
+
+    expect(sent).toEqual({ completedAt: null });
+    expect(Object.hasOwn(sent, 'recurrence')).toBe(false);
+  });
+
+  /**
+   * Every mutable entity, so the next defaulted field added cannot arrive
+   * carrying this bug — the same shape as the clearability walk above, and the
+   * reason that one is a property rather than a list.
+   */
+  it('holds for every entity that can be updated', () => {
+    const mutable = ENTITIES.filter(
+      (entity: Entity) => !isAppendOnly(entity) && payloadSchemaFor(entity, 'update') !== undefined,
+    );
+
+    // A guard on the guard: an empty list would make this pass vacuously.
+    expect(mutable.length).toBeGreaterThan(8);
+
+    const invented: string[] = [];
+    const cannotBeEmpty: string[] = [];
+    let checked = 0;
+
+    for (const entity of mutable) {
+      const update = payloadSchemaFor(entity, 'update');
+      if (update === undefined) continue;
+
+      const parsed = update.safeParse({});
+      if (!parsed.success) {
+        // An update with a required field of its own, which is a different
+        // rule and not this one's business. Collected rather than ignored so
+        // the exception has to stay the one we know about.
+        cannotBeEmpty.push(entity);
+        continue;
+      }
+
+      checked += 1;
+      for (const key of Object.keys(parsed.data as Record<string, unknown>)) {
+        invented.push(`${entity}.${key}`);
+      }
+    }
+
+    expect(invented).toEqual([]);
+    /**
+     * `note` is the one, and it is hand-built rather than made by
+     * `updateSchemaOf`: `z.object({ body: z.string().min(1) }).strict()`,
+     * because what a note is *about* is fixed when it is written and only the
+     * body can be edited. The sibling walk above names the same exception.
+     */
+    expect(cannotBeEmpty).toEqual(['note']);
+    // Names a real number of schemas rather than passing on an empty walk.
+    expect(checked).toBeGreaterThan(8);
+  });
+
+  /**
+   * And the other half of the same coin: a CREATE still applies its defaults.
+   *
+   * Stripping the default from the update shape must not reach the create
+   * shape, which is built from the raw fields — a create that stopped
+   * defaulting `recurrence` would write records the due engine cannot read.
+   */
+  it('leaves a create still applying its defaults', () => {
+    expect(taskCreateSchema.parse({ title: 'Water the trough' })).toMatchObject({
+      recurrence: 'none',
+    });
   });
 });
 
