@@ -3,6 +3,10 @@ import { z } from 'zod';
 import {
   ALREADY_VERIFIED,
   changeEmailSchema,
+  GOOGLE_ALREADY_LINKED,
+  GOOGLE_LINK_FAILED,
+  GOOGLE_TAKEN,
+  googleLinkSchema,
   EMAIL_TAKEN,
   FORGOT_ACKNOWLEDGEMENT,
   forgotSchema,
@@ -41,6 +45,7 @@ import {
   insertUser,
   isDuplicateKey,
   linkGoogleSub,
+  linkGoogleSubInSession,
   markEmailVerified,
   normalizeEmail,
   orgHasMembers,
@@ -123,11 +128,25 @@ async function farmOf(orgId: string): Promise<{ org?: { name: string } }> {
  */
 async function accountOf(
   userId: string,
-): Promise<{ account?: { email: string; emailVerified: boolean } }> {
+): Promise<{ account?: { email: string; emailVerified: boolean; googleLinked: boolean } }> {
   const user = await findUserById(userId);
   return user === null
     ? {}
-    : { account: { email: user.email, emailVerified: user.emailVerifiedAt !== undefined } };
+    : {
+        account: {
+          email: user.email,
+          emailVerified: user.emailVerifiedAt !== undefined,
+          /**
+           * Whether a Google identity is bound, so the account screen can say
+           * which sign-ins work rather than offering to connect one twice.
+           *
+           * The subject itself is deliberately NOT sent. A device needs to know
+           * *that* there is one; the identifier is Google's and nothing on the
+           * handset has a use for it, so it stays on the server.
+           */
+          googleLinked: user.googleSub !== undefined,
+        },
+      };
 }
 
 export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> {
@@ -361,26 +380,35 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
           });
       }
 
-      // 2. Same person, arriving a different way. Safe because the token
-      //    carries `email_verified: true` — see `verifyGoogleIdToken`.
+      // 2. Same person, arriving a different way — if the account can show it
+      //    is the same person. See `linkGoogleSub` for what that means.
       const byEmail = await findUserByEmail(identity.email);
       if (byEmail) {
         if (byEmail.disabledAt) {
           return reply.status(401).send({ error: 'That Google sign-in did not work. Try again.' });
         }
         /**
-         * The link proves the address as well as binding the identity.
+         * The link is refused unless the *stored account* has already proved
+         * this address, and unless no other Google identity holds it.
          *
-         * `verifyGoogleIdToken` refuses a token without `email_verified`, so
-         * Google has just demonstrated exactly what `/auth/verify` would ask
-         * this person to demonstrate — on the same address, since that is how
-         * the account was found. Making them read a code afterwards would be
-         * asking for a second proof of something already proved, and would
-         * leave a farm whose recovery is off for no reason it can see.
+         * The token proves the caller controls the address. It says nothing
+         * about the row: `/auth/signup` accepts whatever is typed and sends no
+         * mail, so an unproved row is only somebody's claim. Linking on that
+         * claim meant whoever signed up as an address first received the sign-in
+         * of whoever actually owns it — into their org, as their user. So the
+         * proof has to come from the account's own history, which is what
+         * `emailVerifiedAt` records.
+         *
+         * **The 401 is deliberately the disabled-account one, word for word.**
+         * A distinct message here would answer "does that address have an
+         * account?", which is the question this route exists not to answer —
+         * the same reason branch 1 and the disabled check already share it.
+         *
+         * The way back is `/auth/verify`: sign in with the password, prove the
+         * address from the account screen, and the Google button then links.
          */
-        await linkGoogleSub(byEmail._id, identity.googleSub);
-        if (byEmail.emailVerifiedAt === undefined) {
-          await markEmailVerified(byEmail._id, byEmail.email, now);
+        if (!(await linkGoogleSub(byEmail._id, identity.googleSub))) {
+          return reply.status(401).send({ error: 'That Google sign-in did not work. Try again.' });
         }
         const pair = await startSession(
           { userId: byEmail._id, orgId: byEmail.orgId, role: byEmail.role },
@@ -947,6 +975,154 @@ async function verificationRoutes(app: FastifyInstance, env: Env): Promise<void>
       await retireVerifyCodes(user._id, new Date());
 
       return reply.status(200).send({ ok: true, ...(await accountOf(user._id)) });
+    });
+
+    /**
+     * Connect a Google account to the one already signed in (the way back from
+     * H1).
+     *
+     * `linkGoogleSub` refuses an account whose address was never proved,
+     * because `/auth/google` is unauthenticated and an address in `users` is a
+     * claim rather than a fact. Every password account — signup, invite, join
+     * code — is in exactly that state, so since that fix the Google button on
+     * the sign-in screen refuses them until `/auth/verify` has been through.
+     * This is the route that makes that step unnecessary: a session answers the
+     * question the address was standing in for, and answers it about the
+     * account rather than about an inbox.
+     *
+     * ## Order matters here more than usual
+     *
+     * **The token is verified before the password.** A caller holding only a
+     * stolen session would otherwise get unlimited password guesses against
+     * this route without presenting any Google credential at all, bounded only
+     * by a limiter keyed on an IP address. Making them bring a valid Google ID
+     * token first costs them a real Google account per attempt.
+     *
+     * **An account with no password hash is answered about its Google
+     * identity, not about a password it never had.** That account was created
+     * by Google and already carries a subject, so the truthful answer is that
+     * it is connected — `/auth/email` refuses the same shape with
+     * `WRONG_PASSWORD` and can afford to, because nothing draws it a button.
+     * Here something does, and a dead control that answers "that password is
+     * not right" about a password that does not exist is the failure
+     * `AccountScreen` names in its own comment.
+     *
+     * **Everything else waits until the password is proved.** Whether an
+     * account already has a Google identity is not a secret from somebody
+     * holding its session — `/auth/refresh` says so on every rotation — but
+     * there is no reason to answer it earlier than the write would.
+     *
+     * ## Shares the scope's limiter, and that is a real cost
+     *
+     * Three a minute per IP, shared with `/auth/verify/send` and
+     * `/auth/email`. A farmer who asked for two codes and then taps Connect
+     * gets a 429 about neither, and a farm behind one connection shares the
+     * bucket. Accepted rather than fixed: this route sends no mail and spends
+     * nobody's money, and a per-account ceiling would be a second counter for
+     * a case nobody has met.
+     */
+    scope.post('/auth/google/link', async (request, reply) => {
+      const claims = await requireMutationClaims(request.headers.authorization, env.AUTH_SECRET);
+
+      const parsed = googleLinkSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: 'Check the details and try again.' });
+      }
+
+      // First, and deliberately. See the note above: without a Google account
+      // in hand, a stolen session is a free run at the password.
+      const identity = await verifyGoogleIdToken(parsed.data.idToken, env.googleClientIds);
+
+      const user = await findUserById(claims.userId);
+      if (user === null) return reply.status(401).send({ error: 'This account is no longer active.' });
+
+      /**
+       * No password to prove, which means Google made this account.
+       *
+       * `authorizeCredentials` refuses such an account rather than comparing
+       * against nothing, and `/auth/email` says the same case is unreachable
+       * there — *"'unreachable' is a thing that stops being true when somebody
+       * adds a route"*. This is that route, so it answers the case rather than
+       * leaving it to fall into a sentence about a password.
+       */
+      if (user.passwordHash === undefined) {
+        return reply.status(409).send({ error: GOOGLE_ALREADY_LINKED });
+      }
+
+      if (
+        parsed.data.password === undefined ||
+        !(await verifyPassword(user.passwordHash, parsed.data.password))
+      ) {
+        return reply.status(403).send({ error: WRONG_PASSWORD });
+      }
+
+      if (user.googleSub !== undefined) {
+        return reply.status(409).send({ error: GOOGLE_ALREADY_LINKED });
+      }
+
+      /**
+       * Asked before the write, and the index is kept behind it.
+       *
+       * `/auth/email` sets out why neither is load-bearing alone: a suite with
+       * no indexes applied lets a route that rests on the constraint pass its
+       * tests and collide in production, and a route that rests on the read
+       * alone loses the race. Both, and the same sentence from either.
+       */
+      const holder = await findUserByGoogleSub(identity.googleSub);
+      if (holder !== null && holder._id !== user._id) {
+        return reply.status(409).send({ error: GOOGLE_TAKEN });
+      }
+
+      try {
+        if (!(await linkGoogleSubInSession(user._id, identity.googleSub))) {
+          return reply.status(409).send({ error: GOOGLE_LINK_FAILED });
+        }
+      } catch (error) {
+        if (isDuplicateKey(error)) return reply.status(409).send({ error: GOOGLE_TAKEN });
+        throw error;
+      }
+
+      /**
+       * The address is proved too, but only when it is the same address.
+       *
+       * `verifyGoogleIdToken` refuses a token without `email_verified`, so
+       * Google has demonstrated exactly what `/auth/verify` would ask for — on
+       * this account's own address, if the two match. Making somebody read a
+       * code afterwards would be asking twice for the same proof, and leaving
+       * recovery switched off on a farm that has just proved it can read the
+       * inbox.
+       *
+       * **A different address proves nothing about this one.** Connecting a
+       * personal Google account to a farm account under another address is
+       * ordinary and allowed; what it must not do is mark that other address
+       * confirmed. The account is then found by the Google subject and never by
+       * its email, and its own address stays unproved — which is correct, not a
+       * bug, and is why the comparison is here rather than the link being taken
+       * as proof on its own.
+       */
+      if (
+        user.emailVerifiedAt === undefined &&
+        normalizeEmail(identity.email) === user.email
+      ) {
+        await markEmailVerified(user._id, user.email, new Date());
+      }
+
+      /**
+       * The address that was connected goes back, and it is not decoration.
+       *
+       * An Android handset with two Google accounts on it offers a chooser
+       * whose default is the top one, and nothing else in the app would ever
+       * tell a farmer which subject they bound. Connecting the wrong one is
+       * the likeliest real failure here, and it is silent unless the answer
+       * names the address — the same argument the account screen already makes
+       * for showing the email back: somebody has to be able to check.
+       *
+       * Route-local rather than part of `account`: it is a fact about this
+       * request, not state a device should cache.
+       */
+      return reply
+        .status(200)
+        .send({ ok: true, ...(await accountOf(user._id)), linked: { email: identity.email } });
     });
   });
 }

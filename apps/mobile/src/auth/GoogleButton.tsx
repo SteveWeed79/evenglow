@@ -24,10 +24,20 @@ import { useGoogleSignIn } from './google';
 export function GoogleButton({
   disabled,
   onToken,
+  label = 'Continue with Google',
+  testID = 'account-google',
 }: {
   disabled: boolean;
   /** The ID token, or null when the person backed out of the sheet. */
   onToken: (idToken: string | null) => void;
+  /**
+   * What the button says, because there are two of these now and they are not
+   * doing the same thing. Signed out it continues into an account; signed in
+   * it connects one to the account already open. Defaulted to the signed-out
+   * wording so the original call site is unchanged.
+   */
+  label?: string;
+  testID?: string;
 }): React.ReactElement {
   const { prompt, ready } = useGoogleSignIn();
 
@@ -37,13 +47,13 @@ export function GoogleButton({
 
   return (
     <Secondary
-      label="Continue with Google"
+      label={label}
       // `ready` is false while the auth request is still being prepared. A
       // button that silently does nothing for the first half-second is one
       // people tap twice.
       disabled={disabled || !ready}
       onPress={press}
-      testID="account-google"
+      testID={testID}
     />
   );
 }

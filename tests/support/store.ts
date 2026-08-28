@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { SqlDriver } from '@homefarm/core/db/driver';
 import { openSqliteStore } from '@homefarm/core/db/sqlite-store';
 import { localStore, resetLocalStore, setLocalStore } from '@homefarm/core/db/store';
-import { ENTITIES } from '@homefarm/contracts';
+import { ENTITIES, newId } from '@homefarm/contracts';
 import { nodeIds, nodeSqlDriver } from './sqlite';
 
 /**
@@ -130,6 +130,48 @@ export async function corruptRecordRow(key: string, entity = 'flock') {
   );
 }
 
+/**
+ * A row that is wrong in exactly one way: its JSON column will not parse.
+ *
+ * **The distinction the existing helpers cannot make.** `corruptRow` leaves a
+ * valid `payload` and damages a typed column; `corruptRecordRow` damages the
+ * JSON column *and* `updatedAt`. Either way the parse fails for the other
+ * reason, so neither could ever have caught a schema that accepts an
+ * unreadable JSON column — which is what `z.unknown()` does, since a key that
+ * is present and `undefined` satisfies it and only an absent key does not.
+ *
+ * Everything else here is deliberately, exactly valid.
+ */
+export async function unreadablePayloadRow(id: string, clientSeq = 50): Promise<void> {
+  await currentDriver().run(
+    `INSERT INTO outbox (id, schemaVersion, targetId, entity, op, payload, deviceId,
+       clientSeq, clientTs, status, attempts, enqueuedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      1,
+      newId(),
+      'eggLog',
+      'create',
+      '{"occurredAt": 170000',
+      '00000000-0000-4000-8000-0000000000ff',
+      clientSeq,
+      1,
+      'queued',
+      0,
+      1,
+    ],
+  );
+}
+
+/** The same, for a projection row: only `value` is unreadable. */
+export async function unreadableValueRow(key: string, entity = 'flock'): Promise<void> {
+  await currentDriver().run(
+    'INSERT INTO records (key, entity, targetId, value, updatedAt, deleted) VALUES (?, ?, ?, ?, ?, ?)',
+    [key, entity, newId(), '{"name": "half a rec', 1_700_000_000_000, 0],
+  );
+}
+
 /** Deletes a row from the outbox behind the store's back. */
 export async function deleteOutboxRow(id: string): Promise<void> {
   await currentDriver().run('DELETE FROM outbox WHERE id = ?', [id] as never);
@@ -138,6 +180,22 @@ export async function deleteOutboxRow(id: string): Promise<void> {
 /** Deletes a meta key behind the store's back — a corrupted counter. */
 export async function deleteMetaKey(key: string): Promise<void> {
   await currentDriver().run('DELETE FROM meta WHERE key = ?', [key] as never);
+}
+
+/**
+ * How many rows the undecided-answer tally holds.
+ *
+ * Read through the driver rather than the port because there is deliberately
+ * no port method for it: nothing in the app needs the number, only the ceiling
+ * does. What a test needs it for is proving the table is emptied — it is on
+ * the wipe list, and every table that was ever missed from that list was
+ * missed by nobody writing this assertion.
+ */
+export async function undecidedRowCount(): Promise<number> {
+  const row = await currentDriver().get<{ n: number }>(
+    'SELECT COUNT(*) AS n FROM outbox_unreadable',
+  );
+  return row?.n ?? 0;
 }
 
 /** How many meta rows survive. A wipe must leave none. */

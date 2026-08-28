@@ -6,7 +6,8 @@ import {
 } from '@homefarm/contracts';
 import { apiUrl, renewSession, syncHeaders } from '../api';
 import type { PullResult } from '../db/port';
-import { localStore, storeGeneration } from '../db/store';
+import { localStore } from '../db/store';
+import { tenantFence } from './tenant';
 
 /**
  * Hydration — the read half of sync.
@@ -72,7 +73,9 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
   // The farm this pass belongs to. Applying a page into a store that has since
   // been swapped would write one farm's records into another's database, which
   // is the worst version of this hazard and the one no server check can catch.
-  const tenant = storeGeneration();
+  // `tenantFence` also refuses while the token and the store disagree, which is
+  // every moment of a sign-in and is not a swap the generation can see.
+  const moved = tenantFence();
   const repairing = !(await localStore().projectionRepairDone());
   if (repairing) await localStore().startProjectionRepair();
 
@@ -89,6 +92,18 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
   };
 
   for (let page = 0; page < MAX_PAGES_PER_PASS; page++) {
+    /**
+     * Asked before the request as well as after it.
+     *
+     * The check below catches a page that arrived for the wrong farm. This one
+     * means the page is never asked for — a device whose token has moved ahead
+     * of its database has no business pulling a snapshot it cannot legally
+     * write anywhere, and after a switch it also stops the *next* page being
+     * fetched under a token the loop has already been told not to trust.
+     */
+    const beforeAsking = moved();
+    if (beforeAsking) return { ...outcome, deferred: beforeAsking };
+
     let response: { status: number; body: unknown };
     try {
       response = await transport(since, sinceId);
@@ -140,7 +155,8 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
      * locally advances past what was skipped, exactly as the server's own
      * unknown-entity skip does.
      */
-    if (storeGeneration() !== tenant) return { ...outcome, deferred: 'farm-switched' };
+    const elsewhere = moved();
+    if (elsewhere) return { ...outcome, deferred: elsewhere };
 
     const { known, unmodelable } = readableRows(parsed.data.mutations);
     outcome.unmodelable += unmodelable;
@@ -188,6 +204,15 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
    * `more` false is the whole condition, and it has to be: a row that simply
    * has not arrived yet is indistinguishable from an orphan, so sweeping before
    * the feed runs out would delete records the server was about to send.
+   *
+   * **It is only a safe condition because the server stopped lying about it**
+   * (H6). `readSnapshotPage` answered `false` when it had merely *stopped* at
+   * a row it could not decide yet, to save the round trip that re-reads up to
+   * the same row — and this read that as the log having run out, so a device
+   * whose records arrived by pull deleted every record whose log rows sat
+   * beyond the stall, and set `repairDone` so it never ran again. A stall says
+   * `more: true` now. Nothing here can tell the two apart, so nothing here can
+   * defend against that line being optimised back.
    *
    * The other two ways a pass can end are already excluded by getting here at
    * all. Every deferral returns from inside the loop, and so does the pause at

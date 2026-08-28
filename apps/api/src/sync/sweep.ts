@@ -7,8 +7,14 @@ import { scopedOn } from '../db/scoped';
 import { db } from '../db/client';
 import { recordSweep } from '../db/sweep-status';
 import { inCommitOrder } from './commit-order';
-import { PENDING } from './outcome';
-import { type MutationDoc, project, replayFromLog, stampOutcome } from './apply';
+import { PENDING, type StoredOutcome, UNREADABLE } from './outcome';
+import {
+  type MutationDoc,
+  outcomeForRepair,
+  project,
+  replayFromLog,
+  stampOutcome,
+} from './apply';
 
 /**
  * The rows whose client never came back.
@@ -70,6 +76,21 @@ import { type MutationDoc, project, replayFromLog, stampOutcome } from './apply'
 
 /** An hour, in the units `Date` counts in. */
 export const SWEEP_AFTER_MS = 60 * 60 * 1000;
+
+/**
+ * The two states a pass will pick a row up from.
+ *
+ * `pending` is the row whose client never came back. `unreadable` is one this
+ * build looked at and could not parse — stamped rather than left `pending`,
+ * because `readSnapshotPage` *stops* at a `pending` row and one of those was a
+ * permanent full stop for every device on the farm. Selecting it here is the
+ * other half of that: stamping it moved the feed on, and this is what still
+ * lets a build that can read the envelope decide it properly.
+ *
+ * Including it costs nothing a pass was not already paying — these rows were
+ * `pending` before, and consumed the same budget in the same order.
+ */
+const LOOKS_AT: StoredOutcome[] = [PENDING, UNREADABLE];
 
 /**
  * How many stranded rows one query asks for.
@@ -182,19 +203,20 @@ export async function sweepFarm(
    *
    * **Not simply re-running the query**, which looks like it would work: a
    * swept row stops being `pending`, so the next call would return the next
-   * rows on its own — until it met an `unreadable` one, which is left `pending`
-   * on purpose for a newer build to read. That row would come back at the head
-   * of every page for ever and the loop would never finish. Seeking past what
-   * has been looked at terminates whatever each row turned out to be.
+   * rows on its own — until it met one this build cannot read, which is stamped
+   * `unreadable` and deliberately still selected below, so a newer build can
+   * come back to it. That row would come back at the head of every page for
+   * ever and the loop would never finish. Seeking past what has been looked at
+   * terminates whatever each row turned out to be.
    */
   let after: { serverTs: Date; _id: string } | null = null;
 
   while (report.found < SWEEP_CEILING) {
     const page = await scope.col<MutationDoc>('mutations').findMany(
       after === null
-        ? { outcome: PENDING, serverTs: { $lt: cutoff } }
+        ? { outcome: { $in: LOOKS_AT }, serverTs: { $lt: cutoff } }
         : {
-            outcome: PENDING,
+            outcome: { $in: LOOKS_AT },
             $and: [
               { serverTs: { $lt: cutoff } },
               {
@@ -249,9 +271,39 @@ async function sweepOne(
     // project it a second time.
     const replay = await replayFromLog(scope, id);
     if (replay.kind === 'decided') return {};
-    if (replay.kind === 'unreadable') return { unreadable: 1 };
 
-    if (typeof userId !== 'string') return { unreadable: 1 };
+    /**
+     * Looked at, could not read — and said so on the row.
+     *
+     * **This used to return without stamping anything**, leaving the row
+     * `pending` so a newer build could read it. The intent was right; the state
+     * was not. `readSnapshotPage` *stops* at a `pending` row rather than
+     * skipping it, and does not advance `through` — so a single row whose
+     * payload no longer parses after a schema tightening was a permanent full
+     * stop for the whole farm's feed, on every device, while each client was
+     * answered `duplicate`, cleared its outbox row, and reported itself up to
+     * date. Silent in both directions.
+     *
+     * `unreadable` is decided as far as the feed is concerned and unsettled as
+     * far as this sweeper is concerned: `FINAL_OUTCOMES` excludes it, so a
+     * later build that *can* read the envelope may still stamp the real
+     * outcome, and `LOOKS_AT` is what brings the row back to be offered one.
+     */
+    if (replay.kind === 'unreadable') {
+      await stampOutcome(scope, id, {
+        kind: UNREADABLE,
+        reason: 'This record could not be read back by the server that stored it.',
+      });
+      return { unreadable: 1 };
+    }
+
+    if (typeof userId !== 'string') {
+      await stampOutcome(scope, id, {
+        kind: UNREADABLE,
+        reason: 'This record does not say who wrote it.',
+      });
+      return { unreadable: 1 };
+    }
 
     const claims = await currentClaims(scope.orgId, userId);
     if (claims === null) {
@@ -289,7 +341,13 @@ async function sweepOne(
     }
 
     const decision = await project(scope, claims, replay.command);
-    await stampOutcome(scope, id, decision);
+    /**
+     * Every row this sweeper touches is a repair by definition — it selects
+     * only rows that were never decided — so a `noop` here carries the same
+     * ambiguity `outcomeForRepair` exists to settle: was the projection put in
+     * this state by somebody else, or by this very row before it died?
+     */
+    await stampOutcome(scope, id, await outcomeForRepair(scope, id, replay.command, decision));
     return { decided: 1 };
   });
 }

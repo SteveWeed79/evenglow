@@ -7,6 +7,7 @@ import {
 import { enqueue, queueDepth, unsentCount } from '@homefarm/core/sync/queue';
 import { flushOnce } from '@homefarm/core/sync/flush';
 import { listRejected } from '@homefarm/core/sync/inbox';
+import { localStore } from '@homefarm/core/db/store';
 import { MUTATION_SCHEMA_VERSION, newId } from '@homefarm/contracts';
 import {
   corruptRecordRow,
@@ -18,6 +19,9 @@ import {
   readAllRecords,
   readOutboxBySeq,
   readRecordsByEntity,
+  undecidedRowCount,
+  unreadablePayloadRow,
+  unreadableValueRow,
   wipeLocalData,
 } from '../support/store';
 
@@ -98,6 +102,98 @@ describe('corruption does not wedge the queue', () => {
   });
 });
 
+/**
+ * The corruption both helpers above were unable to express (H7).
+ *
+ * `corruptRow` leaves a valid payload and damages a typed column;
+ * `corruptRecordRow` damages the JSON column *and* `updatedAt`. So in every
+ * case above the parse failed for the other reason, and the case where the
+ * JSON column is the **only** thing wrong had never been tried.
+ *
+ * It mattered because `payload` and `value` are `z.unknown()`, which is
+ * satisfied by a key that is present and `undefined` and refused only when the
+ * key is absent. An unparseable column read back as `undefined` therefore
+ * *passed* the schema, quarantine was never reached, and `JSON.stringify` then
+ * dropped the key on the way to the wire — so the server received a mutation
+ * with no payload at all, answered 400 for the whole batch, and up to a
+ * hundred good mutations behind it were marked rejected.
+ */
+describe('a column that is on disk but is not JSON', () => {
+  beforeEach(freshStore);
+
+  it('is quarantined rather than sent as a mutation with no payload', async () => {
+    await enqueue(eggLog());
+    await unreadablePayloadRow(newId());
+    await enqueue(eggLog());
+
+    const queue = await readOutboxBySeq();
+
+    expect(queue).toHaveLength(2);
+    expect(await quarantineCount()).toBe(1);
+  });
+
+  it('keeps the unreadable text itself, so the evidence survives', async () => {
+    const id = newId();
+    await unreadablePayloadRow(id);
+
+    await readOutboxBySeq();
+
+    const [held] = await listQuarantined();
+    // The row as it sits on disk, corrupt column and all. The *mapped* object
+    // would have the unreadable column silently missing, which is precisely
+    // what hid this.
+    expect(held?.raw).toMatchObject({ id, payload: '{"occurredAt": 170000' });
+    expect(held?.reason).toContain('payload');
+  });
+
+  /**
+   * The consequence, asserted where it actually bites: nothing reaches the
+   * transport without a payload. That is the byte the server rejects the whole
+   * batch over, and the batch is other farms' mornings.
+   */
+  it('never lets an envelope reach the wire without its payload', async () => {
+    await enqueue(eggLog());
+    await unreadablePayloadRow(newId());
+    await enqueue(eggLog());
+
+    const sent: Record<string, unknown>[] = [];
+    await flushOnce((mutations) => {
+      sent.push(...(mutations as unknown as Record<string, unknown>[]));
+      return Promise.resolve({
+        status: 200,
+        body: {
+          results: mutations.map((m) => ({ id: m.id, status: 'applied' })),
+          serverTs: Date.now(),
+        },
+      });
+    });
+
+    expect(sent).toHaveLength(2);
+    for (const envelope of sent) {
+      expect(Object.hasOwn(envelope, 'payload')).toBe(true);
+      expect(JSON.parse(JSON.stringify(envelope))).toHaveProperty('payload');
+    }
+  });
+
+  /**
+   * The projection half, which is worse in its own way: `value` is
+   * `z.unknown()` too, so a record whose stored value would not parse used to
+   * come back as a perfectly valid record with nothing in it — rendered on a
+   * screen as a blank animal rather than quarantined as a broken row.
+   */
+  it('does not hand a screen a record with its contents missing', async () => {
+    await enqueue(eggLog());
+    await unreadableValueRow('flock:unreadable');
+
+    const records = await readAllRecords();
+
+    expect(records.map((r) => r.key)).not.toContain('flock:unreadable');
+    expect(await quarantineCount()).toBe(1);
+    const [held] = await listQuarantined();
+    expect(held?.reason).toContain('value');
+  });
+});
+
 describe('envelope migration (A7)', () => {
   it('returns a current envelope untouched', () => {
     const envelope = { schemaVersion: MUTATION_SCHEMA_VERSION, id: 'x' };
@@ -155,6 +251,12 @@ describe('session hygiene (C5)', () => {
 
     expect(await quarantineCount()).toBe(1);
 
+    // A tally of answers that decided nothing is about this farm's outbox, so
+    // it goes with it. Seeded here rather than assumed: an empty table would
+    // pass the assertion below whether or not the wipe touches it.
+    await localStore().recordUndecided(await readOutboxBySeq());
+    expect(await undecidedRowCount()).toBeGreaterThan(0);
+
     await wipeLocalData();
 
     // A shared barn tablet must not hand the previous farm's records to the
@@ -163,6 +265,7 @@ describe('session hygiene (C5)', () => {
     expect(await readAllRecords()).toEqual([]);
     expect(await quarantineCount()).toBe(0);
     expect(await readRecordsByEntity('flock')).toEqual([]);
+    expect(await undecidedRowCount()).toBe(0);
 
     expect(await metaCount()).toBe(0);
   });

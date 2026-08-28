@@ -71,6 +71,23 @@ const cachedClaimsSchema = z
      */
     email: z.string().max(254).optional(),
     emailVerified: z.boolean().optional(),
+    /**
+     * Whether a Google identity is bound to this account.
+     *
+     * What it is for is the account screen saying which sign-ins work, rather
+     * than offering to connect a Google account to one that already has one.
+     *
+     * Optional for the same reason as the two above, and the reading of absent
+     * is the same: *this device has not been told*. A server that predates the
+     * link route sends nothing, and rendering that as "not connected" would
+     * offer a control whose answer is already known — which is how a farmer
+     * ends up tapping something that cannot work.
+     *
+     * The Google subject itself is deliberately not here. A screen needs to
+     * know that there is one; the identifier is Google's, nothing on the
+     * handset has a use for it, and a cache is a poor place for an identity.
+     */
+    googleLinked: z.boolean().optional(),
   })
   .strict();
 

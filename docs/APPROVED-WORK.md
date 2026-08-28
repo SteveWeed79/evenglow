@@ -310,9 +310,15 @@ on the exact failure they then permit.
       password even so, because a stolen session alone must not point an
       account at an inbox the thief controls. Moving a *verified* address needs
       the old one to confirm the move and is deliberately not built.
-      **Google arrives confirmed**, on both the signup and the account-linking
-      branch: `verifyGoogleIdToken` refuses a token without `email_verified`,
-      so asking again would be theatre that leaves recovery off.
+      **Google arrives confirmed, where the address is the same one.**
+      `verifyGoogleIdToken` refuses a token without `email_verified`, so asking
+      again would be theatre that leaves recovery off. That was written when
+      linking was unconditional and it is narrower now: signup confirms because
+      Google supplied the address, and the in-session link confirms only when
+      `normalizeEmail(identity.email)` equals the account's — connecting a
+      personal Google account under another address is ordinary and proves
+      nothing about the farm's own. The unauthenticated link branch confirms
+      nobody: it refuses an unproved account outright (H1).
       **Existing accounts are not backfilled.** Dating the flag from the row's
       creation would be it asserting something nobody demonstrated, which is
       the one thing it exists to stop. They confirm when they next open the app.

@@ -339,13 +339,50 @@ describe.each(BACKINGS)('LocalStore — $name', (backing) => {
       const a = await store.enqueue(eggLog());
       const b = await store.enqueue(eggLog());
 
-      await store.recordAttempt([a], 'boom');
-      for (let i = 0; i < 6; i++) await store.recordAttempt([b], 'boom');
+      await store.recordUndecided([a]);
+      for (let i = 0; i < 6; i++) await store.recordUndecided([b]);
 
       await store.rejectExhausted([a, b], 6, 'The server will not accept this.');
 
       const rejected = await store.listRejected();
       expect(rejected.map((m) => m.id)).toEqual([b.id]);
+    });
+
+    /**
+     * The ceiling is answers, not attempts, and that is the whole of H8.
+     *
+     * `attempts` is what a fortnight in a valley with no signal fills. Ripening
+     * the inbox on it meant the budget was normally spent before anything had
+     * gone wrong, so the *first* response the client could not read swept the
+     * whole batch — up to a hundred good mutations — into the rejected inbox.
+     */
+    it('never parks a mutation for having been unreachable', async () => {
+      const a = await store.enqueue(eggLog());
+
+      // A fortnight of mornings in a signal shadow, well past the ceiling.
+      for (let i = 0; i < 20; i++) await store.recordAttempt([a], 'Network error');
+
+      await store.rejectExhausted([a], 6, 'The server will not accept this.');
+
+      expect(await store.listRejected()).toEqual([]);
+      const [row] = await store.readOutboxBySeq();
+      expect(row?.status).toBe('queued');
+      // Still counted, and still shown: what changed is what it decides.
+      expect(row?.attempts).toBe(20);
+    });
+
+    /** A retry starts from nothing on both counts, or it is parked unsent. */
+    it('clears the answer tally when a rejected mutation is retried', async () => {
+      const a = await store.enqueue(eggLog());
+      for (let i = 0; i < 6; i++) await store.recordUndecided([a]);
+      await store.rejectExhausted([a], 6, 'The server will not accept this.');
+      expect(await store.listRejected()).toHaveLength(1);
+
+      await store.retryRejected(a.id);
+      const [queued] = await store.readOutboxBySeq();
+      await store.rejectExhausted([queued!], 6, 'Again.');
+
+      expect(await store.listRejected()).toEqual([]);
     });
 
     it('returns a retried mutation to the queue with a clean attempt count', async () => {

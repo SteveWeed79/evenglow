@@ -3,7 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import type { SessionClaims } from '@homefarm/api/auth/claims';
 import { scopedOn } from '@homefarm/api/db/scoped';
 import { applyBatch } from '@homefarm/api/sync/apply';
-import { PENDING } from '@homefarm/api/sync/outcome';
+import { PENDING, UNREADABLE } from '@homefarm/api/sync/outcome';
 import { readSnapshotPage } from '@homefarm/api/sync/snapshot';
 import { SWEEP_AFTER_MS, SWEEP_CEILING, sweepAllFarms, sweepFarm } from '@homefarm/api/sync/sweep';
 import { makeMutation } from '../support/fixtures';
@@ -348,10 +348,10 @@ describeDb('how much one pass covers', () => {
   });
 
   /**
-   * A row this build cannot read back is left `pending` on purpose, for a newer
-   * one. That is what makes "just run the query again" wrong as a paging
-   * strategy — such a row returns at the head of every page for ever — so the
-   * seek cursor has to move past whatever a row turned out to be.
+   * A row this build cannot read back is still selected by the next pass, for a
+   * newer build to decide. That is what makes "just run the query again" wrong
+   * as a paging strategy — such a row returns at the head of every page for
+   * ever — so the seek cursor has to move past whatever a row turned out to be.
    */
   it('pages past a row it cannot read rather than looping on it', async () => {
     const unreadable = await stranded({ entity: 'flock', op: 'create', payload: flock() });
@@ -418,5 +418,108 @@ describeDb('how much one pass covers', () => {
   /** A ceiling exists, and it is high enough not to bite an ordinary farm. */
   it('bounds one pass rather than running until a backlog is gone', () => {
     expect(SWEEP_CEILING).toBeGreaterThan(1_000);
+  });
+});
+
+/**
+ * A row the server cannot read back froze the whole farm's feed (H5).
+ *
+ * `sweepOne` looked at such a row and returned without stamping anything,
+ * deliberately: leaving it `pending` was how a newer build got a chance to read
+ * it. The intent was right and the state was wrong. `readSnapshotPage` **stops**
+ * at a `pending` row rather than skipping it, and does not advance `through` —
+ * so one row whose payload no longer parses after a schema tightening was a
+ * permanent full stop for every device on that farm, while each client was
+ * answered `duplicate`, cleared its outbox row, and reported itself up to date.
+ *
+ * `outcome.ts` had already written the principle down — *"an unclassifiable row
+ * must not stall the feed"* — and the unreadable-payload case did precisely
+ * that.
+ */
+describeDb('a row this build cannot read', () => {
+  /** Makes a logged row unreadable without touching anything else about it. */
+  async function corrupt(id: string): Promise<void> {
+    await harness!.db
+      .collection('mutations')
+      .updateOne({ _id: id as never }, { $set: { entity: 'nonsense-entity' } });
+  }
+
+  it('is stamped rather than left pending', async () => {
+    const bad = await stranded({ entity: 'flock', op: 'create', payload: flock() });
+    await corrupt(bad);
+
+    await sweepFarm(scope(), Date.now());
+
+    expect(await outcomeOf(bad)).toBe(UNREADABLE);
+  });
+
+  it('does not stop the feed for every other device on the farm', async () => {
+    const bad = await stranded({ entity: 'flock', op: 'create', payload: flock() });
+    await corrupt(bad);
+    const behindIt = await stranded({
+      entity: 'flock',
+      op: 'create',
+      payload: flock({ name: 'Beta' }),
+    });
+
+    // Before the sweep, the unreadable row is `pending` and the feed stops dead
+    // at it — which is the state a farm was left in permanently.
+    expect(await feed()).toEqual([]);
+
+    await sweepFarm(scope(), Date.now());
+
+    // Skipped, not stopped at: the record behind it reaches the other phones.
+    expect(await feed()).toEqual([behindIt]);
+  });
+
+  /** Nothing was read, so there is nothing for another device to replay. */
+  it('is never itself replicated', async () => {
+    const bad = await stranded({ entity: 'flock', op: 'create', payload: flock() });
+    await corrupt(bad);
+
+    await sweepFarm(scope(), Date.now());
+
+    expect(await feed()).not.toContain(bad);
+  });
+
+  /**
+   * The half that stamping could have cost, and does not.
+   *
+   * Deciding the row for the feed must not decide it for ever: the whole reason
+   * this state exists rather than a flat refusal is that a later build may be
+   * able to read the envelope. `FINAL_OUTCOMES` excludes `unreadable` so
+   * `stampOutcome` will overwrite it, and the sweeper still selects it.
+   */
+  it('is offered to a later build that can read it', async () => {
+    const bad = await stranded({ entity: 'flock', op: 'create', payload: flock() });
+    await corrupt(bad);
+
+    await sweepFarm(scope(), Date.now());
+    expect(await outcomeOf(bad)).toBe(UNREADABLE);
+
+    // The newer build: the entity is one it knows again.
+    await harness!.db
+      .collection('mutations')
+      .updateOne({ _id: bad as never }, { $set: { entity: 'flock' } });
+
+    const second = await sweepFarm(scope(), Date.now());
+
+    expect(second.found).toBe(1);
+    expect(await outcomeOf(bad)).toBe('insert');
+    expect(await feed()).toEqual([bad]);
+  });
+
+  /** The other unreadable shape: a log row that names no author. */
+  it('stamps a row that does not say who wrote it', async () => {
+    const anonymous = await stranded({ entity: 'flock', op: 'create', payload: flock() });
+    await harness!.db
+      .collection('mutations')
+      .updateOne({ _id: anonymous as never }, { $unset: { userId: '' } });
+
+    const swept = await sweepFarm(scope(), Date.now());
+
+    expect(swept.unreadable).toBe(1);
+    expect(await outcomeOf(anonymous)).toBe(UNREADABLE);
+    expect(await feed()).toEqual([]);
   });
 });

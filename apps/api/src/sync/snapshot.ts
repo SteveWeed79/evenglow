@@ -206,14 +206,34 @@ export async function readSnapshotPage(
     through: last ? last.serverTs.getTime() : since,
     throughId: last ? last._id : sinceId,
     /**
-     * `false` when stalled, though there are certainly more rows on disk.
+     * **True when stalled, and the round trip it costs is the point.**
      *
-     * `more` drives the client's paging loop, and the honest answer to the
-     * question it actually asks — *is there another page I can have now* — is
-     * no. Saying yes would spend a round trip re-reading up to the same
-     * undecided row and stopping in the same place. The next ordinary pull
-     * picks up whatever has been decided by then.
+     * This used to answer `false`, on the argument that the honest answer to
+     * the question `more` asks — *is there another page I can have now* — is
+     * no, and that saying yes spends a round trip re-reading up to the same
+     * undecided row and stopping in the same place.
+     *
+     * The round trip is real and it was the wrong thing to optimise. `more`
+     * is not only a paging hint: the client's one-time projection repair
+     * treats `false` as proof the log ran out, and on that proof deletes every
+     * local record the replay did not stamp and no outbox row names. A device
+     * whose records arrived by pull, meeting a single undecided row, therefore
+     * lost every record whose log rows sat beyond the stall — and set
+     * `repairDone`, so it never ran again to put them back. `pull.ts` said
+     * *"`more` false is the whole condition, and it has to be"* and listed the
+     * ways a pass can end; this one was not among them.
+     *
+     * Saying `true` costs one extra page request, which then reads zero rows
+     * and returns the cursor unchanged, and the client stops on its own
+     * no-progress guard with `more` still true — so the repair stays open and
+     * finishes on a later pass, once the row is decided.
+     *
+     * **Deliberately not a new field on the response.** `pullResponseSchema`
+     * is `.strict()` and ships inside every APK, so an added key would fail
+     * the parse on every handset in the field and stop it hydrating at all —
+     * the exact failure the note on `ENTITIES` in `contracts/mutation.ts`
+     * describes. Changing what `more` says needs no new build anywhere.
      */
-    more: stalled ? false : hasMore,
+    more: stalled || hasMore,
   };
 }

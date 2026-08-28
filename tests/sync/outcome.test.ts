@@ -4,10 +4,14 @@ import type { SessionClaims } from '@homefarm/api/auth/claims';
 import { scopedOn } from '@homefarm/api/db/scoped';
 import { applyBatch } from '@homefarm/api/sync/apply';
 import {
+  FINAL_OUTCOMES,
+  isOpenToDecision,
   OUTCOMES,
   PENDING,
   REPLICATED_OUTCOMES,
+  UNREADABLE,
   WITHHELD_OUTCOMES,
+  isUndecided,
   shouldReplicate,
 } from '@homefarm/api/sync/outcome';
 import { readSnapshotPage } from '@homefarm/api/sync/snapshot';
@@ -71,7 +75,76 @@ describe('outcome classification', () => {
 
   it('replicates only the outcomes that changed the projection', () => {
     expect([...REPLICATED_OUTCOMES].sort()).toEqual(['archive', 'insert', 'update']);
-    expect([...WITHHELD_OUTCOMES].sort()).toEqual(['conflict', 'noop', PENDING, 'rejected']);
+    expect([...WITHHELD_OUTCOMES].sort()).toEqual([
+      'conflict',
+      'noop',
+      PENDING,
+      'rejected',
+      UNREADABLE,
+    ]);
+  });
+
+  /**
+   * Withheld and decided are different questions, and `unreadable` is the row
+   * that answers them differently: nothing was read, so nothing replicates —
+   * but a page must move past it rather than stop, which is what `pending`
+   * does and what froze a farm's whole feed behind one corrupt row.
+   */
+  it('moves the feed past a row it could not read, and stops only at pending', () => {
+    expect(shouldReplicate(UNREADABLE)).toBe(false);
+    expect(isUndecided(UNREADABLE)).toBe(false);
+    expect(isUndecided(PENDING)).toBe(true);
+  });
+
+  /**
+   * Three questions, three answers, and they are not the same question.
+   *
+   * **Two of the three used to agree, and writing the third one down is what
+   * this file exists for now.** Stamping `unreadable` moved the feed on
+   * (`isUndecided`) and left the row overwritable (`FINAL_OUTCOMES`) — and
+   * `replayFromLog` asks a third thing, *may this row still be decided*, which
+   * it answered by testing for `pending` alone. So the row was selected by the
+   * sweeper and then walked straight past, and the "a newer build can read
+   * this" half — the entire reason for recording the state rather than refusing
+   * outright — never happened. CI caught it; nothing here could.
+   */
+  it('keeps the three questions about an outcome apart', () => {
+    // May a page move past it?           May it still be decided?
+    expect(isUndecided(PENDING)).toBe(true);
+    expect(isOpenToDecision(PENDING)).toBe(true);
+
+    expect(isUndecided(UNREADABLE)).toBe(false);
+    expect(isOpenToDecision(UNREADABLE)).toBe(true);
+
+    for (const settled of FINAL_OUTCOMES) {
+      expect(isUndecided(settled)).toBe(false);
+      expect(isOpenToDecision(settled)).toBe(false);
+    }
+
+    // A row written before the field existed is open, like `pending`.
+    expect(isOpenToDecision(undefined)).toBe(true);
+    expect(isOpenToDecision(null)).toBe(true);
+
+    // And an outcome from a newer deploy is left alone rather than re-decided
+    // by an older applier — which is why this is not `!FINAL_OUTCOMES.includes`.
+    expect(isOpenToDecision('something-a-later-build-wrote')).toBe(false);
+  });
+
+  /**
+   * And it stays overwritable, or stamping it would have cost the thing it was
+   * left `pending` for: a later build reading the envelope and deciding it.
+   */
+  it('is not final, so a build that can read the row may still decide it', () => {
+    expect(FINAL_OUTCOMES).not.toContain(UNREADABLE);
+    expect(FINAL_OUTCOMES).not.toContain(PENDING);
+    expect([...FINAL_OUTCOMES].sort()).toEqual([
+      'archive',
+      'conflict',
+      'insert',
+      'noop',
+      'rejected',
+      'update',
+    ]);
   });
 
   it('lets a row written before the field existed through, which is why no backfill is needed', () => {
@@ -371,5 +444,79 @@ describeDb('a projection lost to a crash repairs itself', () => {
     // Repaired, and not duplicated.
     expect(await harness!.db.collection('eggLogs').countDocuments({})).toBe(1);
     expect(await feed()).toEqual([mutation.id]);
+  });
+
+  /**
+   * What the page says about itself when it stopped rather than ran out (H6).
+   *
+   * `more` is not only a paging hint. The client's one-time projection repair
+   * treats `false` as proof the log ran out, and on that proof deletes every
+   * local record the replay did not stamp and no outbox row names. Answering
+   * `false` at a stall — which this used to do, deliberately, to save a round
+   * trip — meant a device whose records arrived by pull lost every record
+   * whose log rows sat beyond the undecided one, and set `repairDone`, so the
+   * repair never ran again to put them back.
+   *
+   * The saved round trip is spent instead: the client asks once more, reads
+   * nothing, gets the cursor back unchanged, and stops on its own no-progress
+   * guard with `more` still true.
+   */
+  it('says there is more when it stopped at a row it could not decide', async () => {
+    const undecided = makeMutation({ payload: { occurredAt: 1, flockId: ulid(), count: 18 } });
+    const behindIt = makeMutation({ payload: { occurredAt: 2, flockId: ulid(), count: 19 } });
+
+    await harness!.db.collection('mutations').insertMany([
+      {
+        _id: undecided.id,
+        orgId: ORG_A,
+        targetId: undecided.targetId,
+        entity: undecided.entity,
+        op: undecided.op,
+        payload: undecided.payload,
+        deviceId: undecided.deviceId,
+        clientSeq: undecided.clientSeq,
+        clientTs: undecided.clientTs,
+        schemaVersion: undecided.schemaVersion,
+        userId: OWNER.userId,
+        serverTs: new Date(1_000),
+        outcome: 'pending',
+      },
+      {
+        _id: behindIt.id,
+        orgId: ORG_A,
+        targetId: behindIt.targetId,
+        entity: behindIt.entity,
+        op: behindIt.op,
+        payload: behindIt.payload,
+        deviceId: behindIt.deviceId,
+        clientSeq: behindIt.clientSeq,
+        clientTs: behindIt.clientTs,
+        schemaVersion: behindIt.schemaVersion,
+        userId: OWNER.userId,
+        serverTs: new Date(2_000),
+        outcome: 'insert',
+      },
+    ] as never);
+
+    const page = await readSnapshotPage(scope(), { since: 0, sinceId: null });
+
+    // Held behind the undecided row, which is the ordering this stall exists
+    // to protect — and the reason the client must not read the page as final.
+    expect(page.mutations).toEqual([]);
+    expect(page.more).toBe(true);
+    // And the cursor did not move past it, so the next page starts here again.
+    expect(page.through).toBe(0);
+    expect(page.throughId).toBeNull();
+  });
+
+  /** The other half of the same flag: run out, and say so. */
+  it('says there is no more when the log has genuinely run out', async () => {
+    const mutation = makeMutation({ payload: { occurredAt: 1, flockId: ulid(), count: 18 } });
+    await applyBatch(scope(), OWNER, [mutation]);
+
+    const page = await readSnapshotPage(scope(), { since: 0, sinceId: null });
+
+    expect(page.mutations.map((m) => m.id)).toEqual([mutation.id]);
+    expect(page.more).toBe(false);
   });
 });

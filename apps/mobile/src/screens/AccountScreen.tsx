@@ -25,6 +25,7 @@ import {
   resetPassword,
   changeEmail,
   confirmEmail,
+  linkGoogle,
   sendVerifyCode,
   signIn,
   SignInError,
@@ -139,6 +140,18 @@ export function AccountScreen({
    * sharing a failure line between "your password was wrong" and "that code
    * has expired" is a class of confusion worth not inviting.
    */
+  /**
+   * Connecting a Google account, kept apart from the verify panel's state.
+   *
+   * Its own busy flag and its own failure, because sharing `verifyFailure`
+   * would print a refusal about Google inside a panel about an email address,
+   * and sharing `save` would navigate off the screen the moment it worked.
+   */
+  const [linkPassword, setLinkPassword] = useState('');
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [linkFailure, setLinkFailure] = useState<string | null>(null);
+  const [linkedTo, setLinkedTo] = useState<string | null>(null);
+
   const [verifySent, setVerifySent] = useState<string | null>(null);
   const [verifyCode, setVerifyCode] = useState('');
   const [verifyBusy, setVerifyBusy] = useState(false);
@@ -171,6 +184,41 @@ export function AccountScreen({
       }
     },
     [],
+  );
+
+  /**
+   * What the Google sheet comes back to.
+   *
+   * A null token is somebody backing out, which happens on every sign-in sheet
+   * ever built and must not produce a red message — the same reading
+   * `useGoogleSignIn` gives it, and the same silence.
+   */
+  const connectGoogle = useCallback(
+    (idToken: string | null): void => {
+      if (idToken === null) return;
+
+      setLinkBusy(true);
+      setLinkFailure(null);
+      void (async () => {
+        try {
+          const address = await linkGoogle({ idToken, password: linkPassword });
+          setLinkedTo(address ?? '');
+          // Cleared on success, so a password does not sit in component state
+          // on a panel that has nothing left to do with it.
+          setLinkPassword('');
+          setClaims(await readCachedClaims());
+        } catch (error) {
+          setLinkFailure(
+            error instanceof Error
+              ? error.message
+              : 'Google could not be connected. Try again in a minute.',
+          );
+        } finally {
+          setLinkBusy(false);
+        }
+      })();
+    },
+    [linkPassword],
   );
 
   const askToConfirm = useCallback(() => {
@@ -564,6 +612,99 @@ export function AccountScreen({
             )}
 
             <Failure message={verifyFailure} />
+          </Panel>
+        ) : null}
+
+        {/**
+          * Connecting a Google account to this one.
+          *
+          * **This panel is the way back from the H1 fix.** `/auth/google`
+          * refuses to bind a Google identity to an account whose address was
+          * never proved — an address in `users` is a claim, not a fact, and
+          * linking on it handed whoever typed it first the sign-in of whoever
+          * actually owns it. Every password account is in that state, so
+          * without this the Google button on the sign-in screen turns a farm
+          * away until a code has been read out of an inbox that, for a mistyped
+          * address, never arrives. Here the session is the proof, so the
+          * address does not have to be confirmed first.
+          *
+          * **Absent entirely in a build with no client id**, exactly as the
+          * signed-out button is, and for the reason written there: a dead
+          * button that fails on every tap is worse than no button.
+          *
+          * **Not gated on `emailVerified`.** Connecting is worth as much to a
+          * farm that confirmed its address months ago — one tap instead of a
+          * password, on the handset they bought yesterday — and the verify
+          * panel above disappears the moment the address is proved.
+          */}
+        {GOOGLE_AVAILABLE ? (
+          <Panel label="Google sign-in">
+            {/**
+              * Connected, and it names which one when this device is the one
+              * that just did it.
+              *
+              * **`linkedTo` has to be part of this condition, not part of the
+              * form below it.** A successful link sets `googleLinked` on the
+              * cached claims, so the panel flips to this branch on the same
+              * render — and a success sentence written inside the other branch
+              * is a sentence nobody ever sees. That was this panel's first
+              * shape and a screen test caught it: the one moment a wrong Google
+              * account can be noticed was the one moment the address was not on
+              * screen.
+              */}
+            {claims.googleLinked === true || linkedTo !== null ? (
+              <Body>
+                {linkedTo === null || linkedTo === ''
+                  ? 'This account is connected to a Google account. Either that or your password signs you in.'
+                  : `This account is connected to ${linkedTo}. Either that or your password signs you in.`}
+              </Body>
+            ) : (
+              <>
+                <Body>
+                  Connect a Google account and it signs you in on any handset — no password to
+                  type with a glove on. Your password goes on working either way.
+                </Body>
+                {/**
+                  * Said before the tap, not after it. Connecting is one-way
+                  * from inside the app, and somebody should learn that while
+                  * they can still decide, not from a sentence explaining why
+                  * they cannot undo it.
+                  */}
+                <Body>
+                  It cannot be undone from the app, so pick the Google account you mean to keep.
+                </Body>
+
+                <Field
+                  label="Your password"
+                  hint="Asked for because a Google sign-in outlives a stolen session, a password change and a sign-out."
+                >
+                  <TextField
+                    value={linkPassword}
+                    onChangeText={setLinkPassword}
+                    secret
+                    testID="link-password"
+                  />
+                </Field>
+
+                {/**
+                  * Deliberately not disabled on an empty password.
+                  *
+                  * An account Google created has none, and the server answers
+                  * that account with the truth — that it is already connected —
+                  * rather than a sentence about a password it never had. A
+                  * button greyed out with no way to un-grey it would be the
+                  * dead control this screen refuses elsewhere.
+                  */}
+                <GoogleButton
+                  disabled={linkBusy}
+                  onToken={connectGoogle}
+                  label={linkBusy ? 'Connecting…' : 'Connect a Google account'}
+                  testID="link-google"
+                />
+              </>
+            )}
+
+            <Failure message={linkFailure} />
           </Panel>
         ) : null}
 

@@ -18,7 +18,13 @@ import type { SessionClaims } from '../auth/claims';
 import { blobsFor } from '../db/blobs';
 import type { Scoped, Tenanted } from '../db/scoped';
 import { inCommitOrder, nextServerTs } from './commit-order';
-import { DECIDED_OUTCOMES, PENDING, type StoredOutcome } from './outcome';
+import {
+  FINAL_OUTCOMES,
+  isOpenToDecision,
+  PENDING,
+  type StampedOutcome,
+  type StoredOutcome,
+} from './outcome';
 import {
   decideProjection,
   ENTITY_COLLECTIONS,
@@ -244,7 +250,12 @@ async function applyMutation(
     }
 
     const projection = await project(scope, claims, command);
-    await stampOutcome(scope, id, projection);
+    // A first attempt cannot be a repair: nothing had been projected before it.
+    await stampOutcome(
+      scope,
+      id,
+      firstTime ? projection : await outcomeForRepair(scope, id, command, projection),
+    );
 
     if (projection.kind === 'conflict') {
       return { id, status: 'conflict', reason: projection.reason };
@@ -302,13 +313,19 @@ export async function replayFromLog(scope: Scoped, id: string): Promise<Replay> 
    * unconditionally before, so it is not new behaviour for them.
    *
    * Read through `unknown` because this is what is on disk, not what this build
-   * writes. Anything that is not absent, null, or `pending` is a decision —
-   * including one from a newer deploy this build cannot name, which is left
-   * alone rather than re-decided by an older applier.
+   * writes. Anything `isOpenToDecision` refuses is a decision — including one
+   * from a newer deploy this build cannot name, which is left alone rather than
+   * re-decided by an older applier.
+   *
+   * **`unreadable` is open, and it has to be.** It is this build saying it
+   * could not parse the envelope, which is a statement about the build; the
+   * whole point of recording it rather than refusing outright is that a later
+   * one may manage. Counting it as a decision here left the row selected by the
+   * sweeper and then skipped by it, so the re-offer never happened.
    */
-  const outcome: unknown = stored.outcome;
-  const undecided = outcome === undefined || outcome === null || outcome === PENDING;
-  if (!undecided) return { kind: 'decided', result: decidedResult(id, stored) };
+  if (!isOpenToDecision(stored.outcome)) {
+    return { kind: 'decided', result: decidedResult(id, stored) };
+  }
 
   const entity = entitySchema.safeParse(stored.entity);
   const op = opSchema.safeParse(stored.op);
@@ -373,15 +390,80 @@ function decidedResult(id: string, stored: MutationDoc): MutationResult {
  * whose field is absent, which is how a pre-outcome row gets stamped the first
  * time it is replayed.
  */
+/**
+ * What to write on a row that was still `pending` and re-projected to `noop`.
+ *
+ * ## The mirror of the window the sweeper was built for
+ *
+ * The sweeper exists for a crash *between the log write and the projection*.
+ * The other order — projection lands, `stampOutcome` does not — was unhandled,
+ * and it is the same crash a millisecond later.
+ *
+ * On the resend, `decideProjection` sees `existing !== null` and answers
+ * `noop`, which is correct about the projection and wrong about the log:
+ * `noop` means *somebody else already put it in this state*, and here nobody
+ * else did — this row did, and then died before it could say so. `noop` does
+ * not replicate (`REPLICATES.noop === false`), so `readSnapshotPage` skips it
+ * and advances the watermark past it.
+ *
+ * The result is a record the sending device has and the server has, that **no
+ * other device on the farm will ever receive — including after a full
+ * `since=0` rehydration.** Identical for a `delete`: the archive lands, the
+ * stamp does not, and every other phone keeps showing a record the farm
+ * removed.
+ *
+ * ## Asking whether anybody else actually did it
+ *
+ * The state-producing event is `insert` for a create and `archive` for a
+ * delete, and it is recorded on exactly one log row. If no *other* row carries
+ * it for this target, then this pending row is the one that produced the
+ * state, and the outcome it should have been stamped with is that event.
+ *
+ * **`delete` needs one more question**, because its `noop` covers two
+ * different worlds: the record was already archived (this row may have done
+ * it) and the record never existed at all (nothing happened, and nothing
+ * should replicate). Only the first converts.
+ *
+ * **The decision is changed, the projection is not re-run.** The projection
+ * already landed — that is the premise — so this rewrites what the log says
+ * about it and nothing else. That matters beyond tidiness: archiving a photo
+ * removes its bytes, and a converted `archive` that re-ran the write would
+ * ask the blob store to delete an object that is already gone.
+ */
+export async function outcomeForRepair(
+  scope: Scoped,
+  id: string,
+  command: Command,
+  decision: ProjectionDecision,
+): Promise<ProjectionDecision> {
+  if (decision.kind !== 'noop') return decision;
+
+  const equivalent = command.op === 'delete' ? 'archive' : 'insert';
+
+  if (command.op === 'delete') {
+    const doc = await scope
+      .col<ProjectedDoc>(ENTITY_COLLECTIONS[command.entity])
+      .findOne({ _id: command.targetId });
+    // Never here at all, so there is nothing for another device to replay.
+    if (!doc?.archivedAt) return decision;
+  }
+
+  const somebodyElse = await scope
+    .col<MutationDoc>('mutations')
+    .findOne({ targetId: command.targetId, outcome: equivalent, _id: { $ne: id } });
+
+  return somebodyElse === null ? { kind: equivalent } : decision;
+}
+
 export async function stampOutcome(
   scope: Scoped,
   id: string,
-  decision: ProjectionDecision,
+  decision: StampedOutcome,
 ): Promise<void> {
   const reason = 'reason' in decision ? decision.reason : undefined;
 
   await scope.col<MutationDoc>('mutations').updateOne(
-    { _id: id, outcome: { $nin: DECIDED_OUTCOMES } },
+    { _id: id, outcome: { $nin: FINAL_OUTCOMES } },
     { $set: { outcome: decision.kind, ...(reason === undefined ? {} : { outcomeReason: reason }) } },
   );
 }
@@ -485,25 +567,61 @@ export async function project(
 
   switch (decision.kind) {
     case 'insert':
-      await col.upsertOne(
-        { _id: targetId },
-        {
-          $setOnInsert: {
-            ...payload,
-            ...stamp,
-            createdAt: new Date(),
-            /**
-             * Who made it, and it does not move.
-             *
-             * `updatedBy` is overwritten by whoever edited last, so it cannot
-             * answer "is this yours" after a single edit. Notes need a stable
-             * answer to that, and every other entity is better off having one
-             * too.
-             */
-            createdBy: command.userId,
+      /**
+       * The same `E11000` guard the log write above carries, and for the same
+       * reason — which this had not been given.
+       *
+       * `_id` is unique **collection-wide**, not per tenant, so a `targetId`
+       * another farm already used fails the insert rather than matching the
+       * org-guarded filter. `decideProjection` cannot see it either: `existing`
+       * is scoped, so another org's document reads as `null` and the decision is
+       * `insert`.
+       *
+       * It is reachable without anybody doing anything strange.
+       * `restore.ts` re-enqueues a backup with its **original** ULIDs, and
+       * justifies that with *"a `create` at a targetId that already exists is a
+       * `noop`"* — true only within one org. Lose a phone, install fresh so the
+       * device mints org B, restore the backup, sign up, flush: the ids belong
+       * to org A's documents and every one of them collides.
+       *
+       * Uncaught it was a 500, so the client retried for ever, the row stayed
+       * `pending` — which stalls the farm's whole pull feed — and the hourly
+       * sweeper rethrew. `listOrgIds()` sorts by `createdAt`, so every farm
+       * created after that one stopped being swept at all.
+       *
+       * Rejected rather than reported as a duplicate, exactly as the log write
+       * decides it: saying `duplicate` would confirm to one farm that another
+       * farm holds that id.
+       */
+      try {
+        await col.upsertOne(
+          { _id: targetId },
+          {
+            $setOnInsert: {
+              ...payload,
+              ...stamp,
+              createdAt: new Date(),
+              /**
+               * Who made it, and it does not move.
+               *
+               * `updatedBy` is overwritten by whoever edited last, so it cannot
+               * answer "is this yours" after a single edit. Notes need a stable
+               * answer to that, and every other entity is better off having one
+               * too.
+               */
+              createdBy: command.userId,
+            },
           },
-        },
-      );
+        );
+      } catch (error) {
+        if (error instanceof MongoServerError && error.code === 11000) {
+          return {
+            kind: 'rejected',
+            reason: 'That record id is already in use. The app will mint a new one.',
+          };
+        }
+        throw error;
+      }
       break;
 
     case 'update':

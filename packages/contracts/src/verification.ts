@@ -119,3 +119,77 @@ export const EMAIL_TAKEN = `That email is already registered with ${PRODUCT_NAME
 
 /** Said when the password offered alongside a new address is not the account’s. */
 export const WRONG_PASSWORD = 'That password is not right.';
+
+// ── Linking a Google identity from inside a session ──────────────────────────
+
+/**
+ * Connecting a Google account to the one already signed in.
+ *
+ * **The way back from the H1 fix.** `linkGoogleSub` refuses to bind a Google
+ * identity to an account whose address was never proved, because an address in
+ * `users` is a claim rather than a fact and linking on it handed whoever typed
+ * it first the sign-in of whoever actually owns it. Every password account —
+ * signup, invite, join code — is in exactly that state, so the Google button on
+ * the sign-in screen now refuses them until `/auth/verify` has been through.
+ *
+ * A session answers the question the address was standing in for. Whoever is
+ * holding this session *is* the account, so the proof the sign-in route could
+ * not have is already in hand, and the link is safe without the address ever
+ * being confirmed.
+ *
+ * **The password is asked for anyway**, exactly as `changeEmailSchema` asks for
+ * it fifteen lines above, and for a stronger version of the same reason. A
+ * Google link is the one grant in this system nothing revokes: `/auth/google`
+ * signs a caller in from the subject alone, so a link minted by a stolen
+ * session outlives the password change and the token revocation meant to evict
+ * the thief. Session plus password is two secrets; a session alone is one.
+ *
+ * **This is in tension with A2.4 and the tension is worth naming.** Google
+ * sign-in exists so there is "no password to store, reset or forget", and this
+ * asks for one on the screen where somebody is trying to stop typing them.
+ * What it costs is one password, once, on a screen they opened deliberately —
+ * and what it buys is that connecting Google cannot be done *to* an account by
+ * somebody who merely holds its session. After this, the password need never be
+ * typed again, which is the promise A2.4 actually made.
+ *
+ * Optional, because an account created *by* Google has no password to offer —
+ * and needs none, since it already carries the identity this route would bind.
+ * The route answers that account with the truth rather than a refusal about a
+ * password it never had.
+ */
+export const googleLinkSchema = z
+  .object({ idToken: z.string().min(1).max(8192), password: passwordSchema.optional() })
+  .strict();
+export type GoogleLink = z.infer<typeof googleLinkSchema>;
+
+/**
+ * Said when this account already has a Google identity bound to it.
+ *
+ * Names the remedy rather than stopping at the refusal, because for the common
+ * case — somebody connecting the same Google account twice — there is nothing
+ * wrong and the sentence should not read like a fault.
+ */
+export const GOOGLE_ALREADY_LINKED =
+  'This account is already connected to a Google account. Sign in with it instead.';
+
+/**
+ * Said when the Google account offered belongs to somebody else here.
+ *
+ * Templated on `PRODUCT_NAME` like `EMAIL_TAKEN`, and it ends in the action:
+ * that Google account is a way in, just to a different farm.
+ */
+export const GOOGLE_TAKEN = `That Google account is already registered with ${PRODUCT_NAME}. Sign in with it instead.`;
+
+/**
+ * Said when the link could not be written and no other answer fits.
+ *
+ * The filter it comes from has three ways to match nothing — the account has
+ * gone, it has been removed from the farm, or a Google identity arrived
+ * between the read and the write — and this sentence covers all three rather
+ * than guessing which. `/auth/email` makes the same choice about the same kind
+ * of filter and says so; the alternative is telling somebody who was removed
+ * from a farm mid-request that their account is connected to a Google account
+ * they have never seen.
+ */
+export const GOOGLE_LINK_FAILED =
+  'That could not be connected just now. Try again in a minute.';
