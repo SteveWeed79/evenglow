@@ -278,3 +278,247 @@ describeDb('POST /auth/google — linking onto an existing account', () => {
     expect(first.json()).toEqual(second.json());
   });
 });
+
+/**
+ * Connecting Google from inside a session — the way back from H1.
+ *
+ * The block above is the refusal: `/auth/google` will not bind a Google
+ * identity to an account whose address was never proved, because an address in
+ * `users` is a claim rather than a fact. Every password account is in exactly
+ * that state, so that fix costs every one of them a code read out of an inbox
+ * before the Google button will work — and for the mistyped address the whole
+ * verification feature exists for, that inbox is somebody else's.
+ *
+ * This route is what makes the step unnecessary: whoever holds the session *is*
+ * the account, which is a better proof than the address ever was, and a better
+ * one than the sign-in route could have had.
+ */
+
+/** A real bearer for a seeded account, minted the way a handset gets one. */
+async function bearerFor(email: string): Promise<string> {
+  const app = await server();
+  const res = await app.inject({
+    method: 'POST',
+    url: '/auth/login',
+    payload: { email, password: PASSWORD },
+  });
+  await app.close();
+  return (JSON.parse(res.body) as { accessToken: string }).accessToken;
+}
+
+async function postLink(
+  payload: unknown,
+  accessToken?: string,
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  const app = await server();
+  const res = await app.inject({
+    method: 'POST',
+    url: '/auth/google/link',
+    payload: payload as never,
+    ...(accessToken === undefined
+      ? {}
+      : { headers: { authorization: `Bearer ${accessToken}` } }),
+  });
+  await app.close();
+  return { status: res.statusCode, body: res.json() as Record<string, unknown> };
+}
+
+describeDb('POST /auth/google/link', () => {
+  it('connects an account whose address was never proved', async () => {
+    const { userId, email } = await seedAccount();
+    const bearer = await bearerFor(email);
+    tokenFor('someone.else@gmail.test', 'sub-in-session');
+
+    const res = await postLink({ idToken: 'anything', password: PASSWORD }, bearer);
+
+    expect(res.status).toBe(200);
+    expect((await storedUser(userId)).googleSub).toBe('sub-in-session');
+    // The refusal the sign-in route would still give this account, gone.
+    expect(res.body['account']).toMatchObject({ googleLinked: true });
+  });
+
+  /**
+   * The one moment a wrong link can be noticed. An Android handset with two
+   * Google accounts on it offers a chooser whose default is the top one, and
+   * nothing else in the app ever names the subject that was bound.
+   */
+  it('says which Google account it connected', async () => {
+    const { email } = await seedAccount();
+    const bearer = await bearerFor(email);
+    tokenFor('the.other.one@gmail.test', 'sub-echo');
+
+    const res = await postLink({ idToken: 'anything', password: PASSWORD }, bearer);
+
+    expect(res.body['linked']).toEqual({ email: 'the.other.one@gmail.test' });
+  });
+
+  it('refuses without a session at all', async () => {
+    const { userId, email } = await seedAccount();
+    void email;
+    tokenFor('nobody@gmail.test', 'sub-unauthenticated');
+
+    const res = await postLink({ idToken: 'anything', password: PASSWORD });
+
+    expect(res.status).toBe(401);
+    expect((await storedUser(userId)).googleSub).toBeUndefined();
+  });
+
+  it('refuses a wrong password and writes nothing', async () => {
+    const { userId, email } = await seedAccount();
+    const bearer = await bearerFor(email);
+    tokenFor('someone.else@gmail.test', 'sub-wrong-password');
+
+    const res = await postLink({ idToken: 'anything', password: 'not the passphrase' }, bearer);
+
+    expect(res.status).toBe(403);
+    expect((await storedUser(userId)).googleSub).toBeUndefined();
+  });
+
+  /**
+   * Ordering, and it is a security property rather than a tidiness one.
+   *
+   * With the password checked first, a caller holding only a stolen session
+   * would get unlimited password guesses against this route without presenting
+   * a Google credential of any kind — bounded by a limiter keyed on an IP
+   * address. Verifying the token first costs an attacker a real Google account
+   * per attempt.
+   */
+  it('refuses a bad Google token before it looks at the password', async () => {
+    const { email } = await seedAccount();
+    const bearer = await bearerFor(email);
+    stub.verify.mockRejectedValue(
+      new (await import('@homefarm/api/http')).HttpError(401, REFUSED),
+    );
+
+    const res = await postLink({ idToken: 'rubbish', password: 'not the passphrase' }, bearer);
+
+    // The Google answer, not the password one — so nothing was learned about
+    // the password by a caller who never had a Google account.
+    expect(res.status).toBe(401);
+    expect(res.body['error']).toBe(REFUSED);
+  });
+
+  it('refuses to rebind an account that already has a Google identity', async () => {
+    const { userId, email } = await seedAccount({ googleSub: 'sub-original' });
+    const bearer = await bearerFor(email);
+    tokenFor('another@gmail.test', 'sub-second');
+
+    const res = await postLink({ idToken: 'anything', password: PASSWORD }, bearer);
+
+    expect(res.status).toBe(409);
+    expect((await storedUser(userId)).googleSub).toBe('sub-original');
+  });
+
+  /**
+   * The account Google made. It has no password to prove and needs none — it
+   * already carries the identity this route would bind — so the truthful answer
+   * is about the link, never about a password it never had. `/auth/email` calls
+   * this case unreachable and warns that "unreachable" stops being true when
+   * somebody adds a route; this is that route.
+   */
+  it('tells a Google-created account the truth rather than that its password is wrong', async () => {
+    const { userId, orgId, email } = await seedAccount({
+      googleSub: 'sub-made-by-google',
+      emailVerifiedAt: new Date(),
+    });
+    // What `/auth/google` branch 3 writes: no `passwordHash` at all, because
+    // nothing was ever set and so nothing can be guessed.
+    await harness!.db
+      .collection<UserDoc>('users')
+      .updateOne({ _id: userId }, { $unset: { passwordHash: '' } });
+
+    // No password to sign in with, so the bearer is minted rather than earned.
+    const { mintAccessToken } = await import('@homefarm/api/auth/tokens');
+    const bearer = await mintAccessToken({ userId, orgId, role: 'owner' }, SECRET);
+    tokenFor(email, 'sub-something-new');
+
+    const res = await postLink({ idToken: 'anything' }, bearer);
+
+    expect(res.status).toBe(409);
+    expect(res.body['error']).not.toBe('That password is not right.');
+  });
+
+  /**
+   * The cross-account case, and the only shape tenancy can take here.
+   *
+   * CLAUDE.md's literal isolation test — org A's token against org B's
+   * document id — has no form on this route: it acts on `claims.userId` and
+   * takes no id from the payload, so acting on another farm's row is not
+   * refused, it is impossible to ask for. What can cross is a Google subject,
+   * because `googleSub` is unique across the whole collection rather than per
+   * farm. That is what this asserts.
+   */
+  it('refuses a Google account another farm already holds, and leaves it alone', async () => {
+    const theirs = await seedAccount({ googleSub: 'sub-taken', emailVerifiedAt: new Date() });
+    const mine = await seedAccount();
+    const bearer = await bearerFor(mine.email);
+    tokenFor('shared@gmail.test', 'sub-taken');
+
+    const res = await postLink({ idToken: 'anything', password: PASSWORD }, bearer);
+
+    expect(res.status).toBe(409);
+    expect((await storedUser(mine.userId)).googleSub).toBeUndefined();
+    // The farm that holds it keeps it.
+    expect((await storedUser(theirs.userId)).googleSub).toBe('sub-taken');
+  });
+
+  /**
+   * Google has proved the address, so `/auth/verify` would be asking twice —
+   * but only when it is the same address.
+   */
+  it('confirms the account’s email when the Google address is the same one', async () => {
+    const { userId, email } = await seedAccount();
+    const bearer = await bearerFor(email);
+    tokenFor(email.toUpperCase(), 'sub-same-address');
+
+    await postLink({ idToken: 'anything', password: PASSWORD }, bearer);
+
+    expect((await storedUser(userId)).emailVerifiedAt).toBeInstanceOf(Date);
+  });
+
+  it('leaves the account’s email unproved when the Google address is a different one', async () => {
+    const { userId, email } = await seedAccount();
+    const bearer = await bearerFor(email);
+    tokenFor('personal@gmail.test', 'sub-other-address');
+
+    await postLink({ idToken: 'anything', password: PASSWORD }, bearer);
+
+    const after = await storedUser(userId);
+    expect(after.googleSub).toBe('sub-other-address');
+    // Connecting a personal Google account under another address is ordinary
+    // and allowed. What it must not do is claim this address was proved.
+    expect(after.emailVerifiedAt).toBeUndefined();
+    expect(after.email).toBe(email);
+  });
+});
+
+describeDb('linkGoogleSubInSession', () => {
+  it('binds an account whose address was never proved', async () => {
+    const { linkGoogleSubInSession } = await import('@homefarm/api/db/identity');
+    const { userId } = await seedAccount();
+
+    expect(await linkGoogleSubInSession(userId, 'sub-unproved')).toBe(true);
+    expect((await storedUser(userId)).googleSub).toBe('sub-unproved');
+  });
+
+  it('refuses an account that has been removed from the farm', async () => {
+    const { linkGoogleSubInSession } = await import('@homefarm/api/db/identity');
+    const { userId } = await seedAccount({ disabledAt: new Date() });
+
+    expect(await linkGoogleSubInSession(userId, 'sub-removed')).toBe(false);
+    expect((await storedUser(userId)).googleSub).toBeUndefined();
+  });
+
+  it('lets exactly one of two simultaneous links win', async () => {
+    const { linkGoogleSubInSession } = await import('@homefarm/api/db/identity');
+    const { userId } = await seedAccount();
+
+    const results = await Promise.all([
+      linkGoogleSubInSession(userId, 'sub-a'),
+      linkGoogleSubInSession(userId, 'sub-b'),
+    ]);
+
+    expect(results.filter(Boolean)).toHaveLength(1);
+    expect(['sub-a', 'sub-b']).toContain((await storedUser(userId)).googleSub);
+  });
+});

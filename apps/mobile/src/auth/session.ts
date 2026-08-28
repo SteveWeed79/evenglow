@@ -1,4 +1,4 @@
-import { apiBase, setAccessToken, syncHeaders } from '@homefarm/core/api';
+import { apiBase, currentAccessToken, setAccessToken, syncHeaders } from '@homefarm/core/api';
 import type { LocalStore } from '@homefarm/core/db/port';
 import { localStore } from '@homefarm/core/db/store';
 import { z } from 'zod';
@@ -56,7 +56,11 @@ const pairSchema = z
      * are different, and only one of them should put a warning on a screen.
      */
     account: z
-      .object({ email: z.string().max(254), emailVerified: z.boolean() })
+      .object({
+        email: z.string().max(254),
+        emailVerified: z.boolean(),
+        googleLinked: z.boolean(),
+      })
       .partial()
       .optional(),
   })
@@ -218,6 +222,9 @@ async function establish(body: unknown): Promise<CachedClaims> {
     ...(pair.account?.emailVerified === undefined
       ? {}
       : { emailVerified: pair.account.emailVerified }),
+    ...(pair.account?.googleLinked === undefined
+      ? {}
+      : { googleLinked: pair.account.googleLinked }),
   };
 
   /**
@@ -877,6 +884,7 @@ async function runRefresh(): Promise<CachedClaims | null> {
    */
   const email = pair.account?.email ?? previous?.email;
   const emailVerified = pair.account?.emailVerified ?? previous?.emailVerified;
+  const googleLinked = pair.account?.googleLinked ?? previous?.googleLinked;
 
   const named: CachedClaims = {
     ...claims,
@@ -884,6 +892,7 @@ async function runRefresh(): Promise<CachedClaims | null> {
     ...(orgName === undefined ? {} : { orgName }),
     ...(email === undefined ? {} : { email }),
     ...(emailVerified === undefined ? {} : { emailVerified }),
+    ...(googleLinked === undefined ? {} : { googleLinked }),
   };
 
   await writeCachedClaims(named);
@@ -1091,7 +1100,20 @@ export async function resetPassword(input: {
  * refresh — the same shape `rememberFarmName` uses and for the same reason.
  */
 const accountSchema = z
-  .object({ account: z.object({ email: z.string().max(254), emailVerified: z.boolean() }) })
+  .object({
+    account: z.object({
+      email: z.string().max(254),
+      emailVerified: z.boolean(),
+      /**
+       * Optional, and it has to be — a required key here would make every
+       * account response from a server that predates the link route fail the
+       * parse, and `rememberAccount` returns silently on a failure. The cache
+       * would then stop being updated by `confirmEmail` and `changeEmail` too,
+       * with nothing said anywhere. Absent means this device has not been told.
+       */
+      googleLinked: z.boolean().optional(),
+    }),
+  })
   .passthrough();
 
 async function rememberAccount(body: unknown): Promise<void> {
@@ -1168,4 +1190,58 @@ export async function changeEmail(input: { email: string; password: string }): P
 
   if (!res.ok) throw await refusal(res, 'That email could not be changed.');
   await rememberAccount(await res.json().catch(() => null));
+}
+
+/**
+ * Connects a Google account to the one already signed in.
+ *
+ * **The way back from the H1 fix.** `/auth/google` refuses to bind a Google
+ * identity to an account whose address was never proved, and every password
+ * account is in that state — so the Google button on the sign-in screen turns
+ * a farm away until a code has been read out of an inbox. A session answers
+ * the question the address was standing in for, so this route does not need
+ * the address confirmed first.
+ *
+ * The password goes with it, as it does for a change of address and for a
+ * sharper version of the same reason: a Google link is the one credential
+ * here that nothing revokes, so a stolen session alone must not be able to
+ * mint one. See `googleLinkSchema`, which also names what that costs A2.4.
+ *
+ * **The bearer is made sure of first.** `syncHeaders` attaches a token only
+ * when one is in memory and never mints one, and a launch that took the
+ * offline path has none — so without this, a farmer who opened the app in a
+ * barn and tapped Connect would read "Not signed in." on a screen headed
+ * "Signed in". `call()` in `auth/call.ts` does this dance already and is not
+ * imported here because it imports `refreshSession` from this file.
+ *
+ * Returns the address of the Google account that was connected. It is not
+ * cached and not shown anywhere else: an Android handset with two Google
+ * accounts offers a chooser whose default is the top one, so connecting the
+ * wrong one is the likeliest thing to go wrong here and the only moment it can
+ * be noticed is in the answer.
+ */
+export async function linkGoogle(input: {
+  idToken: string;
+  password: string;
+}): Promise<string | null> {
+  if (currentAccessToken() === null && (await refreshSession()) === null) {
+    throw new SignInError('This device is not signed in any more. Sign in and try again.');
+  }
+
+  const res = await fetch(url('/auth/google/link'), {
+    method: 'POST',
+    headers: syncHeaders({ 'content-type': 'application/json' }),
+    // Omitted rather than sent empty, so an account Google created — which has
+    // no password and needs none — reaches the honest already-connected answer
+    // instead of one about a password it never had.
+    body: JSON.stringify(input.password === '' ? { idToken: input.idToken } : input),
+  });
+
+  if (!res.ok) throw await refusal(res, 'Google could not be connected. Try again in a minute.');
+
+  const body: unknown = await res.json().catch(() => null);
+  await rememberAccount(body);
+
+  const linked = (body as { linked?: { email?: unknown } } | null)?.linked?.email;
+  return typeof linked === 'string' ? linked : null;
 }

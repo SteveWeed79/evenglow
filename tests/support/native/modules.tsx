@@ -464,6 +464,27 @@ export function maybeCompleteAuthSession(): void {
 
 export const googlePrompts: string[] = [];
 
+/**
+ * What the next Google sheet comes back with, steerable by a test.
+ *
+ * **It used to be a constant dismissal**, which is the right default — backing
+ * out is a decision and every screen has to treat it as one — and it made the
+ * success path unreachable from any test. A control that only ever meets a
+ * cancel is a control whose whole job is untested; the same reasoning the
+ * camera and the picker in this file already follow, with the same shape.
+ */
+export const googleSheet = {
+  next: { type: 'dismiss', params: {} } as { type: string; params: Record<string, string> },
+  /** Hands back a token on the next tap. */
+  returns(idToken: string): void {
+    googleSheet.next = { type: 'success', params: { id_token: idToken } };
+  },
+  /** Back to somebody closing the sheet. */
+  dismisses(): void {
+    googleSheet.next = { type: 'dismiss', params: {} };
+  },
+};
+
 export function useIdTokenAuthRequest(): [
   { url: string } | null,
   null,
@@ -474,9 +495,7 @@ export function useIdTokenAuthRequest(): [
     null,
     async () => {
       googlePrompts.push('prompt');
-      // Backed out, which is the state a test gets unless it says otherwise —
-      // and the one the screen must treat as a decision rather than a failure.
-      return { type: 'dismiss', params: {} };
+      return googleSheet.next;
     },
   ];
 }

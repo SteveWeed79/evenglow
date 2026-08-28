@@ -238,6 +238,52 @@ export async function linkGoogleSub(userId: string, googleSub: string): Promise<
   return result.matchedCount === 1;
 }
 
+/**
+ * The same binding, asked for by somebody who is already signed in.
+ *
+ * **`emailVerifiedAt` is deliberately absent from this filter, and that is the
+ * entire difference.** The condition above exists because `/auth/google` is
+ * unauthenticated and had nothing but an address to go on — and an address in
+ * `users` is a claim, not a fact, so linking on it handed whoever typed it
+ * first the sign-in of whoever actually owns it. A caller here has presented
+ * the account's own session *and* its password. That is the proof the address
+ * was standing in for, and a better one: it is about the account rather than
+ * about an inbox.
+ *
+ * So a farm that signed up with a password and never confirmed its email can
+ * connect Google without confirming it first, which is the step the H1 fix
+ * otherwise makes unavoidable and the reason this function exists.
+ *
+ * **The other two conditions stay, and one is new.** `googleSub: { $exists:
+ * false }` still refuses to rebind an account that already carries a Google
+ * identity — the outcome `googleSub` exists to prevent — and it settles the
+ * race between two link requests arriving together. `disabledAt` joins them
+ * because a removal landing between `requireMutationClaims` and this write
+ * would otherwise bind an identity to somebody who is no longer on the farm;
+ * the route checks it too, and this is the check a refactor cannot walk past.
+ *
+ * **The Google subject's uniqueness is not this filter's job.** It is the
+ * partial unique index on `googleSub`, and the caller reads a duplicate key as
+ * "somebody else holds that Google account" — see `isDuplicateKey`, and
+ * `/auth/email` for why a route keeps both the read and the index rather than
+ * resting on either.
+ *
+ * False means nothing matched, and the caller cannot tell which of the three
+ * it was. That is deliberate: guessing would mean telling somebody removed from
+ * a farm mid-request that their account is connected to a Google account they
+ * have never seen.
+ */
+export async function linkGoogleSubInSession(
+  userId: string,
+  googleSub: string,
+): Promise<boolean> {
+  const result = await (await users()).updateOne(
+    { _id: userId, disabledAt: { $exists: false }, googleSub: { $exists: false } },
+    { $set: { googleSub } },
+  );
+  return result.matchedCount === 1;
+}
+
 export async function insertUser(user: UserDoc): Promise<void> {
   await (await users()).insertOne({ ...user, email: normalizeEmail(user.email) });
 }

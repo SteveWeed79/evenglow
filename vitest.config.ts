@@ -110,6 +110,23 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    /**
+     * A Google client id, so the Google controls exist in a test at all.
+     *
+     * `GOOGLE_AVAILABLE` is computed once, at import, from these two variables
+     * (`apps/mobile/src/auth/google.ts`), and no test set either — so every
+     * mount rendered a build with no Google project and the button was simply
+     * absent. `screen.has('account-google')` was false for the same reason it
+     * is false for a typo, which is the worst shape an assertion can have.
+     *
+     * Set here rather than with `vi.stubEnv`, which is too late: the constant
+     * is frozen by the time a test body runs. The value is a placeholder — the
+     * verifier is stubbed in every suite that reaches one — and it is public by
+     * design either way, which is what invariant 12 is about.
+     */
+    env: {
+      EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID: '123-test.apps.googleusercontent.com',
+    },
     include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx'],
     setupFiles: ['./tests/support/native/setup.ts'],
     /**
