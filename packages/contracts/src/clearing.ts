@@ -74,10 +74,75 @@ function isOmittable(field: z.ZodType): boolean {
   return probe.success && probe.data === undefined;
 }
 
+/**
+ * The same field with its default taken off, if it had one.
+ *
+ * ## `.partial()` does not do this, and that is the whole bug
+ *
+ * A defaulted field is not clearable — the paragraph above says why, and that
+ * part was right. What was missed is that leaving the default in place makes
+ * the field **write itself into every update that does not mention it**.
+ * `.partial()` wraps each field in `ZodOptional`, and `ZodOptional` *delegates*
+ * to its inner schema for a missing key rather than short-circuiting:
+ *
+ *   z.optional(z.enum(['none','weekly']).default('none')).parse(undefined)
+ *     -> 'none'
+ *
+ * So an update payload arrived carrying a value nobody sent:
+ *
+ *   task update      {}                ->  {"recurrence":"none"}
+ *   task update      {completedAt:null} ->  {"recurrence":"none", …}
+ *   equipment update {name:"Kubota"}   ->  {"name":"Kubota","hasHourMeter":true}
+ *
+ * and the server `$set`s what it is given. Un-ticking a weekly chore therefore
+ * rewrote it to a one-off — `taskDues` then returns nothing after its next
+ * completion and the job never appears again. Silent on both sides: the device
+ * sent a legitimate edit, the server stored exactly what it was sent, and
+ * nothing anywhere disagreed.
+ *
+ * ## Behavioural detection, public-API removal, and a loud failure
+ *
+ * *Whether* a field defaults is asked of the field, never of zod's class names
+ * — the reasoning `isOmittable` already gives, and the reason this survives a
+ * major version. A field carrying a default is exactly one that parses
+ * `undefined` into something that is not `undefined`.
+ *
+ * *Removing* it has to touch the library, so it goes through the public
+ * `removeDefault()` and then **checks that it worked**. If a future zod renames
+ * that method, this throws while the schema is being built rather than
+ * quietly restoring the bug — the difference between a red suite and a farm's
+ * weekly chores turning into one-offs.
+ */
+function withoutDefault(field: z.ZodType): z.ZodType {
+  const probe = field.safeParse(undefined);
+  if (!probe.success || probe.data === undefined) return field;
+
+  const remove = (field as { removeDefault?: () => z.ZodType }).removeDefault;
+  const bare = typeof remove === 'function' ? remove.call(field) : field;
+
+  const after = bare.safeParse(undefined);
+  if (after.success && after.data !== undefined) {
+    throw new Error(
+      'clearableShape: a defaulted field could not have its default removed, so ' +
+        'every update would silently carry it. zod’s removeDefault() has moved.',
+    );
+  }
+
+  return bare;
+}
+
 export function clearableShape<S extends z.ZodRawShape>(shape: S): Clearable<S> {
   const entries = Object.entries(shape).map(([key, field]) => {
     const typed = field as z.ZodType;
-    return [key, isOmittable(typed) ? typed.nullable() : typed];
+    /**
+     * Clearability is decided from the ORIGINAL field, and the default is
+     * stripped afterwards. The order is load-bearing: a defaulted field is not
+     * omittable, so deciding first keeps it un-clearable, while deciding after
+     * the strip would make `z.string().optional().default('x')` clearable and
+     * quietly reverse the rule this file exists to state.
+     */
+    const clearable = isOmittable(typed) ? typed.nullable() : typed;
+    return [key, withoutDefault(clearable)];
   });
 
   return Object.fromEntries(entries) as Clearable<S>;
