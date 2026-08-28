@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { newId } from '@homefarm/contracts';
+import { GOOGLE_ALREADY_LINKED, GOOGLE_TAKEN, newId } from '@homefarm/contracts';
 import { resetApiBase, setAccessToken, setApiBase } from '@homefarm/core/api';
 import { googleSheet, seedSecureStore } from '../support/native/modules';
 import { freshStore } from '../support/store';
@@ -216,10 +216,11 @@ describe('the Google panel on a signed-in account', () => {
   /** The server's own sentence, because it knows which of the refusals it is. */
   it('shows the server’s refusal rather than one of its own', async () => {
     signedInAs({ email: 'alcie@example.test', emailVerified: false });
-    serverThatLinks({
-      status: 409,
-      body: { error: 'That Google account is already registered with Evenglow. Sign in with it instead.' },
-    });
+    // The server's own constant rather than a copy of the sentence: a test
+    // holding its own spelling of the copy is a test that goes on passing
+    // after somebody rewrites it, and `PRODUCT_NAME` is interpolated into this
+    // one so writing it out by hand also spells the brand a second time.
+    serverThatLinks({ status: 409, body: { error: GOOGLE_TAKEN } });
 
     const screen = await mount(<AccountScreen onSignedIn={() => undefined} />);
     await screen.settle();
@@ -240,7 +241,7 @@ describe('the Google panel on a signed-in account', () => {
    */
   it('lets a tap through with no password typed', async () => {
     signedInAs({ email: 'alice@example.test', emailVerified: true });
-    serverThatLinks({ status: 409, body: { error: 'This account is already connected to a Google account. Sign in with it instead.' } });
+    serverThatLinks({ status: 409, body: { error: GOOGLE_ALREADY_LINKED } });
 
     const screen = await mount(<AccountScreen onSignedIn={() => undefined} />);
     await screen.settle();
