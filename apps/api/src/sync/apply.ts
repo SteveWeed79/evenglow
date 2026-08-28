@@ -18,7 +18,13 @@ import type { SessionClaims } from '../auth/claims';
 import { blobsFor } from '../db/blobs';
 import type { Scoped, Tenanted } from '../db/scoped';
 import { inCommitOrder, nextServerTs } from './commit-order';
-import { FINAL_OUTCOMES, PENDING, type StampedOutcome, type StoredOutcome } from './outcome';
+import {
+  FINAL_OUTCOMES,
+  isOpenToDecision,
+  PENDING,
+  type StampedOutcome,
+  type StoredOutcome,
+} from './outcome';
 import {
   decideProjection,
   ENTITY_COLLECTIONS,
@@ -307,13 +313,19 @@ export async function replayFromLog(scope: Scoped, id: string): Promise<Replay> 
    * unconditionally before, so it is not new behaviour for them.
    *
    * Read through `unknown` because this is what is on disk, not what this build
-   * writes. Anything that is not absent, null, or `pending` is a decision —
-   * including one from a newer deploy this build cannot name, which is left
-   * alone rather than re-decided by an older applier.
+   * writes. Anything `isOpenToDecision` refuses is a decision — including one
+   * from a newer deploy this build cannot name, which is left alone rather than
+   * re-decided by an older applier.
+   *
+   * **`unreadable` is open, and it has to be.** It is this build saying it
+   * could not parse the envelope, which is a statement about the build; the
+   * whole point of recording it rather than refusing outright is that a later
+   * one may manage. Counting it as a decision here left the row selected by the
+   * sweeper and then skipped by it, so the re-offer never happened.
    */
-  const outcome: unknown = stored.outcome;
-  const undecided = outcome === undefined || outcome === null || outcome === PENDING;
-  if (!undecided) return { kind: 'decided', result: decidedResult(id, stored) };
+  if (!isOpenToDecision(stored.outcome)) {
+    return { kind: 'decided', result: decidedResult(id, stored) };
+  }
 
   const entity = entitySchema.safeParse(stored.entity);
   const op = opSchema.safeParse(stored.op);

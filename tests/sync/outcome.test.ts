@@ -5,6 +5,7 @@ import { scopedOn } from '@homefarm/api/db/scoped';
 import { applyBatch } from '@homefarm/api/sync/apply';
 import {
   FINAL_OUTCOMES,
+  isOpenToDecision,
   OUTCOMES,
   PENDING,
   REPLICATED_OUTCOMES,
@@ -93,6 +94,40 @@ describe('outcome classification', () => {
     expect(shouldReplicate(UNREADABLE)).toBe(false);
     expect(isUndecided(UNREADABLE)).toBe(false);
     expect(isUndecided(PENDING)).toBe(true);
+  });
+
+  /**
+   * Three questions, three answers, and they are not the same question.
+   *
+   * **Two of the three used to agree, and writing the third one down is what
+   * this file exists for now.** Stamping `unreadable` moved the feed on
+   * (`isUndecided`) and left the row overwritable (`FINAL_OUTCOMES`) — and
+   * `replayFromLog` asks a third thing, *may this row still be decided*, which
+   * it answered by testing for `pending` alone. So the row was selected by the
+   * sweeper and then walked straight past, and the "a newer build can read
+   * this" half — the entire reason for recording the state rather than refusing
+   * outright — never happened. CI caught it; nothing here could.
+   */
+  it('keeps the three questions about an outcome apart', () => {
+    // May a page move past it?           May it still be decided?
+    expect(isUndecided(PENDING)).toBe(true);
+    expect(isOpenToDecision(PENDING)).toBe(true);
+
+    expect(isUndecided(UNREADABLE)).toBe(false);
+    expect(isOpenToDecision(UNREADABLE)).toBe(true);
+
+    for (const settled of FINAL_OUTCOMES) {
+      expect(isUndecided(settled)).toBe(false);
+      expect(isOpenToDecision(settled)).toBe(false);
+    }
+
+    // A row written before the field existed is open, like `pending`.
+    expect(isOpenToDecision(undefined)).toBe(true);
+    expect(isOpenToDecision(null)).toBe(true);
+
+    // And an outcome from a newer deploy is left alone rather than re-decided
+    // by an older applier — which is why this is not `!FINAL_OUTCOMES.includes`.
+    expect(isOpenToDecision('something-a-later-build-wrote')).toBe(false);
   });
 
   /**

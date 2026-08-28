@@ -168,6 +168,27 @@ export function isUndecided(raw: unknown): boolean {
 }
 
 /**
+ * Whether a stored outcome may still be replaced by a real decision.
+ *
+ * **The third question, and leaving it out made the second half of the
+ * `unreadable` fix inert.** `replayFromLog` treats anything that is not
+ * absent, null or `pending` as decided, and stamping `unreadable` therefore
+ * put the row beyond every path that could ever re-decide it: the sweeper's
+ * later pass selected the row and then walked straight past it, so the "a
+ * newer build can read this" half — the whole reason for recording the state
+ * rather than refusing outright — never happened. Found by CI, on a test
+ * written for exactly that behaviour.
+ *
+ * Not `!FINAL_OUTCOMES.includes(raw)`, which would also be true of an outcome
+ * from a newer deploy this build cannot name. Those are deliberately left
+ * alone rather than re-decided by an older applier, and that is a different
+ * answer to a question that only looks the same.
+ */
+export function isOpenToDecision(raw: unknown): boolean {
+  return raw === undefined || raw === null || raw === PENDING || raw === UNREADABLE;
+}
+
+/**
  * What may be written onto a log row: what the projection decided, or that the
  * row could not be read at all. The second is not a projection outcome and
  * `ProjectionDecision` should not learn to pretend it is.
