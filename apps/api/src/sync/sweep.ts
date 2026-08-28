@@ -8,7 +8,13 @@ import { db } from '../db/client';
 import { recordSweep } from '../db/sweep-status';
 import { inCommitOrder } from './commit-order';
 import { PENDING, type StoredOutcome, UNREADABLE } from './outcome';
-import { type MutationDoc, project, replayFromLog, stampOutcome } from './apply';
+import {
+  type MutationDoc,
+  outcomeForRepair,
+  project,
+  replayFromLog,
+  stampOutcome,
+} from './apply';
 
 /**
  * The rows whose client never came back.
@@ -335,7 +341,13 @@ async function sweepOne(
     }
 
     const decision = await project(scope, claims, replay.command);
-    await stampOutcome(scope, id, decision);
+    /**
+     * Every row this sweeper touches is a repair by definition — it selects
+     * only rows that were never decided — so a `noop` here carries the same
+     * ambiguity `outcomeForRepair` exists to settle: was the projection put in
+     * this state by somebody else, or by this very row before it died?
+     */
+    await stampOutcome(scope, id, await outcomeForRepair(scope, id, replay.command, decision));
     return { decided: 1 };
   });
 }

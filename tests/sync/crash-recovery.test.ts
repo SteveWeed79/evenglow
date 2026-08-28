@@ -3,6 +3,8 @@ import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { SessionClaims } from '@homefarm/api/auth/claims';
 import { scopedOn } from '@homefarm/api/db/scoped';
 import { PENDING } from '@homefarm/api/sync/outcome';
+import { applyBatch } from '@homefarm/api/sync/apply';
+import { readSnapshotPage } from '@homefarm/api/sync/snapshot';
 import { SWEEP_AFTER_MS, sweepFarm } from '@homefarm/api/sync/sweep';
 import { newId } from '@homefarm/contracts';
 import { localStore } from '@homefarm/core/db/store';
@@ -238,5 +240,138 @@ describeDb('a record the server logged but never projected', () => {
 
     // The refusal never lands, and it does not hold up what followed it.
     expect((await groupsOn(farm.b)).map((r) => r.targetId)).toEqual([after]);
+  });
+});
+
+/**
+ * The mirror of the window above, and the one nothing handled (H4).
+ *
+ * The sweeper was built for a crash between the log write and the projection.
+ * The other order is the same crash a millisecond later: the projection lands,
+ * `stampOutcome` does not, and the row stays `pending`.
+ *
+ * On the resend `decideProjection` sees `existing !== null` and answers `noop`
+ * — correct about the projection, wrong about the log. `noop` means *somebody
+ * else already put it in this state*, and nobody else did: this row did, and
+ * then died before it could say so. `noop` does not replicate, so
+ * `readSnapshotPage` skipped it and moved the watermark past it.
+ *
+ * The record was then on the sending phone and on the server and on **no other
+ * device on the farm, ever — including after a full `since=0` rehydration.**
+ * The delete case is the same shape with the harm inverted: the archive lands,
+ * the stamp does not, and every other phone goes on showing a record the farm
+ * removed.
+ */
+describeDb('a record the server projected but never stamped', () => {
+  /** The mirror fixture: the projection is there, the outcome is not. */
+  async function halfWritten(
+    over: Record<string, unknown>,
+    projected: Record<string, unknown> | null,
+  ) {
+    const m = makeMutation(over as never);
+    await harness!.db.collection('mutations').insertOne({
+      _id: m.id,
+      orgId: ORG,
+      targetId: m.targetId,
+      entity: m.entity,
+      op: m.op,
+      payload: m.payload,
+      deviceId: m.deviceId,
+      clientSeq: m.clientSeq,
+      clientTs: m.clientTs,
+      schemaVersion: m.schemaVersion,
+      userId: OWNER_ID,
+      serverTs: new Date(Date.now() - SWEEP_AFTER_MS - 60_000),
+      outcome: PENDING,
+    } as never);
+
+    if (projected !== null) {
+      await harness!.db.collection('flocks').insertOne({
+        _id: m.targetId as never,
+        orgId: ORG,
+        ...projected,
+      } as never);
+    }
+    return m;
+  }
+
+  async function outcomeOf(id: string): Promise<unknown> {
+    const doc = await harness!.db.collection('mutations').findOne({ _id: id as never });
+    return doc?.outcome;
+  }
+
+  async function feed(): Promise<string[]> {
+    const page = await readSnapshotPage(scope(), { since: 0, sinceId: null });
+    return page.mutations.map((m) => m.id);
+  }
+
+  it('replicates a create the resend would otherwise write off as a noop', async () => {
+    const m = await halfWritten({ entity: 'flock', payload: flock() }, flock());
+
+    const [result] = await applyBatch(scope(), OWNER, [m]);
+
+    // The client is told `duplicate` either way — it is resending — and the
+    // difference is entirely in what the log now says about the row.
+    expect(result?.status).toBe('duplicate');
+    expect(await outcomeOf(m.id)).toBe('insert');
+    expect(await feed()).toEqual([m.id]);
+  });
+
+  it('replicates the archive a half-written delete left behind', async () => {
+    const m = await halfWritten(
+      { entity: 'flock', op: 'delete', payload: {} },
+      { ...flock(), archivedAt: new Date() },
+    );
+
+    await applyBatch(scope(), OWNER, [m]);
+
+    expect(await outcomeOf(m.id)).toBe('archive');
+    expect(await feed()).toEqual([m.id]);
+  });
+
+  /**
+   * And it must stay a `noop` when it really is one, or every duplicate create
+   * a farm ever sent would start replicating as a second insert.
+   */
+  it('leaves a genuine replay alone when another row already did the work', async () => {
+    const first = makeMutation({ entity: 'flock', payload: flock() } as never);
+    await applyBatch(scope(), OWNER, [first]);
+    expect(await outcomeOf(first.id)).toBe('insert');
+
+    // A second create at the same target, logged and never decided.
+    const second = await halfWritten(
+      { entity: 'flock', targetId: first.targetId, payload: flock() },
+      null,
+    );
+
+    await applyBatch(scope(), OWNER, [second]);
+
+    expect(await outcomeOf(second.id)).toBe('noop');
+    expect(await feed()).toEqual([first.id]);
+  });
+
+  /**
+   * A delete of something that was never here is the other true `noop`: there
+   * is no archive for another device to replay, and inventing one would ship a
+   * removal for a record nobody has.
+   */
+  it('leaves a delete of a record that never existed alone', async () => {
+    const m = await halfWritten({ entity: 'flock', op: 'delete', payload: {} }, null);
+
+    await applyBatch(scope(), OWNER, [m]);
+
+    expect(await outcomeOf(m.id)).toBe('noop');
+    expect(await feed()).toEqual([]);
+  });
+
+  /** The phone that never comes back at all: same repair, through the sweeper. */
+  it('is repaired by the sweeper when no resend ever arrives', async () => {
+    const m = await halfWritten({ entity: 'flock', payload: flock() }, flock());
+
+    const swept = await sweepFarm(scope(), Date.now());
+
+    expect(swept.decided).toBe(1);
+    expect(await outcomeOf(m.id)).toBe('insert');
+    expect(await feed()).toEqual([m.id]);
   });
 });

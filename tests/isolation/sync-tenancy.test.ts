@@ -128,6 +128,10 @@ async function buildApp() {
 const users = () => harness!.db.collection<UserDoc>('users');
 const mutations = () => harness!.db.collection('mutations');
 
+function flock(over: Record<string, unknown> = {}) {
+  return { name: 'Alpha', species: 'chicken', count: 12, ...over };
+}
+
 const describeDb = harness ? describe : describe.skip;
 
 afterAll(async () => {
@@ -172,6 +176,49 @@ describeDb.each([fastifyServer])('$name', (server: Server) => {
     await server.postSync({ mutations: [mutation] });
 
     expect((await mutations().findOne({ _id: mutation.id as never }))?.orgId).toBe(ORG_A);
+  });
+
+  /**
+   * A record id another farm already used (H3).
+   *
+   * The mutation-log insert has carried an `E11000` guard for exactly this,
+   * with the reason written on it — *"`_id` is unique collection-wide, so a
+   * mutation id already used by another tenant fails the insert rather than
+   * matching the org-guarded filter"*. The **projection** insert had no such
+   * guard, and `decideProjection` cannot see the collision either: `existing`
+   * is org-scoped, so the other farm's document reads as `null` and the
+   * decision is `insert`.
+   *
+   * It is reachable without anybody doing anything strange. `restore.ts`
+   * re-enqueues a backup with its original ULIDs, on the argument that a create
+   * at an existing targetId is a `noop` — true only within one org. Lose a
+   * phone, install fresh so the device mints a new farm, restore, sign up,
+   * flush: every id belongs to the old farm's documents.
+   *
+   * Uncaught it was a 500, so the client retried for ever, the row stayed
+   * `pending` — which stalls the whole farm's pull feed — and the hourly
+   * sweeper rethrew. `listOrgIds()` sorts by `createdAt`, so every farm created
+   * after that one stopped being swept at all.
+   */
+  it('refuses a targetId another farm already holds, without a 500', async () => {
+    const targetId = ulid();
+    const mine = makeMutation({ entity: 'flock', targetId, payload: flock() });
+    expect((await server.postSync({ mutations: [mine] })).status).toBe(200);
+
+    await server.as(USERS.ownerB);
+    const theirs = makeMutation({ entity: 'flock', targetId, payload: flock({ name: 'Beta' }) });
+    const res = await server.postSync({ mutations: [theirs] });
+
+    // A per-mutation refusal, not a crash — and never `duplicate`, which would
+    // confirm to one farm that another farm holds that id.
+    expect(res.status).toBe(200);
+    const [result] = (res.body as SyncResponse).results;
+    expect(result?.status).toBe('rejected');
+
+    // And the farm that owns the id still owns it, unchanged.
+    const doc = await harness!.db.collection('flocks').findOne({ _id: targetId as never });
+    expect(doc?.orgId).toBe(ORG_A);
+    expect((doc as { name?: string } | null)?.name).toBe('Alpha');
   });
 
   it('does not disclose another org document with the same id', async () => {
