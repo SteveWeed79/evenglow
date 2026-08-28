@@ -120,12 +120,43 @@ export function photoUrl(id: string): string {
  */
 let accessToken: string | null = null;
 
-export function setAccessToken(token: string | null): void {
+/**
+ * Which farm the token in hand belongs to, or null when nobody has said.
+ *
+ * **The token and the database move separately, and that gap is the bug this
+ * records.** Signing in to a second farm sets the token here and only then
+ * opens the other farm's SQLite file — a close, an open and a migration ladder
+ * later. `storeGeneration()` cannot see it: the store has not moved yet, so
+ * every fence built on the generation reads as stable while the bearer token
+ * under it has already become another farm's. A sync pass in that window
+ * flushes this farm's queue under the next farm's credentials, and the server
+ * takes `orgId` from the token — so the records are created in the wrong org
+ * and come back `applied`, which is how the farm that logged them loses them.
+ *
+ * Set from the claims the token carries, never from anything a payload said.
+ * It authorizes nothing (invariant 8): the server re-derives identity and org
+ * on every mutation regardless. What it buys is a device that can tell its own
+ * two halves apart while they are out of step. See `sync/tenant.ts`.
+ */
+let accessTokenOrgId: string | null = null;
+
+/**
+ * Null for the org is *unknown*, not *any* — see `tenantFence`, which blocks
+ * on a known mismatch and never on an absence, so a caller that has no claims
+ * to hand leaves the device exactly as it was rather than stalling it.
+ */
+export function setAccessToken(token: string | null, orgId: string | null = null): void {
   accessToken = token;
+  accessTokenOrgId = orgId;
 }
 
 export function currentAccessToken(): string | null {
   return accessToken;
+}
+
+/** The org the current token was issued for, if the setter was told. */
+export function accessTokenOrg(): string | null {
+  return accessTokenOrgId;
 }
 
 /**

@@ -99,7 +99,10 @@ export function openLocalStore(orgId: string): Promise<LocalStore> {
     const next = await openSqliteStore(await openExpoSqlDriver(databaseNameFor(orgId)), {
       randomUUID: () => randomUUID(),
     });
-    setLocalStore(next);
+    // Named as well as installed: the engine's tenant fence compares this
+    // against the org the access token was issued for, and a store that cannot
+    // say which farm it holds leaves that fence with nothing to compare.
+    setLocalStore(next, orgId);
     return next;
   })();
 

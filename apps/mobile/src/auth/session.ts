@@ -230,7 +230,18 @@ async function establish(body: unknown): Promise<CachedClaims> {
 
   await writeRefreshToken(pair.refreshToken);
   await writeCachedClaims(named);
-  setAccessToken(pair.accessToken);
+  /**
+   * The org travels with the token, and this is the line that made it matter.
+   *
+   * The database this device holds is opened *after* this returns, by the boot
+   * — a close, an open and a migration ladder later. So from here until then
+   * the bearer token is the farm being signed in to and the SQLite file is
+   * still the farm being left, and the engine loop is not stopped across that
+   * gap. Telling the token which farm it belongs to is what lets the fence in
+   * `core/sync/tenant.ts` notice, and refuse, instead of flushing one farm's
+   * queue under the other's credentials.
+   */
+  setAccessToken(pair.accessToken, named.orgId);
 
   // Signed in, so whatever ended the last session is history rather than a
   // fault — cleared for the same reason `syncHeld` is: nothing is wrong now.
@@ -877,7 +888,7 @@ async function runRefresh(): Promise<CachedClaims | null> {
 
   await writeCachedClaims(named);
   if (await overtaken(epoch)) return null;
-  setAccessToken(pair.accessToken);
+  setAccessToken(pair.accessToken, named.orgId);
 
   return named;
 }

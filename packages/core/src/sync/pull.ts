@@ -6,7 +6,8 @@ import {
 } from '@homefarm/contracts';
 import { apiUrl, renewSession, syncHeaders } from '../api';
 import type { PullResult } from '../db/port';
-import { localStore, storeGeneration } from '../db/store';
+import { localStore } from '../db/store';
+import { tenantFence } from './tenant';
 
 /**
  * Hydration — the read half of sync.
@@ -72,7 +73,9 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
   // The farm this pass belongs to. Applying a page into a store that has since
   // been swapped would write one farm's records into another's database, which
   // is the worst version of this hazard and the one no server check can catch.
-  const tenant = storeGeneration();
+  // `tenantFence` also refuses while the token and the store disagree, which is
+  // every moment of a sign-in and is not a swap the generation can see.
+  const moved = tenantFence();
   const repairing = !(await localStore().projectionRepairDone());
   if (repairing) await localStore().startProjectionRepair();
 
@@ -89,6 +92,18 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
   };
 
   for (let page = 0; page < MAX_PAGES_PER_PASS; page++) {
+    /**
+     * Asked before the request as well as after it.
+     *
+     * The check below catches a page that arrived for the wrong farm. This one
+     * means the page is never asked for — a device whose token has moved ahead
+     * of its database has no business pulling a snapshot it cannot legally
+     * write anywhere, and after a switch it also stops the *next* page being
+     * fetched under a token the loop has already been told not to trust.
+     */
+    const beforeAsking = moved();
+    if (beforeAsking) return { ...outcome, deferred: beforeAsking };
+
     let response: { status: number; body: unknown };
     try {
       response = await transport(since, sinceId);
@@ -140,7 +155,8 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
      * locally advances past what was skipped, exactly as the server's own
      * unknown-entity skip does.
      */
-    if (storeGeneration() !== tenant) return { ...outcome, deferred: 'farm-switched' };
+    const elsewhere = moved();
+    if (elsewhere) return { ...outcome, deferred: elsewhere };
 
     const { known, unmodelable } = readableRows(parsed.data.mutations);
     outcome.unmodelable += unmodelable;

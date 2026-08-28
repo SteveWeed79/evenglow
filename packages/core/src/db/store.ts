@@ -38,14 +38,31 @@ let current: LocalStore | null = null;
  */
 let generation = 0;
 
-export function setLocalStore(store: LocalStore): void {
+/**
+ * Which farm the installed store holds, or null when the caller did not say.
+ *
+ * The generation above answers "did the store move?". It cannot answer "is
+ * this the farm the token belongs to?", and those are different questions the
+ * moment the two halves of a sign-in stop moving together — which they do, by
+ * design: the token is set several awaits before the database is opened. See
+ * `accessTokenOrg` in `../api` for the failure that pairing catches.
+ */
+let currentOrgId: string | null = null;
+
+export function setLocalStore(store: LocalStore, orgId: string | null = null): void {
   current = store;
+  currentOrgId = orgId;
   generation += 1;
 }
 
 /** Captured before an await, re-read after it. See the note above. */
 export function storeGeneration(): number {
   return generation;
+}
+
+/** The farm whose database is installed, if the installer was told. */
+export function storeOrgId(): string | null {
+  return currentOrgId;
 }
 
 export function localStore(): LocalStore {
@@ -60,5 +77,6 @@ export function localStore(): LocalStore {
 /** Tests only: drops the handle so the next call must install one again. */
 export function resetLocalStore(): void {
   current = null;
+  currentOrgId = null;
   generation += 1;
 }

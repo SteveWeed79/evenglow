@@ -6,7 +6,8 @@ import {
   type SyncResponse,
 } from '@homefarm/contracts';
 import { apiUrl, renewSession, type SessionRenewal, syncHeaders } from '../api';
-import { localStore, storeGeneration } from '../db/store';
+import { localStore } from '../db/store';
+import { tenantFence } from './tenant';
 import type { QueuedMutation } from '../db/records';
 
 /**
@@ -113,8 +114,12 @@ async function runFlush(transport: SyncTransport): Promise<FlushOutcome> {
    * queued work under the NEXT farm's token, and write the answers back into
    * the wrong outbox — neither of which `scoped()` can see, because the server
    * is doing exactly what the token it was given says.
+   *
+   * `tenantFence` also asks the question the generation cannot: whether the
+   * token and the store name the same farm at all. They stop doing so for the
+   * length of a sign-in, which is where this went wrong. See `tenant.ts`.
    */
-  const tenant = storeGeneration();
+  const moved = tenantFence();
   const all = await localStore().readOutboxBySeq();
   const batch = all.filter((m) => m.status === 'queued').slice(0, MAX_BATCH_SIZE);
 
@@ -124,7 +129,8 @@ async function runFlush(transport: SyncTransport): Promise<FlushOutcome> {
   // Nothing is sent under a token that belongs to a different farm. Not a
   // deferral to back off from: the switch has already started the next farm's
   // sync, and this pass simply has nothing left to do.
-  if (storeGeneration() !== tenant) return { ...outcome, deferred: 'farm-switched' };
+  const before = moved();
+  if (before) return { ...outcome, deferred: before };
 
   let response: { status: number; body: unknown };
   let renewal: SessionRenewal = 'renewed';
@@ -250,7 +256,8 @@ async function runFlush(transport: SyncTransport): Promise<FlushOutcome> {
    * would match no rows while still moving its cleared counter — which
    * `checkIntegrity` would later read as that farm having lost work.
    */
-  if (storeGeneration() !== tenant) return { ...outcome, deferred: 'farm-switched' };
+  const after = moved();
+  if (after) return { ...outcome, deferred: after };
 
   return applyResults(batch, response.body.results, outcome);
 }
