@@ -4,10 +4,13 @@ import type { SessionClaims } from '@homefarm/api/auth/claims';
 import { scopedOn } from '@homefarm/api/db/scoped';
 import { applyBatch } from '@homefarm/api/sync/apply';
 import {
+  FINAL_OUTCOMES,
   OUTCOMES,
   PENDING,
   REPLICATED_OUTCOMES,
+  UNREADABLE,
   WITHHELD_OUTCOMES,
+  isUndecided,
   shouldReplicate,
 } from '@homefarm/api/sync/outcome';
 import { readSnapshotPage } from '@homefarm/api/sync/snapshot';
@@ -71,7 +74,42 @@ describe('outcome classification', () => {
 
   it('replicates only the outcomes that changed the projection', () => {
     expect([...REPLICATED_OUTCOMES].sort()).toEqual(['archive', 'insert', 'update']);
-    expect([...WITHHELD_OUTCOMES].sort()).toEqual(['conflict', 'noop', PENDING, 'rejected']);
+    expect([...WITHHELD_OUTCOMES].sort()).toEqual([
+      'conflict',
+      'noop',
+      PENDING,
+      'rejected',
+      UNREADABLE,
+    ]);
+  });
+
+  /**
+   * Withheld and decided are different questions, and `unreadable` is the row
+   * that answers them differently: nothing was read, so nothing replicates —
+   * but a page must move past it rather than stop, which is what `pending`
+   * does and what froze a farm's whole feed behind one corrupt row.
+   */
+  it('moves the feed past a row it could not read, and stops only at pending', () => {
+    expect(shouldReplicate(UNREADABLE)).toBe(false);
+    expect(isUndecided(UNREADABLE)).toBe(false);
+    expect(isUndecided(PENDING)).toBe(true);
+  });
+
+  /**
+   * And it stays overwritable, or stamping it would have cost the thing it was
+   * left `pending` for: a later build reading the envelope and deciding it.
+   */
+  it('is not final, so a build that can read the row may still decide it', () => {
+    expect(FINAL_OUTCOMES).not.toContain(UNREADABLE);
+    expect(FINAL_OUTCOMES).not.toContain(PENDING);
+    expect([...FINAL_OUTCOMES].sort()).toEqual([
+      'archive',
+      'conflict',
+      'insert',
+      'noop',
+      'rejected',
+      'update',
+    ]);
   });
 
   it('lets a row written before the field existed through, which is why no backfill is needed', () => {

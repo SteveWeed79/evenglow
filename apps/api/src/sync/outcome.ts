@@ -29,7 +29,31 @@ import type { ProjectionDecision } from './projections';
  */
 export const PENDING = 'pending';
 
-export type StoredOutcome = ProjectionDecision['kind'] | typeof PENDING;
+/**
+ * Looked at, and this build could not read it back.
+ *
+ * **Not a projection decision**, which is why it is here rather than in
+ * `ProjectionDecision`: nothing was projected, and nothing was refused. The
+ * envelope on disk no longer parses — a schema tightened under it — or the log
+ * row names no author this build can use. It is the server failing to read its
+ * own record, and an operator reading the log should be able to tell that from
+ * a refusal the server issued on purpose.
+ *
+ * **Decided for the feed, unsettled for the sweeper**, and it has to be both.
+ * `sweepOne` used to leave these rows `pending` on purpose, so a newer build
+ * could read them — and `readSnapshotPage` *stops* at a `pending` row rather
+ * than skipping it, so one row a schema tightening made unreadable was a
+ * permanent full stop for every device on that farm, while each client was
+ * told `duplicate`, cleared its outbox row, and reported itself up to date.
+ * The intent was right and the state was wrong: the feed has to move past it,
+ * and a later build still has to be allowed to decide it properly.
+ */
+export const UNREADABLE = 'unreadable';
+
+export type StoredOutcome =
+  | ProjectionDecision['kind']
+  | typeof PENDING
+  | typeof UNREADABLE;
 
 /**
  * Every outcome, classified exactly once.
@@ -53,18 +77,32 @@ const REPLICATES: Record<StoredOutcome, boolean> = {
   conflict: false,
   rejected: false,
   [PENDING]: false,
+  // Nothing was read, so there is nothing to replay. Withheld, and — unlike
+  // `pending` — moved past rather than stopped at.
+  [UNREADABLE]: false,
 };
 
 export const OUTCOMES = Object.keys(REPLICATES) as StoredOutcome[];
 
 /**
- * Every outcome that represents a decision.
+ * Every outcome that is final — the ones `stampOutcome` must never overwrite.
  *
- * The complement — `pending`, a null, and a field that was never written — is
- * what "still undecided" means on disk, and matching it by exclusion is how one
- * filter covers all three without naming the two that are not values.
+ * The complement is `pending`, `unreadable`, a null, and a field that was never
+ * written, and matching it by exclusion is how one filter covers all four
+ * without naming the two that are not values.
+ *
+ * **`unreadable` is in the complement deliberately.** It is a decision as far
+ * as the feed is concerned — the page moves past it — and not a decision as
+ * far as the sweeper is concerned, because the whole reason for recording it
+ * rather than refusing outright is that a later build may be able to read the
+ * envelope and decide it properly. A row this build cannot parse is a statement
+ * about this build.
+ *
+ * It was `DECIDED_OUTCOMES`, and the rename is the point: "decided" is the
+ * question the feed asks, "final" is the question this answers, and they gave
+ * the same answer only while `unreadable` did not exist.
  */
-export const DECIDED_OUTCOMES = OUTCOMES.filter((o) => o !== PENDING);
+export const FINAL_OUTCOMES = OUTCOMES.filter((o) => o !== PENDING && o !== UNREADABLE);
 
 /** Exported for the feed's own test, which asserts the split is total. */
 export const REPLICATED_OUTCOMES = OUTCOMES.filter((o) => REPLICATES[o]);
@@ -119,7 +157,21 @@ export function shouldReplicate(raw: unknown): boolean {
  * can only come from a newer deploy that has since been rolled back, and
  * treating it as pending would stall a farm's feed behind a row this build will
  * never be able to classify. Withheld and moved past, as before.
+ *
+ * `unreadable` is not undecided either, for that same reason applied to this
+ * build's own failure: the sweeper may come back to it on a newer build, but a
+ * farm's whole feed must not wait behind a row nobody can currently read. See
+ * `UNREADABLE`.
  */
 export function isUndecided(raw: unknown): boolean {
   return raw === PENDING;
 }
+
+/**
+ * What may be written onto a log row: what the projection decided, or that the
+ * row could not be read at all. The second is not a projection outcome and
+ * `ProjectionDecision` should not learn to pretend it is.
+ */
+export type StampedOutcome =
+  | ProjectionDecision
+  | { kind: typeof UNREADABLE; reason: string };

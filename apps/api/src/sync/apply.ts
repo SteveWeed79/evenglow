@@ -18,7 +18,7 @@ import type { SessionClaims } from '../auth/claims';
 import { blobsFor } from '../db/blobs';
 import type { Scoped, Tenanted } from '../db/scoped';
 import { inCommitOrder, nextServerTs } from './commit-order';
-import { DECIDED_OUTCOMES, PENDING, type StoredOutcome } from './outcome';
+import { FINAL_OUTCOMES, PENDING, type StampedOutcome, type StoredOutcome } from './outcome';
 import {
   decideProjection,
   ENTITY_COLLECTIONS,
@@ -376,12 +376,12 @@ function decidedResult(id: string, stored: MutationDoc): MutationResult {
 export async function stampOutcome(
   scope: Scoped,
   id: string,
-  decision: ProjectionDecision,
+  decision: StampedOutcome,
 ): Promise<void> {
   const reason = 'reason' in decision ? decision.reason : undefined;
 
   await scope.col<MutationDoc>('mutations').updateOne(
-    { _id: id, outcome: { $nin: DECIDED_OUTCOMES } },
+    { _id: id, outcome: { $nin: FINAL_OUTCOMES } },
     { $set: { outcome: decision.kind, ...(reason === undefined ? {} : { outcomeReason: reason }) } },
   );
 }
