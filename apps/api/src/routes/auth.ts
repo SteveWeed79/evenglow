@@ -361,26 +361,35 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
           });
       }
 
-      // 2. Same person, arriving a different way. Safe because the token
-      //    carries `email_verified: true` — see `verifyGoogleIdToken`.
+      // 2. Same person, arriving a different way — if the account can show it
+      //    is the same person. See `linkGoogleSub` for what that means.
       const byEmail = await findUserByEmail(identity.email);
       if (byEmail) {
         if (byEmail.disabledAt) {
           return reply.status(401).send({ error: 'That Google sign-in did not work. Try again.' });
         }
         /**
-         * The link proves the address as well as binding the identity.
+         * The link is refused unless the *stored account* has already proved
+         * this address, and unless no other Google identity holds it.
          *
-         * `verifyGoogleIdToken` refuses a token without `email_verified`, so
-         * Google has just demonstrated exactly what `/auth/verify` would ask
-         * this person to demonstrate — on the same address, since that is how
-         * the account was found. Making them read a code afterwards would be
-         * asking for a second proof of something already proved, and would
-         * leave a farm whose recovery is off for no reason it can see.
+         * The token proves the caller controls the address. It says nothing
+         * about the row: `/auth/signup` accepts whatever is typed and sends no
+         * mail, so an unproved row is only somebody's claim. Linking on that
+         * claim meant whoever signed up as an address first received the sign-in
+         * of whoever actually owns it — into their org, as their user. So the
+         * proof has to come from the account's own history, which is what
+         * `emailVerifiedAt` records.
+         *
+         * **The 401 is deliberately the disabled-account one, word for word.**
+         * A distinct message here would answer "does that address have an
+         * account?", which is the question this route exists not to answer —
+         * the same reason branch 1 and the disabled check already share it.
+         *
+         * The way back is `/auth/verify`: sign in with the password, prove the
+         * address from the account screen, and the Google button then links.
          */
-        await linkGoogleSub(byEmail._id, identity.googleSub);
-        if (byEmail.emailVerifiedAt === undefined) {
-          await markEmailVerified(byEmail._id, byEmail.email, now);
+        if (!(await linkGoogleSub(byEmail._id, identity.googleSub))) {
+          return reply.status(401).send({ error: 'That Google sign-in did not work. Try again.' });
         }
         const pair = await startSession(
           { userId: byEmail._id, orgId: byEmail.orgId, role: byEmail.role },

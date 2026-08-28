@@ -195,17 +195,47 @@ export async function findUserByGoogleSub(googleSub: string): Promise<UserDoc | 
 }
 
 /**
- * Binds a Google identity to an account that already exists.
+ * Binds a Google identity to an account that already exists, and only to one
+ * whose address has been proved and which no Google identity holds yet.
  *
  * The upgrade path for a farm that signed up with a password and later taps
  * the Google button with the same address: the account is theirs either way,
  * and the alternative is telling them their own email is taken.
  *
- * Only ever called after the ID token has been verified, so the address is one
- * Google has confirmed the caller controls.
+ * ## Both conditions are in the filter, and that is the point
+ *
+ * A verified ID token proves that *the caller* controls the address. It proves
+ * nothing about the stored row, and this used to be an unconditional `$set`:
+ *
+ *   - **`emailVerifiedAt: { $exists: true }`.** `/auth/signup` sends no mail
+ *     and sets no flag, so an address typed into it is unproved — see
+ *     `emailVerifiedAt` above, and `verification.ts`. Without this, signing up
+ *     as somebody else's address and waiting handed their Google sign-in to
+ *     the farm that typed it first: they land inside that org, as that user,
+ *     with everything they log syncing there. `/auth/forgot` already refuses
+ *     to act on an unproved address for exactly this reason.
+ *   - **`googleSub: { $exists: false }`.** The caller reaches the linking
+ *     branch only when no account matched this `sub`, so a `googleSub` that is
+ *     already set is necessarily a *different* Google account — and rebinding
+ *     one address to a new Google identity is the outcome `googleSub` exists
+ *     to prevent. It also settles the race: two first-time sign-ins for one
+ *     address, arriving together with different subjects, and exactly one of
+ *     them matches.
+ *
+ * In the filter rather than merely checked by the caller, for the reason
+ * `changeUnverifiedEmail` gives: the route checks these too, and that is the
+ * check a refactor can walk past. This is the one that cannot.
+ *
+ * False means nothing matched — no such account, or its address is unproved,
+ * or another Google identity already holds it. The caller cannot tell which,
+ * and must not: the answer would say whether an address has an account.
  */
-export async function linkGoogleSub(userId: string, googleSub: string): Promise<void> {
-  await (await users()).updateOne({ _id: userId }, { $set: { googleSub } });
+export async function linkGoogleSub(userId: string, googleSub: string): Promise<boolean> {
+  const result = await (await users()).updateOne(
+    { _id: userId, emailVerifiedAt: { $exists: true }, googleSub: { $exists: false } },
+    { $set: { googleSub } },
+  );
+  return result.matchedCount === 1;
 }
 
 export async function insertUser(user: UserDoc): Promise<void> {
