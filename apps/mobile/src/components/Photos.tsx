@@ -132,12 +132,59 @@ export function Photos({
     [log, subjectId],
   );
 
+  /**
+   * The record is archived, never deleted (P13). The bytes genuinely go — they
+   * are not the audit trail, they are the weight.
+   *
+   * ## The order, and it used to be the other way round
+   *
+   * This deleted the file first and then fired the mutation with no `await`
+   * and no `catch`. On a full disk — which is *the* reason somebody is
+   * deleting photos — the JPEG was already gone when `enqueue` threw
+   * `StorageFullError`, the rejection went unhandled, and the panel closed as
+   * though it had worked.
+   *
+   * For a photo that had not been uploaded yet, those bytes were the only
+   * copy: `BACKUP_EXCLUDES` keeps images out of the backup file. The record
+   * stayed live with `uploadedAt` absent, and that pair matches neither branch
+   * in `sync/photos.ts` — `uploadedAt === undefined` skips the download, and
+   * with no local bytes there is nothing to upload — so it could never get
+   * bytes again, on this device or any other. A row pointing at an image that
+   * exists nowhere.
+   *
+   * **The record goes first now, and the bytes only once it is written.**
+   * `enqueue` puts the mutation and the projection in one SQLite transaction
+   * (invariant 5), so this either records the removal or changes nothing —
+   * and if it changes nothing the file is still there, which is the truthful
+   * state and the one the farmer is told about.
+   *
+   * That is the mirror of the server's order rather than a contradiction of
+   * it. `sync/apply.ts` removes the blob *before* stamping `archivedAt`, on
+   * the same principle read from the other end: never mark a photo gone while
+   * its image is still being served, and never destroy an image before the
+   * removal is recorded. Each side puts the durable half last.
+   */
   const remove = useCallback(
-    (photo: Photo) => {
-      // The record is archived, never deleted (P13). The bytes genuinely go —
-      // they are not the audit trail, they are the weight.
-      forgetBytes(photo.id);
-      void log({ entity: 'photo', op: 'delete', targetId: photo.id, payload: {} });
+    async (photo: Photo): Promise<void> => {
+      setProblem(null);
+
+      try {
+        await log({ entity: 'photo', op: 'delete', targetId: photo.id, payload: {} });
+      } catch (error) {
+        // The file is untouched, so the photo is still there to try again.
+        setProblem(error instanceof Error ? error.message : 'That photo could not be removed.');
+        return;
+      }
+
+      try {
+        forgetBytes(photo.id);
+      } catch {
+        // Recorded already, so this is a file left behind rather than a photo
+        // lost, and nothing references it. Saying "that could not be removed"
+        // over a removal that happened would be the message contradicting the
+        // list the farmer is looking at.
+      }
+
       // Nothing left to have open. Without this the panel keeps a slot for a
       // photo that is no longer in the list.
       setOpen(null);
@@ -418,7 +465,9 @@ export function Photos({
                   label="Remove"
                   armedLabel="Tap again"
                   testID={`photo-remove-${photo.id}`}
-                  onConfirm={() => remove(photo)}
+                  onConfirm={() => {
+                    void remove(photo);
+                  }}
                 />
               </View>
             ))}
