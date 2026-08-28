@@ -190,9 +190,22 @@ describeDb('what an unconfirmed address costs', () => {
     await app.close();
 
     const body = JSON.parse(res.body) as {
-      account?: { email: string; emailVerified: boolean };
+      account?: { email: string; emailVerified: boolean; googleLinked: boolean };
     };
-    expect(body.account).toEqual({ email: EMAIL, emailVerified: false });
+    /**
+     * Deep equality, deliberately, so widening the account object is a
+     * decision somebody makes here rather than one that happens to a client.
+     *
+     * `googleLinked` joined it when the in-session Google link shipped, and
+     * this assertion is what said so — every field on this object is cached on
+     * a handset and read by a screen, so a key arriving unremarked is a key
+     * nothing renders and nobody chose.
+     */
+    expect(body.account).toEqual({
+      email: EMAIL,
+      emailVerified: false,
+      googleLinked: false,
+    });
   });
 
   /**
