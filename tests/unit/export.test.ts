@@ -209,6 +209,46 @@ describe('what comes out', () => {
   });
 
   /**
+   * The ordinary case for a goat, a ewe, a cow — and the one the sheet used to
+   * export blank.
+   *
+   * The subject cell was `named(groupName, v.flockId)` alone, so a treatment
+   * given to ONE animal handed it `undefined` and got the empty string back.
+   * On the sheet a vet or an inspector reads to see who was treated with what.
+   *
+   * The row's own `subject` said `v.flockId ?? v.animalId` two lines below the
+   * whole time, and four sibling sheets already fell back the same way.
+   */
+  it('names the animal when a treatment was given to one, not to a group', async () => {
+    await theHens('The goats');
+    const nanny = newId();
+    await enqueue({
+      entity: 'animal',
+      op: 'create',
+      targetId: nanny,
+      payload: { flockId: GROUP, name: 'Bramble', species: 'goat' },
+    });
+    await enqueue({
+      entity: 'medication',
+      op: 'create',
+      targetId: newId(),
+      payload: {
+        animalId: nanny,
+        name: 'Cydectin',
+        administeredAt: Date.now(),
+        withdrawalDays: { milk: 14 },
+      },
+    });
+
+    const treatments = (await buildExport()).find((s) => s.name === 'treatments');
+
+    expect(treatments?.csv).toContain('Cydectin');
+    expect(treatments?.csv).toContain('Bramble');
+    // The header says so too, like its four siblings.
+    expect(treatments?.csv).toContain('Group or animal');
+  });
+
+  /**
    * The escaping, end to end rather than only on `field`. A farm really does
    * name a run "The 'back' run, by the gate".
    */

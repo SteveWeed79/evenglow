@@ -309,7 +309,17 @@ export async function buildExport(range: ExportRange = {}): Promise<Sheet[]> {
    */
   add(
     'treatments',
-    ['Given', 'Group', 'Medication', 'Treatment ends', 'Egg withdrawal (days)', 'Meat', 'Milk'],
+    [
+      'Given',
+      // "Group or animal", like its four siblings, because it is one — see the
+      // cell below.
+      'Group or animal',
+      'Medication',
+      'Treatment ends',
+      'Egg withdrawal (days)',
+      'Meat',
+      'Milk',
+    ],
     await rowsFrom(
       'medication',
       medicationCreateSchema,
@@ -317,7 +327,20 @@ export async function buildExport(range: ExportRange = {}): Promise<Sheet[]> {
         at: v.administeredAt,
         cells: [
           stamp(v.administeredAt),
-          named(groupName, v.flockId),
+          /**
+           * Both, and it used to be `named(groupName, v.flockId)` alone.
+           *
+           * A treatment given to ONE animal — the ordinary case for a goat, a
+           * ewe, a cow — has `animalId` and no `flockId`, so `named` was handed
+           * `undefined` and returned the empty string. Every per-animal
+           * treatment therefore exported with a **blank subject**, on the sheet
+           * a vet or an inspector reads to see who was treated with what.
+           *
+           * The row's own `subject` said `v.flockId ?? v.animalId` two lines
+           * below the whole time, and the four sibling sheets — eggs,
+           * production, husbandry, weights — all fall back the same way.
+           */
+          v.flockId === undefined ? named(animalName, v.animalId) : named(groupName, v.flockId),
           v.name,
           v.treatmentEndsAt === undefined ? '' : stamp(v.treatmentEndsAt),
           v.withdrawalDays?.egg ?? '',
