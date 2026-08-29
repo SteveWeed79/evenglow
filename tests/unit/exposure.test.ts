@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { newId } from '@homefarm/contracts';
 import { BACKUP_GOOD_FOR, EXPOSED_AT, readExposure } from '@homefarm/core/backup/exposure';
+import { pullOnce } from '@homefarm/core/sync/pull';
 import { enqueue } from '@homefarm/core/sync/queue';
 import { localStore } from '@homefarm/core/db/store';
 import { freshStore } from '../support/store';
@@ -71,6 +72,70 @@ describe('when it says nothing', () => {
     await localStore().markSynced(Date.now());
 
     expect((await readExposure()).exposed).toBe(false);
+  });
+
+  /**
+   * ── The device that had only ever received ───────────────────────────────
+   *
+   * `markSynced` was called from `flush.ts` alone, after OUTGOING mutations, so
+   * `lastSyncAt` stayed null on a phone that had only pulled — and this is the
+   * field that decides whether a farm's records exist anywhere else.
+   *
+   * A phone that installed, signed in and pulled 1,500 records was therefore
+   * told *"on this phone only — nothing has been copied anywhere else"*, and
+   * advised to set up the account it had just signed into. The records had
+   * demonstrably come **from** the server; there is no stronger proof of a copy
+   * than that.
+   */
+  it('is silent on a phone whose records came from the server', async () => {
+    const flock = newId();
+    const pulled = Array.from({ length: EXPOSED_AT + 50 }, (_, i) => ({
+      schemaVersion: 1,
+      id: newId(),
+      targetId: i === 0 ? flock : newId(),
+      entity: (i === 0 ? 'flock' : 'eggLog') as 'flock' | 'eggLog',
+      op: 'create' as const,
+      payload:
+        i === 0
+          ? { name: 'The hens', species: 'chicken', count: 6, purposes: ['eggs'] }
+          : { occurredAt: Date.now() - i * 3_600_000, flockId: flock, count: 6 },
+      deviceId: '00000000-0000-4000-8000-0000000000ff',
+      clientSeq: i,
+      clientTs: 1,
+      serverTs: 1_000 + i,
+    }));
+
+    await pullOnce(() =>
+      Promise.resolve({
+        status: 200,
+        body: { mutations: pulled, through: 1_000 + pulled.length, throughId: null, more: false },
+      }),
+    );
+
+    const exposure = await readExposure();
+    expect(exposure.records).toBeGreaterThanOrEqual(EXPOSED_AT);
+    expect(exposure.everSynced).toBe(true);
+    expect(exposure.exposed).toBe(false);
+  });
+
+  /**
+   * **But a pull that delivered nothing is not proof of a copy.** This file's
+   * subject says the test is "nothing has ever reached a server" rather than
+   * "has no account", and an empty page proves this device can reach the server
+   * — not that the server holds anything of this farm's. A farm with a season
+   * of unsent records must still be told.
+   */
+  it('still speaks after a pull that brought nothing back', async () => {
+    await log(EXPOSED_AT + 50);
+
+    await pullOnce(() =>
+      Promise.resolve({
+        status: 200,
+        body: { mutations: [], through: 0, throughId: null, more: false },
+      }),
+    );
+
+    expect((await readExposure()).exposed).toBe(true);
   });
 
   it('is silent after a copy has been taken', async () => {

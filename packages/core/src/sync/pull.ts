@@ -172,6 +172,31 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
     outcome.more = parsed.data.more;
 
     /**
+     * ── A pull counts as having synced, and only a flush used to ────────────
+     *
+     * `markSynced` was called from `flush.ts` alone, after OUTGOING mutations.
+     * `lastSyncAt` therefore stayed null on a device that had only ever
+     * received — and `backup/exposure.ts` reads exactly that field to decide
+     * whether a farm's records exist anywhere but this handset.
+     *
+     * So a phone that installed, signed in and pulled 1,500 records was told
+     * *"on this phone only — nothing has been copied anywhere else"* and
+     * advised to set up the account it had just signed into. The one moment
+     * A2.3 reserves for asking, spent on the one farm that had already done it.
+     *
+     * **Only a page that actually delivered rows.** `exposure.ts` argues the
+     * test is "nothing has ever reached a server" rather than "has no account",
+     * and a pull that returned nothing proves this device can reach the server —
+     * not that the server is holding anything of this farm's. Records coming
+     * back the other way are proof of the copy, which is the thing being
+     * claimed.
+     *
+     * Inside the loop rather than after it, so a pass that pages for a while
+     * and then defers still records the contact it genuinely made.
+     */
+    if (result.applied > 0) await localStore().markSynced(Date.now());
+
+    /**
      * The store stopped at a record this device still owes, and did not move
      * the watermark past it. Paging on would ask for rows beyond a point we
      * have not accepted yet and then discard them — which is the bug this
