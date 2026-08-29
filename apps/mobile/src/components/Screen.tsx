@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
@@ -175,15 +175,29 @@ export function Screen({
    * re-render and the measurement callback needs the value without closing over
    * a stale render.
    */
-  const scroll = useRef<ScrollView>(null);
-  const offset = useRef(0);
   const focused = useRef<Measurable | null>(null);
   const covered = useRef(0);
   const [keyboard, setKeyboard] = useState(0);
 
+  /**
+   * The surfaces a field can be brought up on, and which one it is on.
+   *
+   * One was enough while every screen was a single scroll view. A split screen
+   * has three — the frame, which does not scroll at all, and one per pane —
+   * and the tally's number field sits in the *leading pane* on a tablet, so
+   * scrolling the frame it hangs in would move nothing. Which pane is answered
+   * by the tree rather than by geometry: each wraps its children in its own
+   * `RevealProvider`, and `useRevealOnFocus` reads the nearest one.
+   */
+  const column = useSurface();
+  const leading = useSurface();
+  const trailing = useSurface();
+  const on = useRef<Surface>(column);
+
   const bring = useCallback((height: number) => {
     const node = focused.current;
     if (node === null || height <= 0) return;
+    const surface = on.current;
 
     node.measureInWindow((_x, y, _width, fieldHeight) => {
       const next = scrollToClear({
@@ -192,9 +206,9 @@ export function Screen({
         windowHeight: Dimensions.get('window').height,
         keyboardHeight: height,
         margin: SPACE.lg,
-        offset: offset.current,
+        offset: surface.at.current,
       });
-      if (next !== null) scroll.current?.scrollTo({ y: next, animated: true });
+      if (next !== null) surface.view.current?.scrollTo({ y: next, animated: true });
     });
   }, []);
 
@@ -221,21 +235,214 @@ export function Screen({
     };
   }, [bring]);
 
-  const reveal = useCallback<Reveal>(
-    (node) => {
-      focused.current = node;
-      /**
-       * Moving between two fields with the keyboard already up fires no
-       * `keyboardDidShow`, so without this the second field is never brought
-       * up — which is every form on this app past the first line.
-       */
-      if (node !== null) bring(covered.current);
-    },
-    [bring],
+  const reveal = useMemo(() => {
+    const onto =
+      (surface: Surface): Reveal =>
+      (node) => {
+        focused.current = node;
+        if (node === null) return;
+
+        on.current = surface;
+        /**
+         * Moving between two fields with the keyboard already up fires no
+         * `keyboardDidShow`, so without this the second field is never brought
+         * up — which is every form on this app past the first line.
+         */
+        bring(covered.current);
+      };
+
+    return { column: onto(column), leading: onto(leading), trailing: onto(trailing) };
+  }, [bring, column, leading, trailing]);
+
+  /**
+   * Everything under the bar: the hero, whatever spans both panes, and then
+   * either the two panes or the single column.
+   *
+   * Named rather than written inline because it hangs in a different frame on
+   * each path — a scroll view when there is one column, a still box when there
+   * are two — and writing it twice is how the two paths drift.
+   */
+  const body = (
+    <View
+     style={[
+       styles.content,
+       { maxWidth: frame, paddingHorizontal: gutter },
+       /**
+        * The bottom inset, which was missing and cost the last centimetre of
+        * every pushed screen.
+        *
+        * `paddingTop: insets.top` was applied above and this was not, so on a
+        * handset with gesture navigation the pill sat over whatever was at the
+        * bottom of the scroll — reported from a test phone as the bar covering
+        * the last few percent. It is worst exactly where it hurts most: R3 puts
+        * primary actions in the bottom third, so the button is the thing under
+        * the bar.
+        *
+        * It did not show on the tablet, which is why it survived to a second
+        * device, and `TabDividers` already reads `insets.bottom` — so the
+        * knowledge was in the codebase, one file away.
+        *
+        * On the padding rather than the ground, so the inset is scrollable
+        * space at the end of the content rather than a dead band the app may
+        * not draw into. `contentStyle` still comes after, so a caller can
+        * override it.
+        */
+       /**
+        * Only where nothing else is already standing in that space.
+        *
+        * `back` is the signal and it is already here: a pushed screen has no
+        * tab bar under it, so the system navigation is what its content
+        * would run into. A tab screen has the bar, which reserves the inset
+        * itself — adding it again here is a second helping of the same
+        * gap, and Today ends in a band of nothing.
+        *
+        * Wrong in the harmless direction, unlike the two it follows, but
+        * wrong for the same reason both of those were: the inset belongs to
+        * whichever thing actually meets the bottom of the screen, and that
+        * is a different thing on a tab than on a form.
+        */
+       /**
+        * The keyboard stands in the same place, so it takes the same slot
+        * rather than stacking with it — `Math.max`, not a sum. The system
+        * navigation is *behind* the keyboard when the keyboard is up, and
+        * adding both would leave a bar of nothing under the last field.
+        *
+        * This is the half that makes scrolling possible at all: without
+        * somewhere to scroll to, `scrollToClear` computes an offset the
+        * surface cannot reach and the field stays put.
+        */
+       /**
+        * **A rail is not under the content, so it reserves nothing.**
+        *
+        * This read `back ? insets.bottom : 0` on the reasoning that a tab
+        * screen has the bar beneath it and the bar reserves the inset
+        * itself. That was true right up until the bar moved to the leading
+        * edge — and then nothing at all was standing at the bottom of a tab
+        * screen, so "Also today" ran under the system navigation. Reported
+        * off the tablet in the first screenshot of the rail.
+        *
+        * The rule the old code was reaching for is the one below: the inset
+        * belongs to whichever thing actually meets the bottom of the screen,
+        * and on an expanded window that is the content itself.
+        */
+       { paddingBottom: SPACE.xl + Math.max(keyboard, barAtBottom ? 0 : insets.bottom) },
+       /**
+        * **The height the panes divide up, and the reason they can scroll.**
+        *
+        * `styles.panes` is `flex: 1`, which resolves against its parent — so
+        * without this the row is as tall as its content, every pane inside it
+        * is as tall as *its* content, and a scroll surface the size of its own
+        * content has nothing to scroll. Only on the split path: on the other
+        * one this box is the scroll view's content and must be free to grow
+        * past the window, which is the whole idea of a scroll view.
+        */
+       split ? styles.fill : null,
+       contentStyle,
+     ]}
+    >
+     {/* One block, so the title and the name under it are not separated by
+         the content gap that separates whole panels. */}
+     <View style={styles.heading}>
+       <Text style={[styles.hero, { color: colors.ink }]}>{title}</Text>
+
+       {subtitle === undefined ? null : (
+         <Text style={[styles.subtitle, { color: colors.inkQuiet }]}>{subtitle}</Text>
+       )}
+     </View>
+
+     {/* A read that failed, said out loud.
+         Above the content because the content is the thing that is missing:
+         a screen that renders nothing and explains nothing is the failure
+         this exists to end. It never replaces the screen — everything that
+         did load stays on it. */}
+     {trouble === null ? null : (
+       <View style={[styles.trouble, { borderColor: colors.rowan }]}>
+         {/* The border is rowan and the words are not, which is R7 rather
+             than a preference: rowan on the lamplight ground is 3.1:1 — a
+             perfectly good rule and an unreadable sentence, at 5am, on the
+             one banner in the app that appears when something has already
+             gone wrong. Keep the bar, set the heading in ink. */}
+         <Text style={[styles.troubleTitle, { color: colors.ink }]}>
+           Could not read {trouble.where}
+         </Text>
+         <Text style={[styles.troubleBody, { color: colors.ink }]}>
+           Nothing you have logged is lost — it is on this device. {trouble.message}
+         </Text>
+         {trouble.at === null ? null : (
+           <Text style={[styles.troubleAt, { color: colors.muted }]}>{trouble.at}</Text>
+         )}
+       </View>
+     )}
+
+     {/* Spans both panes, because it outranks either of them. See `above`. */}
+     {above}
+
+     {/**
+       * Two panes, or one column with the aside restacked under it.
+       *
+       * The narrow branch is deliberately a bare fragment rather than a
+       * one-column version of the row: `styles.content` already supplies
+       * the gap between children, and wrapping them in a second flex
+       * container would add a box that changes nothing and can only
+       * introduce a difference between the two paths. A phone renders
+       * exactly the tree it rendered before this prop existed.
+       */}
+     {split ? (
+       /**
+        * Two panes, each scrolling itself.
+        *
+        * `styles.panes` stretches them rather than aligning to the top, and
+        * that is the half of this change that is easy to get wrong. The old
+        * row used `flex-start` so *"a short aside must not stretch to match
+        * a long column, or its last card grows a foot of empty card"* —
+        * which was right for two plain views. These are scroll surfaces: the
+        * surface stretches to the height available and the cards inside it
+        * do not, so the card keeps its size and gains somewhere to scroll.
+        *
+        * Each pane carries its own `RevealProvider`, so a field that takes
+        * focus says which surface has to move by where it sits in the tree.
+        * The alternative was working it out from the field's x against the
+        * pane boundary, which is arithmetic over a layout that has a rail, two
+        * insets and a centred frame in it — and wrong by a pane the first time
+        * any of those moves.
+        */
+       <View style={styles.panes}>
+         <ScrollView
+           ref={leading.view}
+           style={{ width: LAYOUT.column }}
+           contentContainerStyle={styles.pane}
+           keyboardShouldPersistTaps="handled"
+           onScroll={(event) => {
+             leading.at.current = event.nativeEvent.contentOffset.y;
+           }}
+           scrollEventThrottle={16}
+         >
+           <RevealProvider value={reveal.leading}>{children}</RevealProvider>
+         </ScrollView>
+         <ScrollView
+           ref={trailing.view}
+           style={{ width: asidePane }}
+           contentContainerStyle={styles.pane}
+           keyboardShouldPersistTaps="handled"
+           onScroll={(event) => {
+             trailing.at.current = event.nativeEvent.contentOffset.y;
+           }}
+           scrollEventThrottle={16}
+         >
+           <RevealProvider value={reveal.trailing}>{aside}</RevealProvider>
+         </ScrollView>
+       </View>
+     ) : (
+       <>
+         {children}
+         {aside}
+       </>
+     )}
+    </View>
   );
 
   return (
-   <RevealProvider value={reveal}>
+   <RevealProvider value={reveal.column}>
    <ContentWidthProvider value={content}>
     <View style={[styles.ground, { backgroundColor: colors.ground, paddingTop: insets.top }]}>
       {/* Behind everything, never over it. The grain is a shipped tile because
@@ -348,207 +555,104 @@ export function Screen({
         </View>
       </View>
 
-      {/* The scroll surface stays full-bleed and only centres what is on it, so
-          a thumb can drag anywhere on a tablet rather than only inside the
-          column. `alignItems` here with the cap on the view inside, rather than
-          `alignSelf` + `maxWidth` on this container: the container is a
-          `NativeScrollContentView` whose width the native scroll view has a
-          hand in, so centring it is a bet on internals. Centring a plain child
-          inside it is ordinary flexbox and cannot be anything else. */}
-      <ScrollView
-        ref={scroll}
-        /**
-         * **Off when there are two panes, because then the panes scroll.**
-         *
-         * One scroll surface held both columns, so dragging the tractor's
-         * timeline dragged the tractor list up with it and off the top — the
-         * list, its actions and the heading all gone, leaving a column of
-         * nothing beside a column of history. Reported off the tablet, and
-         * visible in the screenshot as a blank left half.
-         *
-         * A split screen is two things side by side *because they are read
-         * independently*: the left names what you are looking at and the right
-         * is as long as the record happens to be. Tying them to one scroll
-         * makes the shorter one a passenger.
-         *
-         * Disabled rather than replaced, so the non-split path — every form,
-         * every phone — renders exactly the tree it always did, including the
-         * keyboard-reveal machinery that scrolls a focused field clear. That
-         * machinery keeps working where it is needed: on a split screen the
-         * fields are in the left pane, which has its own scroll below.
-         */
-        scrollEnabled={!split}
-        // The insets pad the scroll's CONTAINER, so the column is centred
-        // inside the safe area rather than inside the window. The scroll
-        // surface itself stays full-bleed — a thumb can still drag anywhere on
-        // a tablet, which is what the comment above is about.
-        contentContainerStyle={[
-          styles.scroll,
-          { paddingLeft: insets.left, paddingRight: insets.right },
-        ]}
-        // Tapping a field then reaching for a stepper should not need the
-        // keyboard dismissed first.
-        keyboardShouldPersistTaps="handled"
-        // Where the surface is, so a field can be scrolled up from wherever it
-        // happens to be rather than from the top of the form.
-        onScroll={(event) => {
-          offset.current = event.nativeEvent.contentOffset.y;
-        }}
-        scrollEventThrottle={16}
-      >
-       {/**
-         * The bottom inset, which was missing and cost the last centimetre of
-         * every pushed screen.
-         *
-         * `paddingTop: insets.top` was applied above and this was not, so on a
-         * handset with gesture navigation the pill sat over whatever was at the
-         * bottom of the scroll — reported from a test phone as the bar covering
-         * the last few percent. It is worst exactly where it hurts most: R3 puts
-         * primary actions in the bottom third, so the button is the thing under
-         * the bar.
-         *
-         * It did not show on the tablet, which is why it survived to a second
-         * device, and `TabDividers` already reads `insets.bottom` — so the
-         * knowledge was in the codebase, one file away.
-         *
-         * On the padding rather than the ground, so the inset is scrollable
-         * space at the end of the content rather than a dead band the app may
-         * not draw into. `contentStyle` still comes after, so a caller can
-         * override it.
-         */}
-       <View
-        style={[
-          styles.content,
-          { maxWidth: frame, paddingHorizontal: gutter },
-          /**
-           * Only where nothing else is already standing in that space.
-           *
-           * `back` is the signal and it is already here: a pushed screen has no
-           * tab bar under it, so the system navigation is what its content
-           * would run into. A tab screen has the bar, which reserves the inset
-           * itself — adding it again here is a second helping of the same
-           * gap, and Today ends in a band of nothing.
-           *
-           * Wrong in the harmless direction, unlike the two it follows, but
-           * wrong for the same reason both of those were: the inset belongs to
-           * whichever thing actually meets the bottom of the screen, and that
-           * is a different thing on a tab than on a form.
-           */
-          /**
-           * The keyboard stands in the same place, so it takes the same slot
-           * rather than stacking with it — `Math.max`, not a sum. The system
-           * navigation is *behind* the keyboard when the keyboard is up, and
-           * adding both would leave a bar of nothing under the last field.
-           *
-           * This is the half that makes scrolling possible at all: without
-           * somewhere to scroll to, `scrollToClear` computes an offset the
-           * surface cannot reach and the field stays put.
-           */
-          /**
-           * **A rail is not under the content, so it reserves nothing.**
-           *
-           * This read `back ? insets.bottom : 0` on the reasoning that a tab
-           * screen has the bar beneath it and the bar reserves the inset
-           * itself. That was true right up until the bar moved to the leading
-           * edge — and then nothing at all was standing at the bottom of a tab
-           * screen, so "Also today" ran under the system navigation. Reported
-           * off the tablet in the first screenshot of the rail.
-           *
-           * The rule the old code was reaching for is the one below: the inset
-           * belongs to whichever thing actually meets the bottom of the screen,
-           * and on an expanded window that is the content itself.
-           */
-          { paddingBottom: SPACE.xl + Math.max(keyboard, barAtBottom ? 0 : insets.bottom) },
-          contentStyle,
-        ]}
-       >
-        {/* One block, so the title and the name under it are not separated by
-            the content gap that separates whole panels. */}
-        <View style={styles.heading}>
-          <Text style={[styles.hero, { color: colors.ink }]}>{title}</Text>
-
-          {subtitle === undefined ? null : (
-            <Text style={[styles.subtitle, { color: colors.inkQuiet }]}>{subtitle}</Text>
-          )}
+      {/**
+        * The frame under the bar: the scroll surface, or — where there are two
+        * panes — the still box they scroll inside.
+        *
+        * **A scroll view nested in a scroll view has no height to scroll in,
+        * and that is why neither column moved.** The panes were children of
+        * this one, which was stilled with `scrollEnabled={!split}` — and that
+        * stops the drag without bounding the box. A scroll view laid out with
+        * no height takes its content's, so each pane grew as tall as its own
+        * list and had nowhere left to move; the surface under them would not
+        * scroll either, so a tablet showed two columns cut off at the bottom of
+        * the window with no way down. Reported off the tablet.
+        *
+        * The fix is a definite height, which only a frame that is not itself a
+        * scroll surface can give: on the split path a plain `View` that fills
+        * the window, with `styles.panes` taking what is left of it and each
+        * pane stretching to that. The single-column path is untouched — every
+        * form and every phone renders the tree it always did, keyboard-reveal
+        * machinery and all.
+        *
+        * What a split screen gives up is scrolling as a whole: the hero and
+        * `above` stay put and only the panes move. That is what list-detail
+        * does everywhere it is drawn, and it is the price of the two columns
+        * being independent — which is the point of them.
+        *
+        * Why independent, kept from the change that separated them: one scroll
+        * surface held both columns, so dragging the tractor's timeline dragged
+        * the tractor list up with it and off the top, leaving a column of
+        * nothing beside a column of history. The left names what you are
+        * looking at and the right is as long as the record happens to be;
+        * tying them to one scroll makes the shorter one a passenger.
+        */}
+      {split ? (
+        <View
+          style={[
+            styles.scroll,
+            styles.fill,
+            // The same insets the scroll's container carries on the other path.
+            { paddingLeft: insets.left, paddingRight: insets.right },
+          ]}
+        >
+          {body}
         </View>
-
-        {/* A read that failed, said out loud.
-            Above the content because the content is the thing that is missing:
-            a screen that renders nothing and explains nothing is the failure
-            this exists to end. It never replaces the screen — everything that
-            did load stays on it. */}
-        {trouble === null ? null : (
-          <View style={[styles.trouble, { borderColor: colors.rowan }]}>
-            {/* The border is rowan and the words are not, which is R7 rather
-                than a preference: rowan on the lamplight ground is 3.1:1 — a
-                perfectly good rule and an unreadable sentence, at 5am, on the
-                one banner in the app that appears when something has already
-                gone wrong. Keep the bar, set the heading in ink. */}
-            <Text style={[styles.troubleTitle, { color: colors.ink }]}>
-              Could not read {trouble.where}
-            </Text>
-            <Text style={[styles.troubleBody, { color: colors.ink }]}>
-              Nothing you have logged is lost — it is on this device. {trouble.message}
-            </Text>
-            {trouble.at === null ? null : (
-              <Text style={[styles.troubleAt, { color: colors.muted }]}>{trouble.at}</Text>
-            )}
-          </View>
-        )}
-
-        {/* Spans both panes, because it outranks either of them. See `above`. */}
-        {above}
-
-        {/**
-          * Two panes, or one column with the aside restacked under it.
-          *
-          * The narrow branch is deliberately a bare fragment rather than a
-          * one-column version of the row: `styles.content` already supplies
-          * the gap between children, and wrapping them in a second flex
-          * container would add a box that changes nothing and can only
-          * introduce a difference between the two paths. A phone renders
-          * exactly the tree it rendered before this prop existed.
-          */}
-        {split ? (
-          /**
-           * Two panes, each scrolling itself.
-           *
-           * `styles.panes` stretches them rather than aligning to the top, and
-           * that is the half of this change that is easy to get wrong. The old
-           * row used `flex-start` so *"a short aside must not stretch to match
-           * a long column, or its last card grows a foot of empty card"* —
-           * which was right for two plain views. These are scroll surfaces: the
-           * surface stretches to the height available and the cards inside it
-           * do not, so the card keeps its size and gains somewhere to scroll.
-           */
-          <View style={styles.panes}>
-            <ScrollView
-              style={{ width: LAYOUT.column }}
-              contentContainerStyle={styles.pane}
-              keyboardShouldPersistTaps="handled"
-            >
-              {children}
-            </ScrollView>
-            <ScrollView
-              style={{ width: asidePane }}
-              contentContainerStyle={styles.pane}
-              keyboardShouldPersistTaps="handled"
-            >
-              {aside}
-            </ScrollView>
-          </View>
-        ) : (
-          <>
-            {children}
-            {aside}
-          </>
-        )}
-       </View>
-      </ScrollView>
+      ) : (
+        /* The scroll surface stays full-bleed and only centres what is on it, so
+           a thumb can drag anywhere on a tablet rather than only inside the
+           column. `alignItems` here with the cap on the view inside, rather than
+           `alignSelf` + `maxWidth` on this container: the container is a
+           `NativeScrollContentView` whose width the native scroll view has a
+           hand in, so centring it is a bet on internals. Centring a plain child
+           inside it is ordinary flexbox and cannot be anything else. */
+        <ScrollView
+          ref={column.view}
+          // The insets pad the scroll's CONTAINER, so the column is centred
+          // inside the safe area rather than inside the window. The scroll
+          // surface itself stays full-bleed — a thumb can still drag anywhere on
+          // a tablet, which is what the comment above is about.
+          contentContainerStyle={[
+            styles.scroll,
+            { paddingLeft: insets.left, paddingRight: insets.right },
+          ]}
+          // Tapping a field then reaching for a stepper should not need the
+          // keyboard dismissed first.
+          keyboardShouldPersistTaps="handled"
+          // Where the surface is, so a field can be scrolled up from wherever it
+          // happens to be rather than from the top of the form.
+          onScroll={(event) => {
+            column.at.current = event.nativeEvent.contentOffset.y;
+          }}
+          scrollEventThrottle={16}
+        >
+          {body}
+        </ScrollView>
+      )}
     </View>
    </ContentWidthProvider>
    </RevealProvider>
   );
+}
+
+/**
+ * A scroll surface a focused field can be brought up on.
+ *
+ * The view, and where it currently sits — a `scrollTo` is an absolute offset,
+ * so moving a field by a delta means knowing where the surface already is.
+ * Paired in one object because `bring` closes over whichever surface the field
+ * turned out to be on, and two loose refs cannot be picked as a pair.
+ */
+interface Surface {
+  view: React.RefObject<ScrollView | null>;
+  at: React.RefObject<number>;
+}
+
+function useSurface(): Surface {
+  const view = useRef<ScrollView>(null);
+  const at = useRef(0);
+  // Stable for the life of the screen: `on` holds one of these across renders.
+  return useMemo(() => ({ view, at }), [view, at]);
 }
 
 /**
@@ -574,6 +678,8 @@ const styles = StyleSheet.create({
   troubleBody: { fontFamily: FONTS.body, fontSize: TYPE.body, lineHeight: TYPE.body * 1.4 },
   troubleAt: { fontFamily: FONTS.data, fontSize: TYPE.label - 1 },
   ground: { flex: 1 },
+  /** Takes the height it is given rather than the height of what is in it. */
+  fill: { flex: 1 },
   /**
    * The wall fills the screen; the column does not.
    *
@@ -622,16 +728,18 @@ const styles = StyleSheet.create({
   /**
    * The two panes.
    *
-   * One scroll surface for both, not one each. Independent scrolling is what
-   * a desktop mail client does and it is wrong here: these panes are short,
-   * the app is operated with a thumb rather than a pointer, and two scroll
-   * regions on a touch screen means a drag that does something different
-   * depending on which half of the glass it started on.
-   */
-  /**
-   * `flex: 1` and `stretch`, because each pane is now its own scroll surface
-   * and a scroll surface with no height scrolls nothing. The row takes what is
-   * left under the hero; the panes take the row.
+   * `flex: 1` and `stretch`, because each pane is its own scroll surface and a
+   * scroll surface with no height scrolls nothing. The row takes what is left
+   * under the hero; the panes take the row; the lists inside them overflow and
+   * are dragged. All three of those depend on the frame above having a
+   * definite height — see the split branch in `Screen`.
+   *
+   * This once read *"one scroll surface for both, not one each"*, on the
+   * argument that two scroll regions on a touch screen means a drag that does
+   * something different depending on which half of the glass it started on.
+   * True, and the farm reported the cost as the worse one: a machine's
+   * timeline is as long as the machine is old, and dragging it took the list
+   * beside it off the top of the screen.
    */
   panes: { flexDirection: 'row', gap: LAYOUT.spacer, alignItems: 'stretch', flex: 1 },
   /** Repeats the content gap, which the row's own `gap` is spending sideways. */

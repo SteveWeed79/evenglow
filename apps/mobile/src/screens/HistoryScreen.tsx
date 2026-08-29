@@ -71,7 +71,22 @@ export function HistoryScreen(): React.ReactElement {
   const readHistory = useCallback((): Promise<HistoryDay[]> => listHistory(units), [units]);
 
   const days = useLive(readHistory, 'what you have logged');
-  const { panes } = useWindow();
+  /**
+   * `bar: true`, because this is a tab screen and above the expanded boundary
+   * its tab bar is a rail taking 96dp off the side.
+   *
+   * Without it this asked a different question than the `Screen` it hands the
+   * aside to — `Screen` uses `{ bar: !back }` — and the two disagreed across
+   * that 96dp band: a window wide enough for two panes *before* the rail is
+   * taken off and not after. In the band this screen believed it was split, so
+   * it stopped opening days inline and dropped the plus/minus that says a row
+   * expands, while `Screen` restacked the pane under the list — leaving a day
+   * that could only be read by scrolling past every month to the bottom of the
+   * screen. `TodayScreen` found the same bug in the same shape and its comment
+   * is worth repeating: nothing on this farm's hardware sits in the band,
+   * which is exactly why it would have waited for a device that does.
+   */
+  const { panes } = useWindow({ bar: true });
 
   /**
    * `undefined` means "nobody has chosen yet", which is what lets the newest

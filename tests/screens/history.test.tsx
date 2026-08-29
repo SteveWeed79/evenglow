@@ -8,6 +8,7 @@ import { mount } from '../support/screen';
 import { ExportScreen } from '../../apps/mobile/src/screens/ExportScreen';
 import { HistoryScreen } from '../../apps/mobile/src/screens/HistoryScreen';
 import { files, shared } from '../support/native/modules';
+import { seedWindow } from '../support/native/react-native';
 
 /**
  * "We need a history tab. Or somewhere that old data is visible for the user
@@ -39,6 +40,9 @@ async function theHens(): Promise<void> {
 
 beforeEach(async () => {
   await freshStore();
+  // Back on a handset. The window is module state, so a test that widens it
+  // would otherwise hand the next one a tablet.
+  seedWindow();
 });
 
 describe('a day reads as one line', () => {
@@ -787,6 +791,81 @@ describe('sending records out', () => {
   it('invites rather than showing an empty page', async () => {
     const screen = await mount(<ExportScreen />);
     expect(screen.text()).toContain('Nothing to send yet');
+    screen.unmount();
+  });
+});
+
+/**
+ * The screen has to ask the same question about panes that `Screen` does.
+ *
+ * ## The band, and why nothing on the farm ever showed it
+ *
+ * `Screen` reads `useWindow({ bar: !back })`, and What happened is a tab
+ * screen — so above the expanded boundary its tab bar is a rail and 96dp of
+ * the window is chrome. This screen asked `useWindow()`, with no rail taken
+ * off, so between 992 and 1088dp of window the two disagreed: History decided
+ * it was split and stopped opening days inline, `Screen` decided it was not
+ * and restacked the pane under the list. A day could then only be read by
+ * scrolling past every month to the bottom of the screen, and nothing said the
+ * rows opened at all.
+ *
+ * A 10" tablet is 1280 and a phone is 400, so no device in this farm's hands
+ * sits in the band — which is exactly why it would have waited for one that
+ * did. `TodayScreen` had the identical bug and the identical comment.
+ */
+describe('what happened, beside the list', () => {
+  const heading = (day: number): string =>
+    new Date(day).toLocaleDateString(undefined, {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+    });
+
+  /** A 10" tablet in landscape: two panes with the rail already taken off. */
+  const TABLET = { width: 1280, height: 800 };
+  /** Wide enough for two panes until the rail takes its 96. An 8" tablet. */
+  const BAND = { width: 1024, height: 768 };
+
+  async function aDayOfEggs(): Promise<number> {
+    await theHens();
+    await enqueue({
+      entity: 'eggLog',
+      op: 'create',
+      targetId: newId(),
+      payload: { occurredAt: at(0, 8), flockId: GROUP, count: 7 },
+    });
+
+    const days = await listHistory();
+    const day = days[0]?.day;
+    if (day === undefined) throw new Error('seeded a day and read back none');
+    return day;
+  }
+
+  /** How many times the day says its own name. Twice means it is in a pane. */
+  const said = (text: string, words: string): number => text.split(words).length - 1;
+
+  it('opens the day in the pane on a tablet', async () => {
+    const day = await aDayOfEggs();
+    seedWindow(TABLET);
+    const screen = await mount(<HistoryScreen />);
+
+    // Once on the row that selected it, once as the pane's own heading — the
+    // pane repeats it because the row is one of thirty and may be scrolled past.
+    expect(said(screen.text(), heading(day))).toBe(2);
+    screen.unmount();
+  });
+
+  it('opens the day under itself in the band the rail decides', async () => {
+    const day = await aDayOfEggs();
+    seedWindow(BAND);
+    const screen = await mount(<HistoryScreen />);
+
+    // One column, so one heading: the day expands in place, where a phone's
+    // reasoning still applies. Two would mean this screen handed `Screen` an
+    // aside it had no room to put beside anything.
+    expect(said(screen.text(), heading(day))).toBe(1);
+    // And the records are still reachable — restacked, never dropped.
+    expect(screen.text()).toContain('7 eggs');
     screen.unmount();
   });
 });
