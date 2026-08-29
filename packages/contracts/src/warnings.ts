@@ -616,10 +616,28 @@ function birthWarnings(day: ForecastDay, farm: FarmToday, today: number): Draft[
 function shearingWarnings(day: ForecastDay, farm: FarmToday, today: number): Draft[] {
   if (day.rainChance < WET_CHANCE) return [];
 
-  // The window runs from TODAY, like `birthWarnings`: a clip owed in March is
-  // not made urgent by tomorrow being wet.
+  // The forward window runs from TODAY, like `birthWarnings`: a clip owed in
+  // March is not made urgent by tomorrow being wet.
+  //
+  // ── Backwards it does not close, and that is the opposite of the birth rule
+  //
+  // This had a single day of grace, so a clip three days overdue raised nothing
+  // while one due in five days did — the wrong way round, since an overdue
+  // fleece is the one most in need of a dry day.
+  //
+  // `birthWarnings` bounds its back half at a week because a birth DATE is a
+  // prediction, and a breeding record nobody closed would shout every winter
+  // for ever. An owed clip is not a prediction, it is a live state:
+  // `shearingDues` computes `at` from `lastShornAt`, so the row moves forward
+  // the moment the fleece comes off and exists only while the work is actually
+  // outstanding. There is no stale record to guard against, so there is nothing
+  // for a lower bound to do except suppress the case that matters most.
+  //
+  // What stops this from becoming noise on a farm months behind is what was
+  // already decided above: it is `watch`, never `act`, and it only speaks on a
+  // wet day. A farm that has not shorn does need to know which days are no good.
   const owed = (farm.shearings ?? []).filter(
-    (shearing) => shearing.at >= today - DAY_MS && shearing.at <= today + SHEARING_WINDOW_DAYS * DAY_MS,
+    (shearing) => shearing.at <= today + SHEARING_WINDOW_DAYS * DAY_MS,
   );
   if (owed.length === 0) return [];
 
