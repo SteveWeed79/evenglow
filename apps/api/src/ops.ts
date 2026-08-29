@@ -10,11 +10,15 @@ import { buildOpsServer } from './ops/server';
  * run this file has no admin surface on it whatsoever, which is the strongest
  * version of the deployment being a decision.
  *
- * **Bind to loopback by default.** The API listens on `0.0.0.0` because it must
- * be reachable; this must not be, unless a proxy in front of it says so. Caddy
- * talks to it over localhost, and a box whose Caddy config does not mention the
- * board is a box where nothing outside can reach it — no firewall rule
- * required, and no way to forget one.
+ * **Bind to loopback by default**, which the API now does too. This comment
+ * used to draw the contrast the other way — *"the API listens on `0.0.0.0`
+ * because it must be reachable"* — and that premise was false on the deployment
+ * this repository builds: Caddy reverse-proxies to `127.0.0.1:3001` on the same
+ * machine, so the API's public port bought nothing but a second door past the
+ * proxy. Both bind loopback now, for one reason rather than two.
+ *
+ * A box whose Caddy config does not mention the board is a box where nothing
+ * outside can reach it — no firewall rule required, and no way to forget one.
  *
  * `OPS_HOST=0.0.0.0` is there for a container, where loopback means the
  * container's own and a published port would otherwise reach nothing. Setting

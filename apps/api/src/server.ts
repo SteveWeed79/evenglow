@@ -136,8 +136,33 @@ function isEntryPoint(): boolean {
 if (isEntryPoint()) {
   const env = readEnv();
   const app = await buildServer(env);
-  await app.listen({ port: env.PORT, host: '0.0.0.0' });
-  console.log(`homefarm api listening on :${env.PORT}`);
+
+  /**
+   * Loopback by default, and it used to be `0.0.0.0` unconditionally.
+   *
+   * **Every document on this box already said it was loopback.** The Caddyfile
+   * states *"The API binds 127.0.0.1 through this proxy"*, and `ops.ts` argues
+   * its own loopback default by contrast with an API that *"listens on 0.0.0.0
+   * because it must be reachable"* — a premise that is false on the deployment
+   * this repository builds. Caddy reverse-proxies to `127.0.0.1:3001` on the
+   * same machine; nothing outside needs the port at all.
+   *
+   * What binding every interface actually bought was a second door: the API on
+   * `:3001` on the box's public address, past Caddy, past TLS, past whatever the
+   * proxy is doing about rate limits and headers. Its only protection was two
+   * firewalls, and `setup-box.sh` says in so many words that it cannot reach one
+   * of them. A guarantee that rests entirely on a control the deployment script
+   * cannot verify is not one the code should be leaning on.
+   *
+   * `API_HOST=0.0.0.0` is there for a container, where loopback is the
+   * container's own and a published port would otherwise reach nothing. Setting
+   * it on a bare host is the deliberate act of putting the API on the network —
+   * the same knob, the same default and the same sentence as `OPS_HOST`.
+   */
+  const host = process.env['API_HOST'] ?? '127.0.0.1';
+
+  await app.listen({ port: env.PORT, host });
+  console.log(`homefarm api listening on ${host}:${env.PORT}`);
 
   /**
    * Here rather than in `buildServer`, so importing this module in a test binds

@@ -45,7 +45,9 @@ function shell(fn: string, arg: string, env: Record<string, string> = {}): strin
 
   return execFileSync('bash', ['-c', `${lifted}\n${fn} "$1"`, '--', arg], {
     encoding: 'utf8',
-    env: { PATH: process.env['PATH'] ?? '', ...env },
+    // `MONGODB_DB` blanked first: an ambient one would leak into the case that
+    // is about it being unset, which is the case with the interesting answer.
+    env: { ...process.env, MONGODB_DB: '', ...env },
   });
 }
 

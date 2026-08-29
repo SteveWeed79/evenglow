@@ -305,3 +305,54 @@ describe('what reaches a phone', () => {
     expect(cleanup).toBeGreaterThan(guard);
   });
 });
+
+/**
+ * What the API is reachable on, and what every document said it was.
+ *
+ * `server.ts` bound `0.0.0.0` unconditionally while the Caddyfile stated *"The
+ * API binds 127.0.0.1 through this proxy"* and `ops.ts` argued its own loopback
+ * default by contrast with an API that *"listens on 0.0.0.0 because it must be
+ * reachable"*. That premise is false on the deployment this repository builds:
+ * Caddy reverse-proxies to `127.0.0.1:3001` on the same machine, so nothing
+ * outside needs the port.
+ *
+ * What binding every interface bought was a second door — the API on `:3001` at
+ * the box's public address, past Caddy, past TLS, past whatever the proxy does
+ * about headers and rate limits — protected by two firewalls, one of which
+ * `setup-box.sh` says in so many words that it cannot reach.
+ */
+describe('what the API listens on', () => {
+  const server = readFileSync(
+    join(__dirname, '..', '..', 'apps', 'api', 'src', 'server.ts'),
+    'utf8',
+  );
+
+  it('binds loopback unless told otherwise', () => {
+    expect(server).toContain("process.env['API_HOST'] ?? '127.0.0.1'");
+    expect(server).not.toContain("host: '0.0.0.0'");
+  });
+
+  /**
+   * The same knob, the same default and the same sentence as the board's, which
+   * is what makes it one rule rather than two decisions.
+   */
+  it('uses the same shape as the operations board', () => {
+    const ops = readFileSync(join(__dirname, '..', '..', 'apps', 'api', 'src', 'ops.ts'), 'utf8');
+
+    expect(ops).toContain("?? '127.0.0.1'");
+    // And the comment that asserted the API did the opposite is gone with it.
+    expect(ops).not.toContain('because it must be reachable;');
+  });
+
+  /** The Caddyfile said this all along. Now it is true. */
+  it('matches what the Caddyfile claims about it', () => {
+    const caddy = readFileSync(
+      join(__dirname, '..', '..', 'scripts', 'deploy', 'Caddyfile'),
+      'utf8',
+    );
+
+    expect(caddy).toContain('127.0.0.1');
+    expect(caddy).toContain('reverse_proxy');
+  });
+});
+
