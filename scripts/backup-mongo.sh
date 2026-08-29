@@ -90,8 +90,79 @@ stamp() {
   date -u +%Y-%m-%dT%H-%M-%SZ
 }
 
+# ── Which database, and why the URI is not the answer ───────────────────────
+#
+# **The API ignores the URI's path entirely.** `databaseName()` in
+# `apps/api/src/db/client.ts` reads `MONGODB_DB` and falls back to the literal
+# `homefarm`; the path segment of `MONGODB_URI` selects nothing. This script did
+# the opposite — it handed `mongodump` a URI and let the path decide — so on any
+# box where the two disagree it backed up a database **nothing writes to** and
+# reported success at whatever size that empty database dumps to.
+#
+# That is not a hypothetical shape. `setup-mongo.sh` prints a URI ending in the
+# name it was run with, `--keep-db` on the rename leaves `MONGODB_DB` naming
+# something else, and `backup.env` is a separate file from `api.env`, so the two
+# halves are edited at different times by different steps.
+#
+# Resolved the same way the API resolves it, so "the database that is backed up"
+# and "the database that is live" cannot come apart.
+resolve_db() {
+  local configured="${MONGODB_DB:-}"
+  configured="${configured#"${configured%%[![:space:]]*}"}"
+  configured="${configured%"${configured##*[![:space:]]}"}"
+
+  if [[ -n "$configured" ]]; then
+    printf '%s' "$configured"
+  else
+    printf 'homefarm'
+  fi
+}
+
+# The path segment, if the URI carries one. Read only to say so — nothing
+# selects on it.
+uri_db() {
+  local rest="${1#mongodb://}"
+  rest="${rest#mongodb+srv://}"
+  rest="${rest#*@}"
+  rest="${rest%%\?*}"
+
+  case "$rest" in
+    */*) printf '%s' "${rest#*/}" ;;
+    *) printf '' ;;
+  esac
+}
+
+# The same URI with the database stripped out, so `--db` is the only thing
+# naming one. `mongodump` refuses `--db` alongside a URI that already names a
+# database, and the query string — which carries `authSource` — has to survive.
+uri_without_db() {
+  local uri="$1" scheme="" rest query=""
+
+  case "$uri" in
+    mongodb+srv://*) scheme="mongodb+srv://"; rest="${uri#mongodb+srv://}" ;;
+    mongodb://*) scheme="mongodb://"; rest="${uri#mongodb://}" ;;
+    *) printf '%s' "$uri"; return ;;
+  esac
+
+  case "$rest" in
+    *\?*) query="?${rest#*\?}"; rest="${rest%%\?*}" ;;
+  esac
+
+  # Only the path, never the credentials: a password may contain a slash.
+  local creds="" hostpart="$rest"
+  case "$rest" in
+    *@*) creds="${rest%%@*}@"; hostpart="${rest#*@}" ;;
+  esac
+  hostpart="${hostpart%%/*}"
+
+  printf '%s%s%s/%s' "$scheme" "$creds" "$hostpart" "$query"
+}
+
 backup() {
   need mongodump 'Install the MongoDB Database Tools.'
+  # Same package as mongodump, and this path now reads the archive back before
+  # it uploads it.
+  need mongorestore 'Install the MongoDB Database Tools.'
   need age 'https://github.com/FiloSottile/age — single static binary, arm64 builds.'
   need aws 'Install the AWS CLI.'
 
@@ -128,13 +199,70 @@ backup() {
   # invariant for a point-in-time snapshot to protect. Restoring to an oplog
   # position would need a replica set, a `backup` role on `admin`, and a reversal
   # of `setup-mongo.sh`'s recorded decision — all three, or none.
-  mongodump --uri="$MONGODB_URI" --archive="$plain" --gzip --quiet
+  local db_name uri_name base
+  db_name="$(resolve_db)"
+  uri_name="$(uri_db "$MONGODB_URI")"
+  base="$(uri_without_db "$MONGODB_URI")"
 
-  # A failed dump can still leave a small, structurally valid file. Uploading
-  # one is worse than failing, because it looks like a backup in the listing.
-  local size
+  # Said out loud when the two disagree, because the operator almost certainly
+  # believes the URI is the one that counts. It is not, here or in the API.
+  if [[ -n "$uri_name" && "$uri_name" != "$db_name" ]]; then
+    printf 'The URI names "%s" and the API reads "%s" (MONGODB_DB). Backing up "%s", which is the live one.\n' \
+      "$uri_name" "$db_name" "$db_name"
+  fi
+
+  mongodump --uri="$base" --db="$db_name" --archive="$plain" --gzip --quiet
+
+  # ── Is it a backup of THIS database, or merely a file ─────────────────────
+  #
+  # **The only check here was `size >= 4096`**, a constant with no relation to
+  # anything. A farm database with photos runs to hundreds of megabytes; a
+  # five-kilobyte archive passed it, uploaded, moved the marker, and sat in the
+  # listing looking exactly like a backup. Combined with the wrong-database
+  # defect above, the likeliest way to produce one was a correct dump of an
+  # empty database.
+  #
+  # So the floor comes from the source. `dataSize` is what the server says this
+  # database holds; gzip on BSON does well but not fiftyfold, so an archive
+  # under a fiftieth of it is not a copy of this database whatever else it is.
+  # Deliberately loose — this is a guard against a collapse, not a compression
+  # model, and a false alarm here fails a backup that was fine.
+  local size floor="$ARCHIVE_FLOOR_BYTES" data_size=""
   size="$(stat -c%s "$plain" 2>/dev/null || stat -f%z "$plain")"
-  (( size >= ARCHIVE_FLOOR_BYTES )) || die "Dump is only ${size} bytes. Refusing to upload it."
+
+  if command -v mongosh >/dev/null 2>&1; then
+    data_size="$(mongosh "$base" --quiet --eval "
+      print(db.getSiblingDB('${db_name}').stats().dataSize);
+    " 2>/dev/null | tr -dc '0-9' || true)"
+  fi
+
+  if [[ -n "$data_size" ]] && (( data_size > 0 )); then
+    local derived=$(( data_size / 50 ))
+    (( derived > floor )) && floor="$derived"
+  fi
+
+  (( size >= floor )) || die "Dump of '${db_name}' is ${size} bytes against a floor of ${floor}${data_size:+ (the database holds ${data_size} bytes).}
+  That is not a copy of this database. Refusing to upload it, because an archive
+  in the bucket at this size is worse than none: it looks like a backup."
+
+  # ── And that it can be read back ──────────────────────────────────────────
+  #
+  # Size says the bytes are there; this says they are an archive. `--dryRun`
+  # walks the whole file and reports what it would restore without writing
+  # anything, so a truncated dump — the shape a killed `mongodump` leaves — is
+  # caught here rather than on the day somebody needs it.
+  #
+  # Guarded on the flag existing rather than assumed: the tools are installed
+  # from a distribution package whose version this project does not pin, and a
+  # verification that fails a good backup is worse than one that is skipped and
+  # says so.
+  if mongorestore --help 2>&1 | grep -q -- '--dryRun'; then
+    mongorestore --uri="$base" --archive="$plain" --gzip --dryRun --quiet >/dev/null 2>&1 \
+      || die "The archive of '${db_name}' cannot be read back. It is ${size} bytes and mongorestore
+  will not parse it, which is what a truncated or interrupted dump looks like."
+  else
+    printf 'This mongorestore has no --dryRun, so the archive was checked by size only.\n'
+  fi
 
   age --recipient "$HOMEFARM_BACKUP_RECIPIENT" --output "$sealed" "$plain"
 
@@ -172,7 +300,8 @@ backup() {
     date -u +%s > "$MARKER" 2>/dev/null || true
   fi
 
-  printf 'Backed up %s (%s bytes plaintext, %s bytes in the bucket)\n' "$name" "$size" "$landed"
+  printf 'Backed up %s from database %s (%s bytes plaintext, %s bytes in the bucket)\n' \
+    "$name" "$db_name" "$size" "$landed"
 }
 
 list() {
@@ -198,15 +327,31 @@ restore() {
 
   WORK="$(mktemp -d)"
   local sealed="$WORK/archive.age" plain="$WORK/archive.gz"
+  # The database comes out of the archive, so the URI must not also name one.
+  local base
+  base="$(uri_without_db "$MONGODB_URI")"
 
   aws s3 cp "${HOMEFARM_BACKUP_BUCKET%/}/$key" "$sealed" --only-show-errors
   age --decrypt --identity "$HOMEFARM_BACKUP_IDENTITY" --output "$plain" "$sealed"
 
-  printf 'Restoring %s into %s\n' "$key" "${MONGODB_URI%%\?*}"
+  # ── Which database this lands in, said plainly ────────────────────────────
+  #
+  # **The archive decides, not the URI.** `mongorestore --archive` restores each
+  # namespace under the name it was dumped as, so pointing the URI at a
+  # differently-named target does not move it — the records arrive under the old
+  # name and the operator finds an empty database where they were looking.
+  #
+  # Not changed, said. Renaming on restore is `--nsFrom`/`--nsTo` and it is a
+  # deliberate act with its own arguments; guessing at it inside the one path
+  # that runs after a farm has already lost data is the wrong place to be clever.
+  printf 'Restoring %s into the server at %s\n' "$key" "${base%%\?*}"
+  printf 'It lands under the database name it was dumped as, which the archive carries.\n'
+  printf 'To put it somewhere else, restore by hand with --nsFrom and --nsTo.\n'
+
   # No `--oplogReplay`: the archive carries no oplog to replay, because the dump
   # above takes none. Passing it against an archive without one is an error, so
   # this was unusable for exactly as long as the dump was.
-  mongorestore --uri="$MONGODB_URI" --archive="$plain" --gzip
+  mongorestore --uri="$base" --archive="$plain" --gzip
 
   # The EXIT trap would get this anyway; doing it here means the plaintext is
   # gone before the success message rather than after it.
