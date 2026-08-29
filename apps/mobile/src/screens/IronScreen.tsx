@@ -37,7 +37,9 @@ export function IronScreen(): React.ReactElement {
   const inventory = useLive(listInventory);
   const [chosen, setChosen] = useState<string | null>(null);
 
-  if (machines === null) return <Screen title="Iron" back>{null}</Screen>;
+  // `wide` while it reads, because the hub it becomes is wide and the hero
+  // sits inside that cap — see `Loading`.
+  if (machines === null) return <Screen title="Iron" back wide>{null}</Screen>;
 
   const low = runningLow(inventory ?? []);
 

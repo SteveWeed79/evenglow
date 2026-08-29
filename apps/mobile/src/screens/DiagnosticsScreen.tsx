@@ -68,7 +68,10 @@ export function DiagnosticsScreen(): React.ReactElement {
     await refresh();
   }, [refresh]);
 
-  if (report === null) return <Screen title="Sync">{null}</Screen>;
+  // `back`, because this screen is pushed. Without it the wait draws a tab
+  // header — no way out, a quick-add and a gear — and lays the content out
+  // as though a rail were taking width a pushed screen never gives up.
+  if (report === null) return <Screen title="Sync" back>{null}</Screen>;
 
   return (
     <Screen title="Sync" back>

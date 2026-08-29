@@ -103,7 +103,9 @@ export function HistoryScreen(): React.ReactElement {
   const [opened, setOpened] = useState<number | undefined>(undefined);
   const [month, setMonth] = useState<number | undefined>(undefined);
 
-  if (days === null) return <Loading title="What happened" />;
+  // `back={false}`: this is a tab, and the wait must not draw a chevron that
+  // goes nowhere or lay itself out as though the rail were not there.
+  if (days === null) return <Loading title="What happened" back={false} />;
 
   if (days.length === 0) {
     return (

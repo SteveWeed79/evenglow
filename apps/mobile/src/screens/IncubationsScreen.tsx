@@ -29,7 +29,8 @@ export function IncubationsScreen(): React.ReactElement {
 
   const incubations = useLive(listIncubations);
 
-  if (incubations === null) return <Screen title="Eggs under">{null}</Screen>;
+  // `back` while it reads, for the same reason the loaded screen has it.
+  if (incubations === null) return <Screen title="Eggs under" back>{null}</Screen>;
 
   const running = incubations.filter((i) => i.hatchedAt === undefined);
   const finished = incubations.filter((i) => i.hatchedAt !== undefined);

@@ -58,7 +58,8 @@ export function NumbersScreen(): React.ReactElement {
   const units = useUnits();
   const { colors } = useTheme();
 
-  if (numbers === null) return <Loading title="The numbers" />;
+  // `wide`, because that is what it becomes — see `Loading`.
+  if (numbers === null) return <Loading title="The numbers" wide />;
 
   const { now, before } = numbers;
 

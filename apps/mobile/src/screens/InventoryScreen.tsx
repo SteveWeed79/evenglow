@@ -27,7 +27,8 @@ export function InventoryScreen(): React.ReactElement {
   const nav = useNav();
   const items = useLive(listInventory);
 
-  if (items === null) return <Screen title="The shelf">{null}</Screen>;
+  // `back` while it reads, for the same reason the loaded screen has it.
+  if (items === null) return <Screen title="The shelf" back>{null}</Screen>;
 
   const low = runningLow(items);
 

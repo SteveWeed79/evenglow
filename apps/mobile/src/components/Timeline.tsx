@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { type HistoryDay, type HistoryEvent, listHistory } from '@homefarm/core/read/history';
 import { Confirm, Failure, useSaver } from './Form';
 import { Icon } from './Icon';
-import { Loading } from './Missing';
+import { LoadingPanel } from './Missing';
 import { Body, Panel } from './Panel';
 import { Touch } from './Touch';
 import { useLive } from '../hooks/useLive';
@@ -83,7 +83,8 @@ export function Timeline({
   const read = useCallback(() => listHistory(units, { subject: key.split(',') }), [units, key]);
   const days = useLive(read, 'what happened here');
 
-  if (days === null) return <Loading title={label} />;
+  // A panel, not a screen — see `LoadingPanel`.
+  if (days === null) return <LoadingPanel label={label} />;
 
   if (days.length === 0) {
     return (

@@ -132,7 +132,8 @@ export function TrendScreen({ route }: ScreenProps<'Trend'>): React.ReactElement
 
   const data = useLive(read, 'the numbers');
 
-  if (groups === null) return <Loading title="Numbers" />;
+  // `wide`, because that is what it becomes — see `Loading`.
+  if (groups === null) return <Loading title="Numbers" wide />;
   if (group === null) return <Missing title="Numbers" what="That group" />;
 
   return (
