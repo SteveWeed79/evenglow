@@ -17,6 +17,7 @@ import { Tally } from '../components/Tally';
 import { useLive } from '../hooks/useLive';
 import { useLeave } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
+import { reportTrouble } from '../hooks/useTrouble';
 import type { ScreenProps } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, TYPE } from '../theme/tokens';
@@ -89,50 +90,81 @@ export function HarvestScreen({ route }: ScreenProps<'Harvest'>): React.ReactEle
     setMassUnit((current) => (current === heavy || current === light ? current : heavy));
   }, [heavy, light]);
 
-  const { saving, failure, save } = useSaver(useLeave());
+  const leave = useLeave();
+  const { saving, failure, save } = useSaver(leave);
 
   const value = Number(amount);
   const massUg = Number.isFinite(value) && value > 0 ? massEntryToUg(value, massUnit) : null;
 
+  /**
+   * The writes, and nothing about who hears if they fail.
+   *
+   * **This screen has two entries and they need opposite handling**, which is
+   * why the reporting moved out of here. The typed form below is an ordinary
+   * form: `useSaver` catches, disables the button while it runs and prints the
+   * failure on the screen. The tally is not — `Tally` holds a count it has
+   * already cleared optimistically, and only a **rejection** puts it back.
+   *
+   * Wrapping the tally in the saver meant a failed pick was cleared, announced
+   * with a success sentence and a success haptic, and shown an error panel
+   * beside it. So the throw is left in, and the two callers differ in who
+   * catches it.
+   */
   const commit = useCallback(
-    (count: number | null) => {
+    async (count: number | null) => {
       // The contract refuses a mass harvest with no mass and a count harvest
       // with no count, so the guard is here rather than being discovered as a
       // rejected mutation.
       if (unit === 'mass' ? massUg === null : count === null) return;
 
-      void save(async () => {
-        await log({
-          entity: 'harvest',
-          op: 'create',
-          targetId: newId(),
-          payload: {
-            plantingId,
-            occurredAt: Date.now(),
-            unit,
-            ...(unit === 'mass' ? { massUg } : { count }),
-            ...(note.trim() === '' ? {} : { note: note.trim() }),
-          },
-        });
-
-        /**
-         * The first pick moves the planting to `harvesting`.
-         *
-         * That status is what stops `growingDues` producing "should be ready"
-         * every day for the rest of the season — harvest is the one stage with
-         * no completion field of its own, because picking goes on for weeks.
-         */
-        if (planting !== null && planting.status !== 'harvesting') {
-          await log({
-            entity: 'planting',
-            op: 'update',
-            targetId: plantingId,
-            payload: { status: 'harvesting' },
-          });
-        }
+      await log({
+        entity: 'harvest',
+        op: 'create',
+        targetId: newId(),
+        payload: {
+          plantingId,
+          occurredAt: Date.now(),
+          unit,
+          ...(unit === 'mass' ? { massUg } : { count }),
+          ...(note.trim() === '' ? {} : { note: note.trim() }),
+        },
       });
+
+      /**
+       * The first pick moves the planting to `harvesting`.
+       *
+       * That status is what stops `growingDues` producing "should be ready"
+       * every day for the rest of the season — harvest is the one stage with
+       * no completion field of its own, because picking goes on for weeks.
+       */
+      if (planting !== null && planting.status !== 'harvesting') {
+        await log({
+          entity: 'planting',
+          op: 'update',
+          targetId: plantingId,
+          payload: { status: 'harvesting' },
+        });
+      }
     },
-    [save, log, plantingId, unit, massUg, note, planting],
+    [log, plantingId, unit, massUg, note, planting],
+  );
+
+  /**
+   * The tally's caller: `Tally` gets the rejection so it can put the count
+   * back, and the banner still gets the trace. It leaves on success the way
+   * the saver does for the form.
+   */
+  const tallied = useCallback(
+    async (count: number) => {
+      try {
+        await commit(count);
+      } catch (error) {
+        reportTrouble('saving that', error);
+        throw error;
+      }
+      leave();
+    },
+    [commit, leave],
   );
 
   if (plantings === null) return <Loading title="Harvest" />;
@@ -181,7 +213,7 @@ export function HarvestScreen({ route }: ScreenProps<'Harvest'>): React.ReactEle
           <Primary
             label="Log it"
             disabled={saving || massUg === null}
-            onPress={() => commit(null)}
+            onPress={() => void save(() => commit(null))}
             testID="save-harvest"
           />
         </>
@@ -198,10 +230,8 @@ export function HarvestScreen({ route }: ScreenProps<'Harvest'>): React.ReactEle
             label={`${variety?.name ?? 'Harvest'} from this bed`}
             unit={unit === 'bunch' ? 'bunches' : 'picked'}
             steps={[1, 5, 10]}
-            onCommit={(count) => commit(count)}
+            onCommit={tallied}
           />
-
-          <Failure message={failure} />
         </>
       )}
     </Screen>

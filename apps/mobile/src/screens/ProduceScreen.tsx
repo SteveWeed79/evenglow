@@ -13,7 +13,7 @@ import {
 } from '@homefarm/contracts';
 import { listGroups, produceToday } from '@homefarm/core/read/groups';
 import { withdrawalsBySubject } from '@homefarm/core/read/withdrawals';
-import { Choice, Failure, Field, TextField, useSaver } from '../components/Form';
+import { Choice, Field, TextField } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
@@ -22,6 +22,7 @@ import { WithdrawalBanner } from '../components/WithdrawalBanner';
 import { useLive } from '../hooks/useLive';
 import { useLeave } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
+import { reportTrouble } from '../hooks/useTrouble';
 import { useUnits } from '../hooks/useUnits';
 import type { ScreenProps } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
@@ -97,11 +98,24 @@ export function ProduceScreen({ route }: ScreenProps<'Produce'>): React.ReactEle
   const [kind, setKind] = useState<Produce>('milk');
   const [label, setLabel] = useState('');
 
-  const { failure, save } = useSaver(useLeave());
+  const leave = useLeave();
 
+  /**
+   * `Tally` owns the outcome, not a saver wrapped around it.
+   *
+   * This went through `useSaver`, which catches, records the failure and
+   * **returns normally** — while `Tally` puts the count back only on a
+   * rejection. A failed write therefore cleared the milking, printed a success
+   * sentence under a success haptic, and showed an error panel beside it. The
+   * `void` at the call site swallowed the promise on top of that.
+   *
+   * `Tally` already holds the count, shows the failure in an assertive live
+   * region and gives the haptics, so it keeps the whole job and the error is
+   * let out. The banner report stays: that audience is whoever fixes it.
+   */
   const commit = useCallback(
     async (amount: number, acknowledged: boolean) => {
-      await save(async () => {
+      try {
         await log({
           entity: 'productionLog',
           op: 'create',
@@ -118,9 +132,15 @@ export function ProduceScreen({ route }: ScreenProps<'Produce'>): React.ReactEle
             ...(acknowledged ? { withdrawalAcknowledged: true } : {}),
           },
         });
-      });
+      } catch (error) {
+        reportTrouble('saving that', error);
+        // Out, not swallowed: `Tally` puts the amount back and says why.
+        throw error;
+      }
+
+      leave();
     },
-    [save, log, groupId, kind, label, units],
+    [leave, log, groupId, kind, label, units],
   );
 
   if (groups === null) return <Loading title="Produce" />;
@@ -163,10 +183,9 @@ export function ProduceScreen({ route }: ScreenProps<'Produce'>): React.ReactEle
         // millilitres. One goat still uses the steps; see `typed`.
         typed
         requireConfirm={withdrawal !== null}
-        onCommit={(value, acknowledged) => void commit(value, acknowledged)}
+        onCommit={commit}
       />
 
-      <Failure message={failure} />
     </Screen>
   );
 }
