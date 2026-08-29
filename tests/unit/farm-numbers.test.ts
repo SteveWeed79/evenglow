@@ -223,3 +223,102 @@ describe('what it will not pretend to know', () => {
     expect(before?.animals.head).toBe(6);
   });
 });
+
+/**
+ * ── Services done, not schedules wearing a recent date ─────────────────────
+ *
+ * A `service` is a schedule and holds only its **newest** completion, so
+ * counting schedules undercounts twice over. A machine serviced six times in a
+ * year counted one, because the six dates overwrote each other; and a schedule
+ * serviced in 2025 and again in 2026 counted zero for 2025, because the field
+ * had moved on.
+ *
+ * `hadOne` asked the same way, so a machinery-only farm whose only record of
+ * last year was a service it has since repeated lost its entire previous-year
+ * column — every figure on it, not just the service count.
+ *
+ * Nothing here covered services at all, which is why it went unnoticed.
+ */
+describe('what a year of servicing counts as', () => {
+  const OIL = newId();
+
+  async function aSchedule(over: Record<string, unknown> = {}): Promise<void> {
+    await enqueue({
+      entity: 'maintenance',
+      op: 'create',
+      targetId: OIL,
+      payload: { equipmentId: MACHINE, title: 'Oil and filter', intervalHours: 200, ...over },
+    });
+  }
+
+  const serviced = (at: number): Promise<unknown> =>
+    enqueue({
+      entity: 'serviceCompletion',
+      op: 'create',
+      targetId: newId(),
+      payload: { serviceId: OIL, completedAt: at },
+    });
+
+  it('counts every service on one schedule, not the schedule', async () => {
+    await aSchedule();
+    await serviced(on(YEAR, 2, 4));
+    await serviced(on(YEAR, 5, 4));
+    await serviced(on(YEAR, 8, 4));
+
+    expect((await readFarmNumbers(YEAR)).now.machines.services).toBe(3);
+  });
+
+  /** The year that vanished: the schedule's own field had moved on to this one. */
+  it('still counts last years service after the schedule was serviced again', async () => {
+    await aSchedule();
+    await serviced(on(YEAR - 1, 5, 4));
+    await serviced(on(YEAR, 5, 4));
+
+    const { now, before } = await readFarmNumbers(YEAR);
+
+    expect(now.machines.services).toBe(1);
+    expect(before?.machines.services).toBe(1);
+  });
+
+  /**
+   * A farm whose ONLY record of last year is a service it has since repeated.
+   * `hadOne` read the schedule's field, found this year, and answered that
+   * there was no previous year at all.
+   */
+  it('gives a machinery-only farm its previous year back', async () => {
+    await aSchedule();
+    await serviced(on(YEAR - 1, 5, 4));
+    await serviced(on(YEAR, 5, 4));
+
+    expect((await readFarmNumbers(YEAR)).before).not.toBeNull();
+  });
+
+  /**
+   * A schedule written before completions were events carries its date on the
+   * record and has no event beside it. Still counted — the same fallback
+   * `read/iron.ts` and `read/history.ts` make.
+   */
+  it('counts a legacy schedule that carries its own date', async () => {
+    await aSchedule({ lastDoneAtDate: on(YEAR, 5, 4) });
+
+    expect((await readFarmNumbers(YEAR)).now.machines.services).toBe(1);
+  });
+
+  /**
+   * And never both. A schedule with events also carries the newest date on the
+   * record, so counting the field as well would count that service twice.
+   */
+  it('does not count a serviced schedule twice', async () => {
+    await aSchedule({ lastDoneAtDate: on(YEAR, 5, 4) });
+    await serviced(on(YEAR, 5, 4));
+
+    expect((await readFarmNumbers(YEAR)).now.machines.services).toBe(1);
+  });
+
+  /** A plan never carried out is an intention, not work done. */
+  it('counts a schedule nobody has ever done nowhere', async () => {
+    await aSchedule();
+
+    expect((await readFarmNumbers(YEAR)).now.machines.services).toBe(0);
+  });
+});

@@ -1,14 +1,14 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { listInventory, listMachines, listServices } from '@homefarm/core/read/iron';
-import { newId, partsNote } from '@homefarm/contracts';
+import { jobTitle, newId, partsNote } from '@homefarm/contracts';
 import { Confirm, Failure, Field, NumberField, Primary, Toggle, useSaver } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
 import { useLeave } from '../hooks/useNav';
-import { useLog } from '../hooks/useSync';
+import { useLog, useLogAll } from '../hooks/useSync';
 import type { ScreenProps } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, TYPE } from '../theme/tokens';
@@ -29,6 +29,7 @@ import { FONTS, TYPE } from '../theme/tokens';
 export function ServiceDoneScreen({ route }: ScreenProps<'ServiceDone'>): React.ReactElement {
   const { serviceId } = route.params;
   const log = useLog();
+  const logAll = useLogAll();
   const { colors } = useTheme();
 
   const services = useLive(listServices);
@@ -90,18 +91,28 @@ export function ServiceDoneScreen({ route }: ScreenProps<'ServiceDone'>): React.
 
     void save(async () => {
       /**
-       * An event, not a field on the schedule.
+       * The service and every job it raised, as one thing that happened.
        *
-       * This wrote `lastDoneAtDate` onto the `maintenance` record, which every
-       * service overwrote — so a tractor serviced every spring for six years
-       * carried one date, and the resale service record `Evenglow-Masterplan.md`
-       * advertises could not be produced from it. `listServices` still shows
-       * `lastDoneAtDate` and `lastDoneAtHours`, filled from the newest of these,
-       * so the panel above and `serviceDue` read exactly what they always did.
+       * **This was a `log` per mutation, and the order was argued for.** The
+       * note said the service went first because *"a job raised against a
+       * service that was never marked done would sit on Today pointing at
+       * nothing"* — sound reasoning about the wrong mechanism. `enqueue`
+       * validates and stores one at a time, so the completion was already
+       * durable when the first job was refused. The screen showed a failure,
+       * the farm pressed again, and the second press wrote a **second
+       * completion**; the job it had actually noticed was raised neither time.
+       *
+       * What made that reachable was a title of `${line} — ${name}`: a check
+       * is bounded at 80 and a machine name at 80, against a cap of 120. See
+       * `jobTitle`, which is now the thing that composes it and cannot exceed
+       * the cap.
+       *
+       * `enqueueAll` is all of them or none of them, which is the ordering
+       * argument made properly: there is no half-done state left to order.
        */
-      await log({
-        entity: 'serviceCompletion',
-        op: 'create',
+      const completion = {
+        entity: 'serviceCompletion' as const,
+        op: 'create' as const,
         targetId: newId(),
         payload: {
           serviceId: service.id,
@@ -110,7 +121,7 @@ export function ServiceDoneScreen({ route }: ScreenProps<'ServiceDone'>): React.
             ? { atHours: reading }
             : {}),
         },
-      });
+      };
 
       /**
        * A failed check becomes a job, and that is the whole point of the list.
@@ -121,27 +132,24 @@ export function ServiceDoneScreen({ route }: ScreenProps<'ServiceDone'>): React.
        * hands dirty — to still exist at four in the afternoon. `task` is the
        * one authored due kind and this is exactly what it is for.
        *
-       * Written after the service, in the order that survives a partial
-       * failure best: the service being recorded is the fact, and a job raised
-       * against a service that was never marked done would sit on Today
-       * pointing at nothing. No date, so they land on the Jobs list and never
-       * nag; `subjectId` ties each one to the machine it was found on.
+       * No date, so they land on the Jobs list and never nag; `subjectId` ties
+       * each one to the machine it was found on.
        */
-      for (const line of wrong) {
-        await log({
-          entity: 'task',
-          op: 'create',
-          targetId: newId(),
-          payload: {
-            title: `${line} — ${machine?.name ?? service.title}`,
-            recurrence: 'none',
-            ...(machine === null ? {} : { subjectId: machine.id }),
-            note: `Found while doing ${service.title}.`,
-          },
-        });
-      }
+      const jobs = wrong.map((line) => ({
+        entity: 'task' as const,
+        op: 'create' as const,
+        targetId: newId(),
+        payload: {
+          title: jobTitle(line, machine?.name ?? service.title),
+          recurrence: 'none' as const,
+          ...(machine === null ? {} : { subjectId: machine.id }),
+          note: `Found while doing ${service.title}.`,
+        },
+      }));
+
+      await logAll([completion, ...jobs]);
     });
-  }, [save, log, service, atHours, wrong, machine]);
+  }, [save, logAll, service, atHours, wrong, machine]);
 
   const drop = useCallback(() => {
     if (service === null) return;

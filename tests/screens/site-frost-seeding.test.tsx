@@ -125,6 +125,40 @@ describe('a farm that has already given its frost dates', () => {
   });
 
   /**
+   * ── The zone that could not be taken back out ────────────────────────────
+   *
+   * An emptied box omitted the key, and an omitted key **keeps its old value**
+   * — that is the whole of `contracts/clearing.ts`. So a farm that had typed
+   * the wrong zone could not correct it to "I do not know": the box emptied,
+   * the save succeeded, and the old zone came back with every hardiness warning
+   * it drives.
+   *
+   * `null` is the wire's word for cleared.
+   */
+  it('clears the zone when the box is emptied', async () => {
+    await aFarmThatAnswered({ zone: { system: 'usda', value: '6b' } });
+    const screen = await mount(<SiteSetupScreen />);
+
+    await screen.type('site-zone', '');
+    await screen.press('save-site');
+
+    expect((await storedSite()).zone).toBeUndefined();
+    screen.unmount();
+  });
+
+  /** And a zone that is merely changed is still changed, not cleared. */
+  it('replaces a zone that is typed over', async () => {
+    await aFarmThatAnswered({ zone: { system: 'usda', value: '6b' } });
+    const screen = await mount(<SiteSetupScreen />);
+
+    await screen.type('site-zone', '8a');
+    await screen.press('save-site');
+
+    expect((await storedSite()).zone).toEqual({ system: 'usda', value: '8a' });
+    screen.unmount();
+  });
+
+  /**
    * A farm with a position and no frost dates is a real state — the weather
    * screen writes `lat`/`lon` onto this same entity — and it should meet the
    * suggestion rather than a blank. So the seeding is per-field, not one branch

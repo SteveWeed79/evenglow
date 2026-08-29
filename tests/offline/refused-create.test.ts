@@ -133,6 +133,76 @@ beforeEach(freshStore);
     expect(await groupNames()).toEqual(['Alpha']);
   });
 
+  /**
+   * ── The retry the server could never decide ──────────────────────────────
+   *
+   * A mutation's id is the **server's idempotency key**. `sync/apply.ts` upserts
+   * the envelope first and stamps the outcome after, so a refusal reached after
+   * the log write is stored against that id — and a second send under the same
+   * id finds `upsertedCount === 0`, reads `decided` back out of the log, and
+   * returns the identical refusal. For ever, and deliberately: *"a refusal
+   * stays a refusal."*
+   *
+   * That is right for a replay, where the client never got the answer. It is
+   * wrong for "Send it again", which is not a replay — the two refusals whose
+   * own messages tell the farmer to retry are precisely the ones that could
+   * never work. A mistyped hour meter reading cannot be corrected by recording
+   * a better one (the meter refuses anything lower), so the correction goes out
+   * as an edited payload under a key the server has already decided.
+   *
+   * So a retry carries a new id. The server keeps the original and its refusal.
+   */
+  it('sends a retry under an id the server has not already decided', async () => {
+    const sent: string[] = [];
+    const record: SyncTransport = (mutations: Mutation[]) => {
+      sent.push(...mutations.map((m) => m.id));
+      return Promise.resolve({
+        status: 200,
+        body: {
+          results: mutations.map((m) => ({ id: m.id, status: 'rejected' as const, reason: 'no' })),
+          serverTs: Date.now(),
+        },
+      });
+    };
+
+    await enqueue(flock());
+    await flushOnce(record);
+
+    const [refused] = await listRejected();
+    await retryRejected(refused!.id);
+    await flushOnce(record);
+
+    expect(sent).toHaveLength(2);
+    // The whole finding: the second send must not reuse the decided key.
+    expect(sent[1]).not.toBe(sent[0]);
+    expect(sent[0]).toBe(refused!.id);
+  });
+
+  /** A corrected payload goes out with it — that is what a retry is for. */
+  it('sends the corrected payload under the new id', async () => {
+    const sent: Mutation[] = [];
+    const record: SyncTransport = (mutations: Mutation[]) => {
+      sent.push(...mutations);
+      return Promise.resolve({
+        status: 200,
+        body: {
+          results: mutations.map((m) => ({ id: m.id, status: 'rejected' as const, reason: 'no' })),
+          serverTs: Date.now(),
+        },
+      });
+    };
+
+    await enqueue(flock());
+    await flushOnce(record);
+
+    const [refused] = await listRejected();
+    await retryRejected(refused!.id, { name: 'Corrected', species: 'chicken', count: 3 });
+    await flushOnce(record);
+
+    expect(sent[1]?.id).not.toBe(sent[0]?.id);
+    expect((sent[1]?.payload as { name?: string }).name).toBe('Corrected');
+  });
+
   it('leaves every other record alone', async () => {
     const kept = newId();
     await enqueue({ ...flock(kept), payload: { ...GROUP, name: 'Kept' } });
@@ -192,6 +262,121 @@ beforeEach(freshStore);
     await discardRejected(refused!.id);
 
     expect(await groupNames()).toEqual(['Alpha']);
+  });
+
+  /**
+   * ── The residue a merge left behind, permanently ─────────────────────────
+   *
+   * `restoreBefore` used to compare `updatedAt` against the value this device's
+   * optimistic write produced, and skip the restore entirely when it had moved
+   * — "newer wins", which is right whenever the newer write touched the same
+   * field and wrong the rest of the time.
+   *
+   * An `update` arriving from a pull **merges** (`nextRecordValue`), so another
+   * device editing `count` moves `updatedAt` while leaving this device's
+   * refused `name` exactly where the optimistic write put it. The discard then
+   * restored nothing **and dropped the pre-image anyway**, so the record kept a
+   * name the server had refused, no other device had, and nothing could ever
+   * repair.
+   *
+   * The question is asked per field now: what this command wrote is still
+   * standing, so it goes back; `count` was changed by somebody else, so it
+   * stays.
+   */
+  it('takes back a refused field even when a merge has moved the record on', async () => {
+    const targetId = newId();
+    await enqueue(flock(targetId));
+    await flushOnce(respondAll('applied'));
+
+    await enqueue({ entity: 'flock', op: 'update', targetId, payload: { name: 'Edited' } });
+    await flushOnce(respondAll('rejected', 'no'));
+
+    // Another device changes something else about the same group. The merge
+    // keeps this device's refused name and moves `updatedAt`.
+    await pullOnce(() =>
+      Promise.resolve({
+        status: 200,
+        body: {
+          mutations: [
+            {
+              schemaVersion: 1,
+              id: newId(),
+              targetId,
+              entity: 'flock' as const,
+              op: 'update' as const,
+              payload: { count: 20 },
+              deviceId: '00000000-0000-4000-8000-0000000000ff',
+              clientSeq: 0,
+              clientTs: 1,
+              serverTs: 9_000,
+            },
+          ],
+          through: 9_000,
+          throughId: null,
+          more: false,
+        },
+      }),
+    );
+
+    // The state the bug lived in: somebody else's count, this device's refused
+    // name, and an `updatedAt` that no longer matches the optimistic write.
+    expect(await groupNames()).toEqual(['Edited']);
+
+    const [refused] = await listRejected();
+    await discardRejected(refused!.id);
+
+    const [row] = await readRecordsByEntity('flock');
+    const value = row?.value as { name?: string; count?: number };
+
+    // The refused name is gone...
+    expect(value.name).toBe('Alpha');
+    // ...and the other device's edit is untouched.
+    expect(value.count).toBe(20);
+  });
+
+  /**
+   * And where the newer write DID touch the same field, newer still wins. That
+   * is the rule the old `updatedAt` test was reaching for; it simply could not
+   * tell the two cases apart.
+   */
+  it('leaves a field somebody else has since changed', async () => {
+    const targetId = newId();
+    await enqueue(flock(targetId));
+    await flushOnce(respondAll('applied'));
+
+    await enqueue({ entity: 'flock', op: 'update', targetId, payload: { name: 'Edited' } });
+    await flushOnce(respondAll('rejected', 'no'));
+
+    await pullOnce(() =>
+      Promise.resolve({
+        status: 200,
+        body: {
+          mutations: [
+            {
+              schemaVersion: 1,
+              id: newId(),
+              targetId,
+              entity: 'flock' as const,
+              op: 'update' as const,
+              payload: { name: 'Named by somebody else' },
+              deviceId: '00000000-0000-4000-8000-0000000000ff',
+              clientSeq: 0,
+              clientTs: 1,
+              serverTs: 9_000,
+            },
+          ],
+          through: 9_000,
+          throughId: null,
+          more: false,
+        },
+      }),
+    );
+
+    const [refused] = await listRejected();
+    await discardRejected(refused!.id);
+
+    // Not reverted to 'Alpha': the farm has moved past both values.
+    expect(await groupNames()).toEqual(['Named by somebody else']);
   });
 
   /** And the same for a delete, which left the record hidden for ever. */

@@ -30,6 +30,8 @@ const NOTHING: SweepReport = {
   orphaned: 0,
   refused: 0,
   capped: false,
+  rowsFailed: 0,
+  farmsFailed: 0,
 };
 
 /**

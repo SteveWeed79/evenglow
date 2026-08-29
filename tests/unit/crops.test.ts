@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { CROP_DEFAULTS, cropDefaults, LIBRARY_VARIETIES } from '@homefarm/contracts';
+import { CROP_DEFAULTS, cropDefaults, LIBRARY_VARIETIES, searchVarieties } from '@homefarm/contracts';
 import { expand } from '../../packages/contracts/src/library/crops';
 import { CATALOGUE_VARIETIES } from '../../packages/contracts/src/library/cultivars';
+import { varietyKey } from '../../packages/contracts/src/library/varieties';
 
 /**
  * The crop table, and the seam it makes.
@@ -119,6 +120,56 @@ describe('the shipped library', () => {
 
     expect(peppers.length).toBeGreaterThan(15);
     expect(days.size).toBeGreaterThan(5);
+  });
+
+  /**
+   * One row per plant, not one row per slug.
+   *
+   * `library.test.ts` proves the ids are unique, and that is a weaker claim
+   * than it looks: the merge deduplicated on `id`, the hand-tuned ids are typed
+   * by hand, and 24 of them do not follow the rule the generated side slugs by.
+   * Fifteen cultivars therefore shipped twice — same crop, same cultivar, two
+   * ids — and every id in the library was still unique, so nothing said so.
+   *
+   * What the picker shows is crop and cultivar, so that is what has to be
+   * unique for it to show a variety once.
+   */
+  it('ships one row per plant, not one per slug', () => {
+    const keys = LIBRARY_VARIETIES.map(varietyKey);
+    const twice = keys.filter((key, at) => keys.indexOf(key) !== at);
+
+    expect(twice, `shipped twice: ${[...new Set(twice)].join(', ')}`).toEqual([]);
+  });
+
+  /**
+   * The fifteen, at the one that made the disagreement plainest: two Golden
+   * Bantams, 78 days and 80, and nothing on the screen to choose between them.
+   */
+  it('offers one Golden Bantam, and it is the hand-tuned one', () => {
+    const shipped = searchVarieties('golden bantam');
+    const generated = CATALOGUE_VARIETIES.find((v) => v.id === 'sweet-corn-golden-bantam');
+
+    expect(shipped.map((v) => v.id)).toEqual(['corn-golden-bantam']);
+    expect(shipped[0]?.daysToMaturity).toBe(78);
+    // The twin is still in the generated table — it is dropped by the merge,
+    // not deleted from the catalogue.
+    expect(generated?.daysToMaturity).toBe(80);
+  });
+
+  /**
+   * The mirror image, and why crop-and-name did not replace the id key.
+   *
+   * Five pairs share an id and say the crop two ways — "Swiss chard" by hand,
+   * "Chard" in the table. Crop-and-name cannot see those, so dropping the id
+   * key once the new one existed would ship these five twice instead.
+   */
+  it('still collapses a pair whose crop is named two ways', () => {
+    const chard = LIBRARY_VARIETIES.filter((v) => v.id === 'chard-fordhook-giant');
+
+    expect(chard).toHaveLength(1);
+    expect(chard[0]?.crop).toBe('Swiss chard');
+    expect(chard[0]?.daysToMaturity).toBe(55);
+    expect(CATALOGUE_VARIETIES.find((v) => v.id === 'chard-fordhook-giant')?.crop).toBe('Chard');
   });
 
   /**

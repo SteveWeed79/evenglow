@@ -171,12 +171,32 @@ export async function rotateSession(
     throw lapsed;
   }
 
-  if (existing.usedAt === undefined && !(await consumeRefreshToken(existing._id, now))) {
+  if (existing.usedAt === undefined) {
+    const outcome = await consumeRefreshToken(existing._id, now);
+
     /**
-     * Lost the race to mark it used, which means another exchange of this same
-     * token won by microseconds. That is the concurrent case the window exists
-     * for, so it is inside the grace by definition — no revocation, carry on.
+     * A failed consume used to mean one thing here and it meant two.
+     *
+     * `already-used` is the case this was written for: another exchange of the
+     * same token won by microseconds, which is inside the grace by definition,
+     * so no revocation and carry on.
+     *
+     * **`revoked` is not that.** `consumeRefreshToken`'s filter matches on
+     * `revokedAt` as well as `usedAt`, so a password reset or a member removal
+     * landing between the read above and this update produced the identical
+     * failure — and reading it as the benign race meant issuing a fresh 90-day
+     * token into a family that had just been revoked. The one moment a
+     * revocation most needs to win is the one where a session is being renewed.
+     *
+     * The family is revoked again rather than merely refused, so the outcome
+     * does not depend on which revoker ran: `revokeAllForUser` covers every
+     * family of one user, `revokeFamily` covers one family of any user, and
+     * this makes sure the family in hand is dead either way.
      */
+    if (outcome === 'revoked') {
+      await revokeFamily(existing.familyId, now);
+      throw lapsed;
+    }
   }
 
   /**
@@ -190,6 +210,26 @@ export async function rotateSession(
     await revokeFamily(existing.familyId, now);
     throw lapsed;
   }
+
+  /**
+   * One last look before minting, and it narrows rather than closes.
+   *
+   * Every check above reads state that can go stale before the token is issued
+   * — the revocation test at the top of this function, and the `within-grace`
+   * path, which reaches here having written nothing at all and so has no
+   * atomic update to carry a guard for it. This shrinks that window from the
+   * whole body of the function to the gap between this read and the insert.
+   *
+   * **Closing it entirely needs a transaction, and this service deliberately
+   * does not require a replica set** — the same trade `identity.ts` states for
+   * account creation: needing one to run the tests would make the setup harder
+   * than the feature. Stated rather than papered over: a revocation landing
+   * inside those microseconds still loses.
+   *
+   * Safe to read rather than re-check atomically because `revokedAt` never
+   * clears; see `consumeRefreshToken`.
+   */
+  if ((await findRefreshToken(existing._id))?.revokedAt) throw lapsed;
 
   return issue(
     { userId: user._id, orgId: user.orgId, role: user.role },

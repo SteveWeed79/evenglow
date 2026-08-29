@@ -63,8 +63,41 @@ async function wake(): Promise<void> {
  * around `startTriggers`, and the failure arrived as a full-screen "Steading
  * could not start" on a farm whose records were sitting on the device,
  * perfectly readable, behind a screen that would not open.
+ *
+ * ## One set per process, whoever asks for it
+ *
+ * The handles used to be the caller's alone, and there was exactly one caller
+ * — `start()`, on the boot path, and only on the branch where somebody was
+ * already signed in. **So
+ * after an ordinary first sign-in there were no triggers at all.** A device
+ * with no account boots down the no-account branch (correctly: there is
+ * nothing to flush to), the farmer signs in from My Farm, `Boot.onSignedIn`
+ * starts the loop — and `start()` never runs again, so nothing ever attaches
+ * these. Resume and network-regain went unlistened for the life of the
+ * process, on the most ordinary path the app has: install, use it for a week,
+ * then sign in.
+ *
+ * What that costs is the whole of what this file is for. The engine still
+ * flushes on its idle tick, so nothing is lost — but the tick does not run
+ * while Android has the process frozen, so a phone carried out of the barn and
+ * unlocked shows "12 waiting" until the loop happens to come round. That is
+ * the exact experience the note above says teaches somebody not to trust the
+ * app.
+ *
+ * The fix is for `Boot` to attach them too, and the moment two callers exist
+ * the listeners have to be shared: signing out and back in would otherwise
+ * stack a second AppState listener on the first, and every resume would fire
+ * `wake()` twice — two refreshes racing for one rotating refresh token, which
+ * is precisely the family-revocation bug `refreshSession` is single-flight to
+ * prevent.
+ *
+ * So there is one set, and asking again returns it.
  */
+let attached: TriggerHandles | null = null;
+
 export function startTriggers(): TriggerHandles {
+  if (attached !== null) return attached;
+
   const stops: Array<() => void> = [];
 
   try {
@@ -128,8 +161,12 @@ export function startTriggers(): TriggerHandles {
     reportEngineError('watching for the network coming back', error);
   }
 
-  return {
+  const handles: TriggerHandles = {
     stop() {
+      // Released before detaching, so a listener that throws on the way out
+      // still leaves the next `startTriggers()` able to attach a fresh set.
+      attached = null;
+
       for (const stop of stops) {
         // One listener that will not detach must not strand the others.
         try {
@@ -140,4 +177,20 @@ export function startTriggers(): TriggerHandles {
       }
     },
   };
+
+  attached = handles;
+  return handles;
+}
+
+/**
+ * Detach whatever is attached, whoever attached it.
+ *
+ * `start()` used to hold the handles it created and stop those. It cannot any
+ * more: on the no-account boot it creates none, and the set that exists by the
+ * time the app is torn down is the one `Boot.onSignedIn` attached. A teardown
+ * that only knows about its own would leave those listening against a store
+ * that has been closed.
+ */
+export function stopTriggers(): void {
+  attached?.stop();
 }

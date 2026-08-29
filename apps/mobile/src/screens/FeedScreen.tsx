@@ -4,12 +4,10 @@ import { lastFedByGroup, listGroups } from '@homefarm/core/read/groups';
 import { listInventory } from '@homefarm/core/read/iron';
 import {
   Choice,
-  Failure,
   Field,
   NumberField,
   Secondary,
   TextField,
-  useSaver,
 } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
@@ -19,6 +17,7 @@ import { Touch } from '../components/Touch';
 import { useLive } from '../hooks/useLive';
 import { useLeave } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
+import { reportTrouble } from '../hooks/useTrouble';
 import type { ScreenProps } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, SPACE, TAP, TYPE } from '../theme/tokens';
@@ -260,11 +259,27 @@ export function FeedScreen({ route }: ScreenProps<'Feed'>): React.ReactElement {
     setScoop('');
   }, [log, sack, scoop]);
 
-  const { failure, save } = useSaver(useLeave());
+  const leave = useLeave();
 
+  /**
+   * ── Who owns the outcome of a tally ───────────────────────────────────────
+   *
+   * This went through `useSaver`, and the two of them both tried to own it.
+   * `useSaver` catches, records the failure and **returns normally**; `Tally`
+   * awaits `onCommit` and puts the count back only on a rejection. So a failed
+   * write cleared the count, printed *"Logged 6 scoops"* under a success haptic,
+   * and showed an error panel beside it — the count gone, and two contradictory
+   * sentences on one screen. The `void` at the call site swallowed the promise
+   * on top of that, so even a rejecting commit could not have reached `Tally`.
+   *
+   * `Tally` already does everything `useSaver` was here for: it holds the count,
+   * shows the failure in an assertive live region, and gives the haptics. So it
+   * keeps the whole job, and the error is let out rather than absorbed. The
+   * banner report stays — that audience is whoever fixes it, not the farmer.
+   */
   const commit = useCallback(
     async (count: number) => {
-      await save(async () => {
+      try {
         const grams = Math.round(count * gramsPer());
 
         /**
@@ -304,29 +319,39 @@ export function FeedScreen({ route }: ScreenProps<'Feed'>): React.ReactElement {
           },
         });
 
-        if (drawnFrom === null || taken === null) return;
-
         /**
          * The record is written first and the shelf second, on purpose.
          *
          * What was fed is the fact; what is left on the shelf is bookkeeping
          * derived from it. If only one of the two survives — a crash between
          * them, a rejected mutation — the one worth keeping is the feed.
+         *
+         * Conditional rather than an early return, because `leave()` is now
+         * below the `try` and a return here would step past it — a feeding
+         * logged from a screen that stayed put.
          */
-        // Two decimals, and clamped: `quantity` is non-negative in the
-        // contract, and a sack fed past empty says empty rather than refusing
-        // the write. Rounding keeps 50 − 3 at exactly 47 instead of 46.999…
-        const left = Math.max(0, Math.round((drawnFrom.quantity - taken) * 100) / 100);
+        if (drawnFrom !== null && taken !== null) {
+          // Two decimals, and clamped: `quantity` is non-negative in the
+          // contract, and a sack fed past empty says empty rather than refusing
+          // the write. Rounding keeps 50 − 3 at exactly 47 instead of 46.999…
+          const left = Math.max(0, Math.round((drawnFrom.quantity - taken) * 100) / 100);
 
-        await log({
-          entity: 'inventory',
-          op: 'update',
-          targetId: drawnFrom.id,
-          payload: { quantity: left },
-        });
-      });
+          await log({
+            entity: 'inventory',
+            op: 'update',
+            targetId: drawnFrom.id,
+            payload: { quantity: left },
+          });
+        }
+      } catch (error) {
+        reportTrouble('saving that', error);
+        // Out, not swallowed: `Tally` puts the count back and says why.
+        throw error;
+      }
+
+      leave();
     },
-    [save, log, groupId, feedType, drawnFrom, gramsPer],
+    [leave, log, groupId, feedType, drawnFrom, gramsPer],
   );
 
   if (groups === null) return <Loading title="Feed" />;
@@ -442,10 +467,9 @@ export function FeedScreen({ route }: ScreenProps<'Feed'>): React.ReactElement {
         // Sixty pounds of hay is twelve taps of the largest step. The steps
         // are right for a scoop and cannot reach a round bale; see `typed`.
         typed
-        onCommit={(value) => void commit(value)}
+        onCommit={commit}
       />
 
-      <Failure message={failure} />
     </Screen>
   );
 }

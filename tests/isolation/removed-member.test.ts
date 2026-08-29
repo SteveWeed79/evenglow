@@ -270,3 +270,124 @@ describeDb('after somebody is removed from a farm', () => {
     await app.close();
   });
 });
+
+/**
+ * ── "Access ends immediately" ──────────────────────────────────────────────
+ *
+ * `identity.ts` says it of removal, and it was not true. `requireMutationClaims`
+ * refused a disabled account on every write, but the READ path —
+ * `requireClaims` — verified the token's signature and stopped there, on the
+ * documented ground that a signature *"is enough to decide what to render"*.
+ *
+ * What that rendered was every read route on this server: `GET /snapshot`, a
+ * **whole-farm export**, plus the photos, the roster, the join codes and the
+ * subscription. So somebody removed from a farm kept all of it for the rest of
+ * their access token's fifteen minutes — and a removal made for cause is the
+ * one where those fifteen minutes are the whole point.
+ *
+ * The token here is minted BEFORE the removal, deliberately. A token taken
+ * afterwards would be refused at login for a different reason and would prove
+ * nothing about the window.
+ */
+describeDb('the access a removed member still holds', () => {
+  /** Their own token, taken while they were still a member of the farm. */
+  async function handTokenBeforeRemoval(
+    app: Awaited<ReturnType<typeof server>>,
+  ): Promise<{ access: string; refresh: string }> {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { email: HAND_EMAIL, password: PASSWORD },
+    });
+    return { access: res.json().accessToken, refresh: res.json().refreshToken };
+  }
+
+  /** The largest response this API produces, and the one that mattered most. */
+  it('cannot pull the farm out through the snapshot', async () => {
+    const app = await server();
+    const { access } = await handTokenBeforeRemoval(app);
+
+    // It works while they are a member — otherwise this asserts nothing.
+    const before = await app.inject({
+      method: 'GET',
+      url: '/snapshot',
+      headers: { authorization: `Bearer ${access}` },
+    });
+    expect(before.statusCode).toBe(200);
+
+    await removeTheHand(app);
+
+    const after = await app.inject({
+      method: 'GET',
+      url: '/snapshot',
+      headers: { authorization: `Bearer ${access}` },
+    });
+    expect(after.statusCode).toBe(401);
+    await app.close();
+  });
+
+  /** The roster and the join codes go with it — a code is a way back in. */
+  it('cannot read the roster or the join codes', async () => {
+    const app = await server();
+    const { access } = await handTokenBeforeRemoval(app);
+    await removeTheHand(app);
+
+    for (const url of ['/members', '/join-codes', '/billing']) {
+      const res = await app.inject({
+        method: 'GET',
+        url,
+        headers: { authorization: `Bearer ${access}` },
+      });
+      expect(res.statusCode, url).toBe(401);
+    }
+    await app.close();
+  });
+
+  /**
+   * And the refresh family is actually dead rather than merely unusable.
+   *
+   * `disableUser` made the account unusable and left the tokens alive; every
+   * gate happened to refuse a disabled user, so nothing was reachable through
+   * them — but a defence resting on one field being checked in one function is
+   * one refactor from being no defence at all. `revokeAllForUser` is what a
+   * password reset already does for exactly this reason.
+   */
+  it('has its refresh tokens revoked, not just refused', async () => {
+    if (!harness) return;
+    const app = await server();
+    const { refresh } = await handTokenBeforeRemoval(app);
+
+    await removeTheHand(app);
+
+    const live = await harness.db
+      .collection('refreshTokens')
+      .countDocuments({ userId: HAND, revokedAt: { $exists: false } });
+    expect(live).toBe(0);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/refresh',
+      payload: { refreshToken: refresh },
+    });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  /**
+   * The owner is untouched. A check added to the read path is a check that can
+   * lock out the farm, so this is the assertion that says it did not.
+   */
+  it('leaves everybody else reading exactly as before', async () => {
+    const app = await server();
+    await removeTheHand(app);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/snapshot',
+      headers: { authorization: `Bearer ${await ownerToken(app)}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    await app.close();
+  });
+});

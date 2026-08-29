@@ -22,7 +22,12 @@ import {
 import { listAnimals } from '@homefarm/core/read/animals';
 import { listBreedings, listIncubations } from '@homefarm/core/read/breeding';
 import { lastCareBySubject, listCareLogs } from '@homefarm/core/read/care';
-import { currentFeedPlans, lastShornByGroup, listGroups } from '@homefarm/core/read/groups';
+import {
+  currentFeedPlans,
+  lastCullByGroup,
+  lastShornByGroup,
+  listGroups,
+} from '@homefarm/core/read/groups';
 import { listBeds, listPlantings, listVarieties } from '@homefarm/core/read/growing';
 import { listInventory, listMachines, listServices } from '@homefarm/core/read/iron';
 import { listTasks } from '@homefarm/core/read/tasks';
@@ -43,12 +48,27 @@ import { clearTrouble, reportTrouble } from './useTrouble';
  * crosses its date while the app sits open moves on the next publish rather
  * than at midnight tomorrow.
  *
- * **Every builder the contracts package ships is wired in here.** They were
- * written and tested long before anything could write the records they read,
- * and a builder with no reader is a feature that exists only in the test
- * suite — the version of this hook that fed it groups and nothing else put
- * seven permanent husbandry rows on Today and produced no birth, hatch, sow
- * or service row at all.
+ * **Every builder the contracts package ships is wired in here, with one
+ * exception named below.** They were written and tested long before anything
+ * could write the records they read, and a builder with no reader is a feature
+ * that exists only in the test suite — the version of this hook that fed it
+ * groups and nothing else put seven permanent husbandry rows on Today and
+ * produced no birth, hatch, sow or service row at all.
+ *
+ * ## `storageDue`, and why it is not called
+ *
+ * That sentence used to have no exception, and it was wrong. `storageDue` is
+ * exported and tested and has never been called from here — **not an oversight
+ * in the wiring, but a builder with nothing to wire**. It takes `dueAt` and
+ * `lastDoneAt` as parameters, and the equipment entity carries neither: there
+ * is no field saying when a machine should be put away for the season, and no
+ * completion record saying it was.
+ *
+ * So this is a feature that was never finished rather than a row that went
+ * missing, and giving it a data source is a product decision — whether the app
+ * should ask a farm to date the winterising of each machine — not an audit fix.
+ * The builder stays (invariant 13: if something looks dead, ask, do not
+ * delete), and this comment stops claiming otherwise.
  */
 
 export interface DuesView {
@@ -139,11 +159,14 @@ export function useDues(): DuesView {
       ),
     );
     const lastCare = lastCareBySubject(careLogs);
-    // A clip on a named animal counts for its group — a farm shears the whole
-    // paddock in one afternoon and records whichever subject was to hand.
-    const lastShorn = await lastShornByGroup(
-      new Map(animals.map((animal) => [animal.id, animal.flockId])),
-    );
+    const [lastCulled, lastShorn] = await Promise.all([
+      // What discharges the processing row: a deliberate cull, which is what a
+      // farm records when the birds are processed. See `processingDue`.
+      lastCullByGroup(),
+      // A clip on a named animal counts for its group — a farm shears the whole
+      // paddock in one afternoon and records whichever subject was to hand.
+      lastShornByGroup(new Map(animals.map((animal) => [animal.id, animal.flockId]))),
+    ]);
 
     /**
      * What the shelf holds of each feed, in micrograms.
@@ -235,8 +258,16 @@ export function useDues(): DuesView {
         ),
       );
 
-      // The grow-out clock. Silent unless the group says it is kept for meat
-      // and carries a birth date and a breed the library knows.
+      /**
+       * The grow-out clock. Silent unless the group says it is kept for meat
+       * and carries a birth date and a breed the library knows.
+       *
+       * `lastCulledAt` is what clears it once the birds are processed. The
+       * builder took it and nothing passed it, which is the same shape of bug
+       * as `careIntervals` above and left the row a permanent resident on
+       * Today — see `processingDue` for what that cost.
+       */
+      const lastCull = lastCulled.get(group.id);
       const processing = processingDue({
         id: group.id,
         name: group.name,
@@ -246,6 +277,7 @@ export function useDues(): DuesView {
         ...(group.processAtWeeks === undefined
           ? {}
           : { processAtWeeks: group.processAtWeeks }),
+        ...(lastCull === undefined ? {} : { lastCulledAt: lastCull }),
       });
       if (processing) rows.push(processing);
 

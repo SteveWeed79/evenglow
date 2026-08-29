@@ -152,6 +152,53 @@ const BY_SPECIES: Partial<Record<Species, Intervals>> = {
 const ANATOMICAL: readonly CareKind[] = ['hoof-trim', 'dental'];
 
 /**
+ * Which of those the animal genuinely has not got.
+ *
+ * ## Asked directly, because inferring it was the bug
+ *
+ * `careApplies` used to answer this by checking whether the default interval
+ * was null — **the exact conflation the note above says must not be made**. A
+ * null default means "off by default", and the whole point of that paragraph is
+ * that it covers two unrelated situations.
+ *
+ * The `other` group is where the two came apart. It defaults everything to
+ * null, and it holds pigs, rabbits, horses, donkeys and the catch-all `other`
+ * species. Horses and donkeys are rescued by `BY_SPECIES`; the rest were told
+ * they have **neither feet nor teeth**, with no way to switch the chips on:
+ *
+ *  - a pig's feet are trimmed, and a boar's tusks are a real job;
+ *  - a rabbit's nails are clipped and its incisors are the classic thing that
+ *    goes wrong with a rabbit;
+ *  - and `other` means *this app does not know what this animal is*, which is
+ *    the one case where asserting an anatomical impossibility is indefensible.
+ *
+ * So absence is stated rather than derived. A group listed here cannot have the
+ * job at all; everything else may, whether or not it is on a schedule.
+ *
+ * **Ratites keep `dental` and lose the hoof exclusion.** A bird has no teeth,
+ * which is settled; an emu in a pen grows its toenails long and they are
+ * trimmed, so refusing the setting was wrong for the same reason it was wrong
+ * for a pig. It stays off by default — the interval is still null — and a farm
+ * that wants it can now say so.
+ *
+ * Poultry keep both exclusions, which is the decision this file already made
+ * and is not being reversed here: a chicken has no teeth, and a laying flock's
+ * claws are not a scheduled job in the way a hoof is.
+ */
+const ABSENT: Record<Group, readonly CareKind[]> = {
+  poultry: ['hoof-trim', 'dental'],
+  ratite: ['dental'],
+  // Hooves yes; teeth are not a job on a goat or a cow the way they are on a
+  // horse. The camelids sit in this group and ARE floated — see below for why
+  // a species override outranks the group.
+  ruminant: ['dental'],
+  // Pigs, rabbits, horses, donkeys, and anything the app has not got a word
+  // for. Every one of them has feet, and none of them is known to have no
+  // teeth.
+  other: [],
+};
+
+/**
  * Whether this job could ever apply to this kind of animal.
  *
  * Distinct from `careIntervalDays` returning null, which only says it is not
@@ -161,7 +208,23 @@ const ANATOMICAL: readonly CareKind[] = ['hoof-trim', 'dental'];
  */
 export function careApplies(species: Species, kind: CareKind): boolean {
   if (!ANATOMICAL.includes(kind)) return true;
-  return careIntervalDays(species, kind) !== null;
+
+  /**
+   * A species carrying its own interval for a body job plainly has the body
+   * part, and that outranks its group.
+   *
+   * This is what `BY_SPECIES` is for, and it is load-bearing here rather than
+   * tidy: alpacas and llamas are in the **ruminant** group, which does not do
+   * teeth — and camelids are floated yearly. A group-only table would take a
+   * llama's teeth away while its own interval said 365.
+   *
+   * `!= null` rather than `!== undefined`: an override may be an explicit
+   * `null` to silence a job, which is a schedule saying "off", not anatomy
+   * saying "never".
+   */
+  if (BY_SPECIES[species]?.[kind] != null) return true;
+
+  return !ABSENT[SPECIES_TRAITS[species].group].includes(kind);
 }
 
 /** How often a job comes round for this species, or null if it does not apply. */

@@ -38,13 +38,16 @@ vi.mock('../../apps/mobile/src/auth/session', () => ({
   refreshSession: () => Promise.resolve(undefined),
 }));
 
-const { startTriggers } = await import('@homefarm/mobile/sync/triggers');
+const { startTriggers, stopTriggers } = await import('@homefarm/mobile/sync/triggers');
 
 describe('the network listener', () => {
   beforeEach(() => {
     setOnline.mockClear();
     nudge.mockClear();
     listener = null;
+    // One set per process now, so each case has to let go of the previous
+    // one or `startTriggers` hands back the set whose listener is gone.
+    stopTriggers();
     startTriggers();
     expect(listener).not.toBeNull();
   });

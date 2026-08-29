@@ -28,11 +28,11 @@ import {
   feedLogCreateSchema,
   harvestCreateSchema,
   hourReadingCreateSchema,
-  maintenanceCreateSchema,
   medicationCreateSchema,
   mortalityCreateSchema,
   predatorCreateSchema,
   productionLogCreateSchema,
+  serviceCompletionCreateSchema,
   shearingCreateSchema,
   weightCreateSchema,
 } from '@homefarm/contracts';
@@ -40,7 +40,7 @@ import { z } from 'zod';
 import { localStore } from '../db/store';
 import { listAnimals } from '../read/animals';
 import { listGroups } from '../read/groups';
-import { listMachines } from '../read/iron';
+import { listMachines, listServices } from '../read/iron';
 
 /** One file. */
 export interface Sheet {
@@ -172,10 +172,11 @@ async function rowsFrom<T>(
  * gardener does not want eleven files about animals they do not keep.
  */
 export async function buildExport(range: ExportRange = {}): Promise<Sheet[]> {
-  const [groups, animals, machines] = await Promise.all([
+  const [groups, animals, machines, services] = await Promise.all([
     listGroups(),
     listAnimals(),
     listMachines(),
+    listServices(),
   ]);
 
   const groupName = new Map(groups.map((g) => [g.id, g.name]));
@@ -196,8 +197,14 @@ export async function buildExport(range: ExportRange = {}): Promise<Sheet[]> {
     if (rows.length === 0) return;
     // The id columns are appended here rather than written into each header,
     // for the reason `rowsFrom` appends the values rather than each sheet
-    // building them: twelve sheets is twelve chances to leave one out, and the
+    // building them: every sheet is another chance to leave one out, and the
     // sheet that got left out would be the one somebody needed.
+    //
+    // Counted rather than numbered, because the number went stale. This said
+    // "twelve sheets is twelve chances" and three other places said thirteen —
+    // `backup.ts`, `ExportScreen.tsx` and `ROADMAP.md` — while there were
+    // twelve. Adding `service-completions` has made those three right by
+    // accident, which is not the same as their having been maintained.
     sheets.push({ name, csv: toCsv([...header, ...ID_COLUMNS], rows), rows: rows.length });
   };
 
@@ -302,7 +309,17 @@ export async function buildExport(range: ExportRange = {}): Promise<Sheet[]> {
    */
   add(
     'treatments',
-    ['Given', 'Group', 'Medication', 'Treatment ends', 'Egg withdrawal (days)', 'Meat', 'Milk'],
+    [
+      'Given',
+      // "Group or animal", like its four siblings, because it is one — see the
+      // cell below.
+      'Group or animal',
+      'Medication',
+      'Treatment ends',
+      'Egg withdrawal (days)',
+      'Meat',
+      'Milk',
+    ],
     await rowsFrom(
       'medication',
       medicationCreateSchema,
@@ -310,7 +327,20 @@ export async function buildExport(range: ExportRange = {}): Promise<Sheet[]> {
         at: v.administeredAt,
         cells: [
           stamp(v.administeredAt),
-          named(groupName, v.flockId),
+          /**
+           * Both, and it used to be `named(groupName, v.flockId)` alone.
+           *
+           * A treatment given to ONE animal — the ordinary case for a goat, a
+           * ewe, a cow — has `animalId` and no `flockId`, so `named` was handed
+           * `undefined` and returned the empty string. Every per-animal
+           * treatment therefore exported with a **blank subject**, on the sheet
+           * a vet or an inspector reads to see who was treated with what.
+           *
+           * The row's own `subject` said `v.flockId ?? v.animalId` two lines
+           * below the whole time, and the four sibling sheets — eggs,
+           * production, husbandry, weights — all fall back the same way.
+           */
+          v.flockId === undefined ? named(animalName, v.animalId) : named(groupName, v.flockId),
           v.name,
           v.treatmentEndsAt === undefined ? '' : stamp(v.treatmentEndsAt),
           v.withdrawalDays?.egg ?? '',
@@ -418,25 +448,84 @@ export async function buildExport(range: ExportRange = {}): Promise<Sheet[]> {
     ),
   );
 
+  /**
+   * ── The schedule, read the way the screens read it ────────────────────────
+   *
+   * **This read `maintenance.lastDoneAtDate` straight out of the store, and
+   * nothing writes that field any more.** A service is discharged by a
+   * `serviceCompletion` event; `ServiceDoneScreen` writes one and never touches
+   * the schedule. `read/iron.ts` and `read/history.ts` were both moved over.
+   * This was not, so:
+   *
+   * - export *everything* → `Last done` and `At hours` blank on every row,
+   *   however many services the farm had recorded;
+   * - export *the last year* → `at` was the epoch for every row, `within()`
+   *   dropped all of them, and `ExportScreen` said "Nothing in services for
+   *   that period" to a farm that had serviced its tractor that morning.
+   *
+   * The file's own heading says why it should never have been reading the store
+   * here — *built from the same reads the screens use, not from a second pass
+   * over the store* — and this was the one sheet that was. So it goes through
+   * `listServices`, which resolves the newest completion and falls back to the
+   * stored fields for schedules written before completions were events.
+   *
+   * **A schedule never done still sorts to the epoch and still falls out of a
+   * ranged export.** That is unchanged and it is right: nothing happened to it
+   * in the period being asked about. It is in the unranged export, where a
+   * schedule with no history belongs.
+   */
   add(
     'services',
     ['Machine', 'Job', 'Every (hours)', 'Every (days)', 'Last done', 'At hours'],
+    services
+      .filter((service) => within(service.lastDoneAtDate ?? 0, range))
+      .map((service) => [
+        named(machineName, service.equipmentId),
+        service.title,
+        service.intervalHours ?? '',
+        service.intervalDays ?? '',
+        service.lastDoneAtDate === undefined ? '' : stamp(service.lastDoneAtDate),
+        service.lastDoneAtHours ?? '',
+        service.equipmentId,
+        service.id,
+      ])
+      .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+  );
+
+  /**
+   * ── And the events themselves, which had no sheet at all ──────────────────
+   *
+   * The schedule sheet says when a job was last done. It cannot say a machine
+   * was serviced six times in four years, which is the history somebody hands
+   * over with the tractor — the thing P7 is about.
+   *
+   * `taskCompletion` is deliberately not exported beside it: a chore ticked off
+   * is not a maintenance record, and the tasks sheet is not here either.
+   *
+   * The subject is the machine rather than the schedule, so this sheet joins to
+   * `machine-hours` and `services` on the column they all carry. The schedule is
+   * still named, because "which oil change" is the question a reader asks next.
+   */
+  const serviceTitle = new Map(services.map((service) => [service.id, service.title]));
+  const serviceMachine = new Map(services.map((service) => [service.id, service.equipmentId]));
+
+  add(
+    'service-completions',
+    ['When', 'Machine', 'Job', 'At hours', 'Note'],
     await rowsFrom(
-      'maintenance',
-      maintenanceCreateSchema,
+      'serviceCompletion',
+      serviceCompletionCreateSchema,
       (v) => ({
-        // No occurredAt on a schedule; the last time it was done is the date
-        // that means anything to a reader.
-        at: v.lastDoneAtDate ?? 0,
+        at: v.completedAt,
         cells: [
-          named(machineName, v.equipmentId),
-          v.title,
-          v.intervalHours ?? '',
-          v.intervalDays ?? '',
-          v.lastDoneAtDate === undefined ? '' : stamp(v.lastDoneAtDate),
-          v.lastDoneAtHours ?? '',
+          stamp(v.completedAt),
+          named(machineName, serviceMachine.get(v.serviceId)),
+          // The schedule may have been archived; the completion is still true.
+          serviceTitle.get(v.serviceId) ?? '(archived)',
+          v.atHours ?? '',
+          v.note ?? '',
         ],
-        subject: v.equipmentId,
+        subject: serviceMachine.get(v.serviceId),
       }),
       range,
     ),

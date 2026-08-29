@@ -5,8 +5,10 @@ import {
   eggLogCreateSchema,
   type Entity,
   feedLogCreateSchema,
+  breedingCreateSchema,
   formatMass,
-  formatVolume,
+  isAppendOnly,
+  formatProduce,
   gramsToUg,
   harvestCreateSchema,
   hourReadingCreateSchema,
@@ -14,7 +16,6 @@ import {
   serviceCompletionCreateSchema,
   taskCompletionCreateSchema,
   maintenanceStoredSchema,
-  mlToUl,
   mortalityCreateSchema,
   predatorCreateSchema,
   productionLogCreateSchema,
@@ -81,6 +82,29 @@ export interface HistoryEvent {
   id: string;
   /** Typed, not a loose string — the screen enqueues a mutation against it. */
   entity: Entity;
+  /**
+   * Whether "take this back out" means what it says on this row.
+   *
+   * **`id` is not always a record of the row's own.** Most builders here read an
+   * append-only log, so the row and the record are the same thing and a delete
+   * removes exactly what is described. Three do not: `task`, `maintenance` and
+   * `incubation` build a row out of a *field* on a mutable record — a
+   * `completedAt`, a `lastDoneAtDate`, a `hatchedAt` — and `id` is then the
+   * parent record's own id.
+   *
+   * For two of those a delete is catastrophic and silent. `Timeline` offered
+   * one on the premise that *"every entity a history row can be built from is
+   * append-only"*, so one tap on a service row archived **the whole recurring
+   * oil-change schedule** rather than the service it named. The `incubation`
+   * builder had already written the reason down — *"a `maintenance` row is one
+   * service and archiving it takes the whole recurring schedule"* — while
+   * explaining why its own case was the exception.
+   *
+   * So the screen is told rather than left to infer. Decided in `eventsFrom`
+   * from the entity, not per builder: thirteen builders is thirteen chances to
+   * forget, and the one that forgot would be the one that archived something.
+   */
+  removable: boolean;
   /** When the farm says it happened. */
   at: number;
   /**
@@ -141,12 +165,33 @@ function startOfDay(at: number): number {
  * a newer build, a payload half-migrated — must not blank the whole history.
  * The alternative is one bad row costing a farm every other row it has.
  */
+/**
+ * The one mutable entity whose history row IS its own record.
+ *
+ * A set of eggs and its hatch are the same thing — one set, one hatch — so
+ * taking the row back out removes precisely what it describes. `task` and
+ * `maintenance` are not: their rows are one completion of something that
+ * recurs, and deleting the parent takes the schedule with it.
+ *
+ * A list rather than a flag each builder sets, so a builder added later is
+ * **not removable until somebody says why it should be**. That is the safe
+ * direction: forgetting to opt in costs a button, forgetting to opt out costs
+ * a farm its oil-change schedule.
+ */
+const REMOVABLE_MUTABLE: readonly Entity[] = ['incubation'];
+
 async function eventsFrom<T>(
   entity: Entity,
   schema: z.ZodType<T>,
-  build: (value: T, id: string) => HistoryEvent | null,
+  /**
+   * `Omit<…, 'removable'>` deliberately: a builder **cannot** set it, so the
+   * decision has exactly one home and a new builder cannot get it wrong by
+   * copying a neighbour that had it right for a different reason.
+   */
+  build: (value: T, id: string) => Omit<HistoryEvent, 'removable'> | null,
 ): Promise<HistoryEvent[]> {
   const records = await localStore().readRecordsByEntity(entity);
+  const removable = isAppendOnly(entity) || REMOVABLE_MUTABLE.includes(entity);
 
   return records
     .filter((record) => !record.deleted)
@@ -154,7 +199,7 @@ async function eventsFrom<T>(
       const parsed = schema.safeParse(record.value);
       if (!parsed.success) return [];
       const event = build(parsed.data, record.targetId);
-      return event === null ? [] : [event];
+      return event === null ? [] : [{ ...event, removable }];
     });
 }
 
@@ -182,11 +227,27 @@ const storedService = maintenanceStoredSchema;
 
 /** A set of eggs mid-flight: created, then candled, then hatched by update. */
 const storedIncubation = incubationCreateSchema.partial();
+const storedBreeding = breedingCreateSchema.partial();
 
 const storedTaskCompletion = taskCompletionCreateSchema.partial();
 const storedServiceCompletion = serviceCompletionCreateSchema.partial();
 
-const plural = (n: number, one: string, many = `${one}s`): string =>
+/**
+ * "1 egg", "12 eggs" — and "2 losses", which it used to get wrong.
+ *
+ * The default was a bare `${one}s`, so `unit: 'loss'` on the mortality tally
+ * read **"2 losss"** on the closed-day line. `HistoryDay.summary`'s own doc
+ * says what it should be — *"12 eggs · 2 feeds · 1 loss"* — which is how a
+ * single loss came to be the example: at one it is right, and one is the
+ * commonest number of animals to lose in a day.
+ *
+ * The default now knows the sibilant rule (a word ending in s, x, z, ch or sh
+ * takes `-es`), because that is the one that bit and it is a rule rather than a
+ * guess. **It knows nothing else.** A calf is not a calfs and a sheep is not a
+ * sheeps; anything irregular passes its plural as the third argument, as the
+ * harvest row already does for "bunches".
+ */
+const plural = (n: number, one: string, many = /(?:s|x|z|ch|sh)$/.test(one) ? `${one}es` : `${one}s`): string =>
   `${n} ${n === 1 ? one : many}`;
 
 /**
@@ -304,6 +365,9 @@ export async function listHistory(
   /** Names, so a row reads "The hens" rather than an id nobody can pronounce. */
   const groupName = new Map(groups.map((g) => [g.id, g.name]));
   const animalName = new Map(animals.map((a) => [a.id, a.name]));
+  // A birth belongs to the dam AND the group she is in — the same reasoning the
+  // mortality builder gives for naming both.
+  const animalGroup = new Map(animals.map((a) => [a.id, a.flockId]));
   const machineName = new Map(machines.map((m) => [m.id, m.name]));
   const itemName = new Map(stock.map((i) => [i.id, i.name]));
   const varietyOf = new Map(varieties.map((v) => [v.id, v.name]));
@@ -338,12 +402,31 @@ export async function listHistory(
           : {}),
       })),
 
+      /**
+       * **The amount goes through `formatProduce`, and it used to be
+       * interpolated raw.** `productionLog` stores millilitres for milk and
+       * grams for fibre and honey, so the stored number is not the number a
+       * farm reads. The day summary above this row converts it and this did
+       * not, so an imperial farm got:
+       *
+       * ```
+       * 1 gal · 7.5 lb · …          <- the day
+       *   3785 ml milk — The goats  <- the row inside it
+       * ```
+       *
+       * `units.ts` says `formatProduce` exists for exactly this: *"that switch
+       * was written twice and forgotten once"*. It was written three times.
+       *
+       * The title is also the row's accessibility label, so this was read aloud
+       * as "three thousand seven hundred and eighty-five millilitres" to
+       * somebody who has never used a millilitre.
+       */
       eventsFrom('productionLog', productionLogCreateSchema, (v, id) => ({
         id,
         entity: 'productionLog',
         at: v.occurredAt,
         subjects: subjectsOf(v.flockId, v.animalId),
-        title: `${v.amount} ${v.unit} ${v.label ?? v.kind} — ${named(
+        title: `${formatProduce(v.amount, v.unit, system)} ${v.label ?? v.kind} — ${named(
           groupName,
           v.flockId,
           named(animalName, v.animalId, 'a group'),
@@ -500,6 +583,49 @@ export async function listHistory(
        * running set and the set's own screen states it, where a hatch is the
        * end of the story and belongs in the farm's.
        */
+      /**
+       * A birth, on the day it happened.
+       *
+       * **There was no `breeding` builder at all**, so a kidding, a lambing or
+       * a calving produced no row anywhere — while `incubation.hatchedAt`, the
+       * poultry equivalent, has had one all along. `AnimalScreen` renders "What
+       * happened to her" over a timeline her giving birth was not in.
+       *
+       * Only `bornAt`, not `bredAt`. The same call the incubation builder makes
+       * about candling: the mating is a step in the middle of a record that runs
+       * for months, and the birth is the end of the story. The mating is on the
+       * Breeding screen, which is where a keeper goes to ask about it.
+       *
+       * **Not removable, and that falls out of `eventsFrom` without a word
+       * here.** `breeding` is mutable and this row is a FIELD on it, so a
+       * take-back would archive the mating along with the birth — the
+       * `maintenance` case, not the `incubation` one, where the record and the
+       * event are the same thing. `REMOVABLE_MUTABLE` lists only `incubation`,
+       * so a builder added later is silent until somebody says otherwise.
+       */
+      eventsFrom('breeding', storedBreeding, (v, id) =>
+        v.bornAt === undefined || v.damId === undefined
+          ? null
+          : {
+              id,
+              entity: 'breeding',
+              at: v.bornAt,
+              subjects: subjectsOf(v.damId, animalGroup.get(v.damId)),
+              title: `${named(animalName, v.damId, 'One of yours')} gave birth`,
+              detail:
+                v.lost === true
+                  ? 'The whole litter was lost.'
+                  : [
+                      v.liveBorn === undefined ? null : plural(v.liveBorn, 'live birth'),
+                      v.stillborn === undefined || v.stillborn === 0
+                        ? null
+                        : `${v.stillborn} stillborn`,
+                    ]
+                      .filter((part): part is string => part !== null)
+                      .join(' · ') || 'Recorded on the breeding record.',
+            },
+      ),
+
       eventsFrom('incubation', storedIncubation, (v, id) =>
         v.hatchedAt === undefined || v.label === undefined
           ? null
@@ -794,13 +920,16 @@ function summarise(events: readonly HistoryEvent[], system: UnitSystem): string 
     }
   }
 
-  const parts = [...totals.values()].map(({ amount, unit }) => {
+  const parts = [...totals.values()].map(({ amount, unit }) =>
     // A stored measure is scaled into the farm's own system; a counted thing
     // ("egg", "bale") is a word and takes a plural instead.
-    if (unit === 'ml') return formatVolume(mlToUl(amount), system);
-    if (unit === 'g') return formatMass(gramsToUg(amount), system);
-    return plural(amount, unit);
-  });
+    //
+    // The measure half goes through `formatProduce` rather than repeating its
+    // switch, which is the whole point of that function existing — this file
+    // held the third copy of it, and the copy in the row above was the one that
+    // had been forgotten.
+    unit === 'ml' || unit === 'g' ? formatProduce(amount, unit, system) : plural(amount, unit),
+  );
 
   // A day whose events all decline to tally — a weighing, a sighting — still
   // happened, and saying how many beats saying nothing.

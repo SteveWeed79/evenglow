@@ -442,11 +442,32 @@ export function todayBundles(dues: readonly Due[], now: number): DueBundle[] {
 }
 
 /**
- * When a machine is expected to reach a meter reading.
+ * When a machine is expected to reach a meter reading — or when it passed it.
  *
  * Returns null rather than a guess when usage is unknown or non-positive. A
  * machine nobody has recorded twice has no usage rate, and a projection built
  * on one reading is a straight line through a single point.
+ *
+ * ## Past the target, the line runs backwards
+ *
+ * **This clamped to `now`, and a clamp to `now` is a row that can never age.**
+ * `urgencyOf` calls a row `overdue` only once `now >= at + DAY_MS`, and
+ * `useDues` recaptures `now` on every pass — so a projection pinned to the
+ * current instant was `now` this morning, `now` tomorrow, and `now` for ever. A
+ * tractor 650 hours past its oil change read *"today"*, every day, in the band
+ * reserved for things that are due rather than late.
+ *
+ * `serviceDue`'s own note is the rule it broke: *"a row nothing can clear is
+ * worse than a missing row: it sits on Today forever and teaches people to
+ * scroll past the list."*
+ *
+ * So the same straight line is run the other way: at `perDay`, a meter this far
+ * past `target` crossed it this long ago. That is exactly as much of a guess as
+ * the forward projection and rests on the identical assumption — that the last
+ * reading is current and the rate holds — so a caller that trusts one has no
+ * reason to distrust the other.
+ *
+ * Exactly on the target still answers `now`, which is true: it crossed today.
  */
 export function projectReading(
   currentReading: number,
@@ -455,6 +476,5 @@ export function projectReading(
   now: number,
 ): number | null {
   if (perDay === null || perDay <= 0) return null;
-  if (currentReading >= target) return now;
   return now + ((target - currentReading) / perDay) * DAY_MS;
 }

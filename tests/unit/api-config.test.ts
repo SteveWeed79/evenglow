@@ -122,6 +122,7 @@ const openLocalStore = vi.fn(async (_orgId: string) => undefined);
 const startSync = vi.fn();
 const stopSync = vi.fn();
 const startTriggers = vi.fn(() => ({ stop: vi.fn() }));
+const stopTriggers = vi.fn();
 const setStorageBacking = vi.fn();
 
 const ensureLocalOrgId = vi.fn(async () => 'localOrg');
@@ -150,6 +151,7 @@ vi.mock('@homefarm/core/db/store', () => ({
 }));
 vi.mock('@homefarm/mobile/sync/triggers', () => ({
   startTriggers: () => startTriggers(),
+  stopTriggers: () => stopTriggers(),
 }));
 vi.mock('@homefarm/core/sync/engine', () => ({
   startSync: () => startSync(),
@@ -327,6 +329,13 @@ describe('booting normally', () => {
     expect(startTriggers).toHaveBeenCalled();
   });
 
+  /**
+   * Both, and the triggers by the module rather than by a captured handle.
+   *
+   * `start()` attaches none on the no-account boot, so the set that exists at
+   * teardown can be the one `Boot.onSignedIn` attached. Stopping only its own
+   * would leave those listening against a closed store.
+   */
   it('stops both when torn down', async () => {
     const { start } = await import('@homefarm/mobile/boot/start');
     refreshSession.mockResolvedValue(CLAIMS);
@@ -335,6 +344,7 @@ describe('booting normally', () => {
     started.stop();
 
     expect(stopSync).toHaveBeenCalled();
+    expect(stopTriggers).toHaveBeenCalled();
   });
 
   it('shows the door, and no fault, when nobody is signed in', async () => {

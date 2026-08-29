@@ -8,6 +8,7 @@ import { reportTrouble } from './hooks/useTrouble';
 import { describeBreadcrumb, takeBreadcrumb } from './support/breadcrumb';
 import { ensureLocalOrgId } from './auth/local-org';
 import { start, type Started } from './boot/start';
+import { startTriggers } from './sync/triggers';
 import { openLocalStore } from './db/store';
 import { useAppFonts } from './theme/fonts';
 import type { CachedClaims } from './auth/session';
@@ -190,6 +191,22 @@ export function Boot({
     openLocalStore(claims.orgId).then(
       () => {
         setStorageBacking('device');
+        /**
+         * The triggers, because for this device they have never been attached.
+         *
+         * `start()` attaches them only on the branch where somebody was
+         * already signed in, and a device signing in from My Farm booted down
+         * the other one — so before this line, an ordinary first sign-in left
+         * AppState and `expo-network` unlistened for the life of the process.
+         * The loop still ticked, so nothing was lost; what was lost is the
+         * whole point of the two triggers, which is that the tick does not run
+         * while Android has the process frozen.
+         *
+         * Safe to call when they ARE attached: `startTriggers` hands back the
+         * one set rather than stacking a second on top. See its own note for
+         * why that matters more than tidiness.
+         */
+        startTriggers();
         startSync();
         setState({ kind: 'ready' });
       },
@@ -239,6 +256,9 @@ export function Boot({
       .then(
         () => {
           setStorageBacking('device');
+          // Same reason as the sign-in path, and the same idempotence: the
+          // device that has just signed out keeps the listeners it had.
+          startTriggers();
           startSync();
           setState({ kind: 'ready' });
         },

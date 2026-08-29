@@ -40,6 +40,19 @@ mongodump --uri="$MONGODB_URI" --archive="$plain" --gzip --oplog --quiet
 `mongodump` exits non-zero, `set -Eeuo pipefail` aborts before the upload, and no
 archive is ever written.
 
+*Fixed (commit `1f1a57c`): `--oplog` is gone, and the reason is written where the
+next reader will look rather than left as a bare deletion. What it bought is not
+lost in any way that matters here — every write this app makes is a single
+document, so there is no cross-document invariant for a point-in-time snapshot to
+protect, and the restore path drops `--oplogReplay` to match. Reinstating it means
+a replica set, a backup role on `admin`, and reversing `setup-mongo.sh`'s recorded
+decision: all three, or none.*
+
+***Still unproven on the live box.** No backup has ever completed there, so the
+only thing that will confirm this is a manual `backup-mongo.sh backup` before the
+timer is enabled. That is an operational step, not a code one, and it is the
+outstanding half of this finding.*
+
 ### D2 — Nothing installs the backup units, and the alarm is installed by the same missing step
 `scripts/deploy/setup-box.sh`
 
@@ -54,6 +67,13 @@ alarm is indistinguishable from a working one.
 
 Together with D1: even after installing the units, every run fails. **Fix D1
 before enabling the timers, or the only outcome is a nightly failed unit.**
+
+*Fixed (commit `1f1a57c`): all four units are installed by `setup-box.sh`, and
+`backup-check` is enabled immediately — with no marker it says "No backup has ever
+completed on this box" and prints the command that fixes it, which is the true
+state of a box that has just been built. `tests/unit/deploy-units.test.ts` asserts
+it against the directory rather than against a list, so a fifth unit added later
+cannot be forgotten.*
 
 ### D3 — `deploy.env` is sourced too late to override the two settings that matter
 `scripts/deploy/deploy.sh:17`, `:19`, `:30`
@@ -76,6 +96,13 @@ carries no `EnvironmentFile`, so sourcing is the only channel.
 deploy, so it cannot receive the fix for its own condition, and nothing surfaces
 it but a failed unit.
 
+*Fixed (commit `1f1a57c`): the file is sourced first, and `REPO_DIR` defaults to
+the tree the script is running out of — `BASH_SOURCE` — rather than to a literal,
+so a moved copy is self-locating even with nothing set at all. The literal remains
+only as the last resort for a script invoked through a path that cannot be
+resolved. Both properties are asserted in `tests/unit/deploy-units.test.ts`: every
+setting is read after the source, by index.*
+
 ---
 
 ## Critical and High
@@ -95,21 +122,74 @@ it but a failed unit.
   phones flush into it and mark those mutations `applied` — so the old database
   stops being a clean rollback. *Fix: never clobber an existing `.pre-rename`,
   and copy before rewriting.*
+
+  *Fixed as prescribed, both halves. The database copy is now step 5 and the
+  environment rewrite step 6, so a failed copy leaves the box exactly as it was —
+  old name in `api.env`, old database untouched, and a re-run reading the same
+  facts the first one did. And a `.pre-rename` that exists is kept: it holds the
+  only on-box record of the old database name and of the Mongo password, and a
+  second run replacing it makes the thing kept for recovery a copy of the thing
+  it was meant to recover from.*
+
+  ***The order is the fix and the non-clobber is the belt.** Either alone leaves
+  a hole: reordering without the non-clobber still loses the record if a later
+  step fails twice, and the non-clobber without the reorder still leaves a re-run
+  silently skipping the copy while pointing the API at a database that was never
+  made.*
 - **D6** `OLD_DB`'s fallback is `steadingdb`, a name the code has never used —
   `databaseName()` returns `steading` before the rename commit and `homefarm`
   after. `setup-box.sh` leaves `MONGODB_DB` commented out by default, so the
   fallback is the common path, not the rare one.
+
+  *Fixed by removing the guess. There is no safe one to make: the value decides
+  which farm's records are copied, this script cannot see which default the
+  installed build compiled in, and being wrong is silent. So an absent
+  `MONGODB_DB` is now a refusal carrying the `listDatabases` command that
+  answers it.*
+
+  ***What a wrong guess did is not a wrong message.** It is `mongodump --db
+  steadingdb` against a database that does not exist — which dumps nothing,
+  restores nothing, passes the count check by comparing zero to zero (D7), and
+  points the API at an empty database the script has just reported as verified.*
 - **D7** The count check cannot fail when the source is empty:
   `a.getCollectionNames()` returns `[]`, `TALLY` is empty, the `while read` body
   never runs, and a copy that moved nothing reports verified. The sibling
   `migrate-to-local-mongo.sh` has exactly this guard.
+
+  *Fixed with the sibling's guard, and a second one on the loop itself in case
+  the tally's shape changes: a non-empty tally that yields no rows is a
+  verification that verified nothing, which is the defect one layer up.*
+
+  ***It covered for D6 exactly.** A wrong database name produces an empty source,
+  and an empty source is what this check could not fail on — so the two together
+  made a rename that copied nothing indistinguishable from one that worked.*
 - **D8** Every old unit file is `rm -f`'d **before** anything checks the
   replacements exist. A checkout without the new units leaves the box with no API
   unit at all, after the database has been copied.
+
+  *Fixed. The API's unit is required before anything is removed — it is the one
+  whose absence leaves nothing to start — and the rest are named when the
+  checkout does not carry them, rather than silently skipped one at a time after
+  the deletions.*
+
+  ***The recovery was among the casualties**, which is what makes this worse than
+  it reads: the deploy timer that would have pulled a checkout containing the
+  units is one of the eight that had just been deleted.*
 - **D9** `migrate-to-local-mongo.sh` restores with `--drop` and never checks
   whether the local database is already live. A re-run after cutover destroys
   every mutation phones have flushed since — unrecoverably, because clients mark
   them `applied` and never resend (invariant 7).
+
+  *Fixed. It reads the URI the API is actually configured with and refuses when
+  that names this box — because while it still names Atlas this is a migration
+  that has not landed, and a re-run is the ordinary retry `--drop` exists for;
+  once it names the box the migration is done, and there is nothing to re-run,
+  only records to destroy.*
+
+  ***No `--force`.** A flag here has exactly one use, which is the accident it
+  would cause, and the recovery it would need does not exist — Atlas has none of
+  those records either, because nothing has written to Atlas since the URI
+  changed. The refusal offers a verified backup instead.*
 
 ### Provisioning
 
@@ -120,11 +200,38 @@ it but a failed unit.
   reboot, indefinitely**. The comment justifying the window reasons only about a
   first run, then the next paragraph withdraws that premise by making the window
   run every time.
+
+  *Fixed (commit `851c9ff`). A trap armed before the window opens and cleared
+  only once the verification has passed, so the enabled config is the exit
+  invariant. Exercised under a die inside the window, a SIGHUP inside the window,
+  a die after the close, and the clean path — all four leave `enabled`.*
 - **D11** The "authorization is on" verification passes when mongod is simply
   unreachable — it `die`s only when the unauthenticated read *succeeds*, so every
   other outcome reads as proof of enforcement.
+
+  *Fixed alongside D10 (commit `851c9ff`). Reachability is established first and
+  separately: a mongod that is not answering is now its own `die` with its own
+  sentence, because a check that cannot tell "locked" from "gone" is not a check.
+  `wait_for_mongo` closes the same hole from the other side — it used to return 0
+  for a unit systemd called active that had failed fifteen pings.*
 - **D12** A re-run with a different `MONGODB_DB` never grants the account on that
   database; `EXISTS` keys on the user's name only.
+
+  *Fixed. The "already exists" branch now asks the second question — does this
+  account hold `readWrite` on **this** database — and grants both roles when it
+  does not. `grantRolesToUser` with a role already held is a no-op, so the
+  ordinary re-run where nothing changed is untouched.*
+
+  ***What it produced was not a box that failed to start.** The API connects,
+  authenticates against `admin` perfectly well, and then every query comes back
+  `not authorized on <db>` — a box that provisioned cleanly, said so, and could
+  not read or write one record. A rename, a second farm, or a rebuild against a
+  new name all reach it.*
+
+  *The grant sits inside the auth-disabled window, which is the only place the
+  command is permitted, and before the window is closed and verified — so a grant
+  that fails cannot leave authorization off. Asserted by position, not by
+  reading.*
 
 ### Deploy path
 
@@ -132,33 +239,173 @@ it but a failed unit.
   `CHANGED` is derived from whether HEAD moved *this tick*, not from what is
   running, so the next tick prints "nothing to deploy" and exits 0 — for ever.
   New code on disk, old code in memory, green timer.
+
+  *Fixed. The box writes the commit it last got all the way through on —
+  `/var/lib/homefarm/deployed-sha`, written the moment `/ready` answers — and a
+  tick is "nothing to deploy" only when HEAD is at the release ref **and** that
+  ref is what is actually running.*
+
+  *A box that has never written the marker, which is every box already deployed,
+  reads it as empty and does one full pass. One extra install and one restart,
+  once, and then it settles. Asserted, because it is what the first tick after
+  this ships will do.*
+
+  *The marker is written before the Caddy verdict rather than after: Caddy being
+  wrong does not make the API undeployed, and withholding it would reinstall and
+  bounce the API every five minutes over a web-server config — which is the exact
+  churn `CHANGED` exists to stop.*
 - **D14** `systemctl reload caddy` is unguarded and sits between the checkout and
   the API restart, so a refused reload skips the restart of code already
   installed — and `cmp -s` then reports "unchanged" on every later tick.
+
+  *Fixed. The reload is guarded and its two outcomes are named — deferred rather
+  than ignored, because the verification immediately below asks Caddy's admin API
+  what is **actually loaded**, which is a stronger question than this exit code
+  answers: a reload returns 0 for a signal delivered, not for a config accepted.*
+
+  *That verification block was added earlier in this audit for the ten-day `/app`
+  404 and closes the other half of the same hazard. This one is the half where
+  the reload does not return 0 at all, and under `set -e` that killed the script
+  where it stood.*
 - **D15** The readiness probe is gated on `CHANGED`, so on a box where the
   release ref has not moved, nothing on the box ever checks the API. Combined
   with `StartLimitBurst=5`, an API that dies stays dead while the deploy timer
   reports success every five minutes.
+
+  *Fixed. The probe is unconditional, and on a quiet tick a failure is acted on
+  rather than reported: `reset-failed` first — a start limit systemd has hit is
+  precisely why nothing is retrying, and a plain restart against one is refused —
+  then one restart, then the same diagnosis any failed deploy gets. A box that
+  cannot be revived leaves `homefarm-deploy.service` in `systemctl --failed`,
+  which is what `check-box.sh` reads.*
+
+  ***The closing advice had to change with it.** That block offers a rollback to
+  `$WAS`, and on a quiet tick `$WAS` is `$NOW` — so it would have proposed a
+  checkout of the commit already running as the repair for that commit not
+  running. It now says which situation it is in.*
+
+  *Both halves are red-proofed against the old code: with the `CHANGED` gate
+  restored, `curl` is not called once on a quiet tick.*
 - **D16** The API binds `0.0.0.0` while the Caddyfile states *"The API binds
   127.0.0.1 through this proxy"*. Exposure rests entirely on two firewalls, one
   of which `setup-box.sh` says it cannot reach. `ops.ts` gets this right with
   `OPS_HOST ?? '127.0.0.1'`; the API has no equivalent knob.
+
+  *Fixed with the knob `ops.ts` already had: `API_HOST ?? '127.0.0.1'`, same
+  default and same sentence, so it is one rule rather than two decisions.
+  `API_HOST=0.0.0.0` is there for a container, where loopback is the container's
+  own and a published port would otherwise reach nothing.*
+
+  ***This changes what an existing box is reachable on**, and it is worth saying
+  plainly: anything talking to `:3001` directly rather than through Caddy stops
+  working. On the deployment this repository builds, nothing does — Caddy
+  reverse-proxies to `127.0.0.1:3001` on the same machine, and `deploy.sh` probes
+  the same loopback address.*
+
+  ***The container image needed the override, and CI is what said so.** The
+  `container` check publishes `:3001` and polls `/health`; the API logged
+  `listening on 127.0.0.1:3001` and never answered, because loopback inside a
+  container is the container's own namespace and a published port reaches
+  nothing. The Dockerfile now sets `API_HOST=0.0.0.0`, which is correct there and
+  does not weaken the finding: what makes an image reachable is `docker run -p`,
+  and that is already the deliberate act.*
+
+  ***That was the third document asserting the old behaviour.** The Dockerfile
+  said *"Fastify binds 0.0.0.0 already"* — true when written, false one commit
+  before the check ran. The Caddyfile and `ops.ts` were the other two, and both
+  were corrected in the same change; this one was missed because it was the only
+  one where the claim was load-bearing rather than explanatory.*
+
+  ***`ops.ts`'s own comment was the clearest statement of the defect** and is
+  corrected with it. It justified its loopback default by contrast with an API
+  that *"listens on `0.0.0.0` because it must be reachable"* — a premise that was
+  never true here. What binding every interface actually bought was a second door
+  past Caddy, past TLS, and past whatever the proxy does about headers and rate
+  limits.*
 
 ### Backup and release
 
 - **D17** The archive's content is never verified — only that it exceeds 4096
   bytes, a constant with no relation to the source. A farm database with photos
   is hundreds of megabytes; a 5 KB archive passes, uploads, and moves the marker.
+
+  *Fixed at both ends. The floor is now derived from the source — `db.stats()`
+  says what this database holds, and gzip on BSON does well but not fiftyfold, so
+  an archive under a fiftieth of it is not a copy of it. Deliberately loose: this
+  guards against a collapse, not against a compression model, and a false alarm
+  here fails a backup that was fine. The 4096 constant stays as an independent
+  lower bound rather than as the check.*
+
+  *And the archive is read back before it is uploaded. `mongorestore --dryRun`
+  walks the whole file and reports what it would restore without writing, so a
+  truncated dump — what a killed `mongodump` leaves — is caught here rather than
+  on the day somebody needs it. Guarded on the flag existing, because the tools
+  come from a distribution package this project does not pin and a verification
+  that fails a good backup is worse than one that is skipped and says so.*
+
+  ***This and D18 made each other invisible.** The likeliest way to produce a
+  five-kilobyte archive was a correct dump of the wrong, empty database.*
 - **D18** The backup dumps whatever database the **URI path** names, while the
   rest of the codebase treats that path as cosmetic and selects on `MONGODB_DB`.
   After a `--keep-db` rename, or on any box where the two disagree, it backs up
   the wrong database and reports success.
+
+  *Fixed. The name is resolved exactly as `databaseName()` resolves it, the path
+  is stripped out of the URI so `--db` is the only thing naming a database, and
+  the success line says which one it took. Asserted **against `databaseName()`
+  itself** rather than against a restatement of its rule, so a change to the
+  API's fallback fails the backup's test.*
+
+  *When the two disagree it says so on the way past, because the operator almost
+  certainly believes the URI is the one that counts. It is not — here or in the
+  API — and `backup.env` being a separate file from `api.env` is what makes them
+  drift: two halves edited at different times by different steps.*
+
+  ***The restore path had the mirror of this and is documented rather than
+  changed.** `mongorestore --archive` restores each namespace under the name it
+  was dumped as, so pointing the URI at a differently-named target does not move
+  it. Renaming on restore is `--nsFrom`/`--nsTo` and is a deliberate act with its
+  own arguments; guessing at it inside the one path that runs after a farm has
+  already lost data is the wrong place to be clever. It now says where the
+  records will land and how to put them elsewhere.*
+
+  *`homefarm-backup.service` documents `MONGODB_DB` beside `MONGODB_URI`, which
+  it did not.*
 - **D19** Both identity checks on a published APK sit inside
   `if command -v unzip`, and nothing installs `unzip`. Without it, any zip named
   `.apk` is published as the farm's app — the exact failure the file says was
   *"found by publishing this repository's README as a build."*
+
+  *Fixed at both ends. The checks are unconditional, and a missing `unzip` is now
+  its own refusal rather than a reason to skip them — skipping is failing open on
+  the question "is this our application". The cost of refusing is bounded and
+  loud: the shelf keeps the APK it has, `deploy.sh` notes it could not publish,
+  and the API is untouched.*
+
+  *`setup-box.sh` installs it, **unconditionally** — which is its own small
+  finding. The base packages (`ca-certificates curl gnupg git`) are installed
+  inside the Node block, so a box that already had Node got none of them. That is
+  the shape of dependency that goes missing exactly where nobody is looking, and
+  it is why this one was.*
 - **D20** A failed asset upload leaves a published release with no APK, and that
   tag is then refused for ever, so the box serving that commit never gets an app.
+
+  *Fixed, and it heals the state as well as preventing it. The step counts the
+  APKs on a release rather than asking only whether one exists, so:*
+
+  - *exists **with** an APK → still refused, which is the collision the guard was
+    written for: two different builds sharing a name;*
+  - *exists **with none** → the wreckage of a failed upload, so it uploads into
+    it, which is the repair;*
+  - *still empty after the upload → this run produced the stranded state itself,
+    so the release is removed and the tag is free for the next run rather than
+    blocking every one of them.*
+
+  ***The git tag goes only when this run created the release.** One that was
+  already there belongs to whoever made it, and `deploy.sh` resolves a commit to
+  a tag with git before it asks GitHub anything — deleting somebody else's would
+  change what the box resolves to. Asserted by position: `--cleanup-tag` sits
+  inside that guard.*
 
 ---
 
@@ -181,6 +428,60 @@ comment claims catch-up behaviour (D26). Root writes a fixed-name file in shared
 `/tmp` from a unit with no `PrivateTmp` (D27). `GITHUB_TOKEN` in `deploy.env` is
 sourced but never exported, so the private-repo recovery path documented beside
 it cannot work (D28).
+
+**All eight are closed, one of them as a stated decision rather than a fix.**
+
+- **D22** — the EXIT trap ended on a false test, and under `set -e` that sets
+  the script's status. *The cost is upstream and worse than the exit code:*
+  `deploy.sh` read it, printed "could not publish it", and **did not write the
+  marker recording what is on the shelf** — so the next tick fetched and
+  published the same build again, for ever, each time succeeding and each time
+  reported as a failure.
+- **D23** — `After=homefarm-backup.service` on the check's service. *Ordering
+  only: `Requires=` would be the wrong relation and `Wants=` would turn a check
+  into a trigger. The check must still run when the backup failed, because a
+  stale marker is exactly what it exists to report.*
+- **D24** — the note prints only when the save happened, and says what to do
+  when it did not. *A box whose rules were not saved comes back after its next
+  reboot with the ports closed — unreachable, looking like a dead instance —
+  having been told in writing that it was saved. That is worse than not opening
+  them, because it moves the discovery to a reboot weeks later with nothing
+  connecting it to this run.*
+- **D25** — validated to a temporary file first, and a refused reload is no
+  longer escalated. *The escalation was backwards: a reload Caddy declines
+  leaves the previous config serving, and the restart it fell back to takes the
+  site down. `deploy.sh` already did this properly; this is the same shape.*
+- **D26** — `Persistent=` removed, and the comment claiming it with it.
+  *`OnBootSec=5min` was providing the catch-up all along; only the explanation
+  was wrong, and an explanation naming a setting that does nothing is the kind
+  that survives review.*
+- **D27** — `mktemp` in both scripts and `PrivateTmp=true` on the deploy unit.
+  *Both, because the script is run by hand as well as by the timer.*
+- **D28** — exported, conditionally. *`export VAR=""` and an unset one are
+  different things to `release-apk.mjs`: it tests truthiness and would send an
+  empty bearer header, which GitHub answers 401 to rather than treating as
+  anonymous. `HOMEFARM_APP_ID` was already exported for exactly this reason,
+  which is what made the omission easy to miss — and `HOMEFARM_DOMAIN` had it
+  too, unnamed by the finding.*
+- **D21** — ***the false claim is removed; the mechanism is deliberately
+  unchanged, and that is a decision rather than a fix.*** The rule as written
+  holds for how the secret reaches these scripts — in the environment, not on
+  the `sudo` line — and stops at their boundary, which the comment did not say:
+  the URI is then handed to `mongodump`, `mongorestore` and `mongosh` as
+  `--uri=…`, their argv, visible in `ps` for the seconds each runs. Both files
+  now say so.
+
+  *Closing it properly needs two mechanisms. The Database Tools take a
+  `--config` file with the password out of band; `mongosh` has no equivalent and
+  would need the credentials split out of the URI and prompted for, which is
+  unusable unattended. One of the two is version-dependent on an unpinned
+  package, on the paths that carry a farm's only copy of its records. What it
+  buys is closing a window in which a local account on a single-tenant box could
+  read `/proc`.*
+
+  ***Worth doing on a quiet day with a verified backup in hand. Not in the same
+  week as the first one** — which is a judgement about sequencing, and the
+  farm's to overrule.*
 
 ---
 

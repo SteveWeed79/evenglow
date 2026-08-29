@@ -154,12 +154,24 @@ export function DayEvents({ day }: { day: HistoryDay }): React.ReactElement {
 }
 
 /**
- * One record, and the way back out of it.
+ * One record, and the way back out of it — when there is one.
  *
- * Every entity a history row can be built from is append-only, and every one
- * of them accepts a delete — a mistyped hour meter reading cannot be corrected
- * by recording a better one, because the meter's own rule refuses anything
- * lower, so taking it back is the whole of it. See `APPEND_ONLY_ENTITIES`.
+ * A take-back enqueues a `delete` against `event.id` and `event.entity`, which
+ * is right for a row built from an append-only log: the row and the record are
+ * the same thing, and a mistyped hour meter reading cannot be corrected by
+ * recording a better one, because the meter's own rule refuses anything lower.
+ *
+ * **This used to say that was true of every row, and it was not.** Three
+ * builders make a row out of a *field* on a mutable record — `task.completedAt`,
+ * `maintenance.lastDoneAtDate`, `incubation.hatchedAt` — so `event.id` is the
+ * parent record's own id. On a service row, one tap archived **the whole
+ * recurring oil-change schedule** rather than the service it named; the
+ * `incubation` builder had even written the reason down while explaining why
+ * its own case was different.
+ *
+ * So the reader says. `event.removable` is decided once in `eventsFrom`, where
+ * the entity is known, rather than inferred here from a premise a screen has no
+ * way to check.
  */
 function EventRow({
   event,
@@ -219,21 +231,34 @@ function EventRow({
 
       {selected ? (
         <View style={styles.actions}>
-          {/* What it costs, before the second tap rather than after it. A
-              record leaving history takes its share of every total with it,
-              and somebody expecting the line to merely be tidied away should
-              find that out here. */}
-          <Text style={[styles.detail, { color: colors.muted }]}>
-            Logged in error? Take it back out — the day&rsquo;s totals and every average
-            it counted towards will change to match.
-          </Text>
-          <Confirm
-            label="Take this back"
-            armedLabel="Tap again to remove it"
-            onConfirm={remove}
-            testID={`event-remove-${event.id}`}
-          />
-          <Failure message={removed.failure} />
+          {event.removable ? (
+            <>
+              {/* What it costs, before the second tap rather than after it. A
+                  record leaving history takes its share of every total with it,
+                  and somebody expecting the line to merely be tidied away should
+                  find that out here. */}
+              <Text style={[styles.detail, { color: colors.muted }]}>
+                Logged in error? Take it back out — the day&rsquo;s totals and every
+                average it counted towards will change to match.
+              </Text>
+              <Confirm
+                label="Take this back"
+                armedLabel="Tap again to remove it"
+                onConfirm={remove}
+                testID={`event-remove-${event.id}`}
+              />
+              <Failure message={removed.failure} />
+            </>
+          ) : (
+            /* A row drawn from a field on something that recurs. There is no
+               event here to take back — the record is the schedule, and it is
+               edited where it lives. Saying so beats a disabled button nobody
+               can explain, and beats the alternative this replaced. */
+            <Text style={[styles.detail, { color: colors.muted }]}>
+              This is when the job was last done, not a record of its own. Change it
+              where the job is kept.
+            </Text>
+          )}
         </View>
       ) : null}
     </View>

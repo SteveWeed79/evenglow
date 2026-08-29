@@ -261,6 +261,42 @@ MONGODB_URI=mongodb://homefarm:${PASSWORD}@127.0.0.1:27017/${DB_NAME}?authSource
 KEY
 else
   note "already exists — password left alone"
+
+  # ── The account exists. That is not the same as it being able to reach THIS
+  #    database ────────────────────────────────────────────────────────────────
+  #
+  # `EXISTS` keys on the user's name and nothing else, and the roles are granted
+  # per database at creation. So a re-run with a different `MONGODB_DB` — a
+  # rename, a second farm, a box being rebuilt against a new name — took this
+  # branch, said "already exists", and left the account with `readWrite` on the
+  # OLD database only.
+  #
+  # What that produces is not a failure to start. The API connects, authenticates
+  # against `admin` perfectly well, and then every single query comes back
+  # `not authorized on <db>` — a box that provisioned cleanly and cannot read or
+  # write one record, with the setup script's own output saying it was fine.
+  #
+  # Granting is idempotent: `grantRolesToUser` with a role already held is a
+  # no-op, so this is safe on the ordinary re-run where nothing has changed.
+  HAS_DB="$(mongosh --quiet admin --eval "
+    const u = db.getSiblingDB('admin').getUser('homefarm');
+    print(u && u.roles.some(r => r.db === '${DB_NAME}' && r.role === 'readWrite') ? 1 : 0);
+  " 2>/dev/null || echo 0)"
+
+  if [ "$HAS_DB" = "1" ]; then
+    note "already has readWrite on ${DB_NAME}"
+  else
+    mongosh --quiet admin --eval "
+      db.getSiblingDB('admin').grantRolesToUser('homefarm', [
+        { role: 'readWrite', db: '${DB_NAME}' },
+        { role: 'dbAdmin',   db: '${DB_NAME}' }
+      ])
+    " >/dev/null || die "Could not grant the account access to ${DB_NAME}.
+  It exists but holds no role there, so the API would authenticate and then be
+  refused on every query. Check 'mongosh admin --eval \"db.getUser(\\\"homefarm\\\")\"'."
+    note "granted readWrite and dbAdmin on ${DB_NAME} — it had neither"
+  fi
+
   note "the URI shape is: mongodb://homefarm:<password>@127.0.0.1:27017/${DB_NAME}?authSource=admin"
 fi
 

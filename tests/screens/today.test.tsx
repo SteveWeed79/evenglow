@@ -100,10 +100,18 @@ describe('the order of the morning', () => {
    *
    * W2 makes withdrawals the highest-value safety surface in the app, so
    * burying one under a tally would be a bad trade — but that is not the trade.
-   * A withdrawal row has `noticeDays: 0` and reads "clear again after", so it
-   * appears on the day the withdrawal ENDS. While produce is actually being
-   * withheld there is no due row at all, and the guard is the banner on the
-   * tally plus the second press it demands.
+   * A withdrawal row reads "clear again after" and carries one day of notice,
+   * so it appears inside the last day of the hold and says when the produce
+   * comes back. For every day before that there is no row at all, and the guard
+   * is the banner on the tally plus the second press it demands.
+   *
+   * **The notice used to be 0 and this paragraph used to say so**, which read as
+   * the purest statement of "not actionable early" and was the one value that
+   * made the row unreachable: `urgencyOf` calls a row `later` until
+   * `now >= at - noticeDays * DAY`, and `activeWithdrawals` drops the withdrawal
+   * the instant `at <= now`. The row existed only while it was invisible. What
+   * this test asserts did not change — the guard was never in the list — but the
+   * sentence explaining why was describing a row no farm could see.
    *
    * Moving the list does not move the guard, because the guard was never in
    * the list. This test is what stops that from being a comment nobody checked.

@@ -474,22 +474,71 @@ export async function openSqliteStore(
     );
   }
 
+  /** Same value by content, for comparing one field against what was written. */
+  function sameValue(a: unknown, b: unknown): boolean {
+    return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  }
+
+  /** A record's value as a bag of fields, or not one this can reason about. */
+  function isFields(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+  }
+
   /**
    * Puts a record back the way a refused command found it.
    *
-   * **Only when nothing has happened to it since.** `after` is the `updatedAt`
-   * this device's optimistic write produced, so a record still carrying it is
-   * a record nothing else has touched. Anything else — a pull delivering the
-   * server's version, a later edit by the same hand, a second delete somebody
-   * else made — is newer than the command being discarded, and newer wins.
-   * Restoring over it would resurrect a value the farm has moved past, which
-   * is a worse fault than the residue this exists to clear.
+   * ## Per field, because the whole-record test threw the evidence away
+   *
+   * **This compared `updatedAt` against the value this device's optimistic
+   * write produced, and skipped the restore entirely when it had moved** —
+   * "newer wins", which is right whenever the newer write touched the same
+   * field, and wrong the rest of the time. An `update` arriving from a pull
+   * MERGES (`nextRecordValue`), so a second device editing `count` moves
+   * `updatedAt` while leaving this device's refused `name` exactly where the
+   * optimistic write put it.
+   *
+   * The discard then restored nothing **and deleted the pre-image anyway**, so
+   * the record kept a value the server had refused, no other device had, and
+   * nothing could ever repair. Permanent, silent, and on the record a farm
+   * reads.
+   *
+   * So the question is asked per field instead: *is what this command wrote
+   * still standing?* If it is, that field goes back to the pre-image. If it is
+   * not, something newer has replaced it and is left alone — which is the same
+   * "newer wins" rule, applied where it can actually tell.
+   *
+   * The two cases the old test conflated now separate cleanly. A record nothing
+   * has touched has every written field still standing, so all of them revert:
+   * the whole-record restore, unchanged. A record something has merged into
+   * reverts only the residue.
+   *
+   * `updatedAt` is deliberately NOT moved. This removes a value that was never
+   * real rather than making a new version, and bumping it would make the device
+   * look newer than the server and suppress the pull that carries the truth.
+   *
+   * ## What this still cannot tell apart, stated rather than hidden
+   *
+   * "Still standing" is a comparison of values, so two devices that made the
+   * **identical** edit — the same typo corrected the same way — are
+   * indistinguishable: one refused, discarded here, and this reverts a field the
+   * other device legitimately owns. The record then holds the pre-image locally
+   * while the server holds the shared value, until anything touches it again.
+   *
+   * Narrow, and the smaller of the two faults. The residue this replaced was
+   * permanent by construction — the pre-image was dropped in the same breath as
+   * the decision not to use it — where this leaves a divergence any later edit
+   * or rehydration repairs. Per-field provenance would settle it properly and is
+   * a bigger change than the one this is.
    *
    * The pre-image is dropped either way. It describes a mutation that is no
    * longer in the outbox, and keeping it would leave the table growing a row
    * per discarded edit for ever.
    */
-  async function restoreBefore(db: SqlOps, mutationId: string): Promise<void> {
+  async function restoreBefore(
+    db: SqlOps,
+    mutationId: string,
+    refused: { op: string; payload: unknown },
+  ): Promise<void> {
     const undo = await db.get<UndoRow>('SELECT * FROM record_undo WHERE mutationId = ?', [
       mutationId,
     ]);
@@ -497,21 +546,63 @@ export async function openSqliteStore(
 
     await db.run('DELETE FROM record_undo WHERE mutationId = ?', [mutationId]);
 
-    const now = await db.get<{ updatedAt: number }>(
-      'SELECT updatedAt FROM records WHERE key = ?',
+    const now = await db.get<{ value: string; updatedAt: number; deleted: number }>(
+      'SELECT value, updatedAt, deleted FROM records WHERE key = ?',
       [undo.key],
     );
-    if (now?.updatedAt !== undo.after) return;
+    // Gone entirely. Nothing of the refused command is left to take back.
+    if (now === undefined) return;
 
-    if (undo.existed === 0) {
-      await db.run('DELETE FROM records WHERE key = ?', [undo.key]);
+    /**
+     * A refused `delete` set the flag and left the value alone, so the flag is
+     * the only thing to ask about: still hidden means still this command's
+     * doing, and a record somebody has since deleted for real stays deleted.
+     */
+    if (refused.op === 'delete') {
+      if (now.deleted !== 1) return;
+      await db.run('UPDATE records SET deleted = ? WHERE key = ?', [undo.deleted ?? 0, undo.key]);
       return;
     }
 
-    await db.run(
-      'UPDATE records SET value = ?, updatedAt = ?, deleted = ? WHERE key = ?',
-      [undo.value, undo.updatedAt, undo.deleted, undo.key],
-    );
+    const wrote = refused.payload;
+    const current = readJson(now.value);
+    // Either side unreadable means the question cannot be answered, and a
+    // record left alone is the honest outcome — the same call `readJson`'s own
+    // note makes about a merge's previous value.
+    if (!isFields(wrote) || !isFields(current)) return;
+
+    const before = undo.value === null ? {} : readJson(undo.value);
+    const previous = isFields(before) ? before : {};
+
+    const next: Record<string, unknown> = { ...current };
+    let changed = false;
+
+    for (const [field, written] of Object.entries(wrote)) {
+      // `null` on the wire is a clear (`contracts/clearing.ts`), so what the
+      // command produced for that field is its absence.
+      const produced = written === null ? undefined : written;
+      if (!sameValue(current[field], produced)) continue;
+
+      const had = previous[field];
+      if (had === undefined) delete next[field];
+      else next[field] = had;
+      changed = true;
+    }
+
+    if (!changed) return;
+
+    /**
+     * A record this device invented and nothing has since confirmed leaves
+     * altogether — reverting its fields one by one would leave an empty object
+     * where there should be no row. Only when nothing else has arrived: a
+     * create landing from a pull fills the same key, and that record is real.
+     */
+    if (undo.existed === 0) {
+      if (Object.keys(next).length === 0) await db.run('DELETE FROM records WHERE key = ?', [undo.key]);
+      return;
+    }
+
+    await db.run('UPDATE records SET value = ? WHERE key = ?', [JSON.stringify(next), undo.key]);
   }
 
   /** A mutation that has left the outbox owns no pre-image. */
@@ -839,6 +930,38 @@ export async function openSqliteStore(
         .flatMap((parsed) => (parsed.success ? [parsed.data] : []));
     },
 
+    /**
+     * ── "Send it again" needs a new idempotency key ──────────────────────────
+     *
+     * **This kept the mutation's id, and that id is the server's idempotency
+     * key — so the retry could not be decided afresh.** `sync/apply.ts` upserts
+     * the envelope FIRST and stamps the outcome after, so any refusal reached
+     * after the log write is stored against that id. A second send finds
+     * `upsertedCount === 0`, `replayFromLog` answers `decided`, and
+     * `decidedResult` returns the identical refusal — for ever, by design:
+     * *"a refusal stays a refusal. Reporting `duplicate` instead would tell the
+     * device its rejected-inbox entry had somehow been accepted."*
+     *
+     * That is right for a **replay** — a client resending because it never got
+     * the answer — and wrong for this, which is not a replay. The two refusals
+     * whose own messages tell the farmer to try again are the ones that could
+     * never work: a mistyped hour meter reading, corrected and resent, and an
+     * archived-record conflict reviewed and resent. Both arrive with a
+     * `payload` the server has never seen, under a key that says it has.
+     *
+     * So a retry goes out as a new mutation. The server keeps the original and
+     * its refusal, which is where that history belongs; this row carries on as
+     * the same piece of work under a key that has not been decided.
+     *
+     * **`record_undo` moves with it.** The pre-image is keyed by mutation id and
+     * is what `discardRejected` restores from — leaving it behind would mean a
+     * retry that is refused again can no longer be undone, which is the failure
+     * this fix exists to stop, one step later.
+     *
+     * `clientSeq` is deliberately unchanged. It is this device's ordering, and
+     * the work still belongs where it was made: re-stamping it would move an
+     * edit after mutations that were enqueued expecting to follow it.
+     */
     async retryRejected(id, payload): Promise<void> {
       await driver.transaction(async (tx) => {
         if (payload !== undefined) {
@@ -851,11 +974,14 @@ export async function openSqliteStore(
         // that parked it and is refused before it is sent. `attempts` was the
         // only one of the two before there were two.
         await forgetUndecided(tx, [id]);
+
+        const fresh = newId();
+        await tx.run('UPDATE record_undo SET mutationId = ? WHERE mutationId = ?', [fresh, id]);
         await tx.run(
-          `UPDATE outbox SET status = 'queued', attempts = 0,
+          `UPDATE outbox SET id = ?, status = 'queued', attempts = 0,
              lastError = NULL, rejectedReason = NULL, rejectedAt = NULL
            WHERE id = ?`,
-          [id],
+          [fresh, id],
         );
       });
     },
@@ -881,10 +1007,13 @@ export async function openSqliteStore(
         // ONLY a rejected mutation. Without the status check a stray call
         // deletes queued work that has not been sent yet — the one thing the
         // outbox exists to make impossible.
-        const existing = await tx.get<{ status: string; op: string; entity: string; targetId: string }>(
-          'SELECT status, op, entity, targetId FROM outbox WHERE id = ?',
-          [id],
-        );
+        const existing = await tx.get<{
+          status: string;
+          op: string;
+          entity: string;
+          targetId: string;
+          payload: string;
+        }>('SELECT status, op, entity, targetId, payload FROM outbox WHERE id = ?', [id]);
         if (!existing || existing.status !== 'rejected') return;
 
         // Deleted first, so it cannot count itself as the confirmation that
@@ -904,7 +1033,9 @@ export async function openSqliteStore(
         if (existing.op === 'create') {
           await dropRefusedCreate(tx, existing.entity, existing.targetId);
         } else {
-          await restoreBefore(tx, id);
+          // The payload as well as the op: the restore asks, per field, whether
+          // what this command wrote is still standing.
+          await restoreBefore(tx, id, { op: existing.op, payload: readJson(existing.payload) });
         }
       });
     },

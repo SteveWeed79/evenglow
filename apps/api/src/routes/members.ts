@@ -23,6 +23,7 @@ import {
 import { requireClaims, requireMutationClaims } from '../auth/require';
 import { hashPassword } from '../auth/password';
 import { startSession } from '../auth/refresh';
+import { revokeAllForUser } from '../db/refresh-tokens';
 import {
   countOwners,
   disableUser,
@@ -594,7 +595,23 @@ export async function memberRoutes(app: FastifyInstance, env: Env): Promise<void
         });
         if (refusal) throw new HttpError(403, refusalMessage(refusal));
 
-        await disableUser(claims.orgId, target._id, new Date());
+        const at = new Date();
+        await disableUser(claims.orgId, target._id, at);
+
+        /**
+         * And the tokens go with the account.
+         *
+         * `disableUser` stops the account being *usable* — every gate refuses a
+         * disabled user — but it leaves a live refresh family behind, and a
+         * defence that rests on one field being checked in one function is one
+         * refactor from being no defence at all. `revokeAllForUser` is what
+         * makes the sessions actually dead, and it is what a password reset
+         * already does for exactly this reason.
+         *
+         * Inside the lane, after the disable, so a removal that was refused
+         * leaves the member's sessions alone.
+         */
+        await revokeAllForUser(target._id, at);
       });
 
       return reply.status(204).send();

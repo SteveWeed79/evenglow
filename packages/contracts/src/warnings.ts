@@ -1,6 +1,6 @@
 import { SPECIES_TRAITS, type Species } from './entities/livestock';
 import { deciCToFahrenheit } from './units';
-import { type Forecast, type ForecastDay, dayStart } from './weather';
+import { type Forecast, type ForecastDay, dayAfter, dayStart } from './weather';
 
 /**
  * What the forecast means for THIS farm.
@@ -244,6 +244,27 @@ export function camelidHeatIndex(deciC: number, humidity: number): number {
 const BIRTH_WINDOW_DAYS = 7;
 
 /**
+ * How long past her date a doe is still expected.
+ *
+ * **The window used to have no back half, and the case it missed is the ordinary
+ * one.** `birthDue` emits a row only while `bornAt` is unrecorded, so an `at` in
+ * the past does not mean the birth happened — it means *she has not kidded yet
+ * and nobody logged it*. `GESTATION_DAYS` says so itself: every figure there
+ * *"varies by several days across breeds and conditions… The date is when to be
+ * ready, not a promise."* A doe two days over, on a −7 °C night, got nothing.
+ *
+ * A week, matching the forward window, because that is the size of the variance
+ * those averages carry. It is **not** unbounded, and that is deliberate: a
+ * breeding record nobody ever closed would otherwise raise a freezing-night
+ * warning every winter for ever, which is the permanent-resident failure
+ * `due/types.ts` names — *"a list with a permanent resident on it is a list
+ * people stop reading"*. Past a week the likelier readings are that she gave
+ * birth unlogged or that something is wrong, and neither is a thing a weather
+ * warning can help with.
+ */
+const BIRTH_OVERDUE_DAYS = 7;
+
+/**
  * How close a clip has to be for rain to be worth saying.
  *
  * **A week, and it was a month.** The original reasoning is kept because it is
@@ -310,9 +331,11 @@ export function warningsFor(
   if (weather === null || weather.stale) return [];
 
   const today = dayStart(now);
-  const days = weather.forecast.days.filter(
-    (day) => day.day >= today && day.day <= today + DAY_MS,
-  );
+  // Today and tomorrow, by the calendar. `today + DAY_MS` lands an hour short
+  // of tomorrow's key on the fall-back night and dropped every warning this
+  // function has for it — see `dayAfter`.
+  const tomorrow = dayAfter(today);
+  const days = weather.forecast.days.filter((day) => day.day >= today && day.day <= tomorrow);
 
   const drafts = days.flatMap((day) => [
     ...frostWarnings(day, farm),
@@ -551,8 +574,14 @@ function birthWarnings(day: ForecastDay, farm: FarmToday, today: number): Draft[
 
   // The window runs from TODAY, not from the forecast day being examined. A
   // birth eight days out is not imminent because tomorrow happens to be cold.
+  //
+  // Both bounds are measured from today and only the upper one used to exist —
+  // see BIRTH_OVERDUE_DAYS for why an overdue birth is the ordinary case rather
+  // than a closed one.
   const soon = farm.births.filter(
-    (birth) => birth.at >= today && birth.at <= today + BIRTH_WINDOW_DAYS * DAY_MS,
+    (birth) =>
+      birth.at >= today - BIRTH_OVERDUE_DAYS * DAY_MS &&
+      birth.at <= today + BIRTH_WINDOW_DAYS * DAY_MS,
   );
   if (soon.length === 0) return [];
 
@@ -589,10 +618,28 @@ function birthWarnings(day: ForecastDay, farm: FarmToday, today: number): Draft[
 function shearingWarnings(day: ForecastDay, farm: FarmToday, today: number): Draft[] {
   if (day.rainChance < WET_CHANCE) return [];
 
-  // The window runs from TODAY, like `birthWarnings`: a clip owed in March is
-  // not made urgent by tomorrow being wet.
+  // The forward window runs from TODAY, like `birthWarnings`: a clip owed in
+  // March is not made urgent by tomorrow being wet.
+  //
+  // ── Backwards it does not close, and that is the opposite of the birth rule
+  //
+  // This had a single day of grace, so a clip three days overdue raised nothing
+  // while one due in five days did — the wrong way round, since an overdue
+  // fleece is the one most in need of a dry day.
+  //
+  // `birthWarnings` bounds its back half at a week because a birth DATE is a
+  // prediction, and a breeding record nobody closed would shout every winter
+  // for ever. An owed clip is not a prediction, it is a live state:
+  // `shearingDues` computes `at` from `lastShornAt`, so the row moves forward
+  // the moment the fleece comes off and exists only while the work is actually
+  // outstanding. There is no stale record to guard against, so there is nothing
+  // for a lower bound to do except suppress the case that matters most.
+  //
+  // What stops this from becoming noise on a farm months behind is what was
+  // already decided above: it is `watch`, never `act`, and it only speaks on a
+  // wet day. A farm that has not shorn does need to know which days are no good.
   const owed = (farm.shearings ?? []).filter(
-    (shearing) => shearing.at >= today - DAY_MS && shearing.at <= today + SHEARING_WINDOW_DAYS * DAY_MS,
+    (shearing) => shearing.at <= today + SHEARING_WINDOW_DAYS * DAY_MS,
   );
   if (owed.length === 0) return [];
 

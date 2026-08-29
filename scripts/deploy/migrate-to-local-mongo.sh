@@ -27,6 +27,24 @@
 # both strings sit in `ps` for the length of the migration — defeating the rule
 # this paragraph is about. The runbook said to do it that way until somebody
 # ran it.
+#
+# **And it stops at this script's boundary, which the rule above did not say.**
+# The URI reaches here in the environment, and is then handed to `mongodump`,
+# `mongorestore` and `mongosh` as `--uri=…` — their argv, visible in `ps` for
+# the seconds each runs. So the password is off the command line of *this*
+# process and on the command line of its children, and the paragraph above read
+# as though it were off both.
+#
+# Not closed, and the reason is a trade rather than an oversight. The Database
+# Tools take a `--config` file with the password out of band; `mongosh` has no
+# equivalent and would need the credentials split out of the URI and prompted
+# for, which is unusable unattended. So closing it properly means two mechanisms,
+# one of them version-dependent on an unpinned package, on the paths that carry
+# a farm's only copy of its records. The exposure it buys is a local account on
+# a single-tenant box reading `/proc` during those seconds.
+#
+# Worth doing on a quiet day, with a verified backup already in hand. Not worth
+# doing in the same week as the first one.
 
 set -Eeuo pipefail
 umask 077
@@ -128,6 +146,48 @@ else
   'sudo systemctl start homefarm-api'."
 fi
 note "$(du -h "$WORK/dump.gz" | cut -f1)"
+
+# ── Has the cutover already happened? ───────────────────────────────────────
+#
+# **`--drop` below destroys the local database, and after cutover that database
+# is the farm's only copy of everything logged since.** Phones flush to it, the
+# server answers `applied`, and the clients then never resend those mutations
+# (invariant 7) — so a re-run does not lose a few hours of work, it loses them
+# *unrecoverably*, and Atlas has none of it because Atlas stopped being written
+# to the moment the URI changed.
+#
+# The fact that decides is on disk: the URI the API is actually configured with.
+# While it still names Atlas, this script is a migration that has not landed and
+# a re-run is the ordinary retry `--drop` exists for. Once it names this box,
+# the migration is done and there is nothing here to re-run — only records to
+# destroy.
+#
+# Refuses rather than offering a flag. A `--force` on this is a flag whose only
+# use is the accident it would cause, and the recovery it would need does not
+# exist.
+API_ENV=/etc/homefarm/api.env
+if [ -f "$API_ENV" ]; then
+  CONFIGURED="$(sed -n 's/^MONGODB_URI=\(.*\)$/\1/p' "$API_ENV" | tail -1)"
+  case "$CONFIGURED" in
+    *127.0.0.1*|*localhost*)
+      die "The API is already pointed at this box ($API_ENV names a loopback MONGODB_URI),
+  so the cutover has happened and the local database is the live one.
+
+  Restoring over it would drop every record logged since — and those are gone
+  for good, because the phones that sent them were told 'applied' and will never
+  send them again. Atlas does not have them either; nothing has written to it
+  since the URI changed.
+
+  If you genuinely mean to redo the migration, take a backup you have verified
+  first, then point $API_ENV back at Atlas so this script can see that the
+  cutover has been undone:
+
+      sudo /opt/homefarm/scripts/backup-mongo.sh backup
+
+  Nothing has been changed."
+      ;;
+  esac
+fi
 
 say "Restoring onto this box"
 # --drop so a re-run replaces rather than merges. A second run without it would

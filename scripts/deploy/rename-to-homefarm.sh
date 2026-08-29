@@ -131,7 +131,37 @@ done
 # MONGODB_DB and ignores the path on the URI, so this is the only line that
 # decides, and an absent or empty value means the code default.
 OLD_DB="$(sed -n 's/^MONGODB_DB=\(.*\)$/\1/p' "$ENV_FILE" | tail -1)"
-[ -z "$OLD_DB" ] && OLD_DB="${OLD}db"
+
+# ── An absent MONGODB_DB is a question, not a default ───────────────────────
+#
+# **The fallback was `${OLD}db` — "steadingdb" — a name the code has never
+# used.** `databaseName()` returned the bare `steading` before the rename commit
+# and `homefarm` after it; the `db` suffix is a convention of one box's env file
+# and nothing else. And `setup-box.sh` leaves `MONGODB_DB` commented out by
+# default, so the fallback is the common path rather than the rare one.
+#
+# What a wrong guess does here is not a wrong message. It is `mongodump --db
+# steadingdb` against a database that does not exist, which dumps nothing,
+# restores nothing, passes a count check comparing zero to zero (see the tally
+# below), and points the API at an empty database that the script has just
+# reported as verified.
+#
+# There is no safe guess to make. The value decides which farm's records get
+# copied, this script cannot see the API's build to know which default it
+# compiled in, and being wrong is silent. So it asks.
+if [ -z "$OLD_DB" ]; then
+  die "$ENV_FILE does not set MONGODB_DB, so this script cannot tell which database
+  the API is reading — and the answer depends on which build is installed
+  ('steading' before the rename commit, 'homefarm' after). Guessing here copies
+  the wrong database, or none, and reports success either way.
+
+  Look at what is actually there:
+
+      mongosh \"\$MONGODB_URI\" --quiet --eval 'db.adminCommand({listDatabases:1}).databases.map(d => d.name + \" \" + d.sizeOnDisk).join(\"\\n\")'
+
+  then put the answer in $ENV_FILE as MONGODB_DB=<name> and run this again.
+  Nothing has been changed."
+fi
 MONGO_URI="$(sed -n 's/^MONGODB_URI=\(.*\)$/\1/p' "$ENV_FILE" | tail -1)"
 [ -n "$MONGO_URI" ] || die "$ENV_FILE has no MONGODB_URI"
 
@@ -317,42 +347,24 @@ if [ -e "/opt/${NEW}" ]; then
   note "/opt/${NEW}/.env.local  ->  /etc/${NEW}/api.env"
 fi
 
-# ── 5. the environment files ────────────────────────────────────────────────
-
-say "Rewriting the environment files"
-for f in "/etc/${NEW}"/*.env; do
-  [ -f "$f" ] || continue
-  do_it cp -a "$f" "$f.pre-rename"
-  if [ "$GO" = 1 ]; then
-    # STEADING_* -> HOMEFARM_*, and the database the API reads. The URI's own
-    # trailing path is cosmetic (client.ts ignores it) but a URI that says one
-    # database while MONGODB_DB says another is a trap for the next reader.
-    #
-    # **Anchored to the start of the line, which is the whole of the care here.**
-    # An env file is `KEY=value`, and only the key is a name this rename owns.
-    # Unanchored, `STEADING_` matched inside values too — including the one
-    # value on this box that cannot be regenerated from the repository, the
-    # Mongo password on `MONGODB_URI`. A password is arbitrary text; the day one
-    # contains that substring, an unanchored rewrite silently changes it and the
-    # API comes back unable to authenticate against a database whose credential
-    # now exists nowhere but the `.pre-rename` copy.
-    sed -i -e 's/^STEADING_/HOMEFARM_/' "$f"
-
-    # Only when the database is actually being copied. Pointing the API at a
-    # database that was never made is how a rename becomes an outage, and it is
-    # exactly what --keep-db exists to avoid.
-    if [ "$COPY_DB" = 1 ]; then
-      sed -i \
-        -e "s#^MONGODB_DB=.*#MONGODB_DB=${NEW}#" \
-        -e "s#/${OLD_DB}?#/${NEW}?#" \
-        "$f"
-      grep -q '^MONGODB_DB=' "$f" || printf 'MONGODB_DB=%s\n' "$NEW" >> "$f"
-    fi
-  fi
-  note "$f (copy kept at $f.pre-rename)"
-done
-
-# ── 6. the database ─────────────────────────────────────────────────────────
+# ── 5. the database, BEFORE anything is pointed at it ────────────────────────
+#
+# ── Why this moved ahead of the environment rewrite ─────────────────────────
+#
+# **It used to run after it, and a failed copy was then unrecoverable by
+# re-running.** Step 5 rewrote `MONGODB_DB=homefarm` into `api.env` and step 6
+# then made the database. If the copy failed, the env file already said
+# `homefarm` — so on the next run `OLD_DB` read back as `homefarm`, the script
+# said "database is already 'homefarm'", set `COPY_DB=0`, and **skipped the copy
+# entirely** while pointing the API at a database that was never made. The
+# `.pre-rename` backup, which held the only on-box record of the old name, was
+# overwritten by the same run.
+#
+# The order that survives a failure is: make the new database, verify it, and
+# only then point anything at it. Nothing below this line runs unless the copy
+# above it was counted and matched, so a failure leaves the box exactly as it
+# was — old name in `api.env`, old database untouched, and a re-run that reads
+# the same facts this one did.
 #
 # No rename exists, so this is a dump piped into a restore with the namespaces
 # remapped. `--archive` keeps it in memory rather than writing a copy of the
@@ -391,15 +403,92 @@ if [ "$COPY_DB" = 1 ]; then
       ).join('\n')
     ")" || die "could not count the copied collections"
 
+    # ── A copy that moved nothing must not report verified ────────────────
+    #
+    # **The loop below cannot fail on an empty source.** `getCollectionNames()`
+    # returns `[]`, `TALLY` is empty, the body never runs once, and the script
+    # walks on to rewrite the API's environment and print success — having
+    # copied nothing at all. That is the exact outcome a wrong `OLD_DB`
+    # produces, so the two defects covered for each other.
+    #
+    # A farm being renamed has collections; a source with none is a name that is
+    # wrong or a database that is gone, and both are reasons to stop before the
+    # API is pointed anywhere. The sibling `migrate-to-local-mongo.sh` has this
+    # guard already.
+    [ -n "$(printf '%s' "$TALLY" | tr -d '[:space:]')" ] || die "'${OLD_DB}' has no collections, so there is nothing to copy and nothing to verify.
+  Either that is not the database the API is reading, or it is empty. Check:
+
+      mongosh \"\$MONGODB_URI\" --quiet --eval 'db.adminCommand({listDatabases:1}).databases.map(d => d.name + \" \" + d.sizeOnDisk).join(\"\\n\")'
+
+  Nothing has been removed and nothing has been rewritten."
+
+    COUNTED=0
     while read -r name from to; do
       [ -n "$name" ] || continue
       [ "$from" = "$to" ] || die "$name: ${OLD_DB} has $from, ${NEW} has $to — the copy is incomplete, do NOT start the API. Nothing was removed, and the .pre-rename copies still point at ${OLD_DB}."
       note "$name: $from in both"
+      COUNTED=$((COUNTED + 1))
     done <<< "$TALLY"
+
+    # Belt to the check above's braces: `TALLY` non-empty and yet no row read
+    # would mean the shape changed under this loop, and a verification that
+    # verifies nothing is the thing being fixed here.
+    [ "$COUNTED" -gt 0 ] || die "Read no collection counts out of the tally, so nothing was verified.
+  Do NOT start the API. Nothing has been removed and nothing has been rewritten." 
   else
     note "would copy ${OLD_DB} -> ${NEW} and verify the counts match"
   fi
 fi
+
+# ── 6. the environment files ────────────────────────────────────────────────
+
+say "Rewriting the environment files"
+for f in "/etc/${NEW}"/*.env; do
+  [ -f "$f" ] || continue
+  # ── Never over an existing one ──────────────────────────────────────────
+  #
+  # **The `.pre-rename` copy is the only on-box record of what this file said
+  # before the migration** — the old database name, the old variable names, and
+  # the Mongo password if a rewrite ever damages it. A second run overwriting it
+  # replaces that record with the already-rewritten file, so the thing kept for
+  # recovery becomes a copy of the thing it was meant to recover from.
+  #
+  # The copy above is now ordered ahead of this, which stops the half-state that
+  # made a second run likely. This is the other half: if there is a second run,
+  # it must not destroy what the first one preserved.
+  if [ -e "$f.pre-rename" ]; then
+    note "$f (kept the existing $f.pre-rename — it is from before the first run)"
+  else
+    do_it cp -a "$f" "$f.pre-rename"
+  fi
+  if [ "$GO" = 1 ]; then
+    # STEADING_* -> HOMEFARM_*, and the database the API reads. The URI's own
+    # trailing path is cosmetic (client.ts ignores it) but a URI that says one
+    # database while MONGODB_DB says another is a trap for the next reader.
+    #
+    # **Anchored to the start of the line, which is the whole of the care here.**
+    # An env file is `KEY=value`, and only the key is a name this rename owns.
+    # Unanchored, `STEADING_` matched inside values too — including the one
+    # value on this box that cannot be regenerated from the repository, the
+    # Mongo password on `MONGODB_URI`. A password is arbitrary text; the day one
+    # contains that substring, an unanchored rewrite silently changes it and the
+    # API comes back unable to authenticate against a database whose credential
+    # now exists nowhere but the `.pre-rename` copy.
+    sed -i -e 's/^STEADING_/HOMEFARM_/' "$f"
+
+    # Only when the database is actually being copied. Pointing the API at a
+    # database that was never made is how a rename becomes an outage, and it is
+    # exactly what --keep-db exists to avoid.
+    if [ "$COPY_DB" = 1 ]; then
+      sed -i \
+        -e "s#^MONGODB_DB=.*#MONGODB_DB=${NEW}#" \
+        -e "s#/${OLD_DB}?#/${NEW}?#" \
+        "$f"
+      grep -q '^MONGODB_DB=' "$f" || printf 'MONGODB_DB=%s\n' "$NEW" >> "$f"
+    fi
+  fi
+  note "$f rewritten"
+done
 
 # ── 6a. the workspace, which does not survive the move on its own ───────────
 #
@@ -438,15 +527,43 @@ fi
 # second copy of it here. It is idempotent and rewrites what it finds.
 
 say "Installing the new units"
+REPO="/opt/${NEW}"
+NEW_UNITS=("${NEW}-api.service" "${NEW}-ops.service" "${NEW}-deploy.service" "${NEW}-deploy.timer" \
+           "${NEW}-backup.service" "${NEW}-backup.timer" "${NEW}-backup-check.service" "${NEW}-backup-check.timer")
+
+# ── The replacements have to exist before the originals are removed ─────────
+#
+# **Every old unit was `rm -f`'d first, and only then was the checkout asked
+# whether it had new ones.** A checkout that does not carry them — an older
+# release, a shallow clone, a tree that moved but did not update — therefore
+# left the box with **no API unit at all**, after the database had already been
+# copied and the trees already moved. Nothing to start, and the thing that would
+# have deployed a fix is one of the units that was just deleted.
+#
+# The API's unit is the one that matters; the rest degrade. So: refuse before
+# removing anything if it is missing, and name what is there.
+[ -f "$REPO/scripts/deploy/${NEW}-api.service" ] || die "$REPO/scripts/deploy/${NEW}-api.service is not in the checkout, so removing
+  the old units would leave this box with nothing to start the API. The trees
+  have moved and the database is copied; the environment files have been
+  rewritten. Nothing else has been touched.
+
+  This is an old or incomplete checkout. Update it and run this again:
+
+      cd $REPO && sudo git fetch origin release && sudo git reset --hard FETCH_HEAD"
+
+MISSING=()
+for u in "${NEW_UNITS[@]}"; do
+  [ -f "$REPO/scripts/deploy/$u" ] || MISSING+=("$u")
+done
+[ ${#MISSING[@]} -eq 0 ] || note "not in this checkout, so not installed: ${MISSING[*]}"
+
 for u in "${UNITS[@]}"; do
   do_it rm -f "/etc/systemd/system/$u"
 done
 do_it systemctl daemon-reload
 
-REPO="/opt/${NEW}"
-for u in "${NEW}-api.service" "${NEW}-ops.service" "${NEW}-deploy.service" "${NEW}-deploy.timer" \
-         "${NEW}-backup.service" "${NEW}-backup.timer" "${NEW}-backup-check.service" "${NEW}-backup-check.timer"; do
-  [ -f "$REPO/scripts/deploy/$u" ] || { skip "$u is not in the checkout"; continue; }
+for u in "${NEW_UNITS[@]}"; do
+  [ -f "$REPO/scripts/deploy/$u" ] || continue
   do_it cp "$REPO/scripts/deploy/$u" "/etc/systemd/system/$u"
 done
 do_it systemctl daemon-reload

@@ -98,6 +98,21 @@ export function boardPage(nonce: string): string {
   .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
   #signin { max-width: 380px; margin: 12vh auto; }
   #signin input { width: 100%; margin-bottom: 8px; }
+  /* The six rules that used to be inline style attributes on the elements.
+     A nonce does not authorise an inline style ATTRIBUTE — it names a style
+     ELEMENT, and this is it. So style-src 'nonce-...' left all six
+     unauthorised, and a browser enforcing the policy dropped every one: the
+     Refresh button un-anchored from the right and four inputs back at their
+     default width. The board's own layout, stripped by the board's own header.
+     Moved here rather than answered with style-src-attr 'unsafe-inline',
+     which would have worked and would have weakened the one thing this policy
+     is for. See boardPolicy in headers.ts. */
+  .push-right { margin-left: auto; }
+  .w-promo-days { width: 190px; }
+  .w-promo-uses { width: 90px; }
+  .w-promo-note { width: 160px; }
+  .w-grant-org { width: 250px; }
+  .w-grant-note { width: 150px; }
   #signin button { width: 100%; }
   [hidden] { display: none !important; }
 </style>
@@ -119,7 +134,7 @@ export function boardPage(nonce: string): string {
   <header>
     <h1>${PRODUCT_NAME} operations</h1>
     <span class="sub" id="who"></span>
-    <span class="sub" style="margin-left:auto"><button class="quiet" id="refresh">Refresh</button></span>
+    <span class="sub push-right"><button class="quiet" id="refresh">Refresh</button></span>
   </header>
 
   <div class="grid">
@@ -159,9 +174,9 @@ export function boardPage(nonce: string): string {
     <section class="card">
       <h2>Mint a promotion code</h2>
       <form id="promo-form">
-        <input id="promo-days" type="number" min="1" max="3650" placeholder="Days (blank = forever)" style="width:190px">
-        <input id="promo-uses" type="number" min="1" max="1000" value="1" style="width:90px">
-        <input id="promo-note" type="text" placeholder="Note" style="width:160px">
+        <input id="promo-days" type="number" min="1" max="3650" placeholder="Days (blank = forever)" class="w-promo-days">
+        <input id="promo-uses" type="number" min="1" max="1000" value="1" class="w-promo-uses">
+        <input id="promo-note" type="text" placeholder="Note" class="w-promo-note">
         <button type="submit">Mint</button>
       </form>
       <div id="promo-said" class="said"></div>
@@ -170,8 +185,8 @@ export function boardPage(nonce: string): string {
     <section class="card">
       <h2>Grant or revoke sync</h2>
       <form id="grant-form">
-        <input id="grant-org" type="text" placeholder="Farm id" style="width:250px" required>
-        <input id="grant-note" type="text" placeholder="Note" style="width:150px">
+        <input id="grant-org" type="text" placeholder="Farm id" class="w-grant-org" required>
+        <input id="grant-note" type="text" placeholder="Note" class="w-grant-note">
         <button type="submit">Grant</button>
         <button type="button" class="quiet" id="revoke">Revoke</button>
       </form>

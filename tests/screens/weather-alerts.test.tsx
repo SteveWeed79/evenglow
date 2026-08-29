@@ -106,6 +106,70 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/**
+ * ── Moving the pin, and the county that came with it ──────────────────────
+ *
+ * `forgetWeather` exists for exactly this and **was called from nothing but
+ * tests**. The grid it drops is keyed by position and self-heals; the cached
+ * forecast, reading and alerts are single rows with no position on them. So
+ * after a farm corrected its position it was shown the previous county's
+ * official alerts as live for `ALERTS_GAP_MS` — fifteen minutes of a tornado
+ * warning for somewhere else — and, offline, the old valley's forecast for
+ * `FORECAST_STALE_MS`, driving the frost and heat warnings for its stock.
+ *
+ * The clear happens in `weather/store.ts::load`, which runs on every publish,
+ * so a position arriving from another device is caught as well as one typed
+ * here. Guarded on there having been a previous position: both caches are in
+ * memory, and a cold start has none — treating that as a move would wipe the
+ * offline cache on every launch, which is the one thing it exists to survive.
+ */
+describe('when the farm corrects its position', () => {
+  it('does not go on showing the last county’s alert', async () => {
+    service([tornado()]);
+    await farm();
+
+    const before = await mount(<TodayScreen />);
+    expect(before.text()).toContain('Tornado Warning');
+    before.unmount();
+
+    // The service now says there is nothing where the farm actually is.
+    service([]);
+    await enqueue({
+      entity: 'site',
+      op: 'update',
+      targetId: SITE,
+      payload: { lat: 44.51, lon: -109.06 },
+    });
+
+    const after = await mount(<TodayScreen />);
+    expect(after.text()).not.toContain('Tornado Warning');
+    after.unmount();
+  });
+
+  /**
+   * **And a cold start is not a move.** The whole point of the cache is that a
+   * phone with no signal still shows what it last heard, so a launch that found
+   * no previous position must not clear it.
+   */
+  it('keeps what it last heard across a restart', async () => {
+    service([tornado()]);
+    await farm();
+
+    const first = await mount(<TodayScreen />);
+    expect(first.text()).toContain('Tornado Warning');
+    first.unmount();
+
+    // Restarted with nothing reachable: the cache is all there is.
+    await simulateRestart();
+    resetWeatherState();
+    vi.stubGlobal('fetch', () => Promise.reject(new Error('no signal')));
+
+    const again = await mount(<TodayScreen />);
+    expect(again.text()).toContain('Tornado Warning');
+    again.unmount();
+  });
+});
+
 describe('an alert in force', () => {
   it('reaches Today', async () => {
     service([tornado()]);

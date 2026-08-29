@@ -62,6 +62,10 @@ async function farm(): Promise<void> {
   });
 }
 
+/** Local midday on a date, so a fixture is never an hour away from another year. */
+const on = (year: number, month: number, day: number): number =>
+  new Date(year, month, day, 12).getTime();
+
 async function plant(bedId: string, varietyId: string, season: number): Promise<string> {
   const id = newId();
   await enqueue({
@@ -109,11 +113,22 @@ describe('a farm in its first season', () => {
 });
 
 describe('a season beside the one before it', () => {
+  /**
+   * **Last year's pick is now dated last year, and it was not before.**
+   *
+   * This used to plant in `YEAR - 1` and pick with `Date.now()`, then assert
+   * the 8 kg landed in the previous season — which passed only because the
+   * numbers were bucketed by the planting's stamped season and not by when
+   * anything was picked. It was the assertion holding that behaviour in place.
+   *
+   * A pick made today is this year's pick whatever year the seed went in, so
+   * the fixture now says when it happened.
+   */
   it('keeps the two apart', async () => {
     const thisYear = await plant(BED_A, TOMATO, YEAR);
     const lastYear = await plant(BED_A, TOMATO, YEAR - 1);
     await pick(thisYear, { massUg: 3 * KG });
-    await pick(lastYear, { massUg: 8 * KG });
+    await pick(lastYear, { massUg: 8 * KG, occurredAt: on(YEAR - 1, 7, 20) });
 
     const { now, before } = await readNumbers(YEAR);
 
@@ -217,5 +232,108 @@ describe('what it refuses to guess', () => {
     const { now } = await readNumbers(YEAR);
 
     expect(now.plantings).toBe(2);
+  });
+});
+
+/**
+ * ── The year a thing was picked, not the year it was planted ───────────────
+ *
+ * `planting.season` is stamped when the planting is created and never moves.
+ * For an annual sown and picked inside one year it is the same number as the
+ * year of the pick, which is why bucketing by it read correctly for as long as
+ * nobody grew anything else.
+ *
+ * Anything that overwinters or comes back breaks the equivalence, and those are
+ * first-class shapes in the bundled library rather than corner cases:
+ * `library/crops.ts` has garlic as autumn-sown, and asparagus, rhubarb,
+ * raspberry, blueberry and strawberry as perennials.
+ *
+ * The perennial is the worse of the two. Its planting is stamped once, so every
+ * year after the first reported nothing off that bed for ever — and the
+ * previous-season column, the reason this screen exists at all, compared a year
+ * of picking against a year that had been credited with all of it.
+ */
+describe('a crop that does not begin and end in one year', () => {
+  const RHUBARB = newId();
+  const GARLIC = newId();
+
+  beforeEach(async () => {
+    for (const [id, name, crop] of [
+      [RHUBARB, 'Victoria', 'Rhubarb'],
+      [GARLIC, 'Music', 'Garlic'],
+    ] as const) {
+      await enqueue({
+        entity: 'variety',
+        op: 'create',
+        targetId: id,
+        payload: { name, crop, family: 'other', lifecycle: 'perennial' },
+      });
+    }
+  });
+
+  /** A crown put in two years ago, cropping now. It read 0 kg, 0 picks. */
+  it('credits a perennial to the year it was actually picked', async () => {
+    const crown = await plant(BED_A, RHUBARB, YEAR - 2);
+    await pick(crown, { massUg: 8 * KG, occurredAt: on(YEAR, 4, 12) });
+
+    const { now } = await readNumbers(YEAR);
+
+    expect(now.massUg).toBe(8 * KG);
+    expect(now.picks).toBe(1);
+    expect(now.byCrop).toEqual([{ crop: 'Rhubarb', massUg: 8 * KG, count: 0, picks: 1 }]);
+  });
+
+  /** Sown in the autumn, lifted the next July. It was filed under the sowing. */
+  it('does not file an autumn sowing under the year it went in', async () => {
+    const sown = await plant(BED_A, GARLIC, YEAR - 1);
+    await pick(sown, { massUg: 3 * KG, occurredAt: on(YEAR, 6, 4) });
+
+    const { now, before } = await readNumbers(YEAR);
+
+    expect(now.massUg).toBe(3 * KG);
+    // The sowing is still last year's — that is a different question, and the
+    // answer to it was never wrong.
+    expect(before?.plantings).toBe(1);
+    expect(before?.massUg).toBe(0);
+  });
+
+  /**
+   * **`byBed` has to sum to the season it is under.**
+   *
+   * The bed rows are seeded from the plantings loop, one per season something
+   * went IN. A bed whose only planting is a crown from two years ago has no row
+   * in this year — so a pick keyed by its own year had a season total to add to
+   * and no bed row to appear against, and the screen would contradict itself in
+   * the space of two rows: eight kilos at the top, nothing against any bed
+   * below. The row is created on demand rather than the pick being dropped.
+   */
+  it('gives the pick a bed row in the year it happened', async () => {
+    const crown = await plant(BED_A, RHUBARB, YEAR - 2);
+    await pick(crown, { massUg: 8 * KG, occurredAt: on(YEAR, 4, 12) });
+
+    const { now } = await readNumbers(YEAR);
+    const byBed = now.byBed.reduce((total, bed) => total + bed.massUg, 0);
+
+    expect(byBed).toBe(now.massUg);
+    expect(now.byBed).toEqual([
+      { bedId: BED_A, bed: 'The top bed', massUg: 8 * KG, count: 0, picks: 1, crops: ['Rhubarb'] },
+    ]);
+  });
+
+  /**
+   * A bed cropping in two years running gets one row in each, and the year it
+   * was planted does not double-count the year it was picked.
+   */
+  it('splits a perennials picks across the years they fell in', async () => {
+    const crown = await plant(BED_A, RHUBARB, YEAR - 1);
+    await pick(crown, { massUg: 5 * KG, occurredAt: on(YEAR - 1, 4, 12) });
+    await pick(crown, { massUg: 8 * KG, occurredAt: on(YEAR, 4, 12) });
+
+    const { now, before } = await readNumbers(YEAR);
+
+    expect(now.massUg).toBe(8 * KG);
+    expect(before?.massUg).toBe(5 * KG);
+    expect(now.picks).toBe(1);
+    expect(before?.picks).toBe(1);
   });
 });

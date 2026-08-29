@@ -7,7 +7,7 @@ import {
 } from '@homefarm/contracts';
 import { apiUrl, renewSession, type SessionRenewal, syncHeaders } from '../api';
 import { localStore } from '../db/store';
-import { tenantFence } from './tenant';
+import { tenantFence, type TenantMove } from './tenant';
 import type { QueuedMutation } from '../db/records';
 
 /**
@@ -283,13 +283,14 @@ async function runFlush(transport: SyncTransport): Promise<FlushOutcome> {
   const after = moved();
   if (after) return { ...outcome, deferred: after };
 
-  return applyResults(batch, response.body.results, outcome);
+  return applyResults(batch, response.body.results, outcome, moved);
 }
 
 async function applyResults(
   batch: QueuedMutation[],
   results: MutationResult[],
   outcome: FlushOutcome,
+  moved: () => TenantMove | null,
 ): Promise<FlushOutcome> {
   const byId = new Map(results.map((r) => [r.id, r]));
 
@@ -297,39 +298,76 @@ async function applyResults(
   // left queued with its attempt counted. This function only tallies what the
   // server said, so the outcome the UI reads and the rows on disk cannot
   // describe different things.
+  //
+  // Safe without another fence: the caller checked immediately above and
+  // `localStore()` is read synchronously here, so nothing can land between.
   await localStore().resolveBatch(batch, results);
-  await localStore().markSynced(Date.now());
 
   /**
-   * A batch got through, so whatever was holding this farm is over.
+   * And the fence again, because `resolveBatch` is an await like any other.
    *
-   * Cleared here rather than on subscribing, because this is the only place
-   * that *knows* — the app is never told a payment succeeded, it finds out by
-   * being allowed to write again. A farm that resubscribes and then goes into
-   * a barn stays "on this phone" until the first flush lands, which is
-   * correct: nothing has reached the server yet.
+   * `tenant.ts` says the fence is *"captured once, at the top of a pass, and
+   * asked again after each await"*. This function asked no more, and the two
+   * writes below are the ones where that costs the most — because unlike the
+   * row work above, **they are farm-wide state keyed by nothing.**
+   *
+   * A switch landing inside `resolveBatch` sends them to the farm that just
+   * opened. `markSynced` stamps a farm that has flushed nothing as having
+   * synced this instant, and `setSyncHeld(null)` clears a hold that is
+   * genuinely true of it — a free-tier farm's `noAccount`, an unpaid farm's
+   * `unsubscribed`, an old build's `appTooOld`. Every one of those turns the
+   * chip from a sentence that explains the state into "waiting", which is the
+   * exact failure D13 exists to prevent, arrived at from the other end.
+   *
+   * `rejectExhausted` goes behind it too, though for a smaller reason: it
+   * matches rows by mutation id, so on another farm's store it would find
+   * nothing. Skipping is what running it would amount to, said honestly — and
+   * the next flush on the right farm counts and ripens them properly.
    */
-  await localStore().setSyncHeld(null);
+  if (moved() === null) {
+    await localStore().markSynced(Date.now());
 
-  /**
-   * Answered, but without mentioning these.
-   *
-   * resolveBatch keeps them queued and counts the attempt, because resending
-   * is safe and silence must never be read as success. But counting an
-   * attempt only bounds the retry if something eventually acts on the count —
-   * and nothing did, so a server that consistently omits a mutation had it
-   * resent forever. The malformed-batch path above already routes to the
-   * inbox on exhaustion; this is the same reasoning for a well-formed
-   * response with a hole in it.
-   */
-  const unanswered = batch.filter((queued) => !byId.has(queued.id));
-  if (unanswered.length > 0) {
-    await rejectExhausted(
-      unanswered,
-      'The server kept answering without saying what happened to this record.',
-    );
+    /**
+     * A batch got through, so whatever was holding this farm is over.
+     *
+     * Cleared here rather than on subscribing, because this is the only place
+     * that *knows* — the app is never told a payment succeeded, it finds out
+     * by being allowed to write again. A farm that resubscribes and then goes
+     * into a barn stays "on this phone" until the first flush lands, which is
+     * correct: nothing has reached the server yet.
+     */
+    await localStore().setSyncHeld(null);
+
+    /**
+     * Answered, but without mentioning these.
+     *
+     * resolveBatch keeps them queued and counts the attempt, because resending
+     * is safe and silence must never be read as success. But counting an
+     * attempt only bounds the retry if something eventually acts on the count —
+     * and nothing did, so a server that consistently omits a mutation had it
+     * resent forever. The malformed-batch path above already routes to the
+     * inbox on exhaustion; this is the same reasoning for a well-formed
+     * response with a hole in it.
+     */
+    const unanswered = batch.filter((queued) => !byId.has(queued.id));
+    if (unanswered.length > 0) {
+      await rejectExhausted(
+        unanswered,
+        'The server kept answering without saying what happened to this record.',
+      );
+    }
   }
 
+  /**
+   * Tallied either way, and NOT reported as deferred.
+   *
+   * `resolveBatch` landed on the right farm — the fence above it is the
+   * caller's, one line up with no await between — so this batch really was
+   * delivered and really was resolved. `deferred` means the opposite ("could
+   * not be delivered at all; entries stay queued") and the engine counts it as
+   * a consecutive failure, which would back a farm off for work that went
+   * through.
+   */
   const next = { ...outcome };
   for (const queued of batch) {
     const result = byId.get(queued.id);

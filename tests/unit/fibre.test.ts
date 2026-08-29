@@ -221,6 +221,48 @@ describe('a wet day landing on a clip', () => {
     expect(warnings.some((w) => w.kind === 'shearing-wet')).toBe(false);
   });
 
+  /**
+   * ── The clip that is already late ────────────────────────────────────────
+   *
+   * The filter had a single day of grace behind it, so a clip three days
+   * overdue raised nothing while one due in five days did — the wrong way
+   * round, since an overdue fleece is the one most in need of a dry day.
+   *
+   * **And this is the opposite call to the one the birth rule takes.**
+   * `birthWarnings` bounds its back half at a week because a birth date is a
+   * prediction and a breeding record nobody closed would shout every winter for
+   * ever. An owed clip is not a prediction: `shearingDues` computes `at` from
+   * `lastShornAt`, so the row moves the moment the fleece comes off and exists
+   * only while the work is outstanding. There is no stale record for a lower
+   * bound to guard against.
+   */
+  it('speaks about a clip that is already overdue', () => {
+    const overdue = warningsFor(
+      forecast(90),
+      { ...FARM, shearings: [{ key: 'k', title: 'Shearing — Woolies', at: NOW - 3 * DAY }] },
+      NOW,
+    );
+
+    expect(overdue.some((w) => w.kind === 'shearing-wet')).toBe(true);
+  });
+
+  /**
+   * A farm a season behind still needs to know which days are no good. What
+   * keeps this from becoming noise is not a cut-off but the two decisions
+   * already made: it is a `watch`, never an `act`, and it speaks only on a wet
+   * day.
+   */
+  it('goes on speaking about a clip a season overdue', () => {
+    const late = warningsFor(
+      forecast(90),
+      { ...FARM, shearings: [{ key: 'k', title: 'Shearing — Woolies', at: NOW - 120 * DAY }] },
+      NOW,
+    );
+
+    expect(late.some((w) => w.kind === 'shearing-wet')).toBe(true);
+    expect(late.find((w) => w.kind === 'shearing-wet')?.severity).toBe('watch');
+  });
+
   /** And still speaks about the week you might actually shear in. */
   it('still says so about a clip inside the week', () => {
     const warnings = warningsFor(

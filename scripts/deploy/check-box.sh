@@ -117,15 +117,85 @@ if [ -d "/opt/$NEW/.git" ]; then
     || HM "remote is $(git -C "/opt/$NEW" remote get-url origin 2>/dev/null) — works only while GitHub redirects"
 else NO "no checkout at /opt/$NEW"; fi
 
+H "Caddy and the download page"
+if ! command -v caddy >/dev/null 2>&1; then
+  HM "caddy is not installed — nothing on this box serves TLS or /app"
+else
+  systemctl is-active --quiet caddy && OK "caddy running" || NO "caddy NOT running"
+
+  # ── Running, and serving something else entirely ──────────────────────────
+  #
+  # **`is-active` is true of a Caddy that refused its last config.** It logs the
+  # refusal and goes on serving the previous one, which is a sensible thing to
+  # do and completely invisible from here.
+  #
+  # This box did that for ten days. `/var/log/caddy/homefarm.log` had been
+  # created by root at 0600, caddy could not open it, so every reload was
+  # rejected and a pre-rename config stayed live — rooted at a directory that
+  # no longer existed. `systemctl status caddy` said `active (running)`,
+  # `deploy.sh` said `unchanged`, this script said `ok caddy running`, and the
+  # download answered 404 the whole time. Three green checks and a broken box.
+  #
+  # The admin API is the only thing here that knows what is loaded.
+  RUNNING="$(curl -fsS --max-time 5 http://127.0.0.1:2019/config/ 2>/dev/null || true)"
+  if [ -z "$RUNNING" ]; then
+    HM "caddy's admin API did not answer on 2019 — cannot tell which config is live"
+  elif printf '%s' "$RUNNING" | grep -q "/var/lib/$NEW/dist"; then
+    OK "caddy is running the config on disk"
+  else
+    NO "CADDY IS RUNNING A CONFIG THAT IS NOT THE ONE ON DISK — a reload was refused (journalctl -u caddy -n 40)"
+  fi
+
+  # The cause of that failure rather than the symptom, so it is repairable
+  # without reading a journal. Ownership, not mode: caddy opens this as itself.
+  CLOG="/var/log/caddy/$NEW.log"
+  if [ ! -e "$CLOG" ]; then
+    HM "$CLOG does not exist — caddy or the next deploy creates it"
+  elif [ "$(stat -c%U "$CLOG" 2>/dev/null)" = caddy ]; then
+    OK "$CLOG belongs to caddy"
+  else
+    NO "$CLOG is owned by $(stat -c%U "$CLOG" 2>/dev/null) — caddy cannot open it, so EVERY reload is refused"
+  fi
+
+  # ── The thing somebody is actually sent to ────────────────────────────────
+  #
+  # Every check above can pass while this fails, and this is the one a person
+  # notices: *"I still cannot access the download."* Asked over the real name
+  # and the real certificate, because that is how a handset asks — a local
+  # request answers 308 and proves nothing.
+  #
+  # Every site block is tried rather than the first. A box that predates conf.d
+  # has the operations board in this file too, and which one `head -1` returns
+  # is not something to stake a FAIL on.
+  BLOCKS="$(sed -n 's/^\([a-z0-9.-]*\) {$/\1/p' /etc/caddy/Caddyfile 2>/dev/null)"
+  if [ -z "$BLOCKS" ]; then
+    HM "could not read a site name out of /etc/caddy/Caddyfile — did not test /app/"
+  else
+    APP=""; SEEN=""; REACHED=0
+    for d in $BLOCKS; do
+      CODE="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "https://$d/app/" 2>/dev/null || true)"
+      SEEN="$SEEN $d=${CODE:-000}"
+      [ "${CODE:-000}" = 000 ] || REACHED=1
+      [ "$CODE" = 200 ] && APP="$d"
+    done
+    if [ -n "$APP" ]; then
+      OK "https://$APP/app/ answers 200"
+    elif [ "$REACHED" = 0 ]; then
+      # Not a failure on its own: a box is not always able to reach its own
+      # public name from the inside.
+      HM "could not reach any site's /app/ from this box —$SEEN"
+    else
+      NO "/app/ is not being served —$SEEN"
+    fi
+  fi
+fi
+
 H "SSH and firewall"
 SSHD="$(sshd -T 2>/dev/null)"
 if [ -n "$SSHD" ]; then
   printf '%s\n' "$SSHD" | grep -qi '^passwordauthentication no' && OK "password auth off" || NO "PASSWORD AUTH IS ON"
   printf '%s\n' "$SSHD" | grep -qi '^permitrootlogin no'        && OK "root login off"    || NO "ROOT LOGIN IS ALLOWED"
 else HM "could not read the effective sshd config"; fi
-if command -v caddy >/dev/null 2>&1; then
-  systemctl is-active --quiet caddy && OK "caddy running" || NO "caddy NOT running"
-fi
 if command -v iptables >/dev/null 2>&1; then
   iptables -C INPUT -p tcp --dport 27017 -m conntrack --ctstate NEW -j ACCEPT 2>/dev/null \
     && NO "27017 IS OPEN — nothing outside this box needs it" \

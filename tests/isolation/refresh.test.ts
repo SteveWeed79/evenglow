@@ -214,4 +214,70 @@ describeDb('refresh token rotation', () => {
     // Sign-out must not become a way to probe which tokens exist.
     await expect(endSession('not-a-real-token')).resolves.toBeUndefined();
   });
+
+  /**
+   * ── A revocation landing inside the exchange ─────────────────────────────
+   *
+   * `consumeRefreshToken`'s filter requires `usedAt` AND `revokedAt` to be
+   * absent, and it used to return a bare boolean. `rotateSession` read `false`
+   * as *"another exchange of this same token won by microseconds"* — the benign
+   * concurrent case the grace window exists for — and issued.
+   *
+   * So a revocation arriving between the token being read and that update
+   * produced the identical `false`, and a family that had just been revoked was
+   * handed a fresh ninety days. This is the sequence, with the revocation
+   * placed exactly in the gap.
+   *
+   * The rule itself is asserted without a database in
+   * `tests/unit/consume-outcome.test.ts`; this is the wiring.
+   */
+  it('refuses a token whose family was revoked mid-exchange', async () => {
+    const { rotateSession, startSession } = await import('@homefarm/api/auth/refresh');
+    const { revokeAllForUser } = await import('@homefarm/api/db/refresh-tokens');
+
+    const first = await startSession(CLAIMS, SECRET);
+
+    // What a password reset or a member removal does, landing while the token
+    // is unspent — the state `rotateSession` would find mid-flight.
+    await revokeAllForUser(OWNER._id, new Date());
+
+    await expect(rotateSession(first.refreshToken, SECRET)).rejects.toThrow(/expired/i);
+  });
+
+  /**
+   * And nothing survives it. The point of revoking the family again on that
+   * branch is that the outcome does not depend on which revoker ran.
+   */
+  it('leaves no live token behind after a revoked exchange', async () => {
+    const { rotateSession, startSession } = await import('@homefarm/api/auth/refresh');
+    const { revokeAllForUser } = await import('@homefarm/api/db/refresh-tokens');
+
+    const first = await startSession(CLAIMS, SECRET);
+    await revokeAllForUser(OWNER._id, new Date());
+    await expect(rotateSession(first.refreshToken, SECRET)).rejects.toThrow(/expired/i);
+
+    const live = await harness!.db
+      .collection('refreshTokens')
+      .countDocuments({ userId: OWNER._id, revokedAt: { $exists: false } });
+
+    expect(live).toBe(0);
+  });
+
+  /**
+   * The `within-grace` path reaches the issue with no atomic update of its own,
+   * so the last look before minting is the only thing standing there. A token
+   * spent seconds ago is normally honoured — the test above this asserts that —
+   * and must not be once its family is dead.
+   */
+  it('refuses a within-grace retry on a revoked family', async () => {
+    const { rotateSession, startSession } = await import('@homefarm/api/auth/refresh');
+    const { revokeAllForUser } = await import('@homefarm/api/db/refresh-tokens');
+
+    const first = await startSession(CLAIMS, SECRET);
+    // Spend it, so the retry lands on the grace path rather than the consume.
+    await rotateSession(first.refreshToken, SECRET);
+    await revokeAllForUser(OWNER._id, new Date());
+
+    await expect(rotateSession(first.refreshToken, SECRET)).rejects.toThrow(/expired/i);
+  });
 });

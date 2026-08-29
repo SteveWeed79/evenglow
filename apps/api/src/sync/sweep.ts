@@ -137,6 +137,25 @@ export interface SweepReport {
    * identical in a log, and the second is the one an operator will assume.
    */
   capped: boolean;
+  /**
+   * Rows that threw, and farms whose sweep threw.
+   *
+   * **There was no containment at all**, and the shape of that failure is worse
+   * than it first looks: the only `try` was around the whole pass, so one row
+   * that threw abandoned every remaining row on that farm AND every farm behind
+   * it — and the row stays undecided, so it throws again on the next pass, and
+   * the pass after that. A box with two hundred farms could have every one of
+   * them after the third silently unswept for ever, which is precisely the
+   * *"quietest possible bug"* `sweepAllFarms` says it was written to prevent.
+   *
+   * Counted rather than swallowed, for the reason `capped` gives about itself:
+   * a pass that skipped something and a pass that found everything must not
+   * look the same in a log.
+   */
+  rowsFailed: number;
+  farmsFailed: number;
+  /** The first thing that went wrong, so an operator has somewhere to start. */
+  failure?: string;
 }
 
 const NOTHING: SweepReport = {
@@ -146,7 +165,14 @@ const NOTHING: SweepReport = {
   orphaned: 0,
   refused: 0,
   capped: false,
+  rowsFailed: 0,
+  farmsFailed: 0,
 };
+
+/** What went wrong, in words, without assuming it was an Error. */
+function reasonFor(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 function add(a: SweepReport, b: Partial<SweepReport>): SweepReport {
   return {
@@ -156,6 +182,11 @@ function add(a: SweepReport, b: Partial<SweepReport>): SweepReport {
     orphaned: a.orphaned + (b.orphaned ?? 0),
     refused: a.refused + (b.refused ?? 0),
     capped: a.capped || (b.capped ?? false),
+    rowsFailed: a.rowsFailed + (b.rowsFailed ?? 0),
+    farmsFailed: a.farmsFailed + (b.farmsFailed ?? 0),
+    // The FIRST reason is kept, not the last: it is the one most likely to
+    // explain the rest, and a later failure is often the first one's wake.
+    ...(a.failure ?? b.failure) === undefined ? {} : { failure: a.failure ?? b.failure },
   };
 }
 
@@ -234,7 +265,16 @@ export async function sweepFarm(
 
     report = add(report, { found: page.length });
     for (const row of page) {
-      report = add(report, await sweepOne(scope, row._id, row.userId));
+      /**
+       * One row that throws must not take the page, the farm, or every farm
+       * behind it. It is counted and the loop moves on; the row stays
+       * undecided, which is what it already was.
+       */
+      try {
+        report = add(report, await sweepOne(scope, row._id, row.userId));
+      } catch (error) {
+        report = add(report, { rowsFailed: 1, failure: reasonFor(error) });
+      }
     }
 
     const last = page[page.length - 1];
@@ -375,7 +415,19 @@ export async function sweepAllFarms(
   let report = NOTHING;
 
   for (const orgId of await listOrgIds()) {
-    report = add(report, await sweepFarm(scopedOn(database, orgId), now, olderThanMs));
+    /**
+     * And one farm that throws must not take the farms behind it.
+     *
+     * Per farm as well as per row because the throw can come from outside the
+     * row loop — the paged `findMany`, or the scope itself — and a farm whose
+     * every page fails would otherwise stop the pass at whatever position it
+     * happens to occupy in `listOrgIds`.
+     */
+    try {
+      report = add(report, await sweepFarm(scopedOn(database, orgId), now, olderThanMs));
+    } catch (error) {
+      report = add(report, { farmsFailed: 1, failure: reasonFor(error) });
+    }
   }
 
   return report;
@@ -532,14 +584,25 @@ export function startSweeper(options: SweeperOptions = {}): () => void {
       const at = now();
       status = { at, report: swept, failed: null };
       await persist({ at, host: hostname(), startedAt: bootedAt, report: swept });
-      // Silent on the ordinary hour, which is every hour. A line per pass would
-      // bury the one that matters in a log nobody then reads.
-      if (swept.found > 0) {
+      /**
+       * Silent on the ordinary hour, which is every hour. A line per pass would
+       * bury the one that matters in a log nobody then reads.
+       *
+       * **A contained failure speaks even when nothing was found**, which is the
+       * whole point of containing it rather than swallowing it: a pass that
+       * skipped a farm because its every page threw has `found: 0` and would
+       * otherwise say nothing at all, for ever.
+       */
+      const spoiled = swept.rowsFailed > 0 || swept.farmsFailed > 0;
+      if (swept.found > 0 || spoiled) {
         report(
           `sweeper: ${swept.found} undecided, ${swept.decided} decided` +
             `${swept.orphaned > 0 ? `, ${swept.orphaned} orphaned` : ''}` +
             `${swept.refused > 0 ? `, ${swept.refused} refused` : ''}` +
             `${swept.unreadable > 0 ? `, ${swept.unreadable} unreadable` : ''}` +
+            `${swept.rowsFailed > 0 ? `, ${swept.rowsFailed} rows threw` : ''}` +
+            `${swept.farmsFailed > 0 ? `, ${swept.farmsFailed} farms threw` : ''}` +
+            `${swept.failure === undefined ? '' : ` — first: ${swept.failure}`}` +
             `${swept.capped ? ', stopped at the ceiling with more to do' : ''}`,
         );
       }

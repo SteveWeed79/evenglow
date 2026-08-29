@@ -93,6 +93,7 @@ export default defineConfig({
       { find: /^expo-image-picker$/, replacement: here('./tests/support/native/modules.tsx') },
       { find: /^expo-image-manipulator$/, replacement: here('./tests/support/native/modules.tsx') },
       { find: /^expo-location$/, replacement: here('./tests/support/native/modules.tsx') },
+      { find: /^expo-network$/, replacement: here('./tests/support/native/modules.tsx') },
       // The OAuth flow. Its real hook throws during render when unconfigured,
       // which is why AccountScreen could never be mounted by this suite.
       {

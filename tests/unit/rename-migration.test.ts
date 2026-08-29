@@ -259,3 +259,135 @@ describe('the live-box rename, as a script', () => {
     expect(executable).not.toContain('mongosh "$MONGO_URI" --eval');
   });
 });
+
+/**
+ * The half-states, which are the shape every defect in this script has taken.
+ *
+ * The rename is not one operation. It moves trees, renames an account, copies a
+ * database, rewrites an environment file and replaces eight units — and the
+ * question that decides whether a failure is recoverable is always the same:
+ * **is the box, at that instant, still describing the world it is actually
+ * in?** These are the three places where it was not, asserted against the
+ * source because they need a live box, a first failure and a second run.
+ */
+describe('what a failure halfway leaves behind', () => {
+  const source = readFileSync(SCRIPT, 'utf8');
+
+  /**
+   * D5. Step 5 rewrote `MONGODB_DB=homefarm` and step 6 then made the database.
+   * A failed copy left the env file saying `homefarm`, so the next run read
+   * `OLD_DB` back as `homefarm`, said "database is already 'homefarm'", set
+   * `COPY_DB=0` and **skipped the copy entirely** — pointing the API at a
+   * database that was never made.
+   */
+  it('copies the database before it points anything at it', () => {
+    const copy = source.indexOf('# ── 5. the database, BEFORE anything is pointed at it');
+    const rewrite = source.indexOf('# ── 6. the environment files');
+
+    expect(copy).toBeGreaterThan(0);
+    expect(rewrite).toBeGreaterThan(copy);
+  });
+
+  /**
+   * And the backup of the file it rewrites is never replaced. It holds the only
+   * on-box record of the old database name and of the Mongo password; a second
+   * run overwriting it makes the thing kept for recovery a copy of the thing it
+   * was meant to recover from.
+   */
+  it('never overwrites a .pre-rename that is already there', () => {
+    expect(source).toContain('if [ -e "$f.pre-rename" ]; then');
+    expect(source).toContain('it is from before the first run');
+  });
+
+  /**
+   * D6. The fallback was `steadingdb`, a name the code has never used —
+   * `databaseName()` returns `steading` before the rename commit and `homefarm`
+   * after, and the `db` suffix is one box's convention. A wrong guess dumps a
+   * database that does not exist, restores nothing, and reports success.
+   */
+  it('asks rather than guessing which database the API reads', () => {
+    expect(source).not.toContain('OLD_DB="${OLD}db"');
+    expect(source).toContain('does not set MONGODB_DB, so this script cannot tell which database');
+  });
+
+  /**
+   * D7. `getCollectionNames()` on an empty source returns `[]`, so `TALLY` was
+   * empty, the verification loop never ran once, and a copy that moved nothing
+   * reported verified. It covered for D6 exactly: a wrong name produces an
+   * empty source.
+   */
+  it('refuses a copy that moved nothing rather than verifying it', () => {
+    expect(source).toContain('has no collections, so there is nothing to copy');
+    // And a second guard on the loop itself, in case the tally's shape changes.
+    expect(source).toContain('Read no collection counts out of the tally');
+  });
+
+  /**
+   * D8. Every old unit was removed first and the checkout was asked for
+   * replacements afterwards, so a tree without them left the box with no API
+   * unit at all — after the database had been copied and the trees moved, and
+   * with the deploy unit that would have fixed it among the ones just deleted.
+   */
+  it('checks the new units exist before removing the old ones', () => {
+    const check = source.indexOf('is not in the checkout, so removing');
+    const removal = source.indexOf('do_it rm -f "/etc/systemd/system/$u"');
+
+    expect(check).toBeGreaterThan(0);
+    expect(removal).toBeGreaterThan(check);
+  });
+});
+
+/**
+ * The one that cannot be undone.
+ *
+ * `migrate-to-local-mongo.sh` restores with `--drop`, which is right while the
+ * migration has not landed: a re-run after a failed restore has to replace
+ * rather than merge, because merging skips every `_id` collision silently and
+ * looks like success.
+ *
+ * **After cutover it is the opposite.** The local database is then the farm's
+ * only copy of everything logged since: phones flush to it, the server answers
+ * `applied`, and the clients never resend those mutations (invariant 7). Atlas
+ * has none of it either, because nothing has written to Atlas since the URI
+ * changed. So a re-run does not lose a few hours of work — it loses them for
+ * good.
+ */
+describe('restoring onto a box that is already live', () => {
+  const source = readFileSync(
+    join(REPO, 'scripts', 'deploy', 'migrate-to-local-mongo.sh'),
+    'utf8',
+  );
+
+  it('reads the URI the API is actually configured with', () => {
+    expect(source).toContain('API_ENV=/etc/homefarm/api.env');
+    expect(source).toContain('*127.0.0.1*|*localhost*)');
+  });
+
+  /** And stops there, before the drop rather than after it. */
+  it('refuses before the restore rather than reporting afterwards', () => {
+    const check = source.indexOf('the cutover has happened and the local database is the live one');
+    const restore = source.indexOf('mongorestore --uri="$LOCAL_URI"');
+
+    expect(check).toBeGreaterThan(0);
+    expect(restore).toBeGreaterThan(check);
+  });
+
+  /**
+   * No escape hatch, deliberately. A `--force` here is a flag whose only use is
+   * the accident it would cause, and the recovery it would need does not exist.
+   */
+  it('offers a verified backup rather than a way past', () => {
+    // Executable lines only — the reasoning above the refusal names the flag it
+    // declines to add, and a verb in a comment is not an option.
+    const code = source
+      .split('\n')
+      .filter((line) => !line.trimStart().startsWith('#'))
+      .join('\n');
+
+    expect(code).not.toContain('--force');
+    // The script takes no options at all, so there is nothing to pass one to.
+    expect(code).not.toContain('for arg in "$@"');
+    expect(source).toContain('backup-mongo.sh backup');
+  });
+});
+

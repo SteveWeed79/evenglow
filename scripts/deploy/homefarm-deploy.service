@@ -38,3 +38,16 @@ TimeoutStartSec=600
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=homefarm-deploy
+
+# ── Its own /tmp ────────────────────────────────────────────────────────────
+#
+# `deploy.sh` renders a candidate Caddyfile to a temporary file and validates it
+# before installing, and it did that at a **fixed name in shared `/tmp`, as
+# root, from a unit with no `PrivateTmp`**. Any local account can create that
+# path first as a symlink and have root's redirect follow it.
+#
+# Two fixes and both are wanted: the script uses `mktemp` now, which protects it
+# when it is run by hand, and this protects it when it runs here — a private
+# `/tmp` namespace means the name cannot be pre-empted at all. `homefarm-api`
+# and `homefarm-ops` already carry it.
+PrivateTmp=true

@@ -33,10 +33,19 @@ OnUnitActiveSec=5min
 # five-minutely without being a metronome.
 RandomizedDelaySec=60
 
-# Survives the box being off. If it misses a window — a reboot, a maintenance
-# window, Oracle moving the instance — it runs once on the way back rather than
-# waiting for the next slot.
-Persistent=true
+# ── No `Persistent=`, and it used to claim what that would have bought ──────
+#
+# The line here was `Persistent=true`, with a comment saying it made the timer
+# run once on the way back from a reboot rather than waiting for the next slot.
+# **`Persistent=` applies only to `OnCalendar=` timers** — systemd stores a
+# last-triggered stamp for those and replays a missed wall-clock window. This
+# timer is monotonic, so there was nothing for it to do, and the comment
+# described behaviour the file did not have.
+#
+# Which is fine, because `OnBootSec=5min` above is the catch-up: a box coming
+# back deploys five minutes after boot whatever it missed while it was off. The
+# behaviour was always right; only the explanation was wrong, and an explanation
+# that names a setting doing nothing is the kind that survives review.
 
 [Install]
 WantedBy=timers.target

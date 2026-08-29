@@ -544,3 +544,37 @@ export function randomUUID(): string {
 export function getRandomValues<T extends ArrayBufferView>(array: T): T {
   return nodeGetRandomValues(array);
 }
+
+// ── expo-network ─────────────────────────────────────────────────────────────
+
+/**
+ * The connectivity listener, recorded rather than driven.
+ *
+ * Aliased for the same reason `expo-crypto` is: the real module reaches
+ * `expo-modules-core`, whose top-level logger reads the Metro global `__DEV__`
+ * and throws under vitest. That import used to be reachable only from
+ * `sync/triggers.ts`, which no screen touched — until `Boot` began attaching
+ * the triggers itself, at which point every screen suite that mounts `Boot`
+ * pulled it in.
+ *
+ * The subscribers are kept so a test can assert HOW MANY there are. That is
+ * the whole of what the trigger singleton is for: a second sign-in must not
+ * stack a second listener, and counting is the only way to see it.
+ */
+export const networkListeners: Array<(event: { isConnected?: boolean }) => void> = [];
+
+export function addNetworkStateListener(
+  listener: (event: { isConnected?: boolean }) => void,
+): { remove: () => void } {
+  networkListeners.push(listener);
+  return {
+    remove(): void {
+      const at = networkListeners.indexOf(listener);
+      if (at !== -1) networkListeners.splice(at, 1);
+    },
+  };
+}
+
+export function resetNetworkListeners(): void {
+  networkListeners.length = 0;
+}

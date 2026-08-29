@@ -267,6 +267,41 @@ export function dayStart(at: number): number {
 }
 
 /**
+ * The next day's key, on the CALENDAR rather than 86,400,000 milliseconds on.
+ *
+ * ## A day is not a fixed span, twice a year
+ *
+ * Forecast days are keyed by `dayStart` — local midnight — so stepping between
+ * two of them by a fixed number of milliseconds is wrong on both daylight-saving
+ * nights, and wrong in the direction that hides things on the worse one.
+ *
+ * `America/New_York`, 2 November 2025, the fall-back night:
+ *
+ * ```
+ * today                    Sun Nov 02 00:00 EDT
+ * tomorrow                 Mon Nov 03 00:00 EST     25 hours later
+ * today + 86,400,000       Sun Nov 02 23:00 EST     an hour short
+ * ```
+ *
+ * So `day.day <= today + DAY_MS` excluded tomorrow entirely, and
+ * `warningsFor` — which is exactly a today-and-tomorrow window — dropped
+ * **every warning it has for tomorrow**: frost, freeze, heat, a newborn in
+ * the cold, a clip that must not get wet. On the one night of the year the
+ * clocks go back, which in most of the temperate world is the week the first
+ * hard frost arrives.
+ *
+ * `setDate` moves a calendar day whatever that day's length, and the `setHours`
+ * after it re-normalises onto a local midnight that exists — a timezone whose
+ * transition is at midnight has one that does not.
+ */
+export function dayAfter(at: number): number {
+  const date = new Date(at);
+  date.setDate(date.getDate() + 1);
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
+}
+
+/**
  * Today's entry in a forecast, or the nearest one still ahead.
  *
  * A forecast fetched last night and read this morning has yesterday at the

@@ -38,9 +38,27 @@ function when(due: Due, now: number): string {
     return due.atReading === null ? '' : `at ${due.atReading} hours`;
   }
 
-  // Whole days from the start of today, so "tomorrow" does not become "today"
-  // because it is late in the evening.
-  const days = Math.round((at - now) / DAY_MS);
+  /**
+   * Whole days between local midnights — which is what this comment always
+   * claimed and what the arithmetic under it never did.
+   *
+   * It measured `(at - now)` from **this instant** against dates anchored at
+   * midnight, so the answer moved through the day. A job due today, read at
+   * 13:00, is thirteen hours *behind* now: −0.54 of a day, which rounds to −1
+   * and prints **"yesterday"**. And a job due tomorrow, read at the same hour,
+   * is eleven hours ahead: +0.46, which rounds to 0 and prints **"today"** —
+   * precisely the failure the note claimed to prevent, arriving every afternoon.
+   *
+   * Anchoring both ends to local midnight is the whole fix. `Math.round` on the
+   * difference of two midnights is also right across a daylight-saving change,
+   * where a day is 23 or 25 hours and the ratio is 0.96 or 1.04.
+   */
+  const midnight = (ms: number): number => {
+    const date = new Date(ms);
+    date.setHours(0, 0, 0, 0);
+    return date.getTime();
+  };
+  const days = Math.round((midnight(at) - midnight(now)) / DAY_MS);
 
   if (days < -1) return `${Math.abs(days)} days ago`;
   if (days === -1) return 'yesterday';

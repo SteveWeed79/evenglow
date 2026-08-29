@@ -25,6 +25,7 @@ const egg = (when: number, count: number, id = `e${when}${count}`): HistoryEvent
   entity: 'eggLog',
   at: when,
   title: `${count} eggs`,
+  removable: true,
   tally: { key: 'eggs', amount: count, unit: 'egg' },
 });
 

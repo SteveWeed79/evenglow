@@ -194,12 +194,40 @@ describe('service', () => {
   /**
    * A machine bought at 900 hours with no service history is overdue, and the
    * honest answer is to say so rather than restart the clock at 1150.
+   *
+   * **This asserted `'now'`, which is the opposite of what its own first
+   * sentence says.** `projectReading` clamped a passed target to the current
+   * instant, and `useDues` recaptures `now` on every pass — so the row read
+   * *"today"* this morning, tomorrow, and every morning after. 650 hours late,
+   * in the band reserved for things that are merely due.
+   *
+   * At 2 h/day the meter crossed 250 some 325 days ago, and that is what the
+   * row says now.
    */
-  it('counts from zero when nothing was ever recorded', () => {
+  it('counts from zero when nothing was ever recorded, and says how late', () => {
     const row = serviceDue(machine(), { id: 's1', name: 'Oil change', everyHours: 250 }, NOW);
+
     expect(row?.atReading).toBe(250);
-    expect(row?.projectedAt).toBe(NOW);
-    expect(urgencyOf(row as Due, NOW)).toBe('now');
+    // 900 − 250 = 650 hours past, at 2 h/day.
+    expect(row?.projectedAt).toBe(NOW - 325 * DAY);
+    expect(urgencyOf(row as Due, NOW)).toBe('overdue');
+  });
+
+  /**
+   * And it goes on getting later, which the clamp made impossible: a row pinned
+   * to `now` is the same distance from `now` on every pass, for ever.
+   */
+  it('gets later as the days pass rather than resetting to today', () => {
+    const row = serviceDue(machine(), { id: 's1', name: 'Oil change', everyHours: 250 }, NOW) as Due;
+    const later = serviceDue(
+      machine(),
+      { id: 's1', name: 'Oil change', everyHours: 250 },
+      NOW + 30 * DAY,
+    ) as Due;
+
+    expect(urgencyOf(row, NOW)).toBe('overdue');
+    // Same reading, thirty days on: still overdue, and no less so.
+    expect(urgencyOf(later, NOW + 30 * DAY)).toBe('overdue');
   });
 
   /** Rather than a row nothing can clear. */
@@ -240,8 +268,26 @@ describe('service', () => {
 });
 
 describe('projectReading', () => {
-  it('returns now when the target is already passed', () => {
-    expect(projectReading(300, 2, 250, NOW)).toBe(NOW);
+  /**
+   * Past the target, the same straight line runs backwards: at 2 h/day, a meter
+   * fifty hours over crossed it twenty-five days ago.
+   *
+   * It used to clamp to `now`, which is a row that can never age — `urgencyOf`
+   * needs `now >= at + DAY_MS` for `overdue`, and a projection pinned to the
+   * current instant never gets there.
+   */
+  it('says when a passed target was passed', () => {
+    expect(projectReading(300, 2, 250, NOW)).toBe(NOW - 25 * DAY);
+  });
+
+  /** Exactly on it is `now`, which is true: it crossed today. */
+  it('answers now for a target reached exactly', () => {
+    expect(projectReading(250, 2, 250, NOW)).toBe(NOW);
+  });
+
+  /** Unchanged on the forward side. */
+  it('projects a target not yet reached', () => {
+    expect(projectReading(200, 2, 250, NOW)).toBe(NOW + 25 * DAY);
   });
 
   it('refuses to guess without a usable rate', () => {

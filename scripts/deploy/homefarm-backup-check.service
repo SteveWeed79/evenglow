@@ -14,6 +14,21 @@
 Description=Check that an Evenglow backup happened recently
 Documentation=https://github.com/SteveWeed79/evenglow/blob/main/docs/DEPLOY-THE-SERVER.md
 
+# ── After the backup, when both are catching up at once ─────────────────────
+#
+# **Both timers are `Persistent=true`, so a box that was off across 02:00 and
+# 09:00 fires both of them on the way back** — in one transaction, in whatever
+# order systemd picks. The check then reads a marker the backup has not written
+# yet and reports "no backup in N days" about a backup that is running in the
+# next process along. A false alarm from the one unit whose entire purpose is
+# that its alarms are believed.
+#
+# `After=` and nothing else: ordering when both are being started, and no
+# dependency at all otherwise. The check must still run when the backup has
+# failed — a stale marker is exactly what it exists to report — so `Requires=`
+# would be the wrong relation and `Wants=` would make a check into a trigger.
+After=homefarm-backup.service
+
 [Service]
 Type=oneshot
 User=root

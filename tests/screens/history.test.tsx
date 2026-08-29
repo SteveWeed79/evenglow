@@ -205,9 +205,9 @@ describe('the summarising itself', () => {
   /** Driven directly, because it is arithmetic rather than a store question. */
   it('holds its order as records arrive', () => {
     const [day] = intoDays([
-      { id: 'a', entity: 'eggLog', at: 1, title: 'a', tally: { key: 'eggs', amount: 1, unit: 'egg' } },
-      { id: 'b', entity: 'feedLog', at: 2, title: 'b', tally: { key: 'feeds', amount: 1, unit: 'feed' } },
-      { id: 'c', entity: 'eggLog', at: 3, title: 'c', tally: { key: 'eggs', amount: 5, unit: 'egg' } },
+      { id: 'a', entity: 'eggLog', at: 1, title: 'a', removable: true, tally: { key: 'eggs', amount: 1, unit: 'egg' } },
+      { id: 'b', entity: 'feedLog', at: 2, title: 'b', removable: true, tally: { key: 'feeds', amount: 1, unit: 'feed' } },
+      { id: 'c', entity: 'eggLog', at: 3, title: 'c', removable: true, tally: { key: 'eggs', amount: 5, unit: 'egg' } },
     ]);
 
     // Eggs first because eggs appeared first — a day that reorders itself
@@ -217,9 +217,49 @@ describe('the summarising itself', () => {
 
   it('says one egg, not 1 eggs', () => {
     const [day] = intoDays([
-      { id: 'a', entity: 'eggLog', at: 1, title: 'a', tally: { key: 'eggs', amount: 1, unit: 'egg' } },
+      { id: 'a', entity: 'eggLog', at: 1, title: 'a', removable: true, tally: { key: 'eggs', amount: 1, unit: 'egg' } },
     ]);
     expect(day?.summary).toBe('1 egg');
+  });
+
+  /**
+   * And two losses, not "2 losss".
+   *
+   * `HistoryDay.summary`'s own doc gives the intended line — *"12 eggs · 2
+   * feeds · 1 loss"* — and a single loss is why it went unnoticed: at one the
+   * word is right, and one is the commonest number of animals to lose in a day.
+   * A fox in the run is the day this line is read on, and it is the day it read
+   * wrong.
+   */
+  it('says two losses, not 2 losss', () => {
+    const [day] = intoDays([
+      { id: 'a', entity: 'mortality', at: 1, title: 'a', removable: true, tally: { key: 'losses', amount: 2, unit: 'loss' } },
+    ]);
+    expect(day?.summary).toBe('2 losses');
+  });
+
+  it('still says one loss at one', () => {
+    const [day] = intoDays([
+      { id: 'a', entity: 'mortality', at: 1, title: 'a', removable: true, tally: { key: 'losses', amount: 1, unit: 'loss' } },
+    ]);
+    expect(day?.summary).toBe('1 loss');
+  });
+
+  /**
+   * The rule the default now knows, and the limit of it. A word ending in a
+   * sibilant takes `-es`; everything irregular passes its own plural, as the
+   * harvest row does for "bunches". A calf is not a calfs.
+   */
+  it('adds -es after a sibilant and -s otherwise', () => {
+    const summary = (unit: string, amount: number): string | undefined =>
+      intoDays([
+        { id: 'a', entity: 'eggLog', at: 1, title: 'a', removable: true, tally: { key: 'k', amount, unit } },
+      ])[0]?.summary;
+
+    expect(summary('bunch', 3)).toBe('3 bunches');
+    expect(summary('box', 3)).toBe('3 boxes');
+    expect(summary('feed', 3)).toBe('3 feeds');
+    expect(summary('job', 3)).toBe('3 jobs');
   });
 });
 
@@ -410,6 +450,247 @@ describe('taking one back', () => {
     }
 
     expect(await listHistory()).toHaveLength(0);
+    screen.unmount();
+  });
+});
+
+/**
+ * ── The tap that archived a recurring schedule ─────────────────────────────
+ *
+ * `Timeline`'s take-back enqueues a `delete` against `event.id` and
+ * `event.entity`, on the stated premise that *"every entity a history row can
+ * be built from is append-only"*. Three builders make a row out of a **field**
+ * on a mutable record — `task.completedAt`, `maintenance.lastDoneAtDate`,
+ * `incubation.hatchedAt` — so `event.id` is the parent record's own id.
+ *
+ * On a service row that meant one tap archived the whole recurring oil-change
+ * schedule, silently, from a control captioned *"Logged in error?"*. The
+ * `incubation` builder had already written the reason down while explaining why
+ * its own case was the exception: *"a `maintenance` row is one service and
+ * archiving it takes the whole recurring schedule."*
+ *
+ * These rows are the legacy path — a farm's records written before completions
+ * were events — so they are built here the way such a farm holds them: the
+ * field on the schedule, and no `serviceCompletion` beside it.
+ */
+describe('a history row that is not a record of its own', () => {
+  const MACHINE = newId();
+  const OIL = newId();
+  const CHORE = newId();
+
+  async function theOldRecords(): Promise<void> {
+    await enqueue({
+      entity: 'equipment',
+      op: 'create',
+      targetId: MACHINE,
+      payload: { name: 'The tractor', make: 'Kubota', hasHourMeter: true },
+    });
+    // A schedule carrying its completion as a field, which is how every record
+    // written before `serviceCompletion` existed still looks.
+    await enqueue({
+      entity: 'maintenance',
+      op: 'create',
+      targetId: OIL,
+      payload: {
+        equipmentId: MACHINE,
+        title: 'Oil and filter',
+        intervalHours: 200,
+        lastDoneAtDate: at(1, 10),
+      },
+    });
+    await enqueue({
+      entity: 'task',
+      op: 'create',
+      targetId: CHORE,
+      payload: { title: 'Sharpen the shears', completedAt: at(1, 11) },
+    });
+  }
+
+  /** They are still history — nothing here removes the row from the day. */
+  it('still shows the service and the job', async () => {
+    await theOldRecords();
+
+    const titles = (await listHistory()).flatMap((day) => day.events.map((e) => e.title));
+
+    expect(titles.some((t) => t.includes('Oil and filter'))).toBe(true);
+    expect(titles).toContain('Sharpen the shears');
+  });
+
+  /** The whole finding: the control is not there to be tapped. */
+  it('offers no take-back on either of them', async () => {
+    await theOldRecords();
+
+    const screen = await mount(<HistoryScreen />);
+    for (const id of [OIL, CHORE]) {
+      await screen.press(`event-${id}`);
+      expect(screen.has(`event-remove-${id}`), id).toBe(false);
+    }
+
+    expect(screen.text()).toContain('not a record of its own');
+    screen.unmount();
+  });
+
+  /** And the schedule is still there, which is what was actually at stake. */
+  it('leaves the schedule where it was', async () => {
+    await theOldRecords();
+
+    const screen = await mount(<HistoryScreen />);
+    await screen.press(`event-${OIL}`);
+    screen.unmount();
+
+    const services = await localStore().readRecordsByEntity('maintenance');
+    expect(services.filter((r) => !r.deleted)).toHaveLength(1);
+  });
+
+  /**
+   * **The exception, and it is documented rather than incidental.** A set of
+   * eggs and its hatch are the same thing — one set, one hatch — so taking the
+   * row back out removes precisely what it describes.
+   */
+  it('still offers a take-back on a hatch, which is its own record', async () => {
+    const set = newId();
+    await enqueue({
+      entity: 'incubation',
+      op: 'create',
+      targetId: set,
+      payload: {
+        label: 'The March set',
+        species: 'chicken',
+        setAt: at(30, 8),
+        eggsSet: 12,
+        source: 'own',
+        method: 'incubator',
+        hatchedAt: at(1, 9),
+        hatched: 8,
+      },
+    });
+
+    const screen = await mount(<HistoryScreen />);
+    await screen.press(`event-${set}`);
+
+    expect(screen.has(`event-remove-${set}`)).toBe(true);
+    screen.unmount();
+  });
+
+  /**
+   * A row built from a real completion event IS removable — the newer path,
+   * where the record and the row are the same thing. Asserted so the fix reads
+   * as "which rows", not "service rows are special".
+   */
+  it('offers a take-back on a completion event', async () => {
+    await theOldRecords();
+
+    const done = newId();
+    await enqueue({
+      entity: 'serviceCompletion',
+      op: 'create',
+      targetId: done,
+      payload: { serviceId: OIL, completedAt: at(0, 10), atHours: 1240 },
+    });
+
+    const screen = await mount(<HistoryScreen />);
+    await screen.press(`event-${done}`);
+
+    expect(screen.has(`event-remove-${done}`)).toBe(true);
+    screen.unmount();
+  });
+});
+
+/**
+ * ── A birth, which was in no timeline at all ───────────────────────────────
+ *
+ * `history.ts` had no `breeding` builder, so a kidding, a lambing or a calving
+ * produced **no row anywhere** — while `incubation.hatchedAt`, the poultry
+ * equivalent, has had one all along. `AnimalScreen` renders "What happened to
+ * her" over a timeline her giving birth was not in.
+ */
+describe('a birth on the breeding record', () => {
+  const DAM = newId();
+
+  async function theDam(): Promise<void> {
+    await enqueue({
+      entity: 'animal',
+      op: 'create',
+      targetId: DAM,
+      payload: { flockId: GROUP, name: 'Nutmeg', species: 'goat', sex: 'female' },
+    });
+  }
+
+  async function bred(over: Record<string, unknown> = {}): Promise<string> {
+    const id = newId();
+    await enqueue({
+      entity: 'breeding',
+      op: 'create',
+      targetId: id,
+      payload: {
+        species: 'goat',
+        damId: DAM,
+        bredAt: at(150, 9),
+        method: 'natural',
+        ...over,
+      },
+    });
+    return id;
+  }
+
+  it('says who gave birth, and what came of it', async () => {
+    await theDam();
+    await bred({ bornAt: at(1, 6), liveBorn: 2, stillborn: 1 });
+
+    const [day] = await listHistory();
+    const born = day?.events.find((event) => event.entity === 'breeding');
+
+    expect(born?.title).toBe('Nutmeg gave birth');
+    expect(born?.detail).toBe('2 live births · 1 stillborn');
+  });
+
+  /** It belongs to her AND to the group she is in — the mortality reasoning. */
+  it('reaches the dam and her group', async () => {
+    await theDam();
+    await bred({ bornAt: at(1, 6), liveBorn: 2 });
+
+    const [day] = await listHistory();
+    const born = day?.events.find((event) => event.entity === 'breeding');
+
+    expect(born?.subjects).toContain(DAM);
+    expect(born?.subjects).toContain(GROUP);
+  });
+
+  /** A mating with no birth yet is not an event; it is a record in progress. */
+  it('says nothing until there is a birth', async () => {
+    await theDam();
+    await bred();
+
+    const days = await listHistory();
+    expect(days.flatMap((day) => day.events).some((e) => e.entity === 'breeding')).toBe(false);
+  });
+
+  it('says so plainly when the litter was lost', async () => {
+    await theDam();
+    await bred({ bornAt: at(1, 6), lost: true });
+
+    const [day] = await listHistory();
+    const born = day?.events.find((event) => event.entity === 'breeding');
+
+    expect(born?.detail).toBe('The whole litter was lost.');
+  });
+
+  /**
+   * **Not removable, and this is the M9 rule earning its keep.** `breeding` is
+   * mutable and this row is a FIELD on it, so a take-back would archive the
+   * mating along with the birth — the `maintenance` case, not the `incubation`
+   * one where the record and the event are the same thing. A builder added
+   * later is silent until somebody says otherwise, which is exactly what
+   * happened here without a line being written for it.
+   */
+  it('offers no take-back, because the record is the mating', async () => {
+    await theDam();
+    const breeding = await bred({ bornAt: at(1, 6), liveBorn: 2 });
+
+    const screen = await mount(<HistoryScreen />);
+    await screen.press(`event-${breeding}`);
+
+    expect(screen.has(`event-remove-${breeding}`)).toBe(false);
     screen.unmount();
   });
 });

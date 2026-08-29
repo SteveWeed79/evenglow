@@ -24,11 +24,19 @@
 # sentence naming the variable, rather than systemd refusing to start the unit.
 #
 #   MONGODB_URI                  the same value api.env has
+#   MONGODB_DB                   the same value api.env has, if it sets one
 #   HOMEFARM_BACKUP_BUCKET       s3://bucket/prefix
 #   HOMEFARM_BACKUP_RECIPIENT    the age PUBLIC key, age1...
 #   AWS_ACCESS_KEY_ID            an IAM user that can only PutObject on the prefix
 #   AWS_SECRET_ACCESS_KEY
 #   AWS_DEFAULT_REGION
+#
+# **`MONGODB_DB` matters and looks like it should not.** The API ignores the
+# database in the URI's path entirely — `databaseName()` reads this variable and
+# falls back to `homefarm` — so a box that sets it in `api.env` and not here has
+# a backup of a database nothing writes to. The script resolves it the same way
+# the API does and says which one it took, so the mistake is visible in the
+# journal rather than in the bucket.
 #
 # **No HOMEFARM_BACKUP_IDENTITY.** The private half of the age key must never be
 # on this machine — that is the whole argument for encrypting to a public key,

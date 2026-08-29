@@ -66,6 +66,22 @@ const BASE: Record<string, string> = {
  * `frame-ancestors 'none'` says the same thing as `X-Frame-Options` to a
  * browser that reads CSP, which is every current one. Both, because the header
  * is what an older one honours.
+ *
+ * ## `style-src` is a nonce and stays one
+ *
+ * **A nonce authorises a `<style>` ELEMENT and never a `style=` ATTRIBUTE.**
+ * `ops/page.ts` had six of the latter — the Refresh button's `margin-left` and
+ * four input widths — and this policy silently refused every one of them, so a
+ * browser enforcing it drew the board with its own layout stripped off. The
+ * page carried the fix rather than this function: those six are classes in the
+ * nonced block now.
+ *
+ * `style-src-attr 'unsafe-inline'` would also have made the page render, and it
+ * is the wrong trade. The argument for this whole header is the sentence above
+ * — if a `textContent` ever became an `innerHTML`, the nonce is what stops what
+ * arrives — and an allowance for inline attributes is a hole in exactly that.
+ * A CSS attribute on injected markup can read a page and exfiltrate through a
+ * background URL, which is why the two are separate directives at all.
  */
 export function boardPolicy(nonce: string): string {
   return [

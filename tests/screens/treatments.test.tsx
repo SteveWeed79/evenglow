@@ -120,6 +120,86 @@ describe('seeing what a group has had', () => {
   });
 });
 
+/**
+ * ── A course recorded after it finished ────────────────────────────────────
+ *
+ * `administeredAt` was stamped `Date.now()` on a create, and
+ * `withdrawalWindow` counts from `Math.max(administeredAt, treatmentEndsAt)` —
+ * so a course finished on Tuesday and recorded on Friday had the Tuesday the
+ * person picked **thrown away**, and the withdrawal counted from Friday.
+ *
+ * It errs long, which is the safe direction and is why this was not worse than
+ * it is. But it costs the farm days of sellable produce, and it writes an
+ * administration date that never happened onto a record a vet, a buyer or an
+ * inspector may read — `TreatmentsScreen` prints it as the day it was given and
+ * the CSV exports it under *"Given"*.
+ *
+ * The screen asks for one date, so that is the answer for a course recorded
+ * after the fact: it was administered on or before the last dose.
+ */
+describe('recording a course that is already over', () => {
+  /** 1 January of this year — in the past on every day the suite can run. */
+  const NEW_YEAR = new Date(new Date().getFullYear(), 0, 1).getTime();
+
+  /** Fills the form for a finished course whose last dose was back in January. */
+  async function recordBackdated() {
+    const screen = await mount(<TreatmentScreen {...routeProps({ groupId: GROUP })} />);
+    await screen.type('treatment-name', 'Baytril');
+    // The toggle defaults to off — a finished course — so the date field is
+    // already on screen and must not be toggled away.
+    await screen.pressLabel('Jan');
+    await screen.type('day-of-month', '1');
+    // Seven days off the eggs.
+    await screen.pressLabel('+7');
+    await screen.press('save-treatment');
+    return screen;
+  }
+
+  it('keeps the last dose the person picked as the day it was given', async () => {
+    const screen = await recordBackdated();
+
+    const [record] = await treatmentsFor(GROUP);
+    expect(record?.administeredAt).toBe(NEW_YEAR);
+    expect(record?.treatmentEndsAt).toBe(NEW_YEAR);
+    screen.unmount();
+  });
+
+  /**
+   * And the produce is not held from today. Seven days from a January dose has
+   * long since cleared; seven days from *now* would hold eggs that are fine.
+   */
+  it('counts the withdrawal from the last dose, not from today', async () => {
+    const screen = await recordBackdated();
+
+    const [record] = await treatmentsFor(GROUP);
+    expect(record?.holding).toEqual([]);
+    screen.unmount();
+  });
+
+  /**
+   * An open course still stamps today, and that is deliberate:
+   * `withdrawalWindow` returns `open` and holds indefinitely, so nothing is
+   * counted from the date. That the true first dose may be older is a field
+   * this screen does not ask for, and inventing one is not this fix.
+   */
+  it('stamps today for a course that is still running', async () => {
+    const before = Date.now();
+    const screen = await mount(<TreatmentScreen {...routeProps({ groupId: GROUP })} />);
+    await screen.type('treatment-name', 'Baytril');
+    await screen.pressLabel('The course is still running');
+    await screen.pressLabel('+7');
+    await screen.press('save-treatment');
+
+    const [record] = await treatmentsFor(GROUP);
+    expect(record?.administeredAt).toBeGreaterThanOrEqual(before);
+    expect(record?.running).toBe(true);
+    // That an open course holds indefinitely is settled by its own test above;
+    // the subject here is only the date. Which produce the `+7` lands on is
+    // whichever of three identically labelled steppers `pressLabel` reaches.
+    screen.unmount();
+  });
+});
+
 describe('correcting one', () => {
   it('opens with the record already in the form', async () => {
     const id = await aRunningCourse();

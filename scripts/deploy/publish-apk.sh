@@ -51,7 +51,26 @@ note() { printf '    %s\n' "$*"; }
 # one, so everything below — the extension check, the refusal to overwrite, the
 # symlink — is one code path rather than two that drift.
 FETCHED=""
-cleanup() { [ -n "$FETCHED" ] && rm -f "$FETCHED"; }
+
+# ── The trap's own exit status is the script's ──────────────────────────────
+#
+# **This was `[ -n "$FETCHED" ] && rm -f "$FETCHED"`, and it failed every local
+# publish.** On the local path `FETCHED` is empty, so the test is false, so the
+# `&&` chain is the last command in the trap — and under `set -e` a trap that
+# ends on a false test makes the shell exit non-zero. A completely successful
+# publish therefore exited 1.
+#
+# What that cost is upstream: `deploy.sh` reads the exit code, prints "could not
+# publish it — the API is unaffected", and does **not** write the marker that
+# records what is on the shelf. So the next tick fetches and publishes the same
+# build again, and the one after that, for ever — each of them succeeding and
+# each of them reported as a failure.
+cleanup() {
+  if [ -n "$FETCHED" ]; then
+    rm -f "$FETCHED"
+  fi
+  return 0
+}
 trap cleanup EXIT
 
 case "$SOURCE" in
@@ -99,32 +118,48 @@ MAGIC="$(head -c 4 "$SOURCE" | od -An -tx1 | tr -d ' \n')"
 [ "$MAGIC" = "504b0304" ] \
   || die "That is not an Android package — it is not even a zip. Check the url returned the build and not a login page."
 
-if command -v unzip >/dev/null 2>&1; then
-  unzip -l "$SOURCE" AndroidManifest.xml >/dev/null 2>&1 \
-    || die "That zip has no AndroidManifest.xml, so it is not an APK. An app bundle or a source archive will look like this."
+# ── Required, and it used to be optional ────────────────────────────────────
+#
+# **Both identity checks below lived inside `if command -v unzip`, and nothing
+# installed `unzip`.** So on the ordinary box the branch simply did not run: the
+# magic-number test above is the only thing that fired, and it says "this is a
+# zip". Any zip named `.apk` was published as the farm's app — which is the exact
+# failure the note above records as *"found by publishing this repository's
+# README as a build"*, reinstated by the absence of a package.
+#
+# Refused rather than skipped, because skipping is failing open on the question
+# "is this our application". The cost of refusing is bounded and loud: the shelf
+# keeps the APK it has, `deploy.sh` notes that it could not publish, and the API
+# is untouched. `setup-box.sh` installs it now, so this is the door rather than
+# the wall.
+command -v unzip >/dev/null 2>&1 \
+  || die "unzip is not installed, so this APK cannot be checked for what it is or whose it is.
+  Refusing to publish an unverified build. Install it:  sudo apt-get install -y unzip"
 
-  # ── Whose app is it? (P2-2) ───────────────────────────────────────────────
-  #
-  # An APK is an APK; that says nothing about which application it is. The
-  # deploy asks EAS for a build matching this application id, so this is the
-  # second belt — it checks the bytes that arrived rather than the query that
-  # asked for them, and it is the only check on the hand-run path, where there
-  # is no query at all.
-  #
-  # The manifest is binary XML and the box has no Android SDK by its own stated
-  # decision, so this reads the string pool rather than parsing. `tr -d '\0'`
-  # is what makes that work for both encodings AAPT2 emits: a UTF-16LE string
-  # is the same ASCII with a null after every byte, and stripping nulls leaves
-  # one form to match. Neither `unzip -p` nor `grep -a` cares that the rest of
-  # the file is not text.
-  #
-  # Refuses rather than warns. A timer-driven deploy has nobody reading its
-  # output, so a warning here is a warning nobody sees — and the cost of being
-  # wrong is bounded and loud: the shelf keeps the APK it has, the deploy notes
-  # that it could not publish, and the API is untouched.
-  if ! unzip -p "$SOURCE" AndroidManifest.xml 2>/dev/null | tr -d '\0' | grep -qa "$EXPECT_APP_ID"; then
-    die "That APK does not name ${EXPECT_APP_ID}. It is some other application — check which profile built it."
-  fi
+unzip -l "$SOURCE" AndroidManifest.xml >/dev/null 2>&1 \
+  || die "That zip has no AndroidManifest.xml, so it is not an APK. An app bundle or a source archive will look like this."
+
+# ── Whose app is it? (P2-2) ─────────────────────────────────────────────────
+#
+# An APK is an APK; that says nothing about which application it is. The
+# deploy asks EAS for a build matching this application id, so this is the
+# second belt — it checks the bytes that arrived rather than the query that
+# asked for them, and it is the only check on the hand-run path, where there
+# is no query at all.
+#
+# The manifest is binary XML and the box has no Android SDK by its own stated
+# decision, so this reads the string pool rather than parsing. `tr -d '\0'`
+# is what makes that work for both encodings AAPT2 emits: a UTF-16LE string
+# is the same ASCII with a null after every byte, and stripping nulls leaves
+# one form to match. Neither `unzip -p` nor `grep -a` cares that the rest of
+# the file is not text.
+#
+# Refuses rather than warns. A timer-driven deploy has nobody reading its
+# output, so a warning here is a warning nobody sees — and the cost of being
+# wrong is bounded and loud: the shelf keeps the APK it has, the deploy notes
+# that it could not publish, and the API is untouched.
+if ! unzip -p "$SOURCE" AndroidManifest.xml 2>/dev/null | tr -d '\0' | grep -qa "$EXPECT_APP_ID"; then
+  die "That APK does not name ${EXPECT_APP_ID}. It is some other application — check which profile built it."
 fi
 
 command -v aapt2 >/dev/null 2>&1 && AAPT=aapt2 || AAPT=""

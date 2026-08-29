@@ -54,6 +54,14 @@ export interface GrowOutGroup {
   purposes?: readonly string[] | undefined;
   /** The farm's own figure, in weeks. Beats the library when set. */
   processAtWeeks?: number | undefined;
+  /**
+   * The most recent deliberate cull recorded against this group.
+   *
+   * The record that discharges the processing row — see `processingDue`. From
+   * `mortality` rows with `cause: 'cull'`, which is what the loss screen writes
+   * when a keeper says the birds were processed rather than lost.
+   */
+  lastCulledAt?: number | undefined;
 }
 
 export interface GrowOutWindow {
@@ -114,6 +122,46 @@ export function suggestedGrowOutWeeks(breedId: string | undefined): Range | null
  * keeper is making is "book the processor" and that has a lead time. A row
  * that appeared when the window was already half gone would be information
  * arriving after it was useful.
+ *
+ * ## Something a farmer does has to clear it
+ *
+ * **This row used to be a permanent resident, and it was the only builder here
+ * that was.** It read fields of the group and nothing else, so nothing a keeper
+ * *did* could discharge it: a meat flock went `overdue` a day after the window
+ * opened, sorted first on Today (`URGENCY_ORDER.overdue = 0`) in the alert
+ * tint, and stayed there for ever. Processing the birds and recording the cull
+ * changed nothing. The only escapes were lying about the group or archiving it.
+ *
+ * `due/types.ts` states the rule this broke outright — *"a list with a
+ * permanent resident on it is a list people stop reading"* — and it is the
+ * whole reason `careDues` counts from `careLog` and `shearingDues` from
+ * `shearing`. This one had no equivalent record, so it never got one.
+ *
+ * The record is a `mortality` row with `cause: 'cull'`, which is what the loss
+ * screen writes when the keeper says the birds were processed rather than lost.
+ *
+ * **Only a cull inside the window, and the first draft of this got it wrong.**
+ * A bird put down for a bad leg is a `cull` too, so "any cull ever" would
+ * silence the row before it had ever been shown. The obvious repair was to
+ * count from the moment the row becomes visible — `opensAt - noticeDays` — and
+ * a test written against a Cornish cross disproved it on the spot: `processing`
+ * carries fourteen notice days against a six-week window, so "visible" is week
+ * four, and a week-four injury is exactly the case being guarded against.
+ *
+ * So the line is `opensAt`. Before it the birds are not at processing weight by
+ * the farm's own figure — that is what the window means — and a cull then is a
+ * loss.
+ *
+ * **What that costs**, stated rather than hidden: a keeper who genuinely
+ * processes early, before the window opens, is not answered and the row still
+ * fires. The repair is `processAtWeeks`, which exists for exactly this — *"mine
+ * are ready at eleven weeks"* — and which this file already argues is the farm
+ * being the authority about the farm. A wrong figure corrected once is a better
+ * answer than a rule that guesses.
+ *
+ * **The first cull in the window is enough.** A farm that takes twenty birds
+ * this week and thirty next has had the information this row exists to deliver;
+ * asking again is a different feature, and one nobody asked for.
  */
 export function processingDue(
   group: GrowOutGroup,
@@ -121,6 +169,8 @@ export function processingDue(
 ): Due | null {
   const window = growOutWindow(group);
   if (window === null) return null;
+
+  if (group.lastCulledAt !== undefined && group.lastCulledAt >= window.opensAt) return null;
 
   return {
     key: `${group.id}:processing`,

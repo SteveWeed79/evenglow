@@ -37,6 +37,11 @@ REPO_DIR="${HOMEFARM_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/nul
 SERVICE_USER="homefarm"
 PORT="${PORT:-3001}"
 
+# Set by the Caddy section when the running web server config is not the one on
+# disk. Consulted by the successful exit at the very bottom rather than acted on
+# where it is found, because the API restart below must not be skipped for it.
+CADDY_WRONG=0
+
 # ── Which ref this box follows ──────────────────────────────────────────────
 #
 # `release`, not `main`. CI pushes that branch only after `verify` goes green
@@ -56,6 +61,25 @@ REF="${HOMEFARM_REF:-release}"
 # because that check runs in a child process and a `deploy.env` override that
 # only this script could see would be an override that does nothing.
 export HOMEFARM_APP_ID="${HOMEFARM_APP_ID:-dev.swbuild.homefarm}"
+
+# ── The other two `deploy.env` settings a child process reads ───────────────
+#
+# **Sourcing a file sets shell variables, not environment ones**, and the two
+# below are read by children only — so `deploy.env` could carry them and neither
+# child would ever see one. `HOMEFARM_APP_ID` above was exported for exactly
+# this reason and these were not, which is what made it easy to miss.
+#
+# `GITHUB_TOKEN` is the sharper of the two: the comment further down promises it
+# is *"honoured if this repository is ever made private"*, and
+# `release-apk.mjs` really does read `process.env.GITHUB_TOKEN` — but it never
+# arrived, so the documented recovery path for a private repository could not
+# work. It would have been discovered on the day it was needed.
+#
+# Conditional, because `export VAR=""` and an unset one are different things to
+# a child: `release-apk.mjs` tests the value's truthiness and would send an empty
+# bearer header, which GitHub answers 401 to rather than treating as anonymous.
+[ -n "${GITHUB_TOKEN:-}" ] && export GITHUB_TOKEN
+[ -n "${HOMEFARM_DOMAIN:-}" ] && export HOMEFARM_DOMAIN
 
 say() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 note() { printf '   %s\n' "$*"; }
@@ -135,10 +159,32 @@ TARGET="$(git rev-parse --short FETCH_HEAD)"
 # all. Both are per-tick self-healing by design and both say so. What must not
 # run is the work that only makes sense when the code changed: reinstalling
 # dependencies, and restarting the service.
+#
+# ── And it has to mean the RUNNING code, not this tick's fetch ──────────────
+#
+# `CHANGED` was `WAS != TARGET`: did HEAD move during this run. That is not the
+# question. A deploy that fast-forwards and then dies — a failed `pnpm install`,
+# a restart that did not come back, an SSH session dropped in the middle — has
+# already moved HEAD, so the NEXT tick finds `WAS = TARGET`, prints "nothing to
+# deploy", and exits 0. **For ever.** New code on disk, old code in memory, and
+# a green timer saying so every five minutes.
+#
+# So the box records the commit it last got all the way through on, and that is
+# what this compares against. A tick is "nothing to deploy" only when HEAD is at
+# the release ref *and* that ref is what is actually running.
+#
+# A box that has never written the marker — every box already deployed — reads
+# it as empty and does one full pass. That is one extra install and one restart,
+# once, and then it settles.
+DEPLOYED_MARK=/var/lib/homefarm/deployed-sha
+DEPLOYED="$(cat "$DEPLOYED_MARK" 2>/dev/null || true)"
+
 CHANGED=1
-if [ "$WAS" = "$TARGET" ]; then
+if [ "$WAS" = "$TARGET" ] && [ "$DEPLOYED" = "$TARGET" ]; then
   note "already on $TARGET — nothing to deploy"
   CHANGED=0
+elif [ "$WAS" = "$TARGET" ]; then
+  note "on $TARGET, but the last completed deploy was ${DEPLOYED:-unrecorded} — finishing it"
 elif git merge-base --is-ancestor HEAD FETCH_HEAD; then
   # The ordinary case: release has moved forward and this is a fast-forward.
   git merge --ff-only FETCH_HEAD --quiet \
@@ -198,6 +244,33 @@ if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
   # glob is fine but a relative path would not be.
   install -d -m 0755 /etc/caddy/conf.d
 
+  # ── The log file, and the reload that was refused for ten days ───────────
+  #
+  # The rendered Caddyfile names `/var/log/caddy/homefarm.log`. `setup-box.sh`
+  # creates the *directory* owned by caddy and always has — but nothing has ever
+  # created the file, so it belonged to whichever process wrote there first. On
+  # the live box that was root, running the rename by hand, and the file landed
+  # `root:root 0600`.
+  #
+  # **Caddy opens its log files as the `caddy` user when it loads a config, and
+  # a file it cannot open makes it refuse the whole config.** It then goes on
+  # serving the one it already had. So the box kept a pre-rename config live for
+  # ten days, rooted at a directory that no longer existed, while
+  # `systemctl status caddy` said `active (running)` and `/app/` answered 404.
+  #
+  # `unchanged` is what made it permanent. The file on disk was already correct,
+  # `cmp` agreed, and this script never asked Caddy to read it again. Every five
+  # minutes, for ten days.
+  #
+  # **Never truncated.** `install /dev/null` over an existing log would throw
+  # away the history that says when it broke, so the file is created only when
+  # absent. The ownership is corrected either way — a file that is already there
+  # and unopenable is the entire case this exists for.
+  install -d -m 0755 /var/log/caddy
+  [ -e /var/log/caddy/homefarm.log ] || : > /var/log/caddy/homefarm.log
+  chmod 0644 /var/log/caddy/homefarm.log 2>/dev/null || true
+  chown caddy:caddy /var/log/caddy /var/log/caddy/homefarm.log 2>/dev/null || true
+
   # ── Which name to render for, and a refusal rather than a guess ───────────
   #
   # The template owns exactly ONE site block, so a correctly managed box has
@@ -234,21 +307,96 @@ if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
     note "/etc/caddy/Caddyfile has ${COUNT} site blocks ($(printf '%s\n' "$BLOCKS" | tr '\n' ' ')) — this deploy will not guess which is the API's, so it left the file alone"
     note "copy at /etc/caddy/Caddyfile.local-blocks.bak — move the blocks that are not the API's into /etc/caddy/conf.d/<name>.caddy, leave one in the Caddyfile, then reload caddy"
   else
-    sed "s/api\.example\.com/${DOMAIN}/" "$REPO_DIR/scripts/deploy/Caddyfile" > /tmp/Caddyfile.next
+    # ── A name nobody else can have taken ─────────────────────────────────
+    #
+    # This was the fixed path `/tmp/Caddyfile.next`, written as root from a unit
+    # that had no `PrivateTmp`. Any local account could create it first as a
+    # symlink and have the redirect below follow it. `mktemp` removes the race
+    # here; `PrivateTmp=true` on `homefarm-deploy.service` removes it again for
+    # the scheduled run. Both, because this script is also run by hand.
+    NEXT="$(mktemp /tmp/Caddyfile.next.XXXXXX)"
+    sed "s/api\.example\.com/${DOMAIN}/" "$REPO_DIR/scripts/deploy/Caddyfile" > "$NEXT"
 
     # Validated against the whole config, imports included — so a syntax error
     # in a local block under conf.d is caught here rather than by a reload that
     # leaves the box serving nothing.
-    if ! caddy validate --config /tmp/Caddyfile.next --adapter caddyfile >/dev/null 2>&1; then
+    if ! caddy validate --config "$NEXT" --adapter caddyfile >/dev/null 2>&1; then
       note "the rendered Caddyfile is not valid — left the running one alone (check /etc/caddy/conf.d)"
-    elif cmp -s /tmp/Caddyfile.next /etc/caddy/Caddyfile; then
+    elif cmp -s "$NEXT" /etc/caddy/Caddyfile; then
       note "unchanged"
     else
-      install -m 0644 /tmp/Caddyfile.next /etc/caddy/Caddyfile
-      systemctl reload caddy
-      note "reloaded for ${DOMAIN}"
+      install -m 0644 "$NEXT" /etc/caddy/Caddyfile
+      # ── A refused reload must not take the API deploy with it ─────────────
+      #
+      # Unguarded under `set -e`, this killed the script where it stood —
+      # between the checkout and `systemctl restart homefarm-api`. So a Caddy
+      # config Caddy would not take left **new code installed and the old
+      # process still running**, and `cmp -s` reported "unchanged" on every
+      # tick after, because the file on disk was by then the right one.
+      #
+      # It is not ignored, it is deferred: the verification immediately below
+      # asks the admin API what is actually loaded, which is a stronger question
+      # than this exit code answers — a reload returns 0 for a signal delivered,
+      # not for a config accepted. Whatever this says, that block decides.
+      if systemctl reload caddy 2>/dev/null; then
+        note "reloaded for ${DOMAIN}"
+      else
+        note "caddy refused the reload — the check below says what it is serving"
+      fi
     fi
-    rm -f /tmp/Caddyfile.next
+    rm -f "$NEXT"
+  fi
+
+  # ── What is actually running, which is not what was installed ────────────
+  #
+  # **`systemctl reload caddy` returns 0 when the signal was delivered**, not
+  # when the config was accepted. Caddy validates and loads in its own time, and
+  # a config it refuses is logged and discarded — it goes on serving the last
+  # one that worked. So the reload succeeds, the file on disk is right, and the
+  # box serves something else entirely. See the log-file note above: that is
+  # exactly what happened, and every check on this box reported a clean run
+  # throughout.
+  #
+  # `cmp` cannot see it either. It compares the file this script rendered
+  # against the file on disk, and both were correct the whole time. The thing
+  # that was wrong was the only thing neither of them looks at.
+  #
+  # The admin API is what knows. Caddy listens on 127.0.0.1:2019 by default and
+  # answers with the config it has actually loaded. Checked on every tick,
+  # including the `unchanged` path — which is the state a refused reload leaves
+  # behind, and a deploy that looks only when it changed something can never
+  # find this.
+  #
+  # **Only when this deploy owns the running Caddyfile.** On a box that predates
+  # `conf.d` the block above deliberately leaves the file alone, so whether that
+  # config serves `/app` is not this script's finding to make — least of all as
+  # a permanent failure over something it has already decided not to repair.
+  if [ "$COUNT" = 1 ] && [ -n "$DOMAIN" ]; then
+    RUNNING="$(curl -fsS --max-time 5 http://127.0.0.1:2019/config/ 2>/dev/null || true)"
+    if [ -z "$RUNNING" ]; then
+      # Not a failure: the admin endpoint can be moved or turned off, and a box
+      # configured that way is somebody's deliberate choice rather than a fault.
+      note "caddy's admin API did not answer on 2019 — cannot tell which config is live"
+    elif printf '%s' "$RUNNING" | grep -q '/var/lib/homefarm/dist'; then
+      note "serving the config on disk"
+    else
+      # One reload, then look again. The usual cause is a permission Caddy could
+      # not satisfy at its last load and this script has since repaired — the
+      # log file above is the case this was written for. Without the retry the
+      # repair lands on disk and nothing ever asks Caddy to read it, because
+      # `cmp` says the file is unchanged. That is the loop that ran ten days.
+      note "caddy is not serving the config on disk — reloading"
+      systemctl reload caddy 2>/dev/null || true
+      sleep 1
+      RUNNING="$(curl -fsS --max-time 5 http://127.0.0.1:2019/config/ 2>/dev/null || true)"
+      if printf '%s' "$RUNNING" | grep -q '/var/lib/homefarm/dist'; then
+        note "it has taken it now"
+      else
+        CADDY_WRONG=1
+        note "CADDY IS SERVING A CONFIG THAT IS NOT THE ONE ON DISK, and a reload did not change that"
+        note "journalctl -u caddy -n 40 --no-pager  — a log file it cannot open is the cause this was written for"
+      fi
+    fi
   fi
 
   # Where publish-apk.sh puts a build. Created here as well as in setup-box.sh
@@ -466,13 +614,56 @@ else
   fi
 fi
 
-# Nothing was restarted, so there is nothing to have come back. The check below
-# exists to catch a deploy that killed the server, and its failure text offers a
-# rollback to the previous commit — advice that reads as nonsense on a box that
-# is already on the commit it would roll back to.
+# ── The probe runs on EVERY tick, and it used to run on none of the quiet ones ─
+#
+# This block was gated on `CHANGED`, on the reasoning that nothing was restarted
+# so there is nothing to have come back. True of the deploy, and it left the box
+# with **nothing that ever asks whether the API is answering** — the timer runs
+# every five minutes and, on a box whose release ref has not moved, checked
+# precisely nothing. `homefarm-api.service` carries `StartLimitBurst=5`, so an
+# API that dies five times in its interval is one systemd stops restarting: dead
+# server, silent unit, and a deploy timer reporting success around the clock.
+#
+# So the check is unconditional now, and on a quiet tick a failure is acted on
+# rather than reported: `reset-failed` clears the start limit that is the reason
+# nothing is retrying, one restart, and then the same diagnosis as any other
+# failed deploy. A box that cannot be revived leaves homefarm-deploy.service in
+# `systemctl --failed`, which is what `check-box.sh` reads.
+ready() {
+  # Six seconds, not three: the driver's server-selection timeout is five
+  # (`db/client.ts`), so a shorter deadline aborts the request before `/ready`
+  # can answer and we lose the distinction the block below depends on.
+  local attempt
+  for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    if curl -fsS --max-time 6 "http://127.0.0.1:${PORT}/ready" >/dev/null 2>&1; then
+      note "serving on :${PORT} after ${attempt}s"
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
 if [ "$CHANGED" -eq 0 ]; then
-  printf '\n\033[1mUp to date: %s\033[0m\n\n' "$NOW"
-  exit 0
+  say "Checking it is still up"
+
+  if ready; then
+    printf '\n\033[1mUp to date: %s\033[0m\n\n' "$NOW"
+    if [ "$CADDY_WRONG" -eq 1 ]; then
+      printf '\033[1;31mThe API is fine. Caddy is not serving the config on disk.\033[0m\n\n'
+      printf 'Nothing above fixed it, so a person has to look:\n\n'
+      printf '    journalctl -u caddy -n 40 --no-pager\n\n'
+      exit 1
+    fi
+    exit 0
+  fi
+
+  # Nothing changed, so this is not a bad deploy — it is a server that went away
+  # on its own and that systemd has given up on.
+  printf '\n\033[1;31mThe API is not answering, and nothing was deployed.\033[0m\n\n'
+  printf 'Clearing the start limit and restarting it once.\n\n'
+  systemctl reset-failed homefarm-api 2>/dev/null || true
+  systemctl restart homefarm-api || true
 fi
 
 say "Checking it came back"
@@ -486,18 +677,37 @@ say "Checking it came back"
 # `/health` while every data route fails. `/ready` opens the connection, so a
 # deploy that cannot reach the database fails here rather than at the first
 # farm to log an egg.
-#
-# Six seconds, not three: the driver's server-selection timeout is five
-# (`db/client.ts`), so a shorter deadline aborts the request before `/ready`
-# can answer and we lose the distinction the block below depends on.
-for attempt in 1 2 3 4 5 6 7 8 9 10; do
-  if curl -fsS --max-time 6 "http://127.0.0.1:${PORT}/ready" >/dev/null 2>&1; then
-    note "serving on :${PORT} after ${attempt}s"
-    printf '\n\033[1mDeployed: %s\033[0m\n\n' "$NOW"
-    exit 0
+if ready; then
+  # ── The marker, written the moment the box is actually serving this commit ──
+  #
+  # What `CHANGED` reads next tick. Written here rather than after the Caddy
+  # verdict below, because Caddy being wrong does not make the API undeployed —
+  # and withholding it would reinstall and bounce the API every five minutes
+  # over a web-server config, which is the exact churn `CHANGED` exists to stop.
+  install -d -m 0755 /var/lib/homefarm 2>/dev/null || true
+  printf '%s\n' "$NOW" > "$DEPLOYED_MARK" 2>/dev/null || true
+
+  printf '\n\033[1mDeployed: %s\033[0m\n\n' "$NOW"
+
+  # ── Deployed, and still not a clean run ───────────────────────────────────
+  #
+  # Checked here rather than where it was found, so the API restart is never
+  # skipped for it: a web server serving a stale config is bad, and an API left
+  # down is worse.
+  #
+  # **But it is not success.** Exiting 0 is how this stayed quiet for ten days —
+  # the timer was green, `systemctl --failed` was empty, this script printed
+  # `unchanged` every five minutes, and the one route a farmer needed answered
+  # 404. Non-zero puts homefarm-deploy.service in `systemctl --failed`, which is
+  # what check-box.sh reads and what somebody sees without having gone looking.
+  if [ "$CADDY_WRONG" -eq 1 ]; then
+    printf '\033[1;31mThe API is fine. Caddy is not serving the config on disk.\033[0m\n\n'
+    printf 'Nothing above fixed it, so a person has to look:\n\n'
+    printf '    journalctl -u caddy -n 40 --no-pager\n\n'
+    exit 1
   fi
-  sleep 1
-done
+  exit 0
+fi
 
 # ── Which of the two it was ─────────────────────────────────────────────────
 #
@@ -521,8 +731,21 @@ fi
 # hides which of the two it was. The check above now tells them apart, and this
 # is the branch where the process itself never came back.
 printf '\n\033[1;31mThe service did not come back.\033[0m\n\n'
-printf 'It is on %s. The previous version was %s.\n\n' "$NOW" "$WAS"
 printf 'What it says:\n\n'
 journalctl -u homefarm-api -n 30 --no-pager
-printf '\nTo go back:\n\n    cd %s && sudo git checkout %s && sudo systemctl restart homefarm-api\n\n' "$REPO_DIR" "$WAS"
+
+# ── And "go back to $WAS" is nonsense on a tick that deployed nothing ───────
+#
+# The rollback line is advice about a deploy that broke something. Now that this
+# block is reached on a quiet tick too, `$WAS` is `$NOW` there — so it would
+# offer a checkout of the commit already running as the repair for that commit
+# not running, which is the shape of advice that costs somebody an hour.
+if [ "$CHANGED" -eq 0 ]; then
+  printf '\nNothing was deployed this run — it is on %s and was already.\n' "$NOW"
+  printf 'So this is not a bad release; the server went away on its own and the\n'
+  printf 'restart above did not bring it back.\n\n'
+else
+  printf '\nIt is on %s. The previous version was %s.\n' "$NOW" "$WAS"
+  printf '\nTo go back:\n\n    cd %s && sudo git checkout %s && sudo systemctl restart homefarm-api\n\n' "$REPO_DIR" "$WAS"
+fi
 exit 1

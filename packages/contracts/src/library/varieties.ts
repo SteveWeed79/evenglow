@@ -264,18 +264,73 @@ const HAND_TUNED: readonly LibraryVariety[] = [
     spacingIn: 8, rowSpacingIn: 12, sowDepthIn: 0.25, provenance: P },
 ];
 
+/**
+ * The key that says two rows are the same plant: crop and cultivar, folded.
+ *
+ * The same key `PickVarietyScreen` uses to collapse a farm's own duplicates.
+ */
+export function varietyKey(v: Pick<LibraryVariety, 'crop' | 'name'>): string {
+  return `${v.crop.toLowerCase()}|${v.name.toLowerCase()}`;
+}
+
 const HAND_TUNED_IDS = new Set(HAND_TUNED.map((v) => v.id));
+const HAND_TUNED_KEYS = new Set(HAND_TUNED.map(varietyKey));
 
 /**
  * The whole library: the hand-tuned entries, then everything the crop tables
  * generate that they do not already cover.
  *
- * Deduplicated on `id`, which is slugged from crop and name by the same rule on
- * both sides — so `tomato-brandywine` written out by hand and `tomato-brandywine`
- * generated from the table are recognised as one variety rather than shipping
- * twice and appearing twice in the picker.
+ * ## Why one key was not enough
+ *
+ * This deduplicated on `id` alone, and the note here said the id was *"slugged
+ * from crop and name by the same rule on both sides"*. On the generated side it
+ * is. On the hand-tuned side it is typed by hand, and 24 of them do not follow
+ * the rule — so **fifteen cultivars shipped twice**, under two ids, with
+ * agronomy that disagreed:
+ *
+ * | picker showed | and also |
+ * |---|---|
+ * | Golden Bantam, 78 days | Golden Bantam, 80 days |
+ * | Provider, 3 in apart | Provider, 4 in apart |
+ * | Jalapeño, out 3 weeks after | Jalapeño, out 2 weeks after |
+ *
+ * `library.test.ts` passed throughout, precisely because the ids differed: a
+ * uniqueness check over ids cannot see two rows that are the same plant.
+ *
+ * All fifteen carry the **same crop and the same name** as their twin —
+ * `sweet-corn-golden-bantam` and `corn-golden-bantam` are both "Sweet corn" /
+ * "Golden Bantam", and only the slug was typed short. So crop and cultivar is
+ * the second key, and it is the one the picker already uses to collapse a
+ * farm's own duplicates.
+ *
+ * **It does not replace the id.** Five pairs are the mirror image — one id, two
+ * ways of saying the crop — and crop-and-name cannot see those:
+ *
+ * ```
+ * chard-fordhook-giant     "Swiss chard" / "Fordhook Giant"    hand-tuned, 55d
+ * chard-fordhook-giant     "Chard" / "Fordhook Giant"                      60d
+ * pea-sugar-snap           "Snap pea" / "Sugar Snap"           hand-tuned, 62d
+ * pea-sugar-snap           "Pea" / "Sugar Snap"                            70d
+ * mustard-southern-giant   "Mustard greens" / "Southern Giant Curled"  hand-tuned
+ * mustard-southern-giant   "Mustard" / "Southern Giant"
+ * ```
+ *
+ * So both keys, each covering what the other misses. Between them they also
+ * cover the next one: a hand-tuned entry added tomorrow is caught whichever way
+ * its slug and its crop word are typed, which no list of the twenty could do.
+ *
+ * ## The agronomy the survivors do not inherit
+ *
+ * The hand-tuned entry wins, per the rule at the top of this file — and a few
+ * of the dropped rows carried a field their twin lacks: `successionDays` on
+ * Purple Top White Globe (14) and on Yellow Crookneck (21), and the note on
+ * Provider that it germinates in colder soil than the rest. Losing those is a
+ * real cost of the merge; adding them to the surviving entries changes the
+ * numbers, which is the farm's call and not this file's.
  */
 export const LIBRARY_VARIETIES: readonly LibraryVariety[] = [
   ...HAND_TUNED,
-  ...CATALOGUE_VARIETIES.filter((v) => !HAND_TUNED_IDS.has(v.id)),
+  ...CATALOGUE_VARIETIES.filter(
+    (v) => !HAND_TUNED_IDS.has(v.id) && !HAND_TUNED_KEYS.has(varietyKey(v)),
+  ),
 ];

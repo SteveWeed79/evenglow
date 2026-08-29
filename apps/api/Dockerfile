@@ -91,9 +91,26 @@ FROM node:22-slim AS run
 WORKDIR /app
 
 ENV NODE_ENV=production
-# Fastify binds 0.0.0.0 already; this only has to agree with the host's
-# forwarding. `env.ts` defaults to 3001 and every profile below matches.
+# `env.ts` defaults to 3001 and every profile below matches; this only has to
+# agree with the host's forwarding.
 ENV PORT=3001
+
+# ── Every interface, and only inside a container ────────────────────────────
+#
+# `server.ts` binds `127.0.0.1` unless told otherwise, which is right on the box
+# this repository deploys to: Caddy reverse-proxies to loopback on the same
+# machine, and a public bind there is a second door past the proxy.
+#
+# **In a container it is the opposite.** Loopback is the container's own network
+# namespace, so a published port reaches nothing and the process answers only
+# itself. The exposure argument does not carry across either: what makes an
+# image reachable is `docker run -p`, which is already the deliberate act.
+#
+# The comment this replaces said *"Fastify binds 0.0.0.0 already"*, which was
+# true when it was written and stopped being true one commit before this line
+# existed. CI caught it — the container check published :3001, the API logged
+# `listening on 127.0.0.1:3001`, and `/health` was never answered.
+ENV API_HOST=0.0.0.0
 
 # Owned by the user that runs it, so the process needs no write access to its
 # own code to start.

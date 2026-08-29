@@ -177,76 +177,96 @@ export async function billingRoutes(
     });
   });
 
-  app.post('/billing/play', async (request, reply) => {
-    try {
-      const claims = await requireMutationClaims(request.headers.authorization, env.AUTH_SECRET);
-      if (config === null) {
-        throw new HttpError(501, 'This server is not set up to take payments.');
-      }
+  /**
+   * A purchase to verify, in its own rate-limited scope.
+   *
+   * **This had no limiter**, and it is the most expensive authenticated route
+   * on the box: `readPlaySubscription` signs a JWT with the service-account RSA
+   * key and makes two calls to Google per request. The store-notification scope
+   * below got sixty a minute for exactly this reasoning, and it spends the same
+   * outbound quota — the only difference is that this one needs a token first,
+   * which bounds who can spend it but not how fast.
+   *
+   * Ten a minute per address. A device posts a purchase after buying, after a
+   * reinstall, on a renewal, and on a retry when an answer was lost — a handful
+   * a year each — and a farm's handsets share one address behind a house
+   * router. Tighter than the notification scope because the legitimate caller
+   * here is a person rather than a machine catching up after an outage.
+   */
+  await app.register(async (scope) => {
+    await scope.register(import('@fastify/rate-limit'), { max: 10, timeWindow: '1 minute' });
 
-      const parsed = purchaseSchema.safeParse(request.body);
-      if (!parsed.success) throw new HttpError(400, 'That purchase could not be read.');
-
-      /**
-       * One purchase, one farm.
-       *
-       * Google verifies the *purchase* and has no idea which farm is
-       * submitting it, so a token that checks out says nothing about whose it
-       * is. Without this, the same token posted by a second org wrote `active`
-       * onto that org too — one subscription entitling unlimited farms, which
-       * is the whole paywall.
-       *
-       * Checked before Google is asked: a token already spent on another farm
-       * is refused whatever the store would have said about it, and there is
-       * no reason to spend a round trip confirming a purchase we will not
-       * honour here.
-       *
-       * The same-org case is deliberately allowed through. A device re-posting
-       * its own token is a renewal, a reinstall, or a retry after a dropped
-       * response, and every other write path in this service is idempotent for
-       * exactly that reason.
-       */
-      const boundTo = await findOrgIdByPurchaseToken(parsed.data.purchaseToken);
-      if (boundTo !== null && boundTo !== claims.orgId) {
-        throw new HttpError(
-          409,
-          'That subscription is already on another farm. A subscription covers one farm, so this one needs its own.',
-        );
-      }
-
-      const subscription = await readSubscription(config, parsed.data.purchaseToken);
-      // The token is stored beside the state so a later store notification —
-      // which names the purchase and not the farm — can be matched back.
+    scope.post('/billing/play', async (request, reply) => {
       try {
-        await setSubscription(claims.orgId, subscription, parsed.data.purchaseToken);
-      } catch (error) {
+        const claims = await requireMutationClaims(request.headers.authorization, env.AUTH_SECRET);
+        if (config === null) {
+          throw new HttpError(501, 'This server is not set up to take payments.');
+        }
+
+        const parsed = purchaseSchema.safeParse(request.body);
+        if (!parsed.success) throw new HttpError(400, 'That purchase could not be read.');
+
         /**
-         * Two farms posting one token in the same instant.
+         * One purchase, one farm.
          *
-         * The check above loses that race and the unique partial index on
-         * `orgs.playPurchaseToken` is what actually settles it — so the loser
-         * arrives here holding a duplicate-key error. It is the same condition
-         * as the refusal above and must not reach a farm as "Something went
-         * wrong", which is what an unhandled write error becomes.
+         * Google verifies the *purchase* and has no idea which farm is
+         * submitting it, so a token that checks out says nothing about whose it
+         * is. Without this, the same token posted by a second org wrote `active`
+         * onto that org too — one subscription entitling unlimited farms, which
+         * is the whole paywall.
+         *
+         * Checked before Google is asked: a token already spent on another farm
+         * is refused whatever the store would have said about it, and there is
+         * no reason to spend a round trip confirming a purchase we will not
+         * honour here.
+         *
+         * The same-org case is deliberately allowed through. A device re-posting
+         * its own token is a renewal, a reinstall, or a retry after a dropped
+         * response, and every other write path in this service is idempotent for
+         * exactly that reason.
          */
-        if ((error as { code?: unknown } | null)?.code === 11000) {
+        const boundTo = await findOrgIdByPurchaseToken(parsed.data.purchaseToken);
+        if (boundTo !== null && boundTo !== claims.orgId) {
           throw new HttpError(
             409,
             'That subscription is already on another farm. A subscription covers one farm, so this one needs its own.',
           );
         }
-        throw error;
-      }
 
-      return reply.status(200).send({
-        state: subscription.state,
-        expiresAt: subscription.expiresAt ?? null,
-        syncing: entitlementOf(subscription, Date.now()).syncing,
-      });
-    } catch (error) {
-      const { status, body } = errorBody(error);
-      return reply.status(status).send(body);
-    }
+        const subscription = await readSubscription(config, parsed.data.purchaseToken);
+        // The token is stored beside the state so a later store notification —
+        // which names the purchase and not the farm — can be matched back.
+        try {
+          await setSubscription(claims.orgId, subscription, parsed.data.purchaseToken);
+        } catch (error) {
+          /**
+           * Two farms posting one token in the same instant.
+           *
+           * The check above loses that race and the unique partial index on
+           * `orgs.playPurchaseToken` is what actually settles it — so the loser
+           * arrives here holding a duplicate-key error. It is the same condition
+           * as the refusal above and must not reach a farm as "Something went
+           * wrong", which is what an unhandled write error becomes.
+           */
+          if ((error as { code?: unknown } | null)?.code === 11000) {
+            throw new HttpError(
+              409,
+              'That subscription is already on another farm. A subscription covers one farm, so this one needs its own.',
+            );
+          }
+          throw error;
+        }
+
+        return reply.status(200).send({
+          state: subscription.state,
+          expiresAt: subscription.expiresAt ?? null,
+          syncing: entitlementOf(subscription, Date.now()).syncing,
+        });
+      } catch (error) {
+        const { status, body } = errorBody(error);
+        return reply.status(status).send(body);
+      }
+    });
   });
 
   /**

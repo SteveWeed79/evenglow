@@ -134,11 +134,26 @@ export function SiteSetupScreen(): React.ReactElement {
           // the weather screen is not wiped by somebody re-entering frost dates.
           name: name.trim() || (known ? site.name : '') || 'The farm',
           frost: { lastSpring, firstAutumn, source: 'entered' as const },
-          // USDA because that is what the bundled data speaks. Stored WITH its
-          // system, never as a bare string — "7a" means nothing on its own,
-          // and a bare column is a US-only column wearing a general name.
+          /**
+           * USDA because that is what the bundled data speaks. Stored WITH its
+           * system, never as a bare string — "7a" means nothing on its own,
+           * and a bare column is a US-only column wearing a general name.
+           *
+           * **A blank box clears it, and it used to be indistinguishable from
+           * not touching it.** An omitted key keeps its old value — that is the
+           * whole of `contracts/clearing.ts` — so a farm that had typed the
+           * wrong zone could not take it back out. The box emptied, the save
+           * succeeded, and the old zone came straight back with every hardiness
+           * warning it drives.
+           *
+           * `null` is the wire's word for "cleared", and it is legal only on an
+           * update at the top level: a create with no zone simply has no zone,
+           * and the schema refuses `null` there. Both halves are asserted.
+           */
           ...(zone.trim() === ''
-            ? {}
+            ? known
+              ? { zone: null }
+              : {}
             : { zone: { system: 'usda' as const, value: normaliseZoneValue(zone) } }),
         },
       });
@@ -204,6 +219,9 @@ export function SiteSetupScreen(): React.ReactElement {
           placeholderTextColor={colors.muted}
           autoCapitalize="none"
           maxLength={8}
+          // Nothing could drive this field from a test, which is part of why a
+          // zone that could not be cleared went unnoticed.
+          testID="site-zone"
           style={[
             styles.field,
             { backgroundColor: colors.raised, borderColor: colors.border, color: colors.ink },

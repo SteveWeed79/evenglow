@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { newId } from '@homefarm/contracts';
 import {
   bucketStart,
@@ -220,5 +220,180 @@ describe('what the chart is worth saying', () => {
     ]);
 
     expect(moved.changePercent).toBe(-40);
+  });
+});
+
+/**
+ * ── The clocks going forward, which emptied five columns of six ────────────
+ *
+ * Every bucket boundary here is *local* midnight, which is what makes a week a
+ * week a farm recognises. `bucketsBack` stepped between those boundaries by
+ * `7 * 86_400_000` ms — and twice a year a week is not that many milliseconds.
+ * One step across a transition lands an hour off midnight and every step after
+ * it stays an hour off.
+ *
+ * The failure is total rather than partial: `into()` keys buckets by
+ * `bucketStart` and looks records up by the same function, so a bucket that is
+ * not itself a bucket start can never be matched by anything. A farm that
+ * logged ten eggs every Tuesday for twenty weeks, charted on 10 March 2025 in
+ * `America/New_York`, saw `0, 0, 0, 0, 10`.
+ *
+ * ## Why nothing here could see it
+ *
+ * **The timezone is the fixture, and it was never set.** A test machine and a
+ * CI runner are both UTC, and UTC has no daylight saving — so every step
+ * between local midnights happened to be exactly a day and every assertion
+ * above passed. A scan of four years of windows reports 41,717 misplaced
+ * buckets in `America/New_York` and **0 in UTC**.
+ *
+ * So this block sets the timezone and puts it back. `fileParallelism: false`
+ * means one process for the whole suite, so leaving it set would quietly
+ * re-time every file that runs after this one.
+ */
+describe('a window that crosses a daylight-saving transition', () => {
+  const WAS = process.env.TZ;
+
+  beforeAll(() => {
+    process.env.TZ = 'America/New_York';
+  });
+
+  afterAll(() => {
+    if (WAS === undefined) delete process.env.TZ;
+    else process.env.TZ = WAS;
+  });
+
+  /** 14:00 on Monday 24 March 2025, two weeks after the clocks went forward. */
+  const AFTER = Date.parse('2025-03-24T18:00:00Z');
+
+  /** Midday on a day of the given week, keyed by the calendar rather than by ms. */
+  function midweek(weekStart: number, dayOffset: number): number {
+    const date = new Date(weekStart);
+    date.setDate(date.getDate() + dayOffset);
+    date.setHours(12, 0, 0, 0);
+    return date.getTime();
+  }
+
+  /**
+   * **The property the whole scheme rests on.** A bucket must be its own
+   * `bucketStart`, because that is the only way a record can ever be filed into
+   * it. Three of these six were `Sun 23:00` and could not be.
+   */
+  it('gives every week a Monday midnight that is its own bucket start', () => {
+    for (const at of bucketsBack(6, 'week', AFTER)) {
+      const when = new Date(at).toString();
+
+      expect(new Date(at).getDay(), when).toBe(1);
+      expect(new Date(at).getHours(), when).toBe(0);
+      expect(bucketStart(at, 'week'), when).toBe(at);
+    }
+  });
+
+  /**
+   * The whole bug, from the outside: a collection in every week, and every
+   * week has to show it. Before the fix the three weeks older than the
+   * transition read 0 whatever had been logged.
+   */
+  it('does not empty the weeks older than the transition', async () => {
+    const weeks = bucketsBack(6, 'week', AFTER);
+    for (const [index, week] of weeks.entries()) {
+      // Tuesday, so the collection is unambiguously inside its own week and
+      // not sitting on a boundary either version could argue about.
+      await eggs(midweek(week, 1), index + 1);
+    }
+
+    const points = await eggTrend(GROUP, 'week', 6, AFTER);
+    expect(points.map((point) => point.amount)).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  /**
+   * ── One correction to the finding this fixes ─────────────────────────────
+   *
+   * H12 says `direction()` "reports a fabricated collapse". It does not, and
+   * the difference is worth pinning so nobody re-derives it: the emptied
+   * buckets run contiguously backwards from the transition, so the two buckets
+   * `direction` compares are almost always in the same regime. When the
+   * boundary does fall between them the older one is the empty one, and
+   * dividing by an empty week is already refused — so the answer is `null`.
+   *
+   * Measured on the shape above, charted week by week through March 2025:
+   * `0`, `null`, `null`, `0`, `0`, `0`. Never a false percentage.
+   *
+   * **Which is its own harm rather than a smaller one.** The sentence is the
+   * part that survives being read at arm's length in a yard, and it went
+   * missing on exactly the two weeks the chart looked most alarming — five
+   * empty columns and no explanation. This asserts it is back.
+   */
+  it('can say what it is worth saying again, on the weeks it went silent', async () => {
+    // Ten eggs every Tuesday for twenty weeks, ending after the transition.
+    let tuesday = new Date(Date.parse('2025-01-07T17:00:00Z'));
+    for (let week = 0; week < 20; week++) {
+      await eggs(tuesday.getTime(), 10);
+      const next = new Date(tuesday.getTime());
+      next.setDate(next.getDate() + 7);
+      tuesday = next;
+    }
+
+    // The Monday a week after the clocks changed: the chart that read
+    // 0, 0, 0, 0, 0, 10 and offered no comparison at all.
+    const points = await eggTrend(GROUP, 'week', 6, Date.parse('2025-03-10T18:00:00Z'));
+
+    expect(points.slice(0, 5).map((point) => point.amount)).toEqual([10, 10, 10, 10, 10]);
+    expect(direction(points).changePercent).toBe(0);
+  });
+});
+
+/**
+ * ── The month chart, and a timezone that changes at midnight ───────────────
+ *
+ * A separate block because `America/New_York` cannot show this. Its clocks move
+ * at 02:00, so the 1st of a month always has a midnight and the month path
+ * looked correct there under every date tried — a bug that hides behind the
+ * timezone chosen to test the other one.
+ *
+ * Beirut moves at 00:00. On 31 March 2024 the day has no midnight, so
+ * `setHours(0, 0, 0, 0)` lands on 01:00, `setDate(1)` keeps 01:00, and every
+ * step back keeps it too. **All six buckets were 01:00 and not one of them was
+ * matchable** — a whole year's month chart at zero, not three columns of six.
+ * `America/Santiago` does the same on 8 September 2024.
+ *
+ * Found by scanning twelve years of windows across twelve timezones rather than
+ * by reasoning about it: the reasoning said the month path was fine.
+ */
+describe('a month window in a timezone whose clocks move at midnight', () => {
+  const WAS = process.env.TZ;
+
+  beforeAll(() => {
+    process.env.TZ = 'Asia/Beirut';
+  });
+
+  afterAll(() => {
+    if (WAS === undefined) delete process.env.TZ;
+    else process.env.TZ = WAS;
+  });
+
+  /** Midday on 31 March 2024 in Beirut — the day that has no 00:00. */
+  const ON_THE_DAY = Date.parse('2024-03-31T09:00:00Z');
+
+  it('gives every month a first-of-the-month start that is its own bucket start', () => {
+    for (const at of bucketsBack(6, 'month', ON_THE_DAY)) {
+      const when = new Date(at).toString();
+
+      expect(new Date(at).getDate(), when).toBe(1);
+      expect(bucketStart(at, 'month'), when).toBe(at);
+    }
+  });
+
+  it('does not empty a year of month columns', async () => {
+    const months = bucketsBack(6, 'month', ON_THE_DAY);
+    for (const [index, month] of months.entries()) {
+      // The 10th, well clear of either end of the month.
+      const day = new Date(month);
+      day.setDate(10);
+      day.setHours(12, 0, 0, 0);
+      await eggs(day.getTime(), index + 1);
+    }
+
+    const points = await eggTrend(GROUP, 'month', 6, ON_THE_DAY);
+    expect(points.map((point) => point.amount)).toEqual([1, 2, 3, 4, 5, 6]);
   });
 });

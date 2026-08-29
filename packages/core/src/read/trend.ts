@@ -33,7 +33,52 @@ export interface Point {
   amount: number;
 }
 
-const DAY = 86_400_000;
+/**
+ * Local midnight, `days` away on the CALENDAR.
+ *
+ * ## A day is not 86,400,000 milliseconds, twice a year
+ *
+ * Every boundary here is local midnight — that is what makes a bucket a week a
+ * farm recognises rather than a week UTC recognises. Stepping between those
+ * boundaries by a fixed span of milliseconds is therefore wrong the moment the
+ * step crosses a daylight-saving transition: the arithmetic lands an hour off
+ * midnight and stays an hour off for every step after it.
+ *
+ * **A chart does not go slightly wrong when that happens. It goes to zero.**
+ * `into()` keys buckets by `bucketStart()` and looks records up by the same
+ * function, so a bucket that is not itself a bucket start can never be matched
+ * by anything. Six weeks ending 24 March 2025 in `America/New_York`:
+ *
+ * ```
+ * MISS  Sun Feb 16 2025 23:00   a Monday log keys to Mon Feb 17 00:00
+ * MISS  Sun Feb 23 2025 23:00
+ * MISS  Sun Mar  2 2025 23:00
+ * ok    Mar 10 / Mar 17 / Mar 24
+ * ```
+ *
+ * Three of the six render as 0 however many eggs were collected, and
+ * `direction()` then reports a collapse that did not happen — the one thing a
+ * trend chart exists to say, said wrongly, in the direction that alarms.
+ *
+ * `setDate` works on local calendar components, so it steps a whole day
+ * whatever that day's length. `setHours` afterwards is not belt and braces: a
+ * timezone whose transition is at midnight has a local midnight that does not
+ * exist, and this re-normalises onto the one that does.
+ */
+function midnightDaysFrom(at: number, days: number): number {
+  const date = new Date(at);
+  date.setDate(date.getDate() + days);
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
+}
+
+/** Local midnight, `months` away on the calendar. Same argument. */
+function midnightMonthsFrom(at: number, months: number): number {
+  const date = new Date(at);
+  date.setMonth(date.getMonth() + months);
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
+}
 
 /** The start of the bucket a moment falls in. Weeks start on Monday. */
 export function bucketStart(at: number, grain: Grain): number {
@@ -42,21 +87,19 @@ export function bucketStart(at: number, grain: Grain): number {
 
   if (grain === 'month') {
     date.setDate(1);
+    date.setHours(0, 0, 0, 0);
     return date.getTime();
   }
 
   // getDay() is 0 for Sunday; a farm's week starts on Monday, so Sunday is 6
   // days after the start rather than the day before it.
   const weekday = (date.getDay() + 6) % 7;
-  return date.getTime() - weekday * DAY;
+  return midnightDaysFrom(date.getTime(), -weekday);
 }
 
 /** The bucket after this one, which is how a range is walked. */
 function nextBucket(at: number, grain: Grain): number {
-  if (grain === 'week') return at + 7 * DAY;
-  const date = new Date(at);
-  date.setMonth(date.getMonth() + 1);
-  return date.getTime();
+  return grain === 'week' ? midnightDaysFrom(at, 7) : midnightMonthsFrom(at, 1);
 }
 
 /**
@@ -73,12 +116,7 @@ export function bucketsBack(spans: number, grain: Grain, now: number): number[] 
     const oldest = out[0];
     if (oldest === undefined) break;
 
-    const date = new Date(oldest);
-    if (grain === 'week') out.unshift(oldest - 7 * DAY);
-    else {
-      date.setMonth(date.getMonth() - 1);
-      out.unshift(date.getTime());
-    }
+    out.unshift(grain === 'week' ? midnightDaysFrom(oldest, -7) : midnightMonthsFrom(oldest, -1));
   }
 
   return out;

@@ -11,6 +11,7 @@ import {
 import type { z } from 'zod';
 import { localStore } from '../db/store';
 import { listGroups } from './groups';
+import { listServiceCompletions } from './completions';
 import { listMachines, listServices } from './iron';
 import { readNumbers, type SeasonNumbers } from './numbers';
 
@@ -35,10 +36,20 @@ import { readNumbers, type SeasonNumbers } from './numbers';
  *
  * ## A year, not a season
  *
- * `readNumbers` buckets by `planting.season`, which is already a calendar year.
- * Everything else here is a log with a moment on it, so it buckets by the year
- * of `occurredAt`. The two agree, which is the point: one column is "this year"
- * across the whole farm and the other is the same period last year.
+ * Everything here is a log with a moment on it, so it buckets by the year of
+ * `occurredAt`, and `readNumbers` buckets its harvests the same way. One column
+ * is "this year" across the whole farm and the other is the same period last
+ * year, and every figure in both answers the same question about when.
+ *
+ * **This paragraph used to say something slightly different and it was wrong.**
+ * It said `readNumbers` bucketed by `planting.season` and that "the two agree,
+ * which is the point". They agreed only for a crop sown and picked inside one
+ * year: a rhubarb crown stamped 2024 credited its 2026 picking to 2024, so this
+ * screen's crop column answered a different question from every column beside
+ * it. `readNumbers` now buckets picks by when they were picked; its *planting*
+ * count still goes by `planting.season`, which is a different question with a
+ * different right answer — a crown put in during 2024 went in in 2024 however
+ * long it goes on cropping.
  *
  * ## Derived, never stored
  *
@@ -173,12 +184,13 @@ function hoursIn(readings: readonly { occurredAt: number; hours: number }[], yea
  * slower on a handset than the arithmetic it was avoiding.
  */
 export async function readFarmNumbers(thisYear = new Date().getFullYear()): Promise<FarmNumbers> {
-  const [crops, groups, machines, services, eggs, produce, feeds, losses, readings] =
+  const [crops, groups, machines, services, serviceEvents, eggs, produce, feeds, losses, readings] =
     await Promise.all([
       readNumbers(thisYear),
       listGroups(),
       listMachines(),
       listServices(),
+      listServiceCompletions(),
       valuesOf('eggLog', eggLogCreateSchema),
       valuesOf('productionLog', productionLogCreateSchema),
       valuesOf('feedLog', feedLogCreateSchema),
@@ -187,6 +199,25 @@ export async function readFarmNumbers(thisYear = new Date().getFullYear()): Prom
     ]);
 
   const machineName = new Map(machines.map((m) => [m.id, m.name]));
+
+  /**
+   * How many services were actually carried out in a year.
+   *
+   * Events first, and the stored field only for a schedule that has **no**
+   * events — every one written before completions existed. The same fallback
+   * `read/history.ts` and `read/iron.ts` make, and for the same reason: a
+   * farm's older records are still what happened, and counting both would
+   * count that farm's newest service twice.
+   */
+  const schedulesWithEvents = new Set(serviceEvents.map((event) => event.serviceId));
+  const servicesDoneIn = (year: number): number =>
+    serviceEvents.filter((event) => yearOf(event.completedAt) === year).length +
+    services.filter(
+      (service) =>
+        !schedulesWithEvents.has(service.id) &&
+        service.lastDoneAtDate !== undefined &&
+        yearOf(service.lastDoneAtDate) === year,
+    ).length;
 
   const readingsByMachine = new Map<string, { occurredAt: number; hours: number }[]>();
   for (const reading of readings) {
@@ -260,15 +291,23 @@ export async function readFarmNumbers(thisYear = new Date().getFullYear()): Prom
         hours: byMachine.reduce((sum, row) => sum + row.hours, 0),
         byMachine,
         /**
-         * A `service` is a schedule rather than an event, so what is counted is
-         * the ones last *done* inside the year. A plan that has never been
-         * carried out has no date and counts nowhere, which is right: it is a
-         * intention, not work done.
+         * ── Services done, not schedules wearing a recent date ──────────────
+         *
+         * A `service` is a schedule and holds only its NEWEST completion, so
+         * counting schedules undercounts twice over. A machine serviced six
+         * times in a year counted **one**, because the six dates overwrote each
+         * other; and a schedule serviced in 2025 and again in 2026 counted
+         * **zero** for 2025, because the field had moved on.
+         *
+         * `serviceCompletion` is the event, and the reason it exists. Counting
+         * those is the same correction `csv.ts` needed for the same reason (H16
+         * in the audit): the schedule is what recurs, the completion is what
+         * happened.
+         *
+         * A plan never carried out still counts nowhere, which was right and
+         * stays right: it is an intention, not work done.
          */
-        services: services.filter(
-          (service) =>
-            service.lastDoneAtDate !== undefined && yearOf(service.lastDoneAtDate) === year,
-        ).length,
+        services: servicesDoneIn(year),
       },
     };
   };
@@ -288,10 +327,10 @@ export async function readFarmNumbers(thisYear = new Date().getFullYear()): Prom
     [...eggs, ...produce, ...feeds, ...losses, ...readings].some(
       (row) => yearOf(row.occurredAt) === previous,
     ) ||
-    services.some(
-      (service) =>
-        service.lastDoneAtDate !== undefined && yearOf(service.lastDoneAtDate) === previous,
-    );
+    // Asked the same way as the count above, and it used to read the schedule's
+    // field — so a farm whose only record of last year was a service it has
+    // since repeated lost its entire previous-year column.
+    servicesDoneIn(previous) > 0;
 
   return { now: assemble(thisYear), before: hadOne ? assemble(previous) : null };
 }
