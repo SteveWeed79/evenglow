@@ -121,6 +121,91 @@ describe('a flush interrupted by a farm switch', () => {
     // was, waiting for the farm it belongs to.
     expect(await store.readOutboxBySeq()).toHaveLength(1);
   });
+
+  /**
+   * The window past the last fence, which is the one nobody was watching.
+   *
+   * `runFlush` checks before sending and again before applying, and stops
+   * there. `applyResults` then does three writes with awaits between them, and
+   * `tenant.ts` is explicit that the fence is *"asked again after each await"*.
+   * A switch landing inside `resolveBatch` therefore reached the two writes
+   * after it — and those are the ones that hurt, because unlike the row work
+   * they are **farm-wide state keyed by nothing**, so they do not miss on the
+   * wrong store. They land.
+   *
+   * `markSynced` stamps a farm that has flushed nothing as having synced this
+   * instant. `setSyncHeld(null)` clears a hold that is genuinely true of it —
+   * and every one of the three holds turns the chip from a sentence explaining
+   * the state into "waiting", which is precisely the failure D13 exists to
+   * prevent, arrived at from the other end.
+   *
+   * Driven by a store that switches farms from inside `resolveBatch`, because
+   * that is the only await this can hide in and a wrapper is the only way to
+   * be standing in it.
+   */
+  it('does not stamp or unhold the farm that replaced it mid-resolve', async () => {
+    await enqueue(eggLog());
+
+    const farmA = localStore();
+    setLocalStore({
+      ...farmA,
+      async resolveBatch(batch, results): Promise<void> {
+        await farmA.resolveBatch(batch, results);
+
+        // The switch, landing exactly where nothing looks. The new farm is
+        // free-tier — the ordinary state of a device that has never signed in
+        // — so it holds `noAccount` and its chip says "on this phone".
+        const farmB = await openSqliteStore(nodeSqlDriver(), nodeIds());
+        await farmB.setSyncHeld('noAccount');
+        setLocalStore(farmB);
+      },
+    });
+
+    await flushOnce(async (mutations) => ({
+      status: 200,
+      body: {
+        results: mutations.map((m) => ({ id: m.id, status: 'applied' as const })),
+        serverTs: Date.now(),
+      },
+    }));
+
+    // `localStore()` is farm B now, and it must look exactly as it did.
+    expect(await localStore().getSyncHeld()).toBe('noAccount');
+    expect(await localStore().getLastSyncAt()).toBeNull();
+  });
+
+  /**
+   * And farm A still gets what it earned. The switch is not a reason to
+   * withhold the stamp from the farm whose batch actually went up — its rows
+   * were resolved against its own store, one line after a fence with no await
+   * in between.
+   */
+  it('still resolves the rows of the farm that sent them', async () => {
+    await enqueue(eggLog());
+    const farmA = localStore();
+
+    setLocalStore({
+      ...farmA,
+      async resolveBatch(batch, results): Promise<void> {
+        await farmA.resolveBatch(batch, results);
+        setLocalStore(await openSqliteStore(nodeSqlDriver(), nodeIds()));
+      },
+    });
+
+    const outcome = await flushOnce(async (mutations) => ({
+      status: 200,
+      body: {
+        results: mutations.map((m) => ({ id: m.id, status: 'applied' as const })),
+        serverTs: Date.now(),
+      },
+    }));
+
+    // Delivered and resolved, so not deferred: the engine counts a deferral as
+    // a consecutive failure and would back a farm off for work that went up.
+    expect(outcome.deferred).toBeUndefined();
+    expect(outcome.applied).toBe(1);
+    expect((await farmA.readOutboxBySeq()).every((m) => m.status === 'applied')).toBe(true);
+  });
 });
 
 describe('a pull interrupted by a farm switch', () => {
