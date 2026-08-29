@@ -4,18 +4,39 @@ import type { SessionClaims } from './claims';
 import { bearerFrom, verifyAccessToken } from './tokens';
 
 /**
- * The two gates: one for reading, one for writing.
+ * The gate, and why there is no longer a cheaper one for reads.
  *
- * They mirrored the Next handlers when both servers were live, and that
- * justification outlived the Next app — it is deleted, and this is the only
- * server. What the pairing is actually for is stated below: a read may be
- * decided by a signature, and a write may not.
- */
-
-/**
- * Read path. The token's signature is proof we issued it, and that is enough
- * to decide what to render. It is a snapshot, though: a role changed or an
- * account disabled after issue is not reflected until the token expires.
+ * These were two functions. The read path verified the signature and stopped
+ * there, on the argument that *"the token's signature is proof we issued it,
+ * and that is enough to decide what to render"* — a snapshot, explicitly, with
+ * a note that an account disabled after issue *"is not reflected until the
+ * token expires."*
+ *
+ * ## What that snapshot actually covered
+ *
+ * Every read route on this server: `GET /snapshot` — a **whole-farm export** —
+ * plus `/photos/:id`, `/members`, `/join-codes` and `/billing`. So somebody
+ * removed from a farm went on holding the farm's entire dataset, its roster,
+ * its join codes and its subscription state for the rest of the access token's
+ * fifteen minutes. `identity.ts` says of removal that *"access ends
+ * immediately"*; it did not, and the removal a farm makes for cause is the one
+ * where those fifteen minutes are the whole point.
+ *
+ * Invariant 10 is *never fail open on authorization*. A read that keeps
+ * answering for a revoked account is failing open, quietly, on the largest
+ * response this API produces.
+ *
+ * ## The cost, which is why the split was never worth it
+ *
+ * One indexed lookup by `_id`. Every one of those five routes is already going
+ * to Mongo — `/snapshot` to read the entire farm — so this is the same trade
+ * the write path already documented as *"effectively nothing"*, made twice.
+ *
+ * `requireMutationClaims` is kept as the name every write site calls, because
+ * renaming twelve call sites is churn that could drop one, and because the name
+ * says what it is for. It is now the same check: a mutation has no weaker
+ * requirement than a read, and if the two ever diverge again it must be the
+ * write side tightening rather than the read side loosening.
  */
 export async function requireClaims(
   authorization: string | undefined,
@@ -23,22 +44,11 @@ export async function requireClaims(
 ): Promise<SessionClaims> {
   const token = bearerFrom(authorization);
   if (!token) throw new HttpError(401, 'Not signed in.');
-  return verifyAccessToken(token, secret);
-}
+  const claims = await verifyAccessToken(token, secret);
 
-/**
- * Write path. Re-derives identity, org and role from the database on every
- * mutation (D4, invariant 8) rather than trusting the token's snapshot.
- *
- * One indexed lookup by _id. The mutation path is already going to Mongo, so
- * this buys literal compliance with "the server re-authorizes every mutation
- * at flush" for effectively nothing.
- */
-export async function requireMutationClaims(
-  authorization: string | undefined,
-  secret: string,
-): Promise<SessionClaims> {
-  const claims = await requireClaims(authorization, secret);
+  // Re-derived from the database rather than read off the token (D4,
+  // invariant 8). The token is proof of who signed in; it is not proof that
+  // they still belong here.
   const user = await findUserById(claims.userId);
 
   if (!user || user.disabledAt) {
@@ -51,4 +61,16 @@ export async function requireMutationClaims(
   }
 
   return { userId: user._id, orgId: user.orgId, role: user.role };
+}
+
+/**
+ * Write path. The same check, under the name every mutation site calls it by.
+ *
+ * See above for why it is no longer a stronger one than the read path.
+ */
+export async function requireMutationClaims(
+  authorization: string | undefined,
+  secret: string,
+): Promise<SessionClaims> {
+  return requireClaims(authorization, secret);
 }
