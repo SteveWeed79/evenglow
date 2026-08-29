@@ -3,6 +3,7 @@ import { readSite } from '@homefarm/core/read/growing';
 import { localStore } from '@homefarm/core/db/store';
 import { subscribe as subscribeToEngine } from '@homefarm/core/sync/engine';
 import {
+  forgetWeather,
   type Measured,
   readAlerts,
   readObservation,
@@ -222,6 +223,41 @@ export async function load(force = false): Promise<void> {
 
   try {
     site = await readSite();
+
+    /**
+     * ── The pin moved, so the last place's weather is not this place's ──────
+     *
+     * `forgetWeather` exists for exactly this and **was called only from
+     * tests**. The grid it drops is keyed by position and self-heals, but the
+     * cached forecast, reading and alerts are single rows with no position on
+     * them — so after a move a farm was shown another county's official alerts
+     * as live for `ALERTS_GAP_MS` (fifteen minutes), and offline the previous
+     * valley's forecast for `FORECAST_STALE_MS` (forty-eight hours), driving
+     * the frost, freeze and heat warnings for its stock off it.
+     *
+     * Here rather than at the screen that moves the pin, because this runs on
+     * every publish and so catches a position arriving from **another device**
+     * as well as one typed on this one.
+     *
+     * **Only when there was a previous position.** `known` and this state are
+     * both in memory, so a cold start has no previous `at` — treating that as a
+     * move would wipe the offline cache on every launch, which is the one thing
+     * the cache exists to survive.
+     *
+     * Before the cache reads below, or the screen would paint the old place's
+     * weather once more on its way out.
+     */
+    const wasAt = snapshot().at;
+    const nowAt =
+      site?.lat === undefined || site.lon === undefined ? null : { lat: site.lat, lon: site.lon };
+    if (
+      wasAt !== null &&
+      nowAt !== null &&
+      (wasAt.lat !== nowAt.lat || wasAt.lon !== nowAt.lon)
+    ) {
+      await forgetWeather();
+    }
+
     // The caches first, always, and before any decision about fetching: a
     // screen must be able to paint from these alone.
     [cached, reading, warned, stamp, readingStamp, alertStamp] = await Promise.all([
