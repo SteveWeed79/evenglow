@@ -245,6 +245,45 @@ describeDb('the index behind the check', () => {
     expect(await harness!.db.collection('orgs').countDocuments()).toBe(27);
   });
 
+  /**
+   * How fast one caller may make this server talk to Google.
+   *
+   * **The route had no limiter**, and it is the most expensive authenticated
+   * thing on the box: `readPlaySubscription` signs a JWT with the
+   * service-account RSA key and makes two calls to Google per request. The
+   * store-notification scope got sixty a minute for precisely this reasoning
+   * and spends the same outbound quota — the only difference here is that a
+   * caller needs a token first, which bounds *who* can spend it and not how
+   * fast.
+   *
+   * Ten a minute per address: a device posts a purchase after buying, after a
+   * reinstall, on a renewal, and on a retry when an answer was lost, and a
+   * farm's handsets share one address behind a house router.
+   *
+   * The refused ones are 409s — farm B posting farm A's token, which is
+   * cheapest to arrange and never reaches Google.
+   */
+  it('bounds how often one caller can spend a Play round trip', async () => {
+    const app = await server();
+    const authorization = await tokenFor(OWNER_B, ORG_B);
+
+    const answers = [];
+    for (let i = 0; i < 15; i += 1) {
+      answers.push(
+        await app.inject({
+          method: 'POST',
+          url: '/billing/play',
+          headers: { authorization },
+          payload: { purchaseToken: TOKEN },
+        }),
+      );
+    }
+    await app.close();
+
+    expect(String(answers[0]?.headers['x-ratelimit-limit'])).toBe('10');
+    expect(answers.slice(0, 10).every((a) => a.statusCode === 409)).toBe(true);
+    expect(answers.slice(10).every((a) => a.statusCode === 429)).toBe(true);
+  });
 });
 
 /**
