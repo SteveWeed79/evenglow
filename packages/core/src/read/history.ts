@@ -6,7 +6,7 @@ import {
   type Entity,
   feedLogCreateSchema,
   formatMass,
-  formatVolume,
+  formatProduce,
   gramsToUg,
   harvestCreateSchema,
   hourReadingCreateSchema,
@@ -14,7 +14,6 @@ import {
   serviceCompletionCreateSchema,
   taskCompletionCreateSchema,
   maintenanceStoredSchema,
-  mlToUl,
   mortalityCreateSchema,
   predatorCreateSchema,
   productionLogCreateSchema,
@@ -338,12 +337,31 @@ export async function listHistory(
           : {}),
       })),
 
+      /**
+       * **The amount goes through `formatProduce`, and it used to be
+       * interpolated raw.** `productionLog` stores millilitres for milk and
+       * grams for fibre and honey, so the stored number is not the number a
+       * farm reads. The day summary above this row converts it and this did
+       * not, so an imperial farm got:
+       *
+       * ```
+       * 1 gal · 7.5 lb · …          <- the day
+       *   3785 ml milk — The goats  <- the row inside it
+       * ```
+       *
+       * `units.ts` says `formatProduce` exists for exactly this: *"that switch
+       * was written twice and forgotten once"*. It was written three times.
+       *
+       * The title is also the row's accessibility label, so this was read aloud
+       * as "three thousand seven hundred and eighty-five millilitres" to
+       * somebody who has never used a millilitre.
+       */
       eventsFrom('productionLog', productionLogCreateSchema, (v, id) => ({
         id,
         entity: 'productionLog',
         at: v.occurredAt,
         subjects: subjectsOf(v.flockId, v.animalId),
-        title: `${v.amount} ${v.unit} ${v.label ?? v.kind} — ${named(
+        title: `${formatProduce(v.amount, v.unit, system)} ${v.label ?? v.kind} — ${named(
           groupName,
           v.flockId,
           named(animalName, v.animalId, 'a group'),
@@ -794,13 +812,16 @@ function summarise(events: readonly HistoryEvent[], system: UnitSystem): string 
     }
   }
 
-  const parts = [...totals.values()].map(({ amount, unit }) => {
+  const parts = [...totals.values()].map(({ amount, unit }) =>
     // A stored measure is scaled into the farm's own system; a counted thing
     // ("egg", "bale") is a word and takes a plural instead.
-    if (unit === 'ml') return formatVolume(mlToUl(amount), system);
-    if (unit === 'g') return formatMass(gramsToUg(amount), system);
-    return plural(amount, unit);
-  });
+    //
+    // The measure half goes through `formatProduce` rather than repeating its
+    // switch, which is the whole point of that function existing — this file
+    // held the third copy of it, and the copy in the row above was the one that
+    // had been forgotten.
+    unit === 'ml' || unit === 'g' ? formatProduce(amount, unit, system) : plural(amount, unit),
+  );
 
   // A day whose events all decline to tally — a weighing, a sighting — still
   // happened, and saying how many beats saying nothing.
