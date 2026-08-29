@@ -356,3 +356,113 @@ describe('what the API listens on', () => {
   });
 });
 
+/**
+ * The smaller findings, each of which turned a working thing into a silent
+ * wrong one.
+ */
+describe('the quieter failures in the deploy path', () => {
+  /**
+   * D22. `cleanup() { [ -n "$FETCHED" ] && rm -f "$FETCHED"; }` — on the local
+   * path `FETCHED` is empty, so the test is false, so the function returns 1,
+   * so under `set -e` an EXIT trap ending that way makes a **completely
+   * successful publish exit 1**.
+   *
+   * The cost is upstream: `deploy.sh` reads the code, prints "could not publish
+   * it", and does not write the marker recording what is on the shelf — so the
+   * next tick fetches and publishes the same build again, for ever, each time
+   * succeeding and each time reported as a failure.
+   */
+  it('does not fail a publish that worked', () => {
+    const publish = executable(read('publish-apk.sh'));
+
+    expect(publish).not.toContain('cleanup() { [ -n "$FETCHED" ] && rm -f "$FETCHED"; }');
+    expect(publish).toContain('return 0');
+  });
+
+  /**
+   * D24. The note printed whether or not either half worked, so a box whose
+   * rules were not saved comes back after its next reboot with the ports closed
+   * — unreachable, looking like a dead instance — having been told in writing
+   * that it was saved.
+   */
+  it('says the firewall was saved only when it was', () => {
+    const setup = executable(read('setup-box.sh'));
+
+    expect(setup).toContain('if command -v netfilter-persistent >/dev/null 2>&1 && netfilter-persistent save');
+    expect(setup).toContain('COULD NOT SAVE THE RULES');
+  });
+
+  /**
+   * D25. `setup-box.sh` wrote `/etc/caddy/Caddyfile` unvalidated and answered a
+   * refused reload with a restart — turning a config Caddy declined, which
+   * leaves the previous one *serving*, into a total outage.
+   */
+  it('validates the Caddyfile before installing it, and never escalates', () => {
+    const setup = executable(read('setup-box.sh'));
+
+    expect(setup).toContain('caddy validate --config "$NEXT"');
+    expect(setup).not.toContain('systemctl reload caddy 2>/dev/null || systemctl restart caddy');
+    expect(setup).toContain('it is serving the old one');
+  });
+
+  /**
+   * D26. `Persistent=` applies only to `OnCalendar=` timers. This one is
+   * monotonic, so the setting did nothing while its comment claimed catch-up
+   * behaviour — which `OnBootSec=5min` provides anyway.
+   */
+  it('does not claim a setting that does nothing on a monotonic timer', () => {
+    const timer = read('homefarm-deploy.timer');
+
+    expect(timer).not.toMatch(/^Persistent=/m);
+    expect(timer).toContain('OnBootSec=5min');
+  });
+
+  /**
+   * D27. A fixed name in shared `/tmp`, written as root, is a symlink somebody
+   * else can have created first. Both halves: `mktemp` for the hand-run case
+   * and `PrivateTmp` for the scheduled one.
+   */
+  it('renders its Caddyfile to a name nobody could have taken', () => {
+    for (const script of ['deploy.sh', 'setup-box.sh']) {
+      const text = executable(read(script));
+      expect(text, script).toContain('mktemp /tmp/Caddyfile');
+      expect(text, script).not.toContain('> /tmp/Caddyfile.next');
+    }
+
+    expect(read('homefarm-deploy.service')).toContain('PrivateTmp=true');
+  });
+
+  /**
+   * D23. Both backup timers are `Persistent=true`, so a box off across 02:00
+   * and 09:00 fires both on the way back, in one transaction, in whatever order
+   * systemd picks — and the check then reports "no backup" about one running in
+   * the next process along.
+   */
+  it('orders the backup check after the backup when both catch up', () => {
+    const check = read('homefarm-backup-check.service');
+
+    expect(check).toContain('After=homefarm-backup.service');
+    // Ordering only. The check must still run when the backup failed — a stale
+    // marker is exactly what it exists to report.
+    expect(check).not.toContain('Requires=homefarm-backup.service');
+    expect(check).not.toContain('Wants=homefarm-backup.service');
+  });
+
+  /**
+   * D28. Sourcing a file sets shell variables, not environment ones.
+   * `release-apk.mjs` reads `process.env.GITHUB_TOKEN` and never received one,
+   * so the documented private-repository recovery could not work — and would
+   * have been discovered on the day it was needed.
+   */
+  it('exports the deploy.env settings its children read', () => {
+    const deploy = executable(read('deploy.sh'));
+
+    expect(deploy).toContain('export GITHUB_TOKEN');
+    expect(deploy).toContain('export HOMEFARM_DOMAIN');
+    // Conditionally: an exported empty string is not an unset variable to
+    // `release-apk.mjs`, which would send an empty bearer header and get a 401
+    // where anonymous access would have worked.
+    expect(deploy).toContain('[ -n "${GITHUB_TOKEN:-}" ] && export GITHUB_TOKEN');
+  });
+});
+

@@ -62,6 +62,25 @@ REF="${HOMEFARM_REF:-release}"
 # only this script could see would be an override that does nothing.
 export HOMEFARM_APP_ID="${HOMEFARM_APP_ID:-dev.swbuild.homefarm}"
 
+# ── The other two `deploy.env` settings a child process reads ───────────────
+#
+# **Sourcing a file sets shell variables, not environment ones**, and the two
+# below are read by children only — so `deploy.env` could carry them and neither
+# child would ever see one. `HOMEFARM_APP_ID` above was exported for exactly
+# this reason and these were not, which is what made it easy to miss.
+#
+# `GITHUB_TOKEN` is the sharper of the two: the comment further down promises it
+# is *"honoured if this repository is ever made private"*, and
+# `release-apk.mjs` really does read `process.env.GITHUB_TOKEN` — but it never
+# arrived, so the documented recovery path for a private repository could not
+# work. It would have been discovered on the day it was needed.
+#
+# Conditional, because `export VAR=""` and an unset one are different things to
+# a child: `release-apk.mjs` tests the value's truthiness and would send an empty
+# bearer header, which GitHub answers 401 to rather than treating as anonymous.
+[ -n "${GITHUB_TOKEN:-}" ] && export GITHUB_TOKEN
+[ -n "${HOMEFARM_DOMAIN:-}" ] && export HOMEFARM_DOMAIN
+
 say() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 note() { printf '   %s\n' "$*"; }
 die() { printf '\n\033[1;31mSTOPPED:\033[0m %s\n\n' "$*" >&2; exit 1; }
@@ -288,17 +307,25 @@ if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
     note "/etc/caddy/Caddyfile has ${COUNT} site blocks ($(printf '%s\n' "$BLOCKS" | tr '\n' ' ')) — this deploy will not guess which is the API's, so it left the file alone"
     note "copy at /etc/caddy/Caddyfile.local-blocks.bak — move the blocks that are not the API's into /etc/caddy/conf.d/<name>.caddy, leave one in the Caddyfile, then reload caddy"
   else
-    sed "s/api\.example\.com/${DOMAIN}/" "$REPO_DIR/scripts/deploy/Caddyfile" > /tmp/Caddyfile.next
+    # ── A name nobody else can have taken ─────────────────────────────────
+    #
+    # This was the fixed path `/tmp/Caddyfile.next`, written as root from a unit
+    # that had no `PrivateTmp`. Any local account could create it first as a
+    # symlink and have the redirect below follow it. `mktemp` removes the race
+    # here; `PrivateTmp=true` on `homefarm-deploy.service` removes it again for
+    # the scheduled run. Both, because this script is also run by hand.
+    NEXT="$(mktemp /tmp/Caddyfile.next.XXXXXX)"
+    sed "s/api\.example\.com/${DOMAIN}/" "$REPO_DIR/scripts/deploy/Caddyfile" > "$NEXT"
 
     # Validated against the whole config, imports included — so a syntax error
     # in a local block under conf.d is caught here rather than by a reload that
     # leaves the box serving nothing.
-    if ! caddy validate --config /tmp/Caddyfile.next --adapter caddyfile >/dev/null 2>&1; then
+    if ! caddy validate --config "$NEXT" --adapter caddyfile >/dev/null 2>&1; then
       note "the rendered Caddyfile is not valid — left the running one alone (check /etc/caddy/conf.d)"
-    elif cmp -s /tmp/Caddyfile.next /etc/caddy/Caddyfile; then
+    elif cmp -s "$NEXT" /etc/caddy/Caddyfile; then
       note "unchanged"
     else
-      install -m 0644 /tmp/Caddyfile.next /etc/caddy/Caddyfile
+      install -m 0644 "$NEXT" /etc/caddy/Caddyfile
       # ── A refused reload must not take the API deploy with it ─────────────
       #
       # Unguarded under `set -e`, this killed the script where it stood —
@@ -317,7 +344,7 @@ if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
         note "caddy refused the reload — the check below says what it is serving"
       fi
     fi
-    rm -f /tmp/Caddyfile.next
+    rm -f "$NEXT"
   fi
 
   # ── What is actually running, which is not what was installed ────────────

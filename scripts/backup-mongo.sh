@@ -42,6 +42,24 @@
 #   HOMEFARM_BACKUP_RECIPIENT    age public key, age1...
 #   HOMEFARM_BACKUP_IDENTITY     restore only: path to the age identity file
 #
+# **And it stops at this script's boundary, which the rule above did not say.**
+# The URI reaches here in the environment, and is then handed to `mongodump`,
+# `mongorestore` and `mongosh` as `--uri=…` — their argv, visible in `ps` for
+# the seconds each runs. So the password is off the command line of *this*
+# process and on the command line of its children, and the paragraph above read
+# as though it were off both.
+#
+# Not closed, and the reason is a trade rather than an oversight. The Database
+# Tools take a `--config` file with the password out of band; `mongosh` has no
+# equivalent and would need the credentials split out of the URI and prompted
+# for, which is unusable unattended. So closing it properly means two mechanisms,
+# one of them version-dependent on an unpinned package, on the paths that carry
+# a farm's only copy of its records. The exposure it buys is a local account on
+# a single-tenant box reading `/proc` during those seconds.
+#
+# Worth doing on a quiet day, with a verified backup already in hand. Not worth
+# doing in the same week as the first one.
+#
 # Rotation is an S3 lifecycle rule on the prefix, not logic in here. A bucket
 # setting cannot silently stop working the way a script can.
 

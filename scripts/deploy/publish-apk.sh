@@ -51,7 +51,26 @@ note() { printf '    %s\n' "$*"; }
 # one, so everything below — the extension check, the refusal to overwrite, the
 # symlink — is one code path rather than two that drift.
 FETCHED=""
-cleanup() { [ -n "$FETCHED" ] && rm -f "$FETCHED"; }
+
+# ── The trap's own exit status is the script's ──────────────────────────────
+#
+# **This was `[ -n "$FETCHED" ] && rm -f "$FETCHED"`, and it failed every local
+# publish.** On the local path `FETCHED` is empty, so the test is false, so the
+# `&&` chain is the last command in the trap — and under `set -e` a trap that
+# ends on a false test makes the shell exit non-zero. A completely successful
+# publish therefore exited 1.
+#
+# What that cost is upstream: `deploy.sh` reads the exit code, prints "could not
+# publish it — the API is unaffected", and does **not** write the marker that
+# records what is on the shelf. So the next tick fetches and publishes the same
+# build again, and the one after that, for ever — each of them succeeding and
+# each of them reported as a failure.
+cleanup() {
+  if [ -n "$FETCHED" ]; then
+    rm -f "$FETCHED"
+  fi
+  return 0
+}
 trap cleanup EXIT
 
 case "$SOURCE" in

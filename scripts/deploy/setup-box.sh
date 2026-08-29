@@ -81,13 +81,29 @@ if command -v iptables >/dev/null 2>&1; then
     fi
   done
 
+  # ── Said only when it happened ────────────────────────────────────────────
+  #
+  # **The note below printed whether or not either half worked.** The install is
+  # `|| true` and the save is guarded on a command that may still not exist, so
+  # "installed iptables-persistent and saved" was a sentence about an intention.
+  #
+  # A box whose rules were not saved is a box that comes back after its next
+  # reboot with the ports closed — unreachable, in a way that looks like the
+  # instance died — and the operator has been told in writing that it was saved.
+  # That is worse than not opening them at all, because it moves the discovery
+  # to a reboot weeks later with nothing connecting it to this run.
   if command -v netfilter-persistent >/dev/null 2>&1; then
     netfilter-persistent save >/dev/null
     note "saved, so it survives a reboot"
   else
     DEBIAN_FRONTEND=noninteractive apt-get install -y iptables-persistent >/dev/null 2>&1 || true
-    command -v netfilter-persistent >/dev/null 2>&1 && netfilter-persistent save >/dev/null
-    note "installed iptables-persistent and saved"
+    if command -v netfilter-persistent >/dev/null 2>&1 && netfilter-persistent save >/dev/null; then
+      note "installed iptables-persistent and saved"
+    else
+      note "COULD NOT SAVE THE RULES. They are open now and will be closed again at the next reboot."
+      note "  Install it by hand and save, or this box becomes unreachable when it restarts:"
+      note "      sudo apt-get install -y iptables-persistent && sudo netfilter-persistent save"
+    fi
   fi
 else
   note "no iptables here — check what this image uses before assuming it is open"
@@ -374,10 +390,48 @@ chown caddy:caddy /var/lib/homefarm/dist 2>/dev/null || true
 # does not. Created empty; an empty glob is not an error to Caddy.
 install -d -m 0755 /etc/caddy/conf.d
 
-sed "s/api\.example\.com/${DOMAIN}/" "$REPO_DIR/scripts/deploy/Caddyfile" > /etc/caddy/Caddyfile
+# ── Validated before it is installed, and a refusal is not escalated ────────
+#
+# **This wrote straight over `/etc/caddy/Caddyfile` and then answered a refused
+# reload with a restart.** Both halves point the same way, and it is the wrong
+# way: a reload that Caddy declines leaves the previous config *serving* — which
+# is the safe outcome — while a restart against the same bad config takes the
+# site down completely. So the response to "Caddy will not accept this" was to
+# turn a rejected config into a total outage, on the one run where nobody has
+# tested the box yet.
+#
+# `deploy.sh` already does this properly, and this is the same shape: render to
+# a temporary file, ask Caddy whether it is valid, and only install it if it is.
+# The absolute `import` in the template is why the temporary path is safe to
+# validate from — Caddy resolves a relative import against the file it appears
+# in, and that difference is written up in `tests/unit/caddy-deploy.test.ts`.
+# `mktemp`, not a fixed name: root writing a predictable path in shared /tmp
+# is a symlink somebody else can have created first. Same reason as `deploy.sh`.
+NEXT="$(mktemp /tmp/Caddyfile.setup.XXXXXX)"
+sed "s/api\.example\.com/${DOMAIN}/" "$REPO_DIR/scripts/deploy/Caddyfile" > "$NEXT"
+
+if command -v caddy >/dev/null 2>&1 \
+  && ! caddy validate --config "$NEXT" --adapter caddyfile >/dev/null 2>&1; then
+  rm -f "$NEXT"
+  die "The Caddyfile this box would get is not valid, so it has NOT been installed.
+  Whatever is in /etc/caddy is still serving. Check the domain you gave — '$DOMAIN' —
+  and anything under /etc/caddy/conf.d, then run this again."
+fi
+
+install -m 0644 "$NEXT" /etc/caddy/Caddyfile
+rm -f "$NEXT"
 systemctl enable caddy >/dev/null
-systemctl reload caddy 2>/dev/null || systemctl restart caddy
-note "configured for $DOMAIN"
+
+# A reload, and no restart behind it. If Caddy declines this one it is still
+# serving the last config it accepted, and that is the state to leave a box in
+# rather than the one a restart would produce.
+if systemctl reload caddy 2>/dev/null; then
+  note "configured for $DOMAIN"
+else
+  note "CADDY DID NOT TAKE THE NEW CONFIG. The file is installed; it is serving the old one."
+  note "  It is not down. Look at why before restarting anything:"
+  note "      sudo journalctl -u caddy -n 40 --no-pager"
+fi
 
 # ── done ────────────────────────────────────────────────────────────────────
 cat <<DONE
