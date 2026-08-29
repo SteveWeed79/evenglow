@@ -35,10 +35,20 @@ import { readNumbers, type SeasonNumbers } from './numbers';
  *
  * ## A year, not a season
  *
- * `readNumbers` buckets by `planting.season`, which is already a calendar year.
- * Everything else here is a log with a moment on it, so it buckets by the year
- * of `occurredAt`. The two agree, which is the point: one column is "this year"
- * across the whole farm and the other is the same period last year.
+ * Everything here is a log with a moment on it, so it buckets by the year of
+ * `occurredAt`, and `readNumbers` buckets its harvests the same way. One column
+ * is "this year" across the whole farm and the other is the same period last
+ * year, and every figure in both answers the same question about when.
+ *
+ * **This paragraph used to say something slightly different and it was wrong.**
+ * It said `readNumbers` bucketed by `planting.season` and that "the two agree,
+ * which is the point". They agreed only for a crop sown and picked inside one
+ * year: a rhubarb crown stamped 2024 credited its 2026 picking to 2024, so this
+ * screen's crop column answered a different question from every column beside
+ * it. `readNumbers` now buckets picks by when they were picked; its *planting*
+ * count still goes by `planting.season`, which is a different question with a
+ * different right answer — a crown put in during 2024 went in in 2024 however
+ * long it goes on cropping.
  *
  * ## Derived, never stored
  *

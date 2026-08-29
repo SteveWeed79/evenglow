@@ -134,13 +134,42 @@ export async function readNumbers(thisSeason = new Date().getFullYear()): Promis
     bedTotals.set(key(planting.season), bedsFor);
   }
 
+  /**
+   * ── A pick belongs to the year it was picked ──────────────────────────────
+   *
+   * This bucketed by `planting.season`, which is stamped when the planting is
+   * created and never moves. Every other column on this screen buckets by when
+   * the thing happened, and for an annual sown and picked inside one year the
+   * two agree — which is why it read correctly for as long as nobody grew
+   * anything else.
+   *
+   * They are not the same question for anything that overwinters or comes back,
+   * and those are first-class shapes in the bundled library rather than corner
+   * cases. `library/crops.ts` has garlic as autumn-sown, and asparagus,
+   * rhubarb, raspberry, blueberry and strawberry as perennials:
+   *
+   * | record                                  | reality      | screen said        |
+   * |-----------------------------------------|--------------|--------------------|
+   * | Rhubarb crown, season 2024; 8 kg May 26  | 8 kg in 2026 | 2026: 0 kg, 0 picks|
+   * | Garlic sown Oct 2025; 3 kg lifted Jul 26 | 3 kg in 2026 | filed under 2025   |
+   *
+   * A perennial bed is the worst of the two: its planting is stamped once, so
+   * every year after the first reports nothing off it for ever, and the
+   * previous-season column — the reason this screen exists — compares a year
+   * of picking against a year that was credited with all of it.
+   *
+   * **The planting count stays on `planting.season`.** That is a different
+   * question and the answer to it is right: a crown put in during 2024 went in
+   * in 2024 however long it goes on cropping.
+   */
   for (const harvest of harvests) {
     const planting = plantingById.get(harvest.plantingId);
     // A pick whose planting has gone is not counted against a season it cannot
     // be placed in. It is not lost — the row is still in the store.
     if (planting === undefined) continue;
 
-    const into = season(planting.season);
+    const picked = new Date(harvest.occurredAt).getFullYear();
+    const into = season(picked);
     const mass = harvest.massUg ?? 0;
     const number = harvest.count ?? 0;
 
@@ -149,21 +178,44 @@ export async function readNumbers(thisSeason = new Date().getFullYear()): Promis
     into.picks += 1;
 
     const crop = cropOf.get(planting.varietyId) ?? 'Something';
-    const cropsFor = crops.get(key(planting.season)) ?? new Map<string, CropTotal>();
+    const cropsFor = crops.get(key(picked)) ?? new Map<string, CropTotal>();
     const cropRow = cropsFor.get(crop) ?? { crop, massUg: 0, count: 0, picks: 0 };
     cropRow.massUg += mass;
     cropRow.count += number;
     cropRow.picks += 1;
     cropsFor.set(crop, cropRow);
-    crops.set(key(planting.season), cropsFor);
+    crops.set(key(picked), cropsFor);
 
-    const bedsFor = bedTotals.get(key(planting.season));
-    const bedRow = bedsFor?.get(planting.bedId);
-    if (bedRow !== undefined) {
-      bedRow.massUg += mass;
-      bedRow.count += number;
-      bedRow.picks += 1;
-    }
+    /**
+     * The bed row is seeded here when the year has none, rather than the pick
+     * being dropped.
+     *
+     * The loop above creates a bed row for every season something was PLANTED
+     * in, and this used to look one up and silently skip when it was missing —
+     * which was invisible while the two keys agreed. Keyed by the picking year
+     * they often do not: a bed whose only planting was a 2024 crown has no 2026
+     * row, so eight kilos would have counted in the season total and appeared
+     * against no bed at all. `byBed` must sum to the season it is under, or the
+     * screen contradicts itself in the space of two rows.
+     */
+    const bedsFor = bedTotals.get(key(picked)) ?? new Map<string, BedTotal>();
+    const bedRow = bedsFor.get(planting.bedId) ?? {
+      bedId: planting.bedId,
+      bed: bedNameOf.get(planting.bedId) ?? 'A bed',
+      massUg: 0,
+      count: 0,
+      picks: 0,
+      crops: [],
+    };
+    // Named the same way the planting loop names it: a variety whose crop is
+    // unknown adds nothing to the bed's list rather than adding "Something".
+    const bedCrop = cropOf.get(planting.varietyId);
+    if (bedCrop !== undefined && !bedRow.crops.includes(bedCrop)) bedRow.crops.push(bedCrop);
+    bedRow.massUg += mass;
+    bedRow.count += number;
+    bedRow.picks += 1;
+    bedsFor.set(planting.bedId, bedRow);
+    bedTotals.set(key(picked), bedsFor);
   }
 
   const assemble = (n: number): SeasonNumbers => {
