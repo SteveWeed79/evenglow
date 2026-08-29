@@ -52,6 +52,19 @@ The competitive finding that drives this document: the market leader loses on **
 > have bought the commit a shorter reach for a right-hander and moved the dues
 > across with it, leaving one hand carrying the whole screen. See
 > `docs/LANDSCAPE-PLAN.md` §5a.1 for the reach study and its error bars.
+>
+> **R4 has one standing exception, and it is the header chrome.** Back, the
+> quick-add, the gear, the lamp and the sync chip are declared at **28dp** with
+> `hitSlop={12}`, so a finger registers over **52** — past the 44 accessibility
+> floor, short of R4's 56. They stay there because that row stands above the
+> content on every screen in the app, so 56 would take 28dp off the top of all
+> of them, and the vertical budget down to a form's commit button already clears
+> a 430dp landscape phone by under 30dp. The trade is a chevron that is easier
+> to hit on one screen against a save button that stays reachable on all of
+> them. It is a decision about header height, not an oversight: the audit
+> (`tests/screens/tap-size.test.tsx`) names those five and **pins them at 28
+> with their slop**, so one drifting either way fails CI. Every other control in
+> the app is measured against the full 56.
 
 ---
 

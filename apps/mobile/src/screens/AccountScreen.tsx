@@ -33,7 +33,7 @@ import {
 import { useLive } from '../hooks/useLive';
 import { useLeave } from '../hooks/useNav';
 import { useTheme } from '../theme/ThemeProvider';
-import { FONTS, SPACE, TYPE } from '../theme/tokens';
+import { FONTS, SPACE, TAP, TYPE } from '../theme/tokens';
 
 /**
  * Where an account is asked for, and the only place it is.
@@ -1218,7 +1218,24 @@ export function AccountScreen({
 
 const styles = StyleSheet.create({
   /** Sits under its field, aligned left with the label above it. */
-  reveal: { alignSelf: 'flex-start', paddingVertical: SPACE.xs },
+  /**
+   * A word, in a box the size of every other control.
+   *
+   * It was `paddingVertical: SPACE.xs` around a label line — about twenty
+   * pixels tall, and no floor of its own. On a sign-in screen that is thumbed
+   * one-handed while holding something else, "Show" was the smallest thing on
+   * it.
+   *
+   * `justifyContent` because the box is now taller than the word in it, and
+   * `alignSelf: 'flex-start'` so it stays the width of the word rather than
+   * stretching across the field.
+   */
+  reveal: {
+    alignSelf: 'flex-start',
+    justifyContent: 'center',
+    minHeight: TAP.min,
+    paddingVertical: SPACE.xs,
+  },
   revealLabel: {
     fontFamily: FONTS.data,
     fontSize: TYPE.label,
