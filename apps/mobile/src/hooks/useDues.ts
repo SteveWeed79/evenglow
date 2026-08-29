@@ -144,12 +144,14 @@ export function useDues(): DuesView {
       ),
     );
     const lastCare = lastCareBySubject(careLogs);
-    // A clip on a named animal counts for its group — a farm shears the whole
-    // paddock in one afternoon and records whichever subject was to hand.
-    const lastCulledAt = await lastCullByGroup();
-    const lastShorn = await lastShornByGroup(
-      new Map(animals.map((animal) => [animal.id, animal.flockId])),
-    );
+    const [lastCulled, lastShorn] = await Promise.all([
+      // What discharges the processing row: a deliberate cull, which is what a
+      // farm records when the birds are processed. See `processingDue`.
+      lastCullByGroup(),
+      // A clip on a named animal counts for its group — a farm shears the whole
+      // paddock in one afternoon and records whichever subject was to hand.
+      lastShornByGroup(new Map(animals.map((animal) => [animal.id, animal.flockId]))),
+    ]);
 
     /**
      * What the shelf holds of each feed, in micrograms.
@@ -250,7 +252,7 @@ export function useDues(): DuesView {
        * as `careIntervals` above and left the row a permanent resident on
        * Today — see `processingDue` for what that cost.
        */
-      const lastCull = lastCulledAt.get(group.id);
+      const lastCull = lastCulled.get(group.id);
       const processing = processingDue({
         id: group.id,
         name: group.name,
