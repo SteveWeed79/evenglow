@@ -151,22 +151,76 @@ export type SupportBundle = z.infer<typeof supportBundleSchema>;
  * Twelve-ish base36 characters, which is short enough to sit in an issue label
  * and long enough that two unrelated defects will not collide.
  */
+/** The 64-bit FNV prime, 0x100000001b3, as the two halves the multiply needs. */
+const PRIME_LO = 0x1b3;
+const PRIME_HI = 0x100;
+
 export function hash64(input: string): string {
-  // 64-bit FNV-1a via two 32-bit halves, because Hermes has no BigInt on every
-  // version this ships to and a 32-bit space collides too readily at scale.
-  let high = 0x811c9dc5;
-  let low = 0x811c9dc5;
+  /**
+   * ## It was 64 bits in the comment and 32 in the arithmetic
+   *
+   * The previous version ran two independent 32-bit FNV-1a lanes and
+   * concatenated them, which would have been a defensible construction if the
+   * lanes had been independent. They were not, in two ways at once:
+   *
+   * - **The high lane never saw any input.** It took
+   *   `high ^= (code >>> 8) & 0xff`, and every character in a fingerprint
+   *   signature is ASCII — a version string, an entity name, an op, a message
+   *   with its digits already replaced by `generalise`. `code >>> 8` is zero
+   *   for all of them, so the lane's only input was the loop count.
+   * - **Both lanes shared a seed and a prime**, so with the same number of
+   *   iterations they held the same value. The high half was therefore a pure
+   *   function of the signature's LENGTH: two thousand distinct same-length
+   *   inputs produced one prefix.
+   *
+   * What shipped was a 32-bit hash wearing a 64-bit label — a birthday
+   * collision at roughly seventy-seven thousand distinct defects rather than at
+   * five billion. Nowhere near reachable for this project, which is why this is
+   * a low finding and not a high one; the reason to fix it is that the next
+   * person to reach for `hash64` will read the comment and not the loop.
+   *
+   * ## Real FNV-1a 64, decomposed
+   *
+   * `h * 0x100000001b3` over two 32-bit halves. Every intermediate stays under
+   * 2^53 — the largest is `hi * 0x1b3 + lo * 0x100 + carry`, about 3e12 — so
+   * the products are exact in doubles and no BigInt is needed. Hermes has none
+   * on every version this ships to, which is what ruled BigInt out originally
+   * and still does.
+   *
+   * Checked against the published FNV-1a 64 vectors, which is the point of
+   * implementing the real algorithm rather than inventing a second lane: an
+   * invented one can only be tested against itself.
+   *
+   * The byte stream is the string's UTF-16 units, low byte first and the high
+   * byte only when there is one — so it agrees with UTF-8 across the ASCII a
+   * signature is made of, and stays deterministic for anything else. Identical
+   * on a handset and on the server is the requirement; matching a particular
+   * encoding beyond ASCII is not.
+   */
+  let hi = 0xcbf29ce4;
+  let lo = 0x84222325;
+
+  const step = (byte: number): void => {
+    lo = (lo ^ byte) >>> 0;
+
+    const loProduct = lo * PRIME_LO;
+    const carry = Math.floor(loProduct / 0x1_0000_0000);
+    const nextLo = loProduct >>> 0;
+    const nextHi = (hi * PRIME_LO + lo * PRIME_HI + carry) >>> 0;
+
+    lo = nextLo;
+    hi = nextHi;
+  };
 
   for (let i = 0; i < input.length; i += 1) {
     const code = input.charCodeAt(i);
-    low ^= code & 0xff;
-    high ^= (code >>> 8) & 0xff;
-    // 16777619, split so the multiply stays inside 32 bits.
-    low = Math.imul(low, 0x01000193) >>> 0;
-    high = Math.imul(high, 0x01000193) >>> 0;
+    step(code & 0xff);
+    if (code > 0xff) step(code >>> 8);
   }
 
-  return (high.toString(36) + low.toString(36)).slice(0, 16);
+  // Base36, padded so a leading zero cannot shorten the string into one that a
+  // different hash could also produce.
+  return hi.toString(36).padStart(7, '0') + lo.toString(36).padStart(7, '0');
 }
 
 /**

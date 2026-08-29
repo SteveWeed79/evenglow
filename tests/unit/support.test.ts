@@ -156,6 +156,56 @@ describe('the hash under it', () => {
     // how dedup silently merges every defect into one issue.
     expect(seen.size).toBe(2000);
   });
+
+  /**
+   * It really is FNV-1a 64, which is the whole reason to implement a published
+   * algorithm rather than invent a second lane: an invented one can only be
+   * tested against itself, and the version this replaced passed every test
+   * above while delivering half the bits it claimed.
+   */
+  it('matches the published FNV-1a 64 vectors', () => {
+    // base36 of the same 64-bit value the reference gives in hex.
+    const vector = (hex: string): string =>
+      parseInt(hex.slice(0, 8), 16).toString(36).padStart(7, '0') +
+      parseInt(hex.slice(8), 16).toString(36).padStart(7, '0');
+
+    expect(hash64('')).toBe(vector('cbf29ce484222325'));
+    expect(hash64('a')).toBe(vector('af63dc4c8601ec8c'));
+    expect(hash64('foobar')).toBe(vector('85944171f73967e8'));
+    expect(hash64('chongo was here!\n')).toBe(vector('46810940eff5f915'));
+  });
+
+  /**
+   * The defect, stated as the thing it broke.
+   *
+   * The old high lane took `(code >>> 8) & 0xff`, which is zero for every
+   * character a fingerprint signature contains — a version string, an entity
+   * name, an op, a message whose digits `generalise` has already replaced. Both
+   * lanes also shared a seed and a prime, so the high half was a pure function
+   * of the signature's LENGTH: two thousand distinct same-length inputs
+   * produced **one** prefix, and what shipped was a 32-bit hash wearing a
+   * 64-bit label.
+   */
+  it('uses the whole width for inputs of one length', () => {
+    const half = (s: string): string => s.slice(0, 7);
+    const prefixes = new Set(
+      Array.from({ length: 2000 }, (_, i) => half(hash64(`defect-${String(i).padStart(6, '0')}`))),
+    );
+
+    // Every input here is the same length, so under the old lane this was 1.
+    expect(prefixes.size).toBeGreaterThan(1900);
+  });
+
+  /**
+   * A leading zero must not shorten the string. Without the padding, a high
+   * half of 35 and a low half of 1 renders "z1", and so does a high half of
+   * 1225 with a low half of 0 — two different hashes, one label.
+   */
+  it('renders both halves at a fixed width', () => {
+    for (const input of ['', 'a', 'foobar', 'a much longer signature line\nwith a newline']) {
+      expect(hash64(input)).toHaveLength(14);
+    }
+  });
 });
 
 describe('the bundle', () => {
