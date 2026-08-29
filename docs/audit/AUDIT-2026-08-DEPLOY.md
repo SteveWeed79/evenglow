@@ -132,13 +132,53 @@ it but a failed unit.
   `CHANGED` is derived from whether HEAD moved *this tick*, not from what is
   running, so the next tick prints "nothing to deploy" and exits 0 — for ever.
   New code on disk, old code in memory, green timer.
+
+  *Fixed. The box writes the commit it last got all the way through on —
+  `/var/lib/homefarm/deployed-sha`, written the moment `/ready` answers — and a
+  tick is "nothing to deploy" only when HEAD is at the release ref **and** that
+  ref is what is actually running.*
+
+  *A box that has never written the marker, which is every box already deployed,
+  reads it as empty and does one full pass. One extra install and one restart,
+  once, and then it settles. Asserted, because it is what the first tick after
+  this ships will do.*
+
+  *The marker is written before the Caddy verdict rather than after: Caddy being
+  wrong does not make the API undeployed, and withholding it would reinstall and
+  bounce the API every five minutes over a web-server config — which is the exact
+  churn `CHANGED` exists to stop.*
 - **D14** `systemctl reload caddy` is unguarded and sits between the checkout and
   the API restart, so a refused reload skips the restart of code already
   installed — and `cmp -s` then reports "unchanged" on every later tick.
+
+  *Fixed. The reload is guarded and its two outcomes are named — deferred rather
+  than ignored, because the verification immediately below asks Caddy's admin API
+  what is **actually loaded**, which is a stronger question than this exit code
+  answers: a reload returns 0 for a signal delivered, not for a config accepted.*
+
+  *That verification block was added earlier in this audit for the ten-day `/app`
+  404 and closes the other half of the same hazard. This one is the half where
+  the reload does not return 0 at all, and under `set -e` that killed the script
+  where it stood.*
 - **D15** The readiness probe is gated on `CHANGED`, so on a box where the
   release ref has not moved, nothing on the box ever checks the API. Combined
   with `StartLimitBurst=5`, an API that dies stays dead while the deploy timer
   reports success every five minutes.
+
+  *Fixed. The probe is unconditional, and on a quiet tick a failure is acted on
+  rather than reported: `reset-failed` first — a start limit systemd has hit is
+  precisely why nothing is retrying, and a plain restart against one is refused —
+  then one restart, then the same diagnosis any failed deploy gets. A box that
+  cannot be revived leaves `homefarm-deploy.service` in `systemctl --failed`,
+  which is what `check-box.sh` reads.*
+
+  ***The closing advice had to change with it.** That block offers a rollback to
+  `$WAS`, and on a quiet tick `$WAS` is `$NOW` — so it would have proposed a
+  checkout of the commit already running as the repair for that commit not
+  running. It now says which situation it is in.*
+
+  *Both halves are red-proofed against the old code: with the `CHANGED` gate
+  restored, `curl` is not called once on a quiet tick.*
 - **D16** The API binds `0.0.0.0` while the Caddyfile states *"The API binds
   127.0.0.1 through this proxy"*. Exposure rests entirely on two firewalls, one
   of which `setup-box.sh` says it cannot reach. `ops.ts` gets this right with
