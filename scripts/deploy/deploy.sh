@@ -140,10 +140,32 @@ TARGET="$(git rev-parse --short FETCH_HEAD)"
 # all. Both are per-tick self-healing by design and both say so. What must not
 # run is the work that only makes sense when the code changed: reinstalling
 # dependencies, and restarting the service.
+#
+# ── And it has to mean the RUNNING code, not this tick's fetch ──────────────
+#
+# `CHANGED` was `WAS != TARGET`: did HEAD move during this run. That is not the
+# question. A deploy that fast-forwards and then dies — a failed `pnpm install`,
+# a restart that did not come back, an SSH session dropped in the middle — has
+# already moved HEAD, so the NEXT tick finds `WAS = TARGET`, prints "nothing to
+# deploy", and exits 0. **For ever.** New code on disk, old code in memory, and
+# a green timer saying so every five minutes.
+#
+# So the box records the commit it last got all the way through on, and that is
+# what this compares against. A tick is "nothing to deploy" only when HEAD is at
+# the release ref *and* that ref is what is actually running.
+#
+# A box that has never written the marker — every box already deployed — reads
+# it as empty and does one full pass. That is one extra install and one restart,
+# once, and then it settles.
+DEPLOYED_MARK=/var/lib/homefarm/deployed-sha
+DEPLOYED="$(cat "$DEPLOYED_MARK" 2>/dev/null || true)"
+
 CHANGED=1
-if [ "$WAS" = "$TARGET" ]; then
+if [ "$WAS" = "$TARGET" ] && [ "$DEPLOYED" = "$TARGET" ]; then
   note "already on $TARGET — nothing to deploy"
   CHANGED=0
+elif [ "$WAS" = "$TARGET" ]; then
+  note "on $TARGET, but the last completed deploy was ${DEPLOYED:-unrecorded} — finishing it"
 elif git merge-base --is-ancestor HEAD FETCH_HEAD; then
   # The ordinary case: release has moved forward and this is a fast-forward.
   git merge --ff-only FETCH_HEAD --quiet \
@@ -277,8 +299,23 @@ if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
       note "unchanged"
     else
       install -m 0644 /tmp/Caddyfile.next /etc/caddy/Caddyfile
-      systemctl reload caddy
-      note "reloaded for ${DOMAIN}"
+      # ── A refused reload must not take the API deploy with it ─────────────
+      #
+      # Unguarded under `set -e`, this killed the script where it stood —
+      # between the checkout and `systemctl restart homefarm-api`. So a Caddy
+      # config Caddy would not take left **new code installed and the old
+      # process still running**, and `cmp -s` reported "unchanged" on every
+      # tick after, because the file on disk was by then the right one.
+      #
+      # It is not ignored, it is deferred: the verification immediately below
+      # asks the admin API what is actually loaded, which is a stronger question
+      # than this exit code answers — a reload returns 0 for a signal delivered,
+      # not for a config accepted. Whatever this says, that block decides.
+      if systemctl reload caddy 2>/dev/null; then
+        note "reloaded for ${DOMAIN}"
+      else
+        note "caddy refused the reload — the check below says what it is serving"
+      fi
     fi
     rm -f /tmp/Caddyfile.next
   fi
@@ -550,13 +587,56 @@ else
   fi
 fi
 
-# Nothing was restarted, so there is nothing to have come back. The check below
-# exists to catch a deploy that killed the server, and its failure text offers a
-# rollback to the previous commit — advice that reads as nonsense on a box that
-# is already on the commit it would roll back to.
+# ── The probe runs on EVERY tick, and it used to run on none of the quiet ones ─
+#
+# This block was gated on `CHANGED`, on the reasoning that nothing was restarted
+# so there is nothing to have come back. True of the deploy, and it left the box
+# with **nothing that ever asks whether the API is answering** — the timer runs
+# every five minutes and, on a box whose release ref has not moved, checked
+# precisely nothing. `homefarm-api.service` carries `StartLimitBurst=5`, so an
+# API that dies five times in its interval is one systemd stops restarting: dead
+# server, silent unit, and a deploy timer reporting success around the clock.
+#
+# So the check is unconditional now, and on a quiet tick a failure is acted on
+# rather than reported: `reset-failed` clears the start limit that is the reason
+# nothing is retrying, one restart, and then the same diagnosis as any other
+# failed deploy. A box that cannot be revived leaves homefarm-deploy.service in
+# `systemctl --failed`, which is what `check-box.sh` reads.
+ready() {
+  # Six seconds, not three: the driver's server-selection timeout is five
+  # (`db/client.ts`), so a shorter deadline aborts the request before `/ready`
+  # can answer and we lose the distinction the block below depends on.
+  local attempt
+  for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    if curl -fsS --max-time 6 "http://127.0.0.1:${PORT}/ready" >/dev/null 2>&1; then
+      note "serving on :${PORT} after ${attempt}s"
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
 if [ "$CHANGED" -eq 0 ]; then
-  printf '\n\033[1mUp to date: %s\033[0m\n\n' "$NOW"
-  exit 0
+  say "Checking it is still up"
+
+  if ready; then
+    printf '\n\033[1mUp to date: %s\033[0m\n\n' "$NOW"
+    if [ "$CADDY_WRONG" -eq 1 ]; then
+      printf '\033[1;31mThe API is fine. Caddy is not serving the config on disk.\033[0m\n\n'
+      printf 'Nothing above fixed it, so a person has to look:\n\n'
+      printf '    journalctl -u caddy -n 40 --no-pager\n\n'
+      exit 1
+    fi
+    exit 0
+  fi
+
+  # Nothing changed, so this is not a bad deploy — it is a server that went away
+  # on its own and that systemd has given up on.
+  printf '\n\033[1;31mThe API is not answering, and nothing was deployed.\033[0m\n\n'
+  printf 'Clearing the start limit and restarting it once.\n\n'
+  systemctl reset-failed homefarm-api 2>/dev/null || true
+  systemctl restart homefarm-api || true
 fi
 
 say "Checking it came back"
@@ -570,37 +650,37 @@ say "Checking it came back"
 # `/health` while every data route fails. `/ready` opens the connection, so a
 # deploy that cannot reach the database fails here rather than at the first
 # farm to log an egg.
-#
-# Six seconds, not three: the driver's server-selection timeout is five
-# (`db/client.ts`), so a shorter deadline aborts the request before `/ready`
-# can answer and we lose the distinction the block below depends on.
-for attempt in 1 2 3 4 5 6 7 8 9 10; do
-  if curl -fsS --max-time 6 "http://127.0.0.1:${PORT}/ready" >/dev/null 2>&1; then
-    note "serving on :${PORT} after ${attempt}s"
-    printf '\n\033[1mDeployed: %s\033[0m\n\n' "$NOW"
+if ready; then
+  # ── The marker, written the moment the box is actually serving this commit ──
+  #
+  # What `CHANGED` reads next tick. Written here rather than after the Caddy
+  # verdict below, because Caddy being wrong does not make the API undeployed —
+  # and withholding it would reinstall and bounce the API every five minutes
+  # over a web-server config, which is the exact churn `CHANGED` exists to stop.
+  install -d -m 0755 /var/lib/homefarm 2>/dev/null || true
+  printf '%s\n' "$NOW" > "$DEPLOYED_MARK" 2>/dev/null || true
 
-    # ── Deployed, and still not a clean run ─────────────────────────────────
-    #
-    # Checked here rather than where it was found, so the API restart is never
-    # skipped for it: a web server serving a stale config is bad, and an API
-    # left down is worse.
-    #
-    # **But it is not success.** Exiting 0 is how this stayed quiet for ten
-    # days — the timer was green, `systemctl --failed` was empty, this script
-    # printed `unchanged` every five minutes, and the one route a farmer needed
-    # answered 404. Non-zero puts homefarm-deploy.service in `systemctl
-    # --failed`, which is what check-box.sh reads and what somebody sees
-    # without having gone looking.
-    if [ "$CADDY_WRONG" -eq 1 ]; then
-      printf '\033[1;31mThe API is fine. Caddy is not serving the config on disk.\033[0m\n\n'
-      printf 'Nothing above fixed it, so a person has to look:\n\n'
-      printf '    journalctl -u caddy -n 40 --no-pager\n\n'
-      exit 1
-    fi
-    exit 0
+  printf '\n\033[1mDeployed: %s\033[0m\n\n' "$NOW"
+
+  # ── Deployed, and still not a clean run ───────────────────────────────────
+  #
+  # Checked here rather than where it was found, so the API restart is never
+  # skipped for it: a web server serving a stale config is bad, and an API left
+  # down is worse.
+  #
+  # **But it is not success.** Exiting 0 is how this stayed quiet for ten days —
+  # the timer was green, `systemctl --failed` was empty, this script printed
+  # `unchanged` every five minutes, and the one route a farmer needed answered
+  # 404. Non-zero puts homefarm-deploy.service in `systemctl --failed`, which is
+  # what check-box.sh reads and what somebody sees without having gone looking.
+  if [ "$CADDY_WRONG" -eq 1 ]; then
+    printf '\033[1;31mThe API is fine. Caddy is not serving the config on disk.\033[0m\n\n'
+    printf 'Nothing above fixed it, so a person has to look:\n\n'
+    printf '    journalctl -u caddy -n 40 --no-pager\n\n'
+    exit 1
   fi
-  sleep 1
-done
+  exit 0
+fi
 
 # ── Which of the two it was ─────────────────────────────────────────────────
 #
@@ -624,8 +704,21 @@ fi
 # hides which of the two it was. The check above now tells them apart, and this
 # is the branch where the process itself never came back.
 printf '\n\033[1;31mThe service did not come back.\033[0m\n\n'
-printf 'It is on %s. The previous version was %s.\n\n' "$NOW" "$WAS"
 printf 'What it says:\n\n'
 journalctl -u homefarm-api -n 30 --no-pager
-printf '\nTo go back:\n\n    cd %s && sudo git checkout %s && sudo systemctl restart homefarm-api\n\n' "$REPO_DIR" "$WAS"
+
+# ── And "go back to $WAS" is nonsense on a tick that deployed nothing ───────
+#
+# The rollback line is advice about a deploy that broke something. Now that this
+# block is reached on a quiet tick too, `$WAS` is `$NOW` there — so it would
+# offer a checkout of the commit already running as the repair for that commit
+# not running, which is the shape of advice that costs somebody an hour.
+if [ "$CHANGED" -eq 0 ]; then
+  printf '\nNothing was deployed this run — it is on %s and was already.\n' "$NOW"
+  printf 'So this is not a bad release; the server went away on its own and the\n'
+  printf 'restart above did not bring it back.\n\n'
+else
+  printf '\nIt is on %s. The previous version was %s.\n' "$NOW" "$WAS"
+  printf '\nTo go back:\n\n    cd %s && sudo git checkout %s && sudo systemctl restart homefarm-api\n\n' "$REPO_DIR" "$WAS"
+fi
 exit 1
