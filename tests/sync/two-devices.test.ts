@@ -288,16 +288,28 @@ describeDb('the refused edit on the phone that made it', () => {
   });
 
   /**
-   * Pulled first, the archive is newer than the pre-image's `after`, so the
-   * discard stands down rather than restoring over it — *"newer wins"*.
+   * ── The trade this used to pin, and no longer has to make ────────────────
    *
-   * The residue that leaves is the name on an **archived** record, on the one
-   * phone whose user typed it and was told it was refused. It shows in no live
-   * list and reaches no other device; the alternative is a discard that can
-   * resurrect a value the farm has moved past, which `restoreBefore` exists to
-   * prevent. Pinned so the trade is visible rather than discovered.
+   * Pulled first, the archive moves `updatedAt` past the pre-image's `after`.
+   * `restoreBefore` compared exactly that and stood down — *"newer wins"* —
+   * so this asserted the residue it left: **`'Renamed'`**, the name on an
+   * archived record, on the one phone whose user typed it and was told it was
+   * refused. The comment here called it a trade and said it was *"pinned so the
+   * trade is visible rather than discovered"*, against the alternative of a
+   * discard that resurrects a value the farm has moved past.
+   *
+   * The trade was real while the test was whole-record. It is not needed now
+   * that the question is asked **per field** (M4): the archive did not touch
+   * `name`, `name` is still exactly what the refused command wrote, so it goes
+   * back — and `deleted` is left alone because an `update` never set it. B
+   * converges on what A and the server hold, instead of keeping a value it was
+   * told was refused.
+   *
+   * **This test is why the change is safe to make at all.** It runs only in CI,
+   * against a real mongod, and it is what caught the behaviour changing here —
+   * nothing on the machine the fix was written on could have.
    */
-  it('is left in place when an archive from elsewhere has already landed on it', async () => {
+  it('takes the refused name back even when an archive has already landed on it', async () => {
     const group = newId();
     await upTo(group);
 
@@ -307,8 +319,10 @@ describeDb('the refused edit on the phone that made it', () => {
     });
 
     const [onB] = await recordsOn(farm.b, 'flock');
+    // The archive stands: a refused `update` never wrote `deleted`.
     expect(onB?.deleted).toBe(true);
-    expect((onB?.value as { name?: string }).name).toBe('Renamed');
+    // And the refused name is gone rather than surviving on the archived row.
+    expect((onB?.value as { name?: string }).name).toBe('Alpha');
 
     // The farm at large never heard of it, which is the part that matters.
     const [onA] = await recordsOn(farm.a, 'flock');

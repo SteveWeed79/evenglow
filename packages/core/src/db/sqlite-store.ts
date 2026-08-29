@@ -516,6 +516,20 @@ export async function openSqliteStore(
    * real rather than making a new version, and bumping it would make the device
    * look newer than the server and suppress the pull that carries the truth.
    *
+   * ## What this still cannot tell apart, stated rather than hidden
+   *
+   * "Still standing" is a comparison of values, so two devices that made the
+   * **identical** edit — the same typo corrected the same way — are
+   * indistinguishable: one refused, discarded here, and this reverts a field the
+   * other device legitimately owns. The record then holds the pre-image locally
+   * while the server holds the shared value, until anything touches it again.
+   *
+   * Narrow, and the smaller of the two faults. The residue this replaced was
+   * permanent by construction — the pre-image was dropped in the same breath as
+   * the decision not to use it — where this leaves a divergence any later edit
+   * or rehydration repairs. Per-field provenance would settle it properly and is
+   * a bigger change than the one this is.
+   *
    * The pre-image is dropped either way. It describes a mutation that is no
    * longer in the outbox, and keeping it would leave the table growing a row
    * per discarded edit for ever.
