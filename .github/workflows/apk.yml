@@ -360,20 +360,68 @@ jobs:
           SHA: ${{ needs.build.outputs.sha }}
         run: |
           set -euo pipefail
+
+          # ── A release is only a release once the APK is on it ──────────────
+          #
+          # `gh release create <tag> <file>` creates the release and then
+          # uploads. **An upload that fails afterwards leaves the release
+          # behind, empty** — and the guard below then refused that tag for
+          # ever, so the box serving that commit never got an app and every
+          # later run failed on a collision with a release holding nothing.
+          #
+          # So: count the APKs on it, not merely whether it exists.
+          apk_assets() {
+            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --json assets --jq '[.assets[] | select(.name | endswith(".apk"))] | length' \
+              2>/dev/null || echo 0
+          }
+
+          CREATED=0
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            # Cannot happen from a normal run — the code is derived to be one
-            # past every existing tag — so it means a tag was made by hand or a
-            # release was deleted and the counter walked back onto it. Refusing
-            # is the point: overwriting would make two different APKs share a
-            # name, and `publish-apk.sh` refuses that for the same reason.
-            echo "::error::Release $TAG already exists. Nothing was overwritten."
+            if [ "$(apk_assets)" != "0" ]; then
+              # A real collision. Cannot happen from a normal run — the code is
+              # derived to be one past every existing tag — so it means a tag was
+              # made by hand or a release was deleted and the counter walked back
+              # onto it. Refusing is the point: overwriting would make two
+              # different APKs share a name, and `publish-apk.sh` refuses that
+              # for the same reason.
+              echo "::error::Release $TAG already exists and has an APK. Nothing was overwritten."
+              exit 1
+            fi
+
+            # An empty one is the wreckage of a previous failed upload, not a
+            # collision. Filling it is the repair.
+            echo "::warning::Release $TAG exists with no APK — a previous upload did not finish. Uploading into it."
+            gh release upload "$TAG" "dist/$APK" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            CREATED=1
+            gh release create "$TAG" "dist/$APK" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$SHA" \
+              --title "$TAG" \
+              --notes "Built on a GitHub runner. Package, version and signing certificate verified before publishing — see \`scripts/apk-check.mjs\`."
+          fi
+
+          # ── And check, rather than trusting the exit code ──────────────────
+          #
+          # If it is still empty, this run has produced the stranded state
+          # itself. Removing it frees the tag for the next run instead of
+          # blocking every one of them.
+          #
+          # The git tag goes with it **only when this run created the release**.
+          # A tag that was already there belongs to whoever made it, and
+          # `deploy.sh` resolves a commit to a tag with git before it asks GitHub
+          # anything — deleting somebody else's would change what the box
+          # resolves to.
+          if [ "$(apk_assets)" = "0" ]; then
+            echo "::error::Release $TAG has no APK after the upload. Removing it so the tag is free to retry."
+            if [ "$CREATED" = "1" ]; then
+              gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
+            else
+              gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes
+            fi
             exit 1
           fi
-          gh release create "$TAG" "dist/$APK" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$SHA" \
-            --title "$TAG" \
-            --notes "Built on a GitHub runner. Package, version and signing certificate verified before publishing — see \`scripts/apk-check.mjs\`."
 
       - name: Say what was built
         env:

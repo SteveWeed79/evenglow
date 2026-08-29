@@ -226,3 +226,82 @@ describe('setup-mongo.sh on a box whose database name has changed', () => {
   });
 });
 
+
+/**
+ * The two ways a build reached — or failed to reach — a farm's phone.
+ *
+ * ## An APK nobody checked
+ *
+ * `publish-apk.sh` establishes two things about a file before it goes on the
+ * shelf: that it is an APK at all, and that it is **our** application. Both
+ * checks sat inside `if command -v unzip`, and nothing installed `unzip`. So on
+ * the ordinary box neither ran, the only surviving test was the four magic bytes
+ * that say "this is a zip", and any zip named `.apk` was published as the farm's
+ * app — the exact failure that file records as *"found by publishing this
+ * repository's README as a build"*, reinstated by the absence of a package.
+ *
+ * ## A release with nothing on it
+ *
+ * `gh release create <tag> <file>` creates the release and then uploads. An
+ * upload that fails afterwards leaves the release behind, empty — and the
+ * collision guard then refused that tag for ever, so the box serving that commit
+ * never got an app and every later run failed against a release holding nothing.
+ */
+describe('what reaches a phone', () => {
+  const publish = executable(read('publish-apk.sh'));
+
+  it('refuses to publish a build it cannot check, rather than skipping the check', () => {
+    // The defect is the conditional. Both checks are unconditional now, and the
+    // absence of the tool is its own refusal.
+    expect(publish).not.toContain('if command -v unzip');
+    expect(publish).toContain('Refusing to publish an unverified build');
+    expect(publish).toContain('AndroidManifest.xml');
+    expect(publish).toContain('$EXPECT_APP_ID');
+  });
+
+  /** So the refusal is something a box built by these scripts never meets. */
+  it('installs unzip in setup-box.sh, unconditionally', () => {
+    const setup = executable(read('setup-box.sh'));
+    expect(setup).toContain('apt-get install -y unzip');
+
+    // Before the Node block, which is where the other base packages are — and
+    // which only runs on a box that needed Node.
+    expect(setup.indexOf('apt-get install -y unzip')).toBeLessThan(
+      setup.indexOf('apt-get install -y nodejs'),
+    );
+  });
+
+  it('counts the APKs on a release rather than only whether one exists', () => {
+    const workflow = readFileSync(
+      join(__dirname, '..', '..', '.github', 'workflows', 'apk.yml'),
+      'utf8',
+    );
+
+    expect(workflow).toContain("select(.name | endswith(\".apk\"))");
+    // An empty release is the wreckage of a failed upload, not a collision, so
+    // filling it is the repair.
+    expect(workflow).toContain('gh release upload');
+    expect(workflow).toContain('a previous upload did not finish');
+    // And a run that produces the empty state itself clears it, so the tag is
+    // free rather than blocked for ever.
+    expect(workflow).toContain('so the tag is free to retry');
+  });
+
+  /**
+   * The git tag goes only when this run made the release. One that was already
+   * there belongs to whoever made it, and `deploy.sh` resolves a commit to a tag
+   * with git before it asks GitHub anything.
+   */
+  it('does not delete a tag it did not create', () => {
+    const workflow = readFileSync(
+      join(__dirname, '..', '..', '.github', 'workflows', 'apk.yml'),
+      'utf8',
+    );
+
+    const cleanup = workflow.indexOf('--cleanup-tag');
+    const guard = workflow.indexOf('if [ "$CREATED" = "1" ]; then');
+
+    expect(guard).toBeGreaterThan(0);
+    expect(cleanup).toBeGreaterThan(guard);
+  });
+});

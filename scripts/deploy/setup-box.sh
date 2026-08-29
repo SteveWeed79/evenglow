@@ -93,7 +93,29 @@ else
   note "no iptables here — check what this image uses before assuming it is open"
 fi
 
-# ── 2. Node ─────────────────────────────────────────────────────────────────
+# ── 2. The small tools the deploy path assumes ──────────────────────────────
+#
+# **`unzip` is not a convenience here, it is a security control.** Both of the
+# checks that establish an APK is an APK and is *ours* live in
+# `publish-apk.sh` and both need it — they used to be skipped when it was
+# absent, which is every box, so any zip named `.apk` was published as the
+# farm's app. That script refuses to publish without it now; this is what makes
+# the refusal something a box never meets.
+#
+# Unconditional, unlike the block below it: the Node install already pulls
+# `ca-certificates curl gnupg git`, but only on a box that needed Node. A box
+# that already had it got none of them, which is the shape of dependency that
+# goes missing exactly where nobody is looking.
+say "Tools the deploy path needs"
+if command -v unzip >/dev/null 2>&1; then
+  note "unzip already installed"
+else
+  apt-get update -qq
+  apt-get install -y unzip >/dev/null
+  note "installed unzip — publish-apk.sh cannot verify a build without it"
+fi
+
+# ── 3. Node ─────────────────────────────────────────────────────────────────
 say "Node $NODE_MAJOR"
 if command -v node >/dev/null 2>&1 && [ "$(node -p 'process.versions.node.split(".")[0]')" -ge "$NODE_MAJOR" ]; then
   note "$(node --version) already installed"
@@ -117,7 +139,7 @@ say "pnpm, via corepack"
 corepack enable
 note "$(cd "$REPO_DIR" && corepack pnpm --version 2>/dev/null || echo 'will pin on first use')"
 
-# ── 3. The user the service runs as ─────────────────────────────────────────
+# ── 4. The user the service runs as ─────────────────────────────────────────
 say "Service user: $SERVICE_USER"
 if id "$SERVICE_USER" >/dev/null 2>&1; then
   note "already exists"
@@ -128,7 +150,7 @@ else
   note "created"
 fi
 
-# ── 4. Dependencies ─────────────────────────────────────────────────────────
+# ── 5. Dependencies ─────────────────────────────────────────────────────────
 say "Installing the API's dependencies"
 cd "$REPO_DIR"
 # Filtered: without it this pulls Expo and React Native onto a server that
@@ -178,7 +200,7 @@ if [ ! -e "$REPO_DIR/.env.local" ] || [ -L "$REPO_DIR/.env.local" ]; then
 fi
 note "ready"
 
-# ── 5. The secrets file, created empty ──────────────────────────────────────
+# ── 6. The secrets file, created empty ──────────────────────────────────────
 say "Configuration"
 install -d -m 0750 /etc/homefarm
 if [ -f /etc/homefarm/api.env ]; then
@@ -263,7 +285,7 @@ ENV
   note "created /etc/homefarm/api.env — FILL IT IN before starting the service"
 fi
 
-# ── 6. The service ──────────────────────────────────────────────────────────
+# ── 7. The service ──────────────────────────────────────────────────────────
 say "Installing the service"
 sed "s#/opt/homefarm#${REPO_DIR}#g" \
   "$REPO_DIR/scripts/deploy/homefarm-api.service" > /etc/systemd/system/homefarm-api.service
@@ -306,7 +328,7 @@ note "homefarm-backup-check.timer enabled — it will report that no backup exis
 # is known to work.
 note "homefarm-deploy.timer installed but not started — see DEPLOY-THE-SERVER"
 
-# ── 7. Caddy, and with it the certificate ───────────────────────────────────
+# ── 8. Caddy, and with it the certificate ───────────────────────────────────
 say "Caddy, for $DOMAIN"
 if command -v caddy >/dev/null 2>&1; then
   note "already installed"
