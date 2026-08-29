@@ -10,7 +10,7 @@ import { deviceBytes } from '../photos/bytes';
 import { recoverPendingPhoto } from '../photos/store';
 import { enqueue } from '@homefarm/core/sync/queue';
 import { openLocalStore } from '../db/store';
-import { startTriggers, type TriggerHandles } from '../sync/triggers';
+import { startTriggers, stopTriggers } from '../sync/triggers';
 import { reportEngineError } from '@homefarm/core/sync/report';
 import { type ApiFault, configureApi } from './config';
 
@@ -243,9 +243,8 @@ export async function start(raw?: string): Promise<Started> {
    * start" over a database sitting right there, under a sentence promising
    * nothing had been lost. Both halves were true and the app was still shut.
    */
-  let triggers: TriggerHandles | null = null;
   try {
-    triggers = startTriggers();
+    startTriggers();
     startSync();
   } catch (error) {
     reportEngineError('starting the sync loop', error);
@@ -255,9 +254,18 @@ export async function start(raw?: string): Promise<Started> {
     claims,
     orgId,
     fault: null,
+    /**
+     * Whatever is attached, not merely what this call attached.
+     *
+     * This held the handles `startTriggers()` returned here and stopped those.
+     * That is now the wrong half of the set: on the no-account boot this
+     * function attaches none, and the listeners that exist by teardown are the
+     * ones `Boot.onSignedIn` put there. Stopping only its own would leave them
+     * listening against a store that has been closed.
+     */
     stop() {
       stopSync();
-      triggers?.stop();
+      stopTriggers();
     },
   };
 }
