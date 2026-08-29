@@ -221,6 +221,46 @@ describe('the summarising itself', () => {
     ]);
     expect(day?.summary).toBe('1 egg');
   });
+
+  /**
+   * And two losses, not "2 losss".
+   *
+   * `HistoryDay.summary`'s own doc gives the intended line — *"12 eggs · 2
+   * feeds · 1 loss"* — and a single loss is why it went unnoticed: at one the
+   * word is right, and one is the commonest number of animals to lose in a day.
+   * A fox in the run is the day this line is read on, and it is the day it read
+   * wrong.
+   */
+  it('says two losses, not 2 losss', () => {
+    const [day] = intoDays([
+      { id: 'a', entity: 'mortality', at: 1, title: 'a', removable: true, tally: { key: 'losses', amount: 2, unit: 'loss' } },
+    ]);
+    expect(day?.summary).toBe('2 losses');
+  });
+
+  it('still says one loss at one', () => {
+    const [day] = intoDays([
+      { id: 'a', entity: 'mortality', at: 1, title: 'a', removable: true, tally: { key: 'losses', amount: 1, unit: 'loss' } },
+    ]);
+    expect(day?.summary).toBe('1 loss');
+  });
+
+  /**
+   * The rule the default now knows, and the limit of it. A word ending in a
+   * sibilant takes `-es`; everything irregular passes its own plural, as the
+   * harvest row does for "bunches". A calf is not a calfs.
+   */
+  it('adds -es after a sibilant and -s otherwise', () => {
+    const summary = (unit: string, amount: number): string | undefined =>
+      intoDays([
+        { id: 'a', entity: 'eggLog', at: 1, title: 'a', removable: true, tally: { key: 'k', amount, unit } },
+      ])[0]?.summary;
+
+    expect(summary('bunch', 3)).toBe('3 bunches');
+    expect(summary('box', 3)).toBe('3 boxes');
+    expect(summary('feed', 3)).toBe('3 feeds');
+    expect(summary('job', 3)).toBe('3 jobs');
+  });
 });
 
 describe('the screen', () => {

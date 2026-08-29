@@ -232,7 +232,22 @@ const storedBreeding = breedingCreateSchema.partial();
 const storedTaskCompletion = taskCompletionCreateSchema.partial();
 const storedServiceCompletion = serviceCompletionCreateSchema.partial();
 
-const plural = (n: number, one: string, many = `${one}s`): string =>
+/**
+ * "1 egg", "12 eggs" — and "2 losses", which it used to get wrong.
+ *
+ * The default was a bare `${one}s`, so `unit: 'loss'` on the mortality tally
+ * read **"2 losss"** on the closed-day line. `HistoryDay.summary`'s own doc
+ * says what it should be — *"12 eggs · 2 feeds · 1 loss"* — which is how a
+ * single loss came to be the example: at one it is right, and one is the
+ * commonest number of animals to lose in a day.
+ *
+ * The default now knows the sibilant rule (a word ending in s, x, z, ch or sh
+ * takes `-es`), because that is the one that bit and it is a rule rather than a
+ * guess. **It knows nothing else.** A calf is not a calfs and a sheep is not a
+ * sheeps; anything irregular passes its plural as the third argument, as the
+ * harvest row already does for "bunches".
+ */
+const plural = (n: number, one: string, many = /(?:s|x|z|ch|sh)$/.test(one) ? `${one}es` : `${one}s`): string =>
   `${n} ${n === 1 ? one : many}`;
 
 /**
