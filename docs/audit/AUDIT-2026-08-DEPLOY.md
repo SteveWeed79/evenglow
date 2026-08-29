@@ -40,6 +40,19 @@ mongodump --uri="$MONGODB_URI" --archive="$plain" --gzip --oplog --quiet
 `mongodump` exits non-zero, `set -Eeuo pipefail` aborts before the upload, and no
 archive is ever written.
 
+*Fixed (commit `1f1a57c`): `--oplog` is gone, and the reason is written where the
+next reader will look rather than left as a bare deletion. What it bought is not
+lost in any way that matters here — every write this app makes is a single
+document, so there is no cross-document invariant for a point-in-time snapshot to
+protect, and the restore path drops `--oplogReplay` to match. Reinstating it means
+a replica set, a backup role on `admin`, and reversing `setup-mongo.sh`'s recorded
+decision: all three, or none.*
+
+***Still unproven on the live box.** No backup has ever completed there, so the
+only thing that will confirm this is a manual `backup-mongo.sh backup` before the
+timer is enabled. That is an operational step, not a code one, and it is the
+outstanding half of this finding.*
+
 ### D2 — Nothing installs the backup units, and the alarm is installed by the same missing step
 `scripts/deploy/setup-box.sh`
 
@@ -54,6 +67,13 @@ alarm is indistinguishable from a working one.
 
 Together with D1: even after installing the units, every run fails. **Fix D1
 before enabling the timers, or the only outcome is a nightly failed unit.**
+
+*Fixed (commit `1f1a57c`): all four units are installed by `setup-box.sh`, and
+`backup-check` is enabled immediately — with no marker it says "No backup has ever
+completed on this box" and prints the command that fixes it, which is the true
+state of a box that has just been built. `tests/unit/deploy-units.test.ts` asserts
+it against the directory rather than against a list, so a fifth unit added later
+cannot be forgotten.*
 
 ### D3 — `deploy.env` is sourced too late to override the two settings that matter
 `scripts/deploy/deploy.sh:17`, `:19`, `:30`
@@ -75,6 +95,13 @@ carries no `EnvironmentFile`, so sourcing is the only channel.
 `/opt/homefarm`, dies, and fails every five minutes for ever. The box cannot
 deploy, so it cannot receive the fix for its own condition, and nothing surfaces
 it but a failed unit.
+
+*Fixed (commit `1f1a57c`): the file is sourced first, and `REPO_DIR` defaults to
+the tree the script is running out of — `BASH_SOURCE` — rather than to a literal,
+so a moved copy is self-locating even with nothing set at all. The literal remains
+only as the last resort for a script invoked through a path that cannot be
+resolved. Both properties are asserted in `tests/unit/deploy-units.test.ts`: every
+setting is read after the source, by index.*
 
 ---
 
@@ -120,11 +147,38 @@ it but a failed unit.
   reboot, indefinitely**. The comment justifying the window reasons only about a
   first run, then the next paragraph withdraws that premise by making the window
   run every time.
+
+  *Fixed (commit `851c9ff`). A trap armed before the window opens and cleared
+  only once the verification has passed, so the enabled config is the exit
+  invariant. Exercised under a die inside the window, a SIGHUP inside the window,
+  a die after the close, and the clean path — all four leave `enabled`.*
 - **D11** The "authorization is on" verification passes when mongod is simply
   unreachable — it `die`s only when the unauthenticated read *succeeds*, so every
   other outcome reads as proof of enforcement.
+
+  *Fixed alongside D10 (commit `851c9ff`). Reachability is established first and
+  separately: a mongod that is not answering is now its own `die` with its own
+  sentence, because a check that cannot tell "locked" from "gone" is not a check.
+  `wait_for_mongo` closes the same hole from the other side — it used to return 0
+  for a unit systemd called active that had failed fifteen pings.*
 - **D12** A re-run with a different `MONGODB_DB` never grants the account on that
   database; `EXISTS` keys on the user's name only.
+
+  *Fixed. The "already exists" branch now asks the second question — does this
+  account hold `readWrite` on **this** database — and grants both roles when it
+  does not. `grantRolesToUser` with a role already held is a no-op, so the
+  ordinary re-run where nothing changed is untouched.*
+
+  ***What it produced was not a box that failed to start.** The API connects,
+  authenticates against `admin` perfectly well, and then every query comes back
+  `not authorized on <db>` — a box that provisioned cleanly, said so, and could
+  not read or write one record. A rename, a second farm, or a rebuild against a
+  new name all reach it.*
+
+  *The grant sits inside the auth-disabled window, which is the only place the
+  command is permitted, and before the window is closed and verified — so a grant
+  that fails cannot leave authorization off. Asserted by position, not by
+  reading.*
 
 ### Deploy path
 
