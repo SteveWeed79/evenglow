@@ -295,6 +295,11 @@ function rows(node: unknown, out: Node[] = []): Node[] {
  *
  * The panes exist side by side *because they are read independently*. Tying
  * them to one scroll makes the shorter one a passenger.
+ *
+ * Separating them took two goes. The first stilled the shared surface and gave
+ * each pane a scroll view of its own, and the panes were still children of the
+ * stilled one — so nothing had a height and nothing scrolled at all. See the
+ * second test below for why that is asserted by shape rather than by prop.
  */
 describe('what scrolls', () => {
   /** Every scroll surface in the tree, by whether it will actually scroll. */
@@ -319,19 +324,53 @@ describe('what scrolls', () => {
     return out;
   }
 
-  it('gives a split screen a scroll per pane, and stills the one under them', async () => {
+  /** Whether a scroll surface is anywhere above this node. */
+  function underScroll(node: unknown, above = false): boolean {
+    if (Array.isArray(node)) return node.some((child) => underScroll(child, above));
+    if (node === null || typeof node !== 'object') return false;
+
+    const n = node as { props?: Record<string, unknown>; children?: unknown };
+    const style = flat(n.props?.style);
+    if (style.flexDirection === 'row' && style.gap === LAYOUT.spacer) return above;
+
+    const scroll =
+      n.props !== undefined &&
+      ('scrollEventThrottle' in n.props || 'keyboardShouldPersistTaps' in n.props);
+
+    return n.children === undefined ? false : underScroll(n.children, above || scroll);
+  }
+
+  it('gives a split screen a scroll per pane', async () => {
     seedWindow(TABLET);
     const screen = await mount(frame());
 
     const found = scrolls(screen.tree.toJSON());
 
-    /**
-     * Three surfaces: the outer one, which is now still, and one for each pane.
-     * The outer is disabled rather than removed so the non-split path — every
-     * form, every phone — renders exactly the tree it always did.
-     */
-    expect(found.filter((s) => s.enabled)).toHaveLength(2);
-    expect(found.filter((s) => !s.enabled)).toHaveLength(1);
+    // Two surfaces, one per pane, and no third one under them.
+    expect(found).toHaveLength(2);
+    expect(found.every((s) => s.enabled)).toBe(true);
+    screen.unmount();
+  });
+
+  /**
+   * **The panes must not hang inside another scroll surface**, and this is the
+   * assertion the last attempt was missing.
+   *
+   * They were nested in the screen's own scroll view, stilled with
+   * `scrollEnabled={false}` — which stops the drag without bounding the box. A
+   * scroll view laid out with no height takes its content's, so each pane grew
+   * as tall as its own list and had nowhere to move, while the surface under
+   * them refused to move at all. Both columns stuck, reported off the tablet,
+   * and every tree-shaped assertion in this file passed throughout.
+   *
+   * A prop cannot say this. The nesting is the defect, so the nesting is what
+   * is asserted.
+   */
+  it('hangs the panes in a frame that is not itself a scroll', async () => {
+    seedWindow(TABLET);
+    const screen = await mount(frame());
+
+    expect(underScroll(screen.tree.toJSON())).toBe(false);
     screen.unmount();
   });
 
