@@ -290,8 +290,37 @@ setting is read after the source, by index.*
   `if command -v unzip`, and nothing installs `unzip`. Without it, any zip named
   `.apk` is published as the farm's app — the exact failure the file says was
   *"found by publishing this repository's README as a build."*
+
+  *Fixed at both ends. The checks are unconditional, and a missing `unzip` is now
+  its own refusal rather than a reason to skip them — skipping is failing open on
+  the question "is this our application". The cost of refusing is bounded and
+  loud: the shelf keeps the APK it has, `deploy.sh` notes it could not publish,
+  and the API is untouched.*
+
+  *`setup-box.sh` installs it, **unconditionally** — which is its own small
+  finding. The base packages (`ca-certificates curl gnupg git`) are installed
+  inside the Node block, so a box that already had Node got none of them. That is
+  the shape of dependency that goes missing exactly where nobody is looking, and
+  it is why this one was.*
 - **D20** A failed asset upload leaves a published release with no APK, and that
   tag is then refused for ever, so the box serving that commit never gets an app.
+
+  *Fixed, and it heals the state as well as preventing it. The step counts the
+  APKs on a release rather than asking only whether one exists, so:*
+
+  - *exists **with** an APK → still refused, which is the collision the guard was
+    written for: two different builds sharing a name;*
+  - *exists **with none** → the wreckage of a failed upload, so it uploads into
+    it, which is the repair;*
+  - *still empty after the upload → this run produced the stranded state itself,
+    so the release is removed and the tag is free for the next run rather than
+    blocking every one of them.*
+
+  ***The git tag goes only when this run created the release.** One that was
+  already there belongs to whoever made it, and `deploy.sh` resolves a commit to
+  a tag with git before it asks GitHub anything — deleting somebody else's would
+  change what the box resolves to. Asserted by position: `--cleanup-tag` sits
+  inside that guard.*
 
 ---
 
