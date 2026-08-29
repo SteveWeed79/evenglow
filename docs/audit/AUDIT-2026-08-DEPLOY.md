@@ -122,21 +122,74 @@ setting is read after the source, by index.*
   phones flush into it and mark those mutations `applied` — so the old database
   stops being a clean rollback. *Fix: never clobber an existing `.pre-rename`,
   and copy before rewriting.*
+
+  *Fixed as prescribed, both halves. The database copy is now step 5 and the
+  environment rewrite step 6, so a failed copy leaves the box exactly as it was —
+  old name in `api.env`, old database untouched, and a re-run reading the same
+  facts the first one did. And a `.pre-rename` that exists is kept: it holds the
+  only on-box record of the old database name and of the Mongo password, and a
+  second run replacing it makes the thing kept for recovery a copy of the thing
+  it was meant to recover from.*
+
+  ***The order is the fix and the non-clobber is the belt.** Either alone leaves
+  a hole: reordering without the non-clobber still loses the record if a later
+  step fails twice, and the non-clobber without the reorder still leaves a re-run
+  silently skipping the copy while pointing the API at a database that was never
+  made.*
 - **D6** `OLD_DB`'s fallback is `steadingdb`, a name the code has never used —
   `databaseName()` returns `steading` before the rename commit and `homefarm`
   after. `setup-box.sh` leaves `MONGODB_DB` commented out by default, so the
   fallback is the common path, not the rare one.
+
+  *Fixed by removing the guess. There is no safe one to make: the value decides
+  which farm's records are copied, this script cannot see which default the
+  installed build compiled in, and being wrong is silent. So an absent
+  `MONGODB_DB` is now a refusal carrying the `listDatabases` command that
+  answers it.*
+
+  ***What a wrong guess did is not a wrong message.** It is `mongodump --db
+  steadingdb` against a database that does not exist — which dumps nothing,
+  restores nothing, passes the count check by comparing zero to zero (D7), and
+  points the API at an empty database the script has just reported as verified.*
 - **D7** The count check cannot fail when the source is empty:
   `a.getCollectionNames()` returns `[]`, `TALLY` is empty, the `while read` body
   never runs, and a copy that moved nothing reports verified. The sibling
   `migrate-to-local-mongo.sh` has exactly this guard.
+
+  *Fixed with the sibling's guard, and a second one on the loop itself in case
+  the tally's shape changes: a non-empty tally that yields no rows is a
+  verification that verified nothing, which is the defect one layer up.*
+
+  ***It covered for D6 exactly.** A wrong database name produces an empty source,
+  and an empty source is what this check could not fail on — so the two together
+  made a rename that copied nothing indistinguishable from one that worked.*
 - **D8** Every old unit file is `rm -f`'d **before** anything checks the
   replacements exist. A checkout without the new units leaves the box with no API
   unit at all, after the database has been copied.
+
+  *Fixed. The API's unit is required before anything is removed — it is the one
+  whose absence leaves nothing to start — and the rest are named when the
+  checkout does not carry them, rather than silently skipped one at a time after
+  the deletions.*
+
+  ***The recovery was among the casualties**, which is what makes this worse than
+  it reads: the deploy timer that would have pulled a checkout containing the
+  units is one of the eight that had just been deleted.*
 - **D9** `migrate-to-local-mongo.sh` restores with `--drop` and never checks
   whether the local database is already live. A re-run after cutover destroys
   every mutation phones have flushed since — unrecoverably, because clients mark
   them `applied` and never resend (invariant 7).
+
+  *Fixed. It reads the URI the API is actually configured with and refuses when
+  that names this box — because while it still names Atlas this is a migration
+  that has not landed, and a re-run is the ordinary retry `--drop` exists for;
+  once it names the box the migration is done, and there is nothing to re-run,
+  only records to destroy.*
+
+  ***No `--force`.** A flag here has exactly one use, which is the accident it
+  would cause, and the recovery it would need does not exist — Atlas has none of
+  those records either, because nothing has written to Atlas since the URI
+  changed. The refusal offers a verified backup instead.*
 
 ### Provisioning
 
