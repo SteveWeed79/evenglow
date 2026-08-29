@@ -37,6 +37,11 @@ REPO_DIR="${HOMEFARM_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/nul
 SERVICE_USER="homefarm"
 PORT="${PORT:-3001}"
 
+# Set by the Caddy section when the running web server config is not the one on
+# disk. Consulted by the successful exit at the very bottom rather than acted on
+# where it is found, because the API restart below must not be skipped for it.
+CADDY_WRONG=0
+
 # ── Which ref this box follows ──────────────────────────────────────────────
 #
 # `release`, not `main`. CI pushes that branch only after `verify` goes green
@@ -198,6 +203,33 @@ if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
   # glob is fine but a relative path would not be.
   install -d -m 0755 /etc/caddy/conf.d
 
+  # ── The log file, and the reload that was refused for ten days ───────────
+  #
+  # The rendered Caddyfile names `/var/log/caddy/homefarm.log`. `setup-box.sh`
+  # creates the *directory* owned by caddy and always has — but nothing has ever
+  # created the file, so it belonged to whichever process wrote there first. On
+  # the live box that was root, running the rename by hand, and the file landed
+  # `root:root 0600`.
+  #
+  # **Caddy opens its log files as the `caddy` user when it loads a config, and
+  # a file it cannot open makes it refuse the whole config.** It then goes on
+  # serving the one it already had. So the box kept a pre-rename config live for
+  # ten days, rooted at a directory that no longer existed, while
+  # `systemctl status caddy` said `active (running)` and `/app/` answered 404.
+  #
+  # `unchanged` is what made it permanent. The file on disk was already correct,
+  # `cmp` agreed, and this script never asked Caddy to read it again. Every five
+  # minutes, for ten days.
+  #
+  # **Never truncated.** `install /dev/null` over an existing log would throw
+  # away the history that says when it broke, so the file is created only when
+  # absent. The ownership is corrected either way — a file that is already there
+  # and unopenable is the entire case this exists for.
+  install -d -m 0755 /var/log/caddy
+  [ -e /var/log/caddy/homefarm.log ] || : > /var/log/caddy/homefarm.log
+  chmod 0644 /var/log/caddy/homefarm.log 2>/dev/null || true
+  chown caddy:caddy /var/log/caddy /var/log/caddy/homefarm.log 2>/dev/null || true
+
   # ── Which name to render for, and a refusal rather than a guess ───────────
   #
   # The template owns exactly ONE site block, so a correctly managed box has
@@ -249,6 +281,58 @@ if command -v caddy >/dev/null 2>&1 && [ -f /etc/caddy/Caddyfile ]; then
       note "reloaded for ${DOMAIN}"
     fi
     rm -f /tmp/Caddyfile.next
+  fi
+
+  # ── What is actually running, which is not what was installed ────────────
+  #
+  # **`systemctl reload caddy` returns 0 when the signal was delivered**, not
+  # when the config was accepted. Caddy validates and loads in its own time, and
+  # a config it refuses is logged and discarded — it goes on serving the last
+  # one that worked. So the reload succeeds, the file on disk is right, and the
+  # box serves something else entirely. See the log-file note above: that is
+  # exactly what happened, and every check on this box reported a clean run
+  # throughout.
+  #
+  # `cmp` cannot see it either. It compares the file this script rendered
+  # against the file on disk, and both were correct the whole time. The thing
+  # that was wrong was the only thing neither of them looks at.
+  #
+  # The admin API is what knows. Caddy listens on 127.0.0.1:2019 by default and
+  # answers with the config it has actually loaded. Checked on every tick,
+  # including the `unchanged` path — which is the state a refused reload leaves
+  # behind, and a deploy that looks only when it changed something can never
+  # find this.
+  #
+  # **Only when this deploy owns the running Caddyfile.** On a box that predates
+  # `conf.d` the block above deliberately leaves the file alone, so whether that
+  # config serves `/app` is not this script's finding to make — least of all as
+  # a permanent failure over something it has already decided not to repair.
+  if [ "$COUNT" = 1 ] && [ -n "$DOMAIN" ]; then
+    RUNNING="$(curl -fsS --max-time 5 http://127.0.0.1:2019/config/ 2>/dev/null || true)"
+    if [ -z "$RUNNING" ]; then
+      # Not a failure: the admin endpoint can be moved or turned off, and a box
+      # configured that way is somebody's deliberate choice rather than a fault.
+      note "caddy's admin API did not answer on 2019 — cannot tell which config is live"
+    elif printf '%s' "$RUNNING" | grep -q '/var/lib/homefarm/dist'; then
+      note "serving the config on disk"
+    else
+      # One reload, then look again. The usual cause is a permission Caddy could
+      # not satisfy at its last load and this script has since repaired — the
+      # log file above is the case this was written for. Without the retry the
+      # repair lands on disk and nothing ever asks Caddy to read it, because
+      # `cmp` says the file is unchanged. That is the loop that ran ten days.
+      note "caddy is not serving the config on disk — reloading"
+      systemctl reload caddy 2>/dev/null || true
+      sleep 1
+      RUNNING="$(curl -fsS --max-time 5 http://127.0.0.1:2019/config/ 2>/dev/null || true)"
+      if printf '%s' "$RUNNING" | grep -q '/var/lib/homefarm/dist'; then
+        note "it has taken it now"
+      else
+        CADDY_WRONG=1
+        note "CADDY IS SERVING A CONFIG THAT IS NOT THE ONE ON DISK, and a reload did not change that"
+        note "journalctl -u caddy -n 40 --no-pager  — a log file it cannot open is the cause this was written for"
+      fi
+    fi
   fi
 
   # Where publish-apk.sh puts a build. Created here as well as in setup-box.sh
@@ -494,6 +578,25 @@ for attempt in 1 2 3 4 5 6 7 8 9 10; do
   if curl -fsS --max-time 6 "http://127.0.0.1:${PORT}/ready" >/dev/null 2>&1; then
     note "serving on :${PORT} after ${attempt}s"
     printf '\n\033[1mDeployed: %s\033[0m\n\n' "$NOW"
+
+    # ── Deployed, and still not a clean run ─────────────────────────────────
+    #
+    # Checked here rather than where it was found, so the API restart is never
+    # skipped for it: a web server serving a stale config is bad, and an API
+    # left down is worse.
+    #
+    # **But it is not success.** Exiting 0 is how this stayed quiet for ten
+    # days — the timer was green, `systemctl --failed` was empty, this script
+    # printed `unchanged` every five minutes, and the one route a farmer needed
+    # answered 404. Non-zero puts homefarm-deploy.service in `systemctl
+    # --failed`, which is what check-box.sh reads and what somebody sees
+    # without having gone looking.
+    if [ "$CADDY_WRONG" -eq 1 ]; then
+      printf '\033[1;31mThe API is fine. Caddy is not serving the config on disk.\033[0m\n\n'
+      printf 'Nothing above fixed it, so a person has to look:\n\n'
+      printf '    journalctl -u caddy -n 40 --no-pager\n\n'
+      exit 1
+    fi
     exit 0
   fi
   sleep 1

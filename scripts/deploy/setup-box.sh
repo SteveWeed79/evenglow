@@ -321,8 +321,21 @@ else
   note "installed"
 fi
 
+# ── The directory AND the file ────────────────────────────────────────────
+#
+# This created the directory and stopped, which looks complete and is not. The
+# Caddyfile names `/var/log/caddy/homefarm.log`, and whichever process wrote
+# there first owned the file — on the live box that was root running the rename
+# by hand, at 0600. Caddy opens its log files as `caddy` when it loads a config
+# and refuses the whole config when it cannot, so the box served a pre-rename
+# config for ten days while reporting `active (running)`.
+#
+# `deploy.sh` repairs this on every tick as well, because a box already built
+# will never run this script again.
 install -d -m 0755 /var/log/caddy
-chown caddy:caddy /var/log/caddy 2>/dev/null || true
+[ -e /var/log/caddy/homefarm.log ] || : > /var/log/caddy/homefarm.log
+chmod 0644 /var/log/caddy/homefarm.log 2>/dev/null || true
+chown caddy:caddy /var/log/caddy /var/log/caddy/homefarm.log 2>/dev/null || true
 
 # Where the APK is served from (`/app`, see the Caddyfile). Created empty and
 # **outside the repository on purpose** — the deploy timer pulls into
