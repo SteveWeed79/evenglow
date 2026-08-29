@@ -151,8 +151,34 @@ export function TreatmentScreen({ route }: ScreenProps<'Treatment'>): React.Reac
        * with "now" on a correction would move the clock forward and hold
        * produce that had already cleared — or, worse, the other way round on a
        * backdated record.
+       *
+       * ## And a CREATE cannot stamp "now" either
+       *
+       * This did, and `withdrawalWindow` counts from
+       * `Math.max(administeredAt, treatmentEndsAt)` — so a course finished on
+       * Tuesday and recorded on Friday had the Tuesday the person picked thrown
+       * away, and the withdrawal counted from Friday.
+       *
+       * It errs long, which is the safe direction and is why this was not worse
+       * than it is. But it costs the farm three days of sellable produce, and it
+       * writes an administration date that never happened onto a record a
+       * regulator, a vet or a buyer may read — `TreatmentsScreen` prints it and
+       * the CSV exports it as *"Given"*.
+       *
+       * The screen asks for one date, the last dose, so that is the best answer
+       * available for a course recorded after the fact: it was administered on
+       * or before then. `Math.min` guards the other way — a last dose picked in
+       * the future must not date the administration into the future, and
+       * `withdrawalWindow`'s own `Math.max` then still counts to that later
+       * date, which holds produce longer rather than shorter.
+       *
+       * An open course keeps `now`: `withdrawalWindow` returns `'open'` and
+       * holds indefinitely, so nothing is counted from it. That the true first
+       * dose may be older is a field this screen does not ask for, and inventing
+       * one is not this fix.
        */
-      const administeredAt = existing?.administeredAt ?? now;
+      const administeredAt =
+        existing?.administeredAt ?? (stillGoing ? now : Math.min(now, lastDoseAt));
 
       /**
        * Closing a course takes the last dose date the person picked.
