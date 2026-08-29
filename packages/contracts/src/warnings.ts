@@ -244,6 +244,27 @@ export function camelidHeatIndex(deciC: number, humidity: number): number {
 const BIRTH_WINDOW_DAYS = 7;
 
 /**
+ * How long past her date a doe is still expected.
+ *
+ * **The window used to have no back half, and the case it missed is the ordinary
+ * one.** `birthDue` emits a row only while `bornAt` is unrecorded, so an `at` in
+ * the past does not mean the birth happened — it means *she has not kidded yet
+ * and nobody logged it*. `GESTATION_DAYS` says so itself: every figure there
+ * *"varies by several days across breeds and conditions… The date is when to be
+ * ready, not a promise."* A doe two days over, on a −7 °C night, got nothing.
+ *
+ * A week, matching the forward window, because that is the size of the variance
+ * those averages carry. It is **not** unbounded, and that is deliberate: a
+ * breeding record nobody ever closed would otherwise raise a freezing-night
+ * warning every winter for ever, which is the permanent-resident failure
+ * `due/types.ts` names — *"a list with a permanent resident on it is a list
+ * people stop reading"*. Past a week the likelier readings are that she gave
+ * birth unlogged or that something is wrong, and neither is a thing a weather
+ * warning can help with.
+ */
+const BIRTH_OVERDUE_DAYS = 7;
+
+/**
  * How close a clip has to be for rain to be worth saying.
  *
  * **A week, and it was a month.** The original reasoning is kept because it is
@@ -551,8 +572,14 @@ function birthWarnings(day: ForecastDay, farm: FarmToday, today: number): Draft[
 
   // The window runs from TODAY, not from the forecast day being examined. A
   // birth eight days out is not imminent because tomorrow happens to be cold.
+  //
+  // Both bounds are measured from today and only the upper one used to exist —
+  // see BIRTH_OVERDUE_DAYS for why an overdue birth is the ordinary case rather
+  // than a closed one.
   const soon = farm.births.filter(
-    (birth) => birth.at >= today && birth.at <= today + BIRTH_WINDOW_DAYS * DAY_MS,
+    (birth) =>
+      birth.at >= today - BIRTH_OVERDUE_DAYS * DAY_MS &&
+      birth.at <= today + BIRTH_WINDOW_DAYS * DAY_MS,
   );
   if (soon.length === 0) return [];
 

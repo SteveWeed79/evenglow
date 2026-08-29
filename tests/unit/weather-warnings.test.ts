@@ -263,6 +263,46 @@ describe('a cold night on an imminent birth', () => {
     const later = { key: 'b2:birth', title: 'Clover due', at: TODAY + 30 * DAY };
     expect(kinds(warn([{ lowDeciC: -30 }], { births: [later] }))).not.toContain('birth-cold');
   });
+
+  /**
+   * ── The half of the window that did not exist ────────────────────────────
+   *
+   * The filter was `at >= today`, so a doe past her date got nothing — and past
+   * her date is the ORDINARY case, not a closed one. `birthDue` emits a row only
+   * while `bornAt` is unrecorded, so an `at` in the past means *she has not
+   * kidded yet and nobody logged it*.
+   *
+   * `GESTATION_DAYS` says as much where it is declared: every figure there
+   * *"varies by several days across breeds and conditions… The date is when to
+   * be ready, not a promise."* A doe two days over on a −7 °C night was exactly
+   * the farm this warning exists for, and it was silent.
+   */
+  it('warns for a doe who is past her date', () => {
+    const overdue = { key: 'b3:birth', title: 'Nutmeg due', at: TODAY - 2 * DAY };
+    const [warning] = warn([{ lowDeciC: -30 }], { births: [overdue] });
+
+    expect(warning?.kind).toBe('birth-cold');
+    expect(warning?.title).toBe('Nutmeg due, and it is freezing tonight.');
+  });
+
+  /** A week over, matching the variance those averages carry. */
+  it('still warns a week past the date', () => {
+    const overdue = { key: 'b4:birth', title: 'Nutmeg due', at: TODAY - 7 * DAY };
+    expect(kinds(warn([{ lowDeciC: -30 }], { births: [overdue] }))).toContain('birth-cold');
+  });
+
+  /**
+   * **Bounded, and not by accident.** A breeding record nobody ever closed would
+   * otherwise raise a freezing-night warning every winter for ever — the
+   * permanent-resident failure `due/types.ts` names, and the same one
+   * `processingDue` had. Past a week the likelier readings are that she gave
+   * birth unlogged or that something is wrong, and a weather warning helps with
+   * neither.
+   */
+  it('gives up on a date long gone rather than shouting every winter', () => {
+    const abandoned = { key: 'b5:birth', title: 'Clover due', at: TODAY - 40 * DAY };
+    expect(kinds(warn([{ lowDeciC: -30 }], { births: [abandoned] }))).not.toContain('birth-cold');
+  });
 });
 
 describe('the window', () => {
