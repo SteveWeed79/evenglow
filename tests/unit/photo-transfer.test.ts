@@ -100,6 +100,76 @@ afterEach(() => {
   setPhotoBytes(null);
 });
 
+/**
+ * Two passes at once, which the engine really can produce.
+ *
+ * `nudge()` calls `schedule(0)` whether or not a tick is already mid-await, so
+ * a resume or a network regain landing during one starts a second tick. That
+ * tick's flush and pull are single-flight and say so; `movePhotos` was the
+ * hole they left.
+ */
+describe('two passes at once', () => {
+  it('PUTs the bytes once, not once per pass', async () => {
+    const id = newId();
+    await photo(id);
+    files.set(id, PIXELS);
+    server();
+
+    const [first, second] = await Promise.all([transferPhotos(), transferPhotos()]);
+
+    // One request, and both callers told the truth about it.
+    expect(sent.filter((r) => r.method === 'PUT')).toHaveLength(1);
+    expect(first.uploaded).toBe(1);
+    expect(second).toBe(first);
+  });
+
+  /**
+   * And one `photo:update`, not two. Two are harmless to the record — same
+   * field, same answer — and they are two more rows behind the number a farm
+   * reads as work waiting.
+   */
+  it('enqueues one uploadedAt, not one per pass', async () => {
+    const id = newId();
+    await photo(id);
+    files.set(id, PIXELS);
+    server();
+
+    await Promise.all([transferPhotos(), transferPhotos()]);
+
+    const updates = (await localStore().readOutboxBySeq()).filter(
+      (m) => m.entity === 'photo' && m.op === 'update',
+    );
+    expect(updates).toHaveLength(1);
+  });
+
+  /** Downloads double the same way: fetched twice, written twice. */
+  it('fetches an incoming photo once', async () => {
+    const id = newId();
+    await photo(id, Date.now());
+    server();
+
+    await Promise.all([transferPhotos(), transferPhotos()]);
+
+    expect(sent.filter((r) => r.method === 'GET')).toHaveLength(1);
+  });
+
+  /** A finished pass releases the seat, so the next tick is a real pass. */
+  it('starts a fresh pass once the first has finished', async () => {
+    const id = newId();
+    await photo(id);
+    files.set(id, PIXELS);
+    server();
+
+    await transferPhotos();
+    await transferPhotos();
+
+    // The second found nothing left to send, which is only observable if it
+    // actually ran rather than returning the first pass's promise for ever.
+    expect(sent.filter((r) => r.method === 'PUT')).toHaveLength(1);
+    expect((await listPhotos())[0]?.uploadedAt).toBeGreaterThan(0);
+  });
+});
+
 describe('sending what this device has', () => {
   it('uploads a photo the server does not have', async () => {
     const id = newId();

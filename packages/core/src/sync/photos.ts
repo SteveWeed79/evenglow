@@ -84,6 +84,8 @@ const NOTHING: TransferResult = { uploaded: 0, downloaded: 0, pending: 0 };
  */
 const PER_PASS = 5;
 
+let inFlight: Promise<TransferResult> | null = null;
+
 /**
  * Sends what this device has and the server does not, then fetches what the
  * server has and this device does not.
@@ -91,8 +93,38 @@ const PER_PASS = 5;
  * Never throws. A transfer failing is an ordinary condition — a barn, a
  * tunnel, a server restart — and nothing here may reach a screen as an error
  * or stop a flush that is otherwise fine.
+ *
+ * ## Single-flight, like every other pass that spans a round trip
+ *
+ * `flushOnce`, `pullOnce` and `refreshSession` are each single-flight and each
+ * says why. This was not, and it is the one the engine can genuinely run twice:
+ * `nudge()` calls `schedule(0)` whether or not a tick is already mid-await, so
+ * a resume or a network regain landing during a tick starts a second one. That
+ * tick's `pull` and `flush` are caught by their own guards. `movePhotos` was
+ * the hole they left.
+ *
+ * Two passes read `listPhotos()` before either enqueues an `uploadedAt`, so
+ * both build the same `toUpload` list and **PUT the same JPEGs twice** — up to
+ * five of them, on the connection a barn has, which is the expensive half of
+ * everything this module does. Both then enqueue a `photo:update` for the same
+ * field: harmless to the record, and two more rows behind the number a farm
+ * reads as work waiting. Downloads double the same way, fetched twice and
+ * written to the store twice.
+ *
+ * **The tick itself is left re-entrant, deliberately.** A guard there would
+ * have to either drop the nudge — losing the "go now" a farmer walking back
+ * into signal just earned — or reschedule at zero, which spins for as long as
+ * the first tick runs. Sharing the in-flight promise costs neither: the second
+ * caller gets the first pass's answer, which is the true one.
  */
-export async function transferPhotos(): Promise<TransferResult> {
+export function transferPhotos(): Promise<TransferResult> {
+  inFlight ??= runTransfer().finally(() => {
+    inFlight = null;
+  });
+  return inFlight;
+}
+
+async function runTransfer(): Promise<TransferResult> {
   const store = bytes;
   if (store === null) return NOTHING;
 
