@@ -415,6 +415,60 @@ comment claims catch-up behaviour (D26). Root writes a fixed-name file in shared
 sourced but never exported, so the private-repo recovery path documented beside
 it cannot work (D28).
 
+**All eight are closed, one of them as a stated decision rather than a fix.**
+
+- **D22** — the EXIT trap ended on a false test, and under `set -e` that sets
+  the script's status. *The cost is upstream and worse than the exit code:*
+  `deploy.sh` read it, printed "could not publish it", and **did not write the
+  marker recording what is on the shelf** — so the next tick fetched and
+  published the same build again, for ever, each time succeeding and each time
+  reported as a failure.
+- **D23** — `After=homefarm-backup.service` on the check's service. *Ordering
+  only: `Requires=` would be the wrong relation and `Wants=` would turn a check
+  into a trigger. The check must still run when the backup failed, because a
+  stale marker is exactly what it exists to report.*
+- **D24** — the note prints only when the save happened, and says what to do
+  when it did not. *A box whose rules were not saved comes back after its next
+  reboot with the ports closed — unreachable, looking like a dead instance —
+  having been told in writing that it was saved. That is worse than not opening
+  them, because it moves the discovery to a reboot weeks later with nothing
+  connecting it to this run.*
+- **D25** — validated to a temporary file first, and a refused reload is no
+  longer escalated. *The escalation was backwards: a reload Caddy declines
+  leaves the previous config serving, and the restart it fell back to takes the
+  site down. `deploy.sh` already did this properly; this is the same shape.*
+- **D26** — `Persistent=` removed, and the comment claiming it with it.
+  *`OnBootSec=5min` was providing the catch-up all along; only the explanation
+  was wrong, and an explanation naming a setting that does nothing is the kind
+  that survives review.*
+- **D27** — `mktemp` in both scripts and `PrivateTmp=true` on the deploy unit.
+  *Both, because the script is run by hand as well as by the timer.*
+- **D28** — exported, conditionally. *`export VAR=""` and an unset one are
+  different things to `release-apk.mjs`: it tests truthiness and would send an
+  empty bearer header, which GitHub answers 401 to rather than treating as
+  anonymous. `HOMEFARM_APP_ID` was already exported for exactly this reason,
+  which is what made the omission easy to miss — and `HOMEFARM_DOMAIN` had it
+  too, unnamed by the finding.*
+- **D21** — ***the false claim is removed; the mechanism is deliberately
+  unchanged, and that is a decision rather than a fix.*** The rule as written
+  holds for how the secret reaches these scripts — in the environment, not on
+  the `sudo` line — and stops at their boundary, which the comment did not say:
+  the URI is then handed to `mongodump`, `mongorestore` and `mongosh` as
+  `--uri=…`, their argv, visible in `ps` for the seconds each runs. Both files
+  now say so.
+
+  *Closing it properly needs two mechanisms. The Database Tools take a
+  `--config` file with the password out of band; `mongosh` has no equivalent and
+  would need the credentials split out of the URI and prompted for, which is
+  unusable unattended. One of the two is version-dependent on an unpinned
+  package, on the paths that carry a farm's only copy of its records. What it
+  buys is closing a window in which a local account on a single-tenant box could
+  read `/proc`.*
+
+  ***Worth doing on a quiet day with a verified backup in hand. Not in the same
+  week as the first one** — which is a judgement about sequencing, and the
+  farm's to overrule.*
+
 ---
 
 ## What was checked and found sound
