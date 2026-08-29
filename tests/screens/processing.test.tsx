@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { massEntryToUg, newId, processingDue } from '@homefarm/contracts';
 import { lastCullByGroup, listGroups, processedByGroup } from '@homefarm/core/read/groups';
+import { localStore } from '@homefarm/core/db/store';
 import { enqueue } from '@homefarm/core/sync/queue';
 import { dueDestination } from '../../apps/mobile/src/hooks/useDueActions';
 import { freshStore } from '../support/store';
@@ -206,6 +207,43 @@ describe('what the totals mean', () => {
     // One weight, two head — the discrepancy stays visible rather than being
     // averaged away.
     expect(done.get(GROUP)?.massUg).toBeGreaterThan(0);
+  });
+
+  /**
+   * A record struck out stops counting, on both halves.
+   *
+   * `mortality` is append-only, so a mistyped batch is corrected by deleting it
+   * and logging again — there is no update. The totals are a fresh read over
+   * every row each time, so a deleted one that still summed would be a yield
+   * the farm could see and could not remove, and the row it discharged would
+   * stay discharged on the strength of a record that no longer exists.
+   *
+   * The two are asserted together because they are read from the same rows by
+   * two different functions, and only one of them being right is the bug.
+   */
+  it('drops a cull that was struck out', async () => {
+    await theRoasters();
+
+    const screen = await mount(<ProcessingScreen {...routeProps({ groupId: GROUP })} />);
+    await screen.press('taken-plus-1');
+    await screen.type('processing-mass', '50');
+    await screen.press('save-processing');
+    screen.unmount();
+
+    const written = (await localStore().readRecordsByEntity('mortality')).filter(
+      (record) => !record.deleted,
+    );
+    expect(written).toHaveLength(1);
+
+    await enqueue({
+      entity: 'mortality',
+      op: 'delete',
+      targetId: written[0]!.targetId,
+      payload: {},
+    });
+
+    expect((await processedByGroup()).get(GROUP)).toBeUndefined();
+    expect((await lastCullByGroup()).get(GROUP)).toBeUndefined();
   });
 
   /** A fox is not a harvest. Every other cause is a loss and stays one. */
