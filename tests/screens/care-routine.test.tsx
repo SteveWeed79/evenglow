@@ -222,6 +222,85 @@ describe('which jobs are offered at all', () => {
     screen.unmount();
   });
 
+  /**
+   * ── The animals that were told they had no body at all ───────────────────
+   *
+   * `careApplies` answered the anatomy question by checking whether the default
+   * interval was null — the exact conflation this file's own note says must not
+   * be made. The `other` group defaults everything to null and holds pigs,
+   * rabbits, horses, donkeys and the catch-all `other` species. Horses and
+   * donkeys are rescued by their own overrides; the rest were told they have
+   * **neither feet nor teeth**, with no way to switch the chips on.
+   *
+   * A pig's feet are trimmed and a boar's tusks are a real job. A rabbit's
+   * nails are clipped and its incisors are the classic thing that goes wrong
+   * with a rabbit. And `other` means the app does not know what the animal is,
+   * which is the one case where asserting an impossibility is indefensible.
+   */
+  it('offers a pig and a rabbit their feet and teeth', async () => {
+    for (const [species, name] of [
+      ['pig', 'The pigs'],
+      ['rabbit', 'The rabbits'],
+      ['other', 'The others'],
+    ] as const) {
+      const id = newId();
+      await enqueue({
+        entity: 'flock',
+        op: 'create',
+        targetId: id,
+        payload: { name, species, count: 3, purposes: ['meat'] },
+      });
+
+      const screen = await mount(<CareRoutineScreen {...routeProps({ groupId: id })} />);
+
+      expect(screen.has('care-now-hoof-trim'), `${species} feet`).toBe(true);
+      expect(screen.has('care-now-dental'), `${species} teeth`).toBe(true);
+      screen.unmount();
+    }
+  });
+
+  /**
+   * And the exclusions that are real are kept. A bird has no teeth; that is
+   * settled and is not what this changed.
+   */
+  it('still does not ask a chicken about its teeth', async () => {
+    const birds = newId();
+    await enqueue({
+      entity: 'flock',
+      op: 'create',
+      targetId: birds,
+      payload: { name: 'The hens', species: 'chicken', count: 6, purposes: ['eggs'] },
+    });
+
+    const screen = await mount(<CareRoutineScreen {...routeProps({ groupId: birds })} />);
+
+    expect(screen.has('care-now-dental')).toBe(false);
+    expect(screen.has('care-now-hoof-trim')).toBe(false);
+    screen.unmount();
+  });
+
+  /**
+   * **The case a group-only table would have broken.** Alpacas and llamas sit
+   * in the ruminant group, which does not do teeth — and camelids are floated
+   * yearly, which their own interval says. A species override outranks its
+   * group for exactly this reason.
+   */
+  it('keeps a llamas teeth, inside a group that has none', async () => {
+    const llamas = newId();
+    await enqueue({
+      entity: 'flock',
+      op: 'create',
+      targetId: llamas,
+      payload: { name: 'The llamas', species: 'llama', count: 3, purposes: ['fibre'] },
+    });
+
+    const screen = await mount(<CareRoutineScreen {...routeProps({ groupId: llamas })} />);
+
+    expect(screen.has('care-now-dental')).toBe(true);
+    expect(screen.has('care-now-hoof-trim')).toBe(true);
+    screen.unmount();
+  });
+
   it('offers a horse its teeth', async () => {
     const horses = newId();
     await enqueue({
