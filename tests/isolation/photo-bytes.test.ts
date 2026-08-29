@@ -524,3 +524,76 @@ describeDb('deleting a photo', () => {
     expect(answer.body.toString()).toContain('not been uploaded');
   });
 });
+
+/**
+ * What it costs a stranger to make this route do work.
+ *
+ * The PUT scope raises the body limit to three megabytes and, until now,
+ * authenticated **inside the handler** — which Fastify runs after the body has
+ * been parsed. So an anonymous request bought 3 MB of buffering before anything
+ * looked at who sent it, on a scope with no rate limiter at all. Neither half
+ * risks a farm's data; together they are the cheapest thing on this server to
+ * point traffic at.
+ *
+ * These say nothing about tenancy, which is what the rest of this file is for.
+ */
+describeDb('what an anonymous caller can make this route spend', () => {
+  it('refuses an oversized body without reading it, when there is no token', async () => {
+    const app = await buildApp();
+
+    // Well past MAX_PHOTO_BYTES. The parser answers 413 for this — which is
+    // itself the proof it read the body — so a 401 is the observable fact that
+    // it did not get that far.
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/photos/${ulid()}`,
+      headers: { 'content-type': 'image/jpeg' },
+      payload: Buffer.alloc(4_000_000, 0),
+    });
+    await app.close();
+
+    expect(res.statusCode).toBe(401);
+  });
+
+  /** A token that is not ours gets the same answer, at the same point. */
+  it('refuses a forged token before the body too', async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/photos/${ulid()}`,
+      headers: { authorization: 'Bearer not.a.token', 'content-type': 'image/jpeg' },
+      payload: Buffer.alloc(4_000_000, 0),
+    });
+    await app.close();
+
+    expect(res.statusCode).toBe(401);
+  });
+
+  /**
+   * Sixty a minute, which is six times what an honest device catching up runs
+   * at: `sync/photos.ts` moves five per pass on a thirty-second tick.
+   */
+  it('is bounded, where the scope used to have no limiter', async () => {
+    const app = await buildApp();
+    const token = await tokenFor(USERS.ownerA);
+
+    const answers = [];
+    for (let i = 0; i < 65; i += 1) {
+      answers.push(
+        await app.inject({
+          method: 'PUT',
+          url: `/photos/${ulid()}`,
+          headers: { authorization: `Bearer ${token}`, 'content-type': 'image/jpeg' },
+          payload: BYTES,
+        }),
+      );
+    }
+    await app.close();
+
+    expect(String(answers[0]?.headers['x-ratelimit-limit'])).toBe('60');
+    // The first sixty reach the handler — 404, because no record was written —
+    // and the rest are turned away before it.
+    expect(answers.slice(0, 60).every((a) => a.statusCode === 404)).toBe(true);
+    expect(answers.slice(60).every((a) => a.statusCode === 429)).toBe(true);
+  });
+});

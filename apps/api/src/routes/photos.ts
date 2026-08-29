@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { canMutate, MAX_PHOTO_BYTES } from '@homefarm/contracts';
 import { requireClaims, requireMutationClaims } from '../auth/require';
+import { bearerFrom, verifyAccessToken } from '../auth/tokens';
+import { errorBody } from '../http';
 import { blobsFor } from '../db/blobs';
 import { ACCEPTED_IMAGE_TYPES, isImageType, sniffImageType } from './image-bytes';
 import { scoped, type Tenanted } from '../db/scoped';
@@ -87,6 +89,58 @@ export async function photoRoutes(app: FastifyInstance, env: Env): Promise<void>
    * JSON batch, and that route's error behaviour is tested.
    */
   await app.register(async (scope) => {
+    /**
+     * Sixty a minute per address, on the one route that reads three megabytes.
+     *
+     * **The scope had no limiter at all**, which made it the cheapest thing on
+     * this server to point traffic at: every request buys 3 MB of parsing
+     * before anything looks at who sent it. The sibling billing route got 60 a
+     * minute for precisely this reasoning and this route is the larger target.
+     *
+     * Sixty rather than the auth routes' three or five, because the legitimate
+     * caller is a device catching up: `sync/photos.ts` moves five per pass and
+     * ticks every thirty seconds, so an honest farm clearing a backlog runs at
+     * ten a minute — and a farm's several handsets share one address behind a
+     * house router. Six times the honest ceiling, and still a bound.
+     */
+    await scope.register(import('@fastify/rate-limit'), { max: 60, timeWindow: '1 minute' });
+
+    /**
+     * A valid token before three megabytes are read, not after.
+     *
+     * Fastify parses the body between `onRequest` and the handler, so
+     * authenticating inside the handler means an **anonymous** request already
+     * bought `MAX_BYTES` of buffer before it was refused. The limiter above
+     * bounds how often; this bounds who, and it is the half that costs nothing
+     * to get right.
+     *
+     * **This is a gate, not an authorization**, and the distinction matters
+     * because invariant 8 is about the second thing. All it proves is that the
+     * caller holds a token this server signed and has not expired — no
+     * database, no org, no role. The handler still calls
+     * `requireMutationClaims`, which re-derives identity, org and role from the
+     * database and is the only thing that decides anything. A signature check
+     * that can only ever REFUSE cannot fail open.
+     *
+     * The GET below is registered outside this scope and needs none of it: it
+     * has no body to parse.
+     */
+    scope.addHook('onRequest', async (request, reply) => {
+      const token = bearerFrom(request.headers.authorization);
+      if (token === null) {
+        return reply.status(401).send({ error: 'Not signed in.' });
+      }
+
+      try {
+        await verifyAccessToken(token, env.AUTH_SECRET);
+      } catch (error) {
+        const { status, body } = errorBody(error);
+        return reply.status(status).send(body);
+      }
+
+      return undefined;
+    });
+
     for (const type of ACCEPTED) {
       scope.addContentTypeParser(type, { parseAs: 'buffer', bodyLimit: MAX_BYTES }, (_req, body, done) => {
         done(null, body);
