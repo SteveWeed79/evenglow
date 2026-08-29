@@ -34,7 +34,7 @@ import type { RootParamList } from '../navigation/Root';
  */
 export type DueDestination =
   | { screen: 'Incubation'; params: { incubationId: string } }
-  | { screen: 'Weigh'; params: { groupId: string } }
+  | { screen: 'Processing'; params: { groupId: string } }
   | { screen: 'Shearing'; params: { groupId: string } }
   | { screen: 'Breeding'; params: { groupId: string } }
   | { screen: 'Group'; params: { groupId: string } }
@@ -65,15 +65,39 @@ export function dueDestination(due: Due): DueDestination | null {
   }
 
   /**
-   * A row about weight opens the scale; a row about fleece opens the shearing
-   * form; a birth opens the breeding book.
+   * A row about fleece opens the shearing form; a birth opens the breeding
+   * book. Landing on the group screen made somebody read a summary, find the
+   * one act among eight other rows and tap again.
    *
-   * "Roasters reach processing weight" asks one question and there is exactly
-   * one way to answer it. Landing on the group screen made somebody read a
-   * summary, find "Weigh them" among eight other rows and tap again — for a row
-   * whose entire content is a weight. The same was true of the clip.
+   * ## Processing opened the scale, and the scale cannot answer it
+   *
+   * This sent "Roasters reach processing weight" to `Weigh`, on the reading
+   * that the row is about a weight. It is not — it is about a date, and the
+   * act that answers it is taking the birds. **Weighing does not discharge the
+   * row**: `processingDue` clears on a cull (`lastCullByGroup`) and on nothing
+   * else, so a keeper tapped the row, weighed the group, and found it still
+   * there the next morning with no way to tell why.
+   *
+   * The row now opens the screen that ends it. Weighing is still one tap away
+   * on the group, and is what the *weight* rows are for.
    */
-  if (due.kind === 'processing') return { screen: 'Weigh', params: { groupId: id } };
+  if (due.kind === 'processing') return { screen: 'Processing', params: { groupId: id } };
+
+  /**
+   * **Nothing routes to `Weigh` any more, and that is not an oversight.**
+   *
+   * It was reachable only from `processing`, on the reading above. There is no
+   * `weight` due kind — `DUE_KINDS` has none — so with that branch moved there
+   * is no row left whose answer is a weighing. Kept as a comment rather than a
+   * branch that cannot fire, which reads like a decision somebody made and
+   * tested.
+   *
+   * A weight due would be worth having: `DOMAIN-SCOPE.md` says a growth curve
+   * is how a keeper knows a bird is on track *before* the processing date
+   * arrives, and nothing prompts for one. If that lands, this is one line and
+   * one union member. Until then the scale is reached from the group, which is
+   * where somebody goes to weigh on purpose.
+   */
   if (due.kind === 'shearing') return { screen: 'Shearing', params: { groupId: id } };
   if (due.kind === 'birth') return { screen: 'Breeding', params: { groupId: id } };
   if (entity === 'flock') return { screen: 'Group', params: { groupId: id } };
@@ -129,7 +153,7 @@ export function useOpenDue(): (due: Due, here?: keyof RootParamList) => (() => v
           case 'Incubation':
             nav.navigate(to.screen, to.params);
             return;
-          case 'Weigh':
+          case 'Processing':
             nav.navigate(to.screen, to.params);
             return;
           case 'Shearing':

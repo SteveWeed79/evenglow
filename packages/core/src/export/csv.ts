@@ -267,7 +267,19 @@ export async function buildExport(range: ExportRange = {}): Promise<Sheet[]> {
 
   add(
     'losses',
-    ['When', 'Group', 'How many', 'Cause', 'Cull weight (g)'],
+    [
+      'When',
+      'Group',
+      'How many',
+      'Cause',
+      // Kept, and always empty on anything this app has written: nothing ever
+      // collected it. See `mortalityCreateSchema`.
+      'Cull weight (g)',
+      // What a cull actually yielded, in the same micrograms the weights sheet
+      // uses. This is the column "meat produced per flock" is summed from, and
+      // until the processing screen existed there was nothing to put in it.
+      'Dressed weight (ug)',
+    ],
     await rowsFrom(
       'mortality',
       mortalityCreateSchema,
@@ -279,6 +291,7 @@ export async function buildExport(range: ExportRange = {}): Promise<Sheet[]> {
           v.count,
           v.cause,
           v.cullWeightGrams ?? '',
+          v.dressedMassUg ?? '',
         ],
         subject: v.animalId ?? v.flockId,
       }),

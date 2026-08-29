@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { updateSchemaOf } from '../clearing';
 import { minorSchema } from '../money';
 import { careIntervalsSchema } from './care';
+import { microgramsSchema } from '../units';
 
 /**
  * Multi-species from the schema up (P10).
@@ -483,8 +484,39 @@ export const mortalityCreateSchema = z
     animalId: z.string().length(26).optional(),
     count: z.number().int().positive(),
     cause: z.enum(MORTALITY_CAUSES),
-    /** Cull weights feed meat-yield math — an open request in competitor reviews. */
+    /**
+     * **Never written by anything, and kept because a record might hold one.**
+     *
+     * Added for meat-yield math — an open request in competitor reviews — and
+     * then collected by no screen, so the feature it was for did not exist:
+     * `csv.ts` exported an always-empty column and nothing summed it. Grams,
+     * where every mass added since is micrograms (`weight`, `shearing`,
+     * `feedPlan`), so it also could not be rendered by `formatMass` or read
+     * back exactly across a units switch.
+     *
+     * Superseded by `dressedMassUg` below. Left in place per invariant 13: it
+     * is optional, a farm's own older record could carry one, and the export
+     * still shows it.
+     */
     cullWeightGrams: z.number().int().positive().optional(),
+    /**
+     * What came off, dressed, for THIS record — the whole batch, not one head.
+     *
+     * The number a farm is actually after: meat produced per flock is the sum
+     * of these, and per-head is this over `count`. Recording the total is what
+     * matches how it is weighed — birds go in a cooler and the cooler goes on
+     * the scale — and a farm that does weigh individually records individually
+     * by logging each one.
+     *
+     * Micrograms, like every other mass in this app, so `formatMass` renders it
+     * and a farm that switches to metric later reads the same record back
+     * exactly rather than approximately.
+     *
+     * Only meaningful with `cause: 'cull'`; a fox leaves no dressed weight. Not
+     * refined against it, because a schema that refuses the pair would turn a
+     * mis-tapped cause into a rejected mutation rather than an edit.
+     */
+    dressedMassUg: microgramsSchema.optional(),
   })
   .strict();
 

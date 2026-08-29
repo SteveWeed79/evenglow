@@ -49,6 +49,7 @@ import { IronScreen } from '../../apps/mobile/src/screens/IronScreen';
 import { JobsScreen } from '../../apps/mobile/src/screens/JobsScreen';
 import { LogHoursScreen } from '../../apps/mobile/src/screens/LogHoursScreen';
 import { LossScreen } from '../../apps/mobile/src/screens/LossScreen';
+import { ProcessingScreen } from '../../apps/mobile/src/screens/ProcessingScreen';
 import { MachineScreen } from '../../apps/mobile/src/screens/MachineScreen';
 import { EditIncubationScreen } from '../../apps/mobile/src/screens/EditIncubationScreen';
 import { EditMachineScreen } from '../../apps/mobile/src/screens/EditMachineScreen';
@@ -226,6 +227,7 @@ export const SCREENS: [string, () => React.ReactElement][] = [
   ['Produce', () => <ProduceScreen {...routeProps({ groupId: GROUP })} />],
   ['Feed', () => <FeedScreen {...routeProps({ groupId: GROUP })} />],
   ['Loss', () => <LossScreen {...routeProps({ groupId: GROUP })} />],
+  ['Processing', () => <ProcessingScreen {...routeProps({ groupId: GROUP })} />],
   ['Breeding', () => <BreedingScreen {...routeProps({ groupId: GROUP })} />],
   ['Incubations', () => <IncubationsScreen />],
   ['SetEggs', () => <SetEggsScreen />],

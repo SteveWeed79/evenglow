@@ -193,6 +193,8 @@ const storedMortality = z.object({
   flockId: z.string(),
   count: z.number().int(),
   cause: z.string(),
+  /** Only ever set on a cull, and only when the farm weighed. See `processedByGroup`. */
+  dressedMassUg: z.number().int().optional(),
 });
 
 /**
@@ -244,6 +246,42 @@ export async function lastCullByGroup(): Promise<Map<string, number>> {
   }
 
   return latest;
+}
+
+/**
+ * What each group has been taken for, and what it yielded.
+ *
+ * `cause: 'cull'` only, on the same reading `lastCullByGroup` uses: every other
+ * cause is a loss, and a flock that lost a bird to a fox has not been processed.
+ *
+ * **The mass is summed and the count is summed, and neither is divided here.**
+ * Per head is the caller's arithmetic because the two numbers do not always
+ * describe each other — a farm that weighed one batch and not the next has a
+ * count larger than the weight accounts for, and a mean computed over that
+ * would understate the birds it did weigh. Handing back both keeps the
+ * discrepancy visible instead of averaging it away.
+ *
+ * A record with no weight contributes its count and nothing else, which is the
+ * ordinary case for a farm that processes at home without a scale.
+ */
+export async function processedByGroup(): Promise<Map<string, { count: number; massUg: number }>> {
+  const records = await localStore().readRecordsByEntity('mortality');
+  const totals = new Map<string, { count: number; massUg: number }>();
+
+  for (const record of records) {
+    if (record.deleted) continue;
+    const parsed = storedMortality.safeParse(record.value);
+    if (!parsed.success || parsed.data.cause !== 'cull') continue;
+
+    const { flockId, count, dressedMassUg } = parsed.data;
+    const running = totals.get(flockId) ?? { count: 0, massUg: 0 };
+    totals.set(flockId, {
+      count: running.count + count,
+      massUg: running.massUg + (dressedMassUg ?? 0),
+    });
+  }
+
+  return totals;
 }
 
 const storedFeedLog = z.object({
