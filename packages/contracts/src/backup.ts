@@ -83,19 +83,65 @@ export const BACKUP_EXCLUDES = ['photographs'] as const;
  * `archived` carries the one bit that a create cannot: a record retired with
  * P13's archive-never-delete is still history and must come back retired.
  */
+const backupEntryShape = {
+  targetId: z.string().length(26),
+  /** Validated per entity at restore time, by the same schema the queue uses. */
+  payload: z.unknown(),
+  /** When the record last changed. Ordering only — nothing depends on it. */
+  at: z.number().int(),
+  archived: z.boolean().optional(),
+};
+
+/**
+ * A row as it comes off the file, with `entity` still a loose string.
+ *
+ * **This was the strict enum, and it made a farm's own backup unreadable.**
+ * Widening the entity list is additive and deliberately bumps neither version
+ * gate (`CLAUDE.md`), so a file written by a build that knows `stockAdjustment`
+ * failed `backupFileSchema` on an older one — and the whole file was refused
+ * with *"That file is not a backup from Evenglow."* It was, and it was theirs.
+ *
+ * `pullResponseSchema` had the identical problem and was already fixed the same
+ * way: parse the row loosely, then partition with `readableEntries`, so a build
+ * skips what it cannot model and restores the rest. A backup is the one moment a
+ * farm has nothing else left, and all-or-nothing is the worst possible rule for
+ * it.
+ */
+export const backupRowSchema = z
+  .object({ entity: z.string().min(1).max(60), ...backupEntryShape })
+  .strict();
+
+export type BackupRow = z.infer<typeof backupRowSchema>;
+
+/** A row this build can actually model, which is what a restore writes. */
 export const backupEntrySchema = z
-  .object({
-    entity: entitySchema,
-    targetId: z.string().length(26),
-    /** Validated per entity at restore time, by the same schema the queue uses. */
-    payload: z.unknown(),
-    /** When the record last changed. Ordering only — nothing depends on it. */
-    at: z.number().int(),
-    archived: z.boolean().optional(),
-  })
+  .object({ entity: entitySchema, ...backupEntryShape })
   .strict();
 
 export type BackupEntry = z.infer<typeof backupEntrySchema>;
+
+/**
+ * Splits a file's rows into the ones this build knows and a count of the rest.
+ *
+ * The same shape as `readableRows` for a pulled page, and for the same reason:
+ * an unknown entity is a record from a newer build, not a corrupt file, and the
+ * honest response is to restore everything else and say how many were left.
+ */
+export function readableEntries(rows: readonly BackupRow[]): {
+  known: BackupEntry[];
+  unmodelable: number;
+} {
+  const known: BackupEntry[] = [];
+  let unmodelable = 0;
+
+  for (const row of rows) {
+    const entity = entitySchema.safeParse(row.entity);
+    if (entity.success) known.push({ ...row, entity: entity.data });
+    else unmodelable += 1;
+  }
+
+  return { known, unmodelable };
+}
 
 /**
  * The file.
@@ -136,7 +182,7 @@ export const backupFileSchema = z
     app: z.string().max(40),
     /** What is NOT in here, in words, so the file is honest without a screen. */
     excludes: z.array(z.string().max(60)),
-    entries: z.array(backupEntrySchema),
+    entries: z.array(backupRowSchema),
   })
   .strict();
 

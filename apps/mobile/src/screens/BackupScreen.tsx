@@ -212,7 +212,14 @@ export function BackupScreen(): React.ReactElement {
       if (!planned.ok) throw new Error(planned.message);
 
       if (planned.toWrite.length === 0) {
-        setNote('Everything in that backup is already on this phone.');
+        // Nothing to write is two different situations, and telling a farm the
+        // wrong one is worse than saying nothing: a file this build simply
+        // cannot read yet is not a file this phone already holds.
+        setNote(
+          planned.unmodelable === 0
+            ? 'Everything in that backup is already on this phone.'
+            : 'Every record in that file was written by a newer version of the app. Update the app and try the same file again.',
+        );
         return;
       }
 
@@ -431,6 +438,18 @@ function Planned({
           {plan.toWrite.length} records from that file will be added to this phone
           {plan.alreadyThere === 0 ? '' : `, and ${plan.alreadyThere} are already here`}.
         </Body>
+        {/* A file written by a newer version can hold record kinds this build
+            has never heard of. It used to refuse the whole file over one; now
+            it restores the rest and says what it could not take, so nobody is
+            left thinking a short restore was a complete one. */}
+        {plan.unmodelable === 0 ? null : (
+          <Body>
+            {plan.unmodelable} {plan.unmodelable === 1 ? 'record was' : 'records were'} written by a
+            newer version of the app and cannot be put back by this one. Updating the app and
+            trying the same file again will bring{' '}
+            {plan.unmodelable === 1 ? 'it' : 'them'} in.
+          </Body>
+        )}
         <Body>
           Photographs are not in a backup and cannot come back with it. Nothing already on this
           phone is changed or removed.

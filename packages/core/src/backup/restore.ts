@@ -1,5 +1,6 @@
 import {
   type BackupEntry,
+  readableEntries,
   type BackupFile,
   backupFileSchema,
   backupRefusal,
@@ -72,6 +73,16 @@ export type RestorePlan =
       toWrite: BackupEntry[];
       /** Entries the device already has. Non-zero means this is a resume. */
       alreadyThere: number;
+      /**
+       * Records this build cannot model, from a file a newer one wrote.
+       *
+       * Counted and surfaced rather than refused: widening the entity list is
+       * additive and bumps no version gate, so a farm's own backup could
+       * legitimately hold a kind this build has never heard of. Refusing the
+       * whole file over it — which is what happened — is the worst possible
+       * answer at the one moment a farm has nothing else left.
+       */
+      unmodelable: number;
       /** When the file was written. Becomes this device's last-copy date. */
       writtenAt: number;
     }
@@ -252,7 +263,9 @@ export async function planRestore(
   }
 
   const store = localStore();
-  const wanted = new Set(file.entries.map((e) => recordKey(e.entity, e.targetId)));
+  // Rows this build knows, and a count of the rest. See `readableEntries`.
+  const { known, unmodelable } = readableEntries(file.entries);
+  const wanted = new Set(known.map((e) => recordKey(e.entity, e.targetId)));
 
   /**
    * Every entity, not only the ones the file mentions.
@@ -282,7 +295,7 @@ export async function planRestore(
     return at === -1 ? PARENTS_FIRST.length : at;
   };
 
-  const toWrite = file.entries
+  const toWrite = known
     .filter((e) => !here.has(recordKey(e.entity, e.targetId)))
     // Stable within a rank: the file is already oldest-first, and a sort that
     // reshuffled equal ranks would make a resume write them in a new order
@@ -292,7 +305,10 @@ export async function planRestore(
   return {
     ok: true,
     toWrite,
-    alreadyThere: file.entries.length - toWrite.length,
+    // Counted against what this build can model, so a file half of which it has
+    // never heard of does not read as a device that already holds it all.
+    alreadyThere: known.length - toWrite.length,
+    unmodelable,
     writtenAt: file.writtenAt,
   };
 }

@@ -297,6 +297,74 @@ describe('putting one back', () => {
   });
 });
 
+/**
+ * ── A farm's own backup, refused ───────────────────────────────────────────
+ *
+ * `backupEntrySchema.entity` was the strict enum, and widening the entity list
+ * is additive by design — `CLAUDE.md` says so and deliberately bumps neither
+ * version gate. So a file written by a build that knows one more record kind
+ * failed `backupFileSchema` on an older one, and the **whole file** was refused
+ * with *"That file is not a backup from Evenglow."* It was, and it was theirs.
+ *
+ * `pullResponseSchema` had the identical problem and was already fixed the same
+ * way: parse loosely, then partition, so a build skips what it cannot model and
+ * takes the rest. A backup is the one moment a farm has nothing else left, and
+ * all-or-nothing is the worst possible rule for it.
+ */
+describe('a backup holding a record kind this build does not know', () => {
+  /** Rewrites one entry to a kind no build has, which is what a newer one looks like. */
+  function withAnUnknownKind(text: string): string {
+    const file = JSON.parse(text) as { entries: { entity: string }[] };
+    const first = file.entries[0];
+    if (first !== undefined) first.entity = 'somethingNewerKnows';
+    return JSON.stringify(file);
+  }
+
+  it('reads the file instead of refusing it', async () => {
+    await aFarm(6);
+    const text = await fileOnThePhone();
+
+    await freshStore();
+    files.set(PICKED, withAnUnknownKind(text));
+    picker.next = PICKED;
+
+    const screen = await mount(<BackupScreen />);
+    await screen.press('backup-choose');
+
+    expect(screen.text()).not.toContain(`not a backup from ${PRODUCT_NAME}`);
+    expect(screen.has('backup-put')).toBe(true);
+    screen.unmount();
+  });
+
+  /** And says what it could not take, so a short restore is not read as a whole one. */
+  it('says how many it could not put back', async () => {
+    await aFarm(6);
+    const text = await fileOnThePhone();
+
+    await freshStore();
+    files.set(PICKED, withAnUnknownKind(text));
+    picker.next = PICKED;
+
+    const screen = await mount(<BackupScreen />);
+    await screen.press('backup-choose');
+
+    expect(screen.text()).toContain('newer version of the app');
+    screen.unmount();
+  });
+
+  /** A file that is genuinely not ours is still refused on the first key. */
+  it('still refuses a file that is not a backup at all', async () => {
+    files.set(PICKED, JSON.stringify({ format: 'something-else', entries: [] }));
+    picker.next = PICKED;
+
+    const screen = await mount(<BackupScreen />);
+    await screen.press('backup-choose');
+
+    expect(screen.text()).toContain(`not a backup from ${PRODUCT_NAME}`);
+    screen.unmount();
+  });
+});
+
 describe('the notice on Today', () => {
   it('says nothing on a new farm', async () => {
     await aFarm(6);
