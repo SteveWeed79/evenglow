@@ -17,6 +17,31 @@ import type { Env } from '../env';
  * a throttled report costs somebody a minute, and an unthrottled one is an
  * issue tracker anybody can flood.
  */
+/**
+ * How large a ticket may be, and why the default was the wrong number.
+ *
+ * **Fastify's default `bodyLimit` is 1 MiB and nothing raised it here**, while
+ * `supportTicketSchema` allows `records` up to twenty million characters. So a
+ * farm that was asked whether to attach its records, and said yes, got a 413 —
+ * and the **lean bundle went with it**, because the diagnostics and the records
+ * travel in one request. The farm most in need of reporting is the one whose
+ * report is the one that cannot be sent.
+ *
+ * It is not a large farm that crosses this. The bench figure this project uses
+ * for a busy year is 1,540 records at 884 KB, so a second season is over the
+ * default with room to spare.
+ *
+ * Twenty-four MiB rather than exactly twenty million: the cap is on characters
+ * and this is on bytes, and the ticket carries the bundle beside them. The
+ * schema is still what refuses an oversized `records` — this only stops the
+ * body being cut off before the schema ever sees it.
+ *
+ * **On an unauthenticated route**, which is the reason to say what bounds it:
+ * the rate limiter above runs on `onRequest`, before a body is read, so a
+ * single address gets five of these a minute and no more.
+ */
+const MAX_TICKET_BYTES = 24 * 1024 * 1024;
+
 export async function supportRoutes(app: FastifyInstance, env: Env): Promise<void> {
   await app.register(async (scope) => {
     /**
@@ -28,7 +53,7 @@ export async function supportRoutes(app: FastifyInstance, env: Env): Promise<voi
      */
     await scope.register(import('@fastify/rate-limit'), { max: 5, timeWindow: '1 minute' });
 
-    scope.post('/support', async (request, reply) => {
+    scope.post('/support', { bodyLimit: MAX_TICKET_BYTES }, async (request, reply) => {
       const config = env.supportConfig;
       if (config === null) {
         /**
