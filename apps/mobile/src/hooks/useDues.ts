@@ -22,7 +22,12 @@ import {
 import { listAnimals } from '@homefarm/core/read/animals';
 import { listBreedings, listIncubations } from '@homefarm/core/read/breeding';
 import { lastCareBySubject, listCareLogs } from '@homefarm/core/read/care';
-import { currentFeedPlans, lastShornByGroup, listGroups } from '@homefarm/core/read/groups';
+import {
+  currentFeedPlans,
+  lastCullByGroup,
+  lastShornByGroup,
+  listGroups,
+} from '@homefarm/core/read/groups';
 import { listBeds, listPlantings, listVarieties } from '@homefarm/core/read/growing';
 import { listInventory, listMachines, listServices } from '@homefarm/core/read/iron';
 import { listTasks } from '@homefarm/core/read/tasks';
@@ -141,6 +146,7 @@ export function useDues(): DuesView {
     const lastCare = lastCareBySubject(careLogs);
     // A clip on a named animal counts for its group — a farm shears the whole
     // paddock in one afternoon and records whichever subject was to hand.
+    const lastCulledAt = await lastCullByGroup();
     const lastShorn = await lastShornByGroup(
       new Map(animals.map((animal) => [animal.id, animal.flockId])),
     );
@@ -235,8 +241,16 @@ export function useDues(): DuesView {
         ),
       );
 
-      // The grow-out clock. Silent unless the group says it is kept for meat
-      // and carries a birth date and a breed the library knows.
+      /**
+       * The grow-out clock. Silent unless the group says it is kept for meat
+       * and carries a birth date and a breed the library knows.
+       *
+       * `lastCulledAt` is what clears it once the birds are processed. The
+       * builder took it and nothing passed it, which is the same shape of bug
+       * as `careIntervals` above and left the row a permanent resident on
+       * Today — see `processingDue` for what that cost.
+       */
+      const lastCull = lastCulledAt.get(group.id);
       const processing = processingDue({
         id: group.id,
         name: group.name,
@@ -246,6 +260,7 @@ export function useDues(): DuesView {
         ...(group.processAtWeeks === undefined
           ? {}
           : { processAtWeeks: group.processAtWeeks }),
+        ...(lastCull === undefined ? {} : { lastCulledAt: lastCull }),
       });
       if (processing) rows.push(processing);
 

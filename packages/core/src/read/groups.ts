@@ -218,6 +218,34 @@ export async function lossesByGroup(): Promise<Map<string, number>> {
   return totals;
 }
 
+/**
+ * When each group was last deliberately culled, which is what discharges the
+ * processing row.
+ *
+ * `cause: 'cull'` and nothing else. Every other cause on `MORTALITY_CAUSES` is
+ * a loss — a predator, an illness, old age — and a flock that lost a bird to a
+ * fox has not been processed. `processingDue` decides whether the date is late
+ * enough to count; this only says when the last one was.
+ *
+ * The newest wins rather than the first, so a farm that processes in two
+ * batches is answered by the batch it has just done.
+ */
+export async function lastCullByGroup(): Promise<Map<string, number>> {
+  const records = await localStore().readRecordsByEntity('mortality');
+  const latest = new Map<string, number>();
+
+  for (const record of records) {
+    if (record.deleted) continue;
+    const parsed = storedMortality.safeParse(record.value);
+    if (!parsed.success || parsed.data.cause !== 'cull') continue;
+
+    const { flockId, occurredAt } = parsed.data;
+    if (occurredAt > (latest.get(flockId) ?? -Infinity)) latest.set(flockId, occurredAt);
+  }
+
+  return latest;
+}
+
 const storedFeedLog = z.object({
   occurredAt: z.number().int(),
   flockId: z.string(),

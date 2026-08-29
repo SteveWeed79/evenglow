@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   birthDue,
   breedingCreateSchema,
+  DEFAULT_NOTICE_DAYS,
   feedNeededUg,
   feedOrderDue,
   feedPlanCreateSchema,
@@ -214,6 +215,77 @@ describe('the grow-out clock', () => {
     expect(row.at).toBe(NOW + 6 * WEEK);
     expect(row.title).toBe('Meat birds reach processing weight');
     expect(urgencyOf(row, NOW + 6 * WEEK)).toBe('now');
+  });
+
+  /**
+   * ── The permanent resident ────────────────────────────────────────────────
+   *
+   * This row read fields of the group and nothing else, so nothing a keeper
+   * *did* could clear it. A meat flock went `overdue` a day after the window
+   * opened, sorted first on Today in the alert tint, and stayed there for ever
+   * — processing the birds and recording the cull changed nothing at all.
+   *
+   * `due/types.ts` states the rule outright: *"a list with a permanent resident
+   * on it is a list people stop reading."* Every other builder here obeys it.
+   *
+   * The record that answers it is a `mortality` row with `cause: 'cull'`.
+   */
+  it('was overdue for ever, and now the cull clears it', () => {
+    const opens = NOW + 6 * WEEK;
+    const wellPast = opens + 30 * DAY;
+
+    // What it did before: still shouting a month after the window opened.
+    expect(urgencyOf(processingDue(chicks) as Due, wellPast)).toBe('overdue');
+
+    // What a keeper does about it.
+    const processed = { ...chicks, lastCulledAt: opens + 2 * DAY };
+    expect(processingDue(processed)).toBeNull();
+  });
+
+  /**
+   * **Not every cull, and this is the whole reason it is dated.** A bird put
+   * down for a bad leg is a `cull` too, and a rule of "any cull ever" would
+   * silence the row before it had ever been shown.
+   *
+   * The line is `opensAt`, and the obvious alternative — the moment the row
+   * becomes *visible* — was written first and disproved by this test. A Cornish
+   * cross is a 6-to-9-week bird and `processing` carries
+   * `DEFAULT_NOTICE_DAYS.processing` days of notice, so "visible" is week four,
+   * which is precisely the injury this is guarding against. The two numbers are
+   * asserted here because the collision is what decides the rule.
+   */
+  it('is not cleared by a loss earlier in the grow-out', () => {
+    expect(6 * WEEK - DEFAULT_NOTICE_DAYS.processing * DAY).toBe(4 * WEEK);
+
+    const injured = { ...chicks, lastCulledAt: NOW + 4 * WEEK };
+    const row = processingDue(injured) as Due;
+
+    expect(row).not.toBeNull();
+    expect(row.at).toBe(NOW + 6 * WEEK);
+  });
+
+  /**
+   * The cost of drawing the line there, stated rather than hidden: a keeper who
+   * processes before the window opens is not answered and the row still fires.
+   * The repair is `processAtWeeks` — *"mine are ready at eleven weeks"* — which
+   * is the same mechanism this file already gives the farm for disagreeing with
+   * the library.
+   */
+  it('does not treat an early processing as an answer, and processAtWeeks is the fix', () => {
+    const early = NOW + 5 * WEEK;
+
+    expect(processingDue({ ...chicks, lastCulledAt: early })).not.toBeNull();
+    expect(processingDue({ ...chicks, processAtWeeks: 5, lastCulledAt: early })).toBeNull();
+  });
+
+  /**
+   * A farm that takes twenty birds this week and thirty next has had the
+   * information this row exists to deliver. Asking again is a different
+   * feature, and one nobody asked for.
+   */
+  it('is answered by the first batch', () => {
+    const opens = NOW + 6 * WEEK;
+    expect(processingDue({ ...chicks, lastCulledAt: opens })).toBeNull();
   });
 
   /**
