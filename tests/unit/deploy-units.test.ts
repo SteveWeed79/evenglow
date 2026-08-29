@@ -344,6 +344,29 @@ describe('what the API listens on', () => {
     expect(ops).not.toContain('because it must be reachable;');
   });
 
+  /**
+   * The one place the loopback default is wrong, and CI found it.
+   *
+   * Inside a container, loopback is the container's own network namespace: a
+   * published port reaches nothing and the process answers only itself. The
+   * exposure argument does not carry across either — what makes an image
+   * reachable is `docker run -p`, which is already the deliberate act.
+   *
+   * The Dockerfile said *"Fastify binds 0.0.0.0 already"*, which was true until
+   * the commit before this one. The container check published :3001, the API
+   * logged `listening on 127.0.0.1:3001`, and `/health` was never answered.
+   */
+  it('overrides the default in the container image, where loopback reaches nothing', () => {
+    const dockerfile = readFileSync(
+      join(__dirname, '..', '..', 'apps', 'api', 'Dockerfile'),
+      'utf8',
+    );
+
+    expect(dockerfile).toContain('ENV API_HOST=0.0.0.0');
+    // And the claim that made the override look unnecessary is gone.
+    expect(dockerfile).not.toContain('Fastify binds 0.0.0.0 already;');
+  });
+
   /** The Caddyfile said this all along. Now it is true. */
   it('matches what the Caddyfile claims about it', () => {
     const caddy = readFileSync(

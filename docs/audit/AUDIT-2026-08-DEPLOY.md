@@ -302,6 +302,20 @@ setting is read after the source, by index.*
   reverse-proxies to `127.0.0.1:3001` on the same machine, and `deploy.sh` probes
   the same loopback address.*
 
+  ***The container image needed the override, and CI is what said so.** The
+  `container` check publishes `:3001` and polls `/health`; the API logged
+  `listening on 127.0.0.1:3001` and never answered, because loopback inside a
+  container is the container's own namespace and a published port reaches
+  nothing. The Dockerfile now sets `API_HOST=0.0.0.0`, which is correct there and
+  does not weaken the finding: what makes an image reachable is `docker run -p`,
+  and that is already the deliberate act.*
+
+  ***That was the third document asserting the old behaviour.** The Dockerfile
+  said *"Fastify binds 0.0.0.0 already"* — true when written, false one commit
+  before the check ran. The Caddyfile and `ops.ts` were the other two, and both
+  were corrected in the same change; this one was missed because it was the only
+  one where the claim was load-bearing rather than explanatory.*
+
   ***`ops.ts`'s own comment was the clearest statement of the defect** and is
   corrected with it. It justified its loopback default by contrast with an API
   that *"listens on `0.0.0.0` because it must be reachable"* — a premise that was
