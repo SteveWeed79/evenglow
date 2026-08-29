@@ -327,3 +327,128 @@ describe('the identifier beside the name', () => {
     expect(row).toMatch(/,,[0-9A-HJKMNP-TV-Z]{26}$/);
   });
 });
+
+/**
+ * ── The sheet that read a field nothing writes ─────────────────────────────
+ *
+ * A service is discharged by a `serviceCompletion` event. `ServiceDoneScreen`
+ * writes one and never touches the `maintenance` schedule; `read/iron.ts` and
+ * `read/history.ts` were both moved over to resolve it. The export was not, and
+ * went on reading `maintenance.lastDoneAtDate` straight out of the store.
+ *
+ * Two different failures, and the second is the one that reads as a broken app:
+ *
+ * - export **everything** → `Last done` and `At hours` blank on every row,
+ *   however many services the farm had actually recorded;
+ * - export **the last year** → `at` was the epoch for every row, `within()`
+ *   dropped all of them, and `ExportScreen` said *"Nothing in services for that
+ *   period"* to a farm that had serviced its tractor that morning.
+ *
+ * The file's own heading says why this could not have been right: *built from
+ * the same reads the screens use, not from a second pass over the store*. This
+ * was the one sheet that was.
+ */
+describe('the service sheets', () => {
+  const TRACTOR = newId();
+  const OIL = newId();
+  const DAY = 86_400_000;
+
+  /** Yesterday, so a "last year" range is unambiguous either side. */
+  const DONE_AT = Date.now() - DAY;
+
+  async function theTractor(): Promise<void> {
+    await enqueue({
+      entity: 'equipment',
+      op: 'create',
+      targetId: TRACTOR,
+      payload: { name: 'The Kubota', make: 'Kubota', hasHourMeter: true },
+    });
+    await enqueue({
+      entity: 'maintenance',
+      op: 'create',
+      targetId: OIL,
+      payload: { equipmentId: TRACTOR, title: 'Oil and filter', intervalHours: 200 },
+    });
+  }
+
+  /** What ServiceDoneScreen writes. Note it never touches the schedule. */
+  async function serviced(completedAt: number, atHours?: number): Promise<void> {
+    await enqueue({
+      entity: 'serviceCompletion',
+      op: 'create',
+      targetId: newId(),
+      payload: { serviceId: OIL, completedAt, ...(atHours === undefined ? {} : { atHours }) },
+    });
+  }
+
+  const sheet = (sheets: { name: string; csv: string }[], name: string): string | undefined =>
+    sheets.find((s) => s.name === name)?.csv;
+
+  beforeEach(async () => {
+    await theTractor();
+  });
+
+  it('fills Last done and At hours from the completion', async () => {
+    await serviced(DONE_AT, 1240);
+
+    const services = sheet(await buildExport(), 'services');
+
+    expect(services).toContain('Oil and filter');
+    expect(services).toContain(stamp(DONE_AT));
+    expect(services).toContain('1240');
+  });
+
+  /** The one that said "Nothing in services for that period." */
+  it('keeps a serviced machine inside a ranged export', async () => {
+    await serviced(DONE_AT, 1240);
+
+    const lastYear = await buildExport({ from: Date.now() - 365 * DAY });
+
+    expect(sheet(lastYear, 'services')).toContain('Oil and filter');
+  });
+
+  /**
+   * A schedule that has never been done still sorts to the epoch and still
+   * falls out of a ranged export. That is unchanged and it is right — nothing
+   * happened to it in the period being asked about — and it is present in the
+   * export of everything, where a schedule with no history belongs.
+   */
+  it('leaves a never-done schedule out of a range and in the whole', async () => {
+    expect(sheet(await buildExport(), 'services')).toContain('Oil and filter');
+    expect(sheet(await buildExport({ from: Date.now() - 365 * DAY }), 'services')).toBeUndefined();
+  });
+
+  /**
+   * The schedule sheet says when a job was last done. It cannot say a machine
+   * was serviced six times in four years, which is the history somebody hands
+   * over with the tractor. There was no sheet for the events at all.
+   */
+  it('exports every completion, not only the latest', async () => {
+    await serviced(DONE_AT - 400 * DAY, 900);
+    await serviced(DONE_AT - 200 * DAY, 1050);
+    await serviced(DONE_AT, 1240);
+
+    const done = sheet(await buildExport(), 'service-completions');
+    const rows = (done ?? '').split('\r\n').slice(1);
+
+    expect(rows).toHaveLength(3);
+    expect(done).toContain('The Kubota');
+    expect(done).toContain('Oil and filter');
+    // The schedule sheet still carries only the newest.
+    expect(sheet(await buildExport(), 'services')).not.toContain('900');
+  });
+
+  /**
+   * The subject is the machine, so this sheet joins to `machine-hours` and
+   * `services` on the column all three carry.
+   */
+  it('files a completion against the machine, not the schedule', async () => {
+    await serviced(DONE_AT, 1240);
+
+    const done = sheet(await buildExport(), 'service-completions') ?? '';
+    const [header, row] = done.split('\r\n');
+
+    expect(header?.split(',').at(-2)).toBe('Subject id');
+    expect(row?.split(',').at(-2)).toBe(TRACTOR);
+  });
+});
