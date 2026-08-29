@@ -5,6 +5,7 @@ import {
   eggLogCreateSchema,
   type Entity,
   feedLogCreateSchema,
+  breedingCreateSchema,
   formatMass,
   isAppendOnly,
   formatProduce,
@@ -226,6 +227,7 @@ const storedService = maintenanceStoredSchema;
 
 /** A set of eggs mid-flight: created, then candled, then hatched by update. */
 const storedIncubation = incubationCreateSchema.partial();
+const storedBreeding = breedingCreateSchema.partial();
 
 const storedTaskCompletion = taskCompletionCreateSchema.partial();
 const storedServiceCompletion = serviceCompletionCreateSchema.partial();
@@ -348,6 +350,9 @@ export async function listHistory(
   /** Names, so a row reads "The hens" rather than an id nobody can pronounce. */
   const groupName = new Map(groups.map((g) => [g.id, g.name]));
   const animalName = new Map(animals.map((a) => [a.id, a.name]));
+  // A birth belongs to the dam AND the group she is in — the same reasoning the
+  // mortality builder gives for naming both.
+  const animalGroup = new Map(animals.map((a) => [a.id, a.flockId]));
   const machineName = new Map(machines.map((m) => [m.id, m.name]));
   const itemName = new Map(stock.map((i) => [i.id, i.name]));
   const varietyOf = new Map(varieties.map((v) => [v.id, v.name]));
@@ -563,6 +568,49 @@ export async function listHistory(
        * running set and the set's own screen states it, where a hatch is the
        * end of the story and belongs in the farm's.
        */
+      /**
+       * A birth, on the day it happened.
+       *
+       * **There was no `breeding` builder at all**, so a kidding, a lambing or
+       * a calving produced no row anywhere — while `incubation.hatchedAt`, the
+       * poultry equivalent, has had one all along. `AnimalScreen` renders "What
+       * happened to her" over a timeline her giving birth was not in.
+       *
+       * Only `bornAt`, not `bredAt`. The same call the incubation builder makes
+       * about candling: the mating is a step in the middle of a record that runs
+       * for months, and the birth is the end of the story. The mating is on the
+       * Breeding screen, which is where a keeper goes to ask about it.
+       *
+       * **Not removable, and that falls out of `eventsFrom` without a word
+       * here.** `breeding` is mutable and this row is a FIELD on it, so a
+       * take-back would archive the mating along with the birth — the
+       * `maintenance` case, not the `incubation` one, where the record and the
+       * event are the same thing. `REMOVABLE_MUTABLE` lists only `incubation`,
+       * so a builder added later is silent until somebody says otherwise.
+       */
+      eventsFrom('breeding', storedBreeding, (v, id) =>
+        v.bornAt === undefined || v.damId === undefined
+          ? null
+          : {
+              id,
+              entity: 'breeding',
+              at: v.bornAt,
+              subjects: subjectsOf(v.damId, animalGroup.get(v.damId)),
+              title: `${named(animalName, v.damId, 'One of yours')} gave birth`,
+              detail:
+                v.lost === true
+                  ? 'The whole litter was lost.'
+                  : [
+                      v.liveBorn === undefined ? null : plural(v.liveBorn, 'live birth'),
+                      v.stillborn === undefined || v.stillborn === 0
+                        ? null
+                        : `${v.stillborn} stillborn`,
+                    ]
+                      .filter((part): part is string => part !== null)
+                      .join(' · ') || 'Recorded on the breeding record.',
+            },
+      ),
+
       eventsFrom('incubation', storedIncubation, (v, id) =>
         v.hatchedAt === undefined || v.label === undefined
           ? null

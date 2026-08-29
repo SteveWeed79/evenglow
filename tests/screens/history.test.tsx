@@ -557,6 +557,105 @@ describe('a history row that is not a record of its own', () => {
 });
 
 /**
+ * ── A birth, which was in no timeline at all ───────────────────────────────
+ *
+ * `history.ts` had no `breeding` builder, so a kidding, a lambing or a calving
+ * produced **no row anywhere** — while `incubation.hatchedAt`, the poultry
+ * equivalent, has had one all along. `AnimalScreen` renders "What happened to
+ * her" over a timeline her giving birth was not in.
+ */
+describe('a birth on the breeding record', () => {
+  const DAM = newId();
+
+  async function theDam(): Promise<void> {
+    await enqueue({
+      entity: 'animal',
+      op: 'create',
+      targetId: DAM,
+      payload: { flockId: GROUP, name: 'Nutmeg', species: 'goat', sex: 'female' },
+    });
+  }
+
+  async function bred(over: Record<string, unknown> = {}): Promise<string> {
+    const id = newId();
+    await enqueue({
+      entity: 'breeding',
+      op: 'create',
+      targetId: id,
+      payload: {
+        species: 'goat',
+        damId: DAM,
+        bredAt: at(150, 9),
+        method: 'natural',
+        ...over,
+      },
+    });
+    return id;
+  }
+
+  it('says who gave birth, and what came of it', async () => {
+    await theDam();
+    await bred({ bornAt: at(1, 6), liveBorn: 2, stillborn: 1 });
+
+    const [day] = await listHistory();
+    const born = day?.events.find((event) => event.entity === 'breeding');
+
+    expect(born?.title).toBe('Nutmeg gave birth');
+    expect(born?.detail).toBe('2 live births · 1 stillborn');
+  });
+
+  /** It belongs to her AND to the group she is in — the mortality reasoning. */
+  it('reaches the dam and her group', async () => {
+    await theDam();
+    await bred({ bornAt: at(1, 6), liveBorn: 2 });
+
+    const [day] = await listHistory();
+    const born = day?.events.find((event) => event.entity === 'breeding');
+
+    expect(born?.subjects).toContain(DAM);
+    expect(born?.subjects).toContain(GROUP);
+  });
+
+  /** A mating with no birth yet is not an event; it is a record in progress. */
+  it('says nothing until there is a birth', async () => {
+    await theDam();
+    await bred();
+
+    const days = await listHistory();
+    expect(days.flatMap((day) => day.events).some((e) => e.entity === 'breeding')).toBe(false);
+  });
+
+  it('says so plainly when the litter was lost', async () => {
+    await theDam();
+    await bred({ bornAt: at(1, 6), lost: true });
+
+    const [day] = await listHistory();
+    const born = day?.events.find((event) => event.entity === 'breeding');
+
+    expect(born?.detail).toBe('The whole litter was lost.');
+  });
+
+  /**
+   * **Not removable, and this is the M9 rule earning its keep.** `breeding` is
+   * mutable and this row is a FIELD on it, so a take-back would archive the
+   * mating along with the birth — the `maintenance` case, not the `incubation`
+   * one where the record and the event are the same thing. A builder added
+   * later is silent until somebody says otherwise, which is exactly what
+   * happened here without a line being written for it.
+   */
+  it('offers no take-back, because the record is the mating', async () => {
+    await theDam();
+    const breeding = await bred({ bornAt: at(1, 6), liveBorn: 2 });
+
+    const screen = await mount(<HistoryScreen />);
+    await screen.press(`event-${breeding}`);
+
+    expect(screen.has(`event-remove-${breeding}`)).toBe(false);
+    screen.unmount();
+  });
+});
+
+/**
  * The share itself.
  *
  * The CSV is settled by `tests/unit/export.test.ts`; what is left is the part
