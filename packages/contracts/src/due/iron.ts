@@ -108,6 +108,17 @@ export function serviceDue(
  * default: long enough to buy stabiliser, short enough not to sit there
  * through October.
  */
+/**
+ * **Not called by anything, and that is a missing feature rather than a missing
+ * line.** `useDues` wires in every other builder this package ships; this one
+ * takes `dueAt` and `lastDoneAt` as parameters and the equipment entity carries
+ * neither — no field for when a machine should be put away for the season, and
+ * no record of its having been done.
+ *
+ * Kept rather than deleted (invariant 13). Giving it a data source is a product
+ * decision about whether the app should ask a farm to date the winterising of
+ * each machine, and the arithmetic here is ready for the day it does.
+ */
 export function storageDue(
   machine: MachineRecord,
   dueAt: number,

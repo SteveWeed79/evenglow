@@ -48,12 +48,27 @@ import { clearTrouble, reportTrouble } from './useTrouble';
  * crosses its date while the app sits open moves on the next publish rather
  * than at midnight tomorrow.
  *
- * **Every builder the contracts package ships is wired in here.** They were
- * written and tested long before anything could write the records they read,
- * and a builder with no reader is a feature that exists only in the test
- * suite — the version of this hook that fed it groups and nothing else put
- * seven permanent husbandry rows on Today and produced no birth, hatch, sow
- * or service row at all.
+ * **Every builder the contracts package ships is wired in here, with one
+ * exception named below.** They were written and tested long before anything
+ * could write the records they read, and a builder with no reader is a feature
+ * that exists only in the test suite — the version of this hook that fed it
+ * groups and nothing else put seven permanent husbandry rows on Today and
+ * produced no birth, hatch, sow or service row at all.
+ *
+ * ## `storageDue`, and why it is not called
+ *
+ * That sentence used to have no exception, and it was wrong. `storageDue` is
+ * exported and tested and has never been called from here — **not an oversight
+ * in the wiring, but a builder with nothing to wire**. It takes `dueAt` and
+ * `lastDoneAt` as parameters, and the equipment entity carries neither: there
+ * is no field saying when a machine should be put away for the season, and no
+ * completion record saying it was.
+ *
+ * So this is a feature that was never finished rather than a row that went
+ * missing, and giving it a data source is a product decision — whether the app
+ * should ask a farm to date the winterising of each machine — not an audit fix.
+ * The builder stays (invariant 13: if something looks dead, ask, do not
+ * delete), and this comment stops claiming otherwise.
  */
 
 export interface DuesView {
