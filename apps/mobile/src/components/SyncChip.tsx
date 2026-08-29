@@ -5,7 +5,7 @@ import { apiFault } from '../boot/config';
 import { Touch } from './Touch';
 import { useNav } from '../hooks/useNav';
 import { useSync } from '../hooks/useSync';
-import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
+import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 
 /**
@@ -126,6 +126,24 @@ export function SyncChip(): React.ReactElement {
 const styles = StyleSheet.create({
   dot: { width: 8, height: 8, borderRadius: RADII.pill },
   chip: {
+    /**
+     * The chrome's height, declared rather than arrived at.
+     *
+     * It had none of its own: padding and the length of the label decided, so
+     * the one control that reports whether the farm's work is reaching the
+     * server changed size with what it happened to be saying — "Saved" and "2
+     * need a look" are not the same box.
+     *
+     * `TAP.min / 2` is what the rest of this row is (`Screen.tsx` `control`,
+     * `LampToggle`), and it is deliberately not `TAP.min`: the chip stands in
+     * the header beside them, so a 56 here would raise the row on every screen
+     * by the same 28dp that raising the others would. That height is spent
+     * elsewhere — see the note on the chrome in `tests/screens/tap-size.test.tsx`.
+     *
+     * So `hitSlop` stays, on the same terms as its neighbours. What this fixes
+     * is the chip having no stated size at all, not the size it settles on.
+     */
+    minHeight: TAP.min / 2,
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACE.xs + 2,

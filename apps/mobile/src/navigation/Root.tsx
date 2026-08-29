@@ -43,6 +43,7 @@ import { AccountScreen } from '../screens/AccountScreen';
 import { LicencesScreen } from '../screens/LicencesScreen';
 import { LogHoursScreen } from '../screens/LogHoursScreen';
 import { LossScreen } from '../screens/LossScreen';
+import { ProcessingScreen } from '../screens/ProcessingScreen';
 import { MachineScreen } from '../screens/MachineScreen';
 import { EditIncubationScreen } from '../screens/EditIncubationScreen';
 import { EditMachineScreen } from '../screens/EditMachineScreen';
@@ -182,6 +183,14 @@ export type RootParamList = {
   /** What a group *should* be fed, as distinct from what it was. */
   FeedPlan: { groupId: string };
   Loss: { groupId: string };
+  /**
+   * Taking a group for meat, which is what the grow-out clock counts down to.
+   *
+   * Its own route rather than a mode on `Loss`: the two record the same
+   * `mortality` and mean opposite things to the person filling them in, and one
+   * screen that had to read both ways would read as neither.
+   */
+  Processing: { groupId: string };
   Breeding: { groupId: string };
   Incubations: undefined;
   SetEggs: undefined;
@@ -286,6 +295,7 @@ export function Root({
       <Stack.Screen name="Feed" component={FeedScreen} />
       <Stack.Screen name="FeedPlan" component={FeedPlanScreen} />
       <Stack.Screen name="Loss" component={LossScreen} />
+      <Stack.Screen name="Processing" component={ProcessingScreen} />
       <Stack.Screen name="Breeding" component={BreedingScreen} />
       <Stack.Screen name="Incubations" component={IncubationsScreen} />
       <Stack.Screen name="SetEggs" component={SetEggsScreen} />

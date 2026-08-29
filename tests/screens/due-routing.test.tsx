@@ -55,12 +55,32 @@ beforeEach(async () => {
   navCalls().length = 0;
 });
 
-describe('a row that asks for a weight', () => {
+describe('a row that says the birds are ready', () => {
   /**
-   * "If the reminder is for weighing it should link to the weighing screen not
-   * the animal group main screen." Exactly so, and it did not.
+   * ## This asserted `Weigh`, and the reason it changed is the reason it was
+   * written
+   *
+   * The report behind this file was *"if the reminder is for weighing it
+   * should link to the weighing screen not the animal group main screen"*, and
+   * the fix routed the **processing** row to the scale. That was better than a
+   * hub and it was still the wrong destination, for a reason no assertion here
+   * could see: **weighing does not discharge a processing row.**
+   * `processingDue` clears on a cull (`lastCullByGroup`) and on nothing else.
+   * So the row led somewhere, the keeper weighed the birds, and the row was
+   * there again the next morning — which is the file header's own "a
+   * processing row that did nothing useful", surviving its own fix in a
+   * quieter form.
+   *
+   * The describe was headed "a row that asks for a weight". It does not. It
+   * asks whether the birds have been taken, and until `Processing` existed
+   * there was no screen that could answer it: the only way to write that cull
+   * was `LossScreen`, headed "Record a loss", with a negative stepper and a
+   * button reading "Record 25 lost".
+   *
+   * So the rule this file states is unchanged — a row leads to the act that
+   * answers it — and the instance is corrected now that the act exists.
    */
-  it('opens the scale rather than the group', async () => {
+  it('opens the screen that ends it, not the scale', async () => {
     const group = newId();
     await aGroup(group, {
       name: 'Roasters',
@@ -73,7 +93,7 @@ describe('a row that asks for a weight', () => {
     const screen = await mount(<TodayScreen />);
     await screen.press(`due-${group}:processing`);
 
-    expect(wentTo()?.route).toBe('Weigh');
+    expect(wentTo()?.route).toBe('Processing');
     expect(wentTo()?.params).toEqual({ groupId: group });
   });
 });

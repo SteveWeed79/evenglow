@@ -342,6 +342,22 @@ export function GroupBody({ group }: { group: Group }): React.ReactElement {
               onPress={() => nav.navigate('Shearing', { groupId })}
             />
           ) : null}
+          {/* Only where the keeper said meat, on exactly the clip's rule and
+              for the grow-out clock's reason: a processing row on a flock of
+              pet bantams is not a helpful default, it is an offensive one.
+
+              Reachable here as well as from the due row, because a farm that
+              takes a few birds early — or one whose breed the library does not
+              know, so there is no countdown at all — still needs to record it.
+              The due is a reminder, not the only door. */}
+          {(group.purposes ?? []).includes('meat') ? (
+            <Row
+              title="Take them for meat"
+              detail="Records what came off, and clears the processing reminder"
+              testID="go-processing"
+              onPress={() => nav.navigate('Processing', { groupId })}
+            />
+          ) : null}
           <Row
             title="Named animals"
             testID="go-animals"
