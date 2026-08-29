@@ -7,8 +7,18 @@ import { speciesSchema } from './livestock';
 
 export const TASK_RECURRENCES = ['none', 'daily', 'weekly', 'monthly'] as const;
 
+/**
+ * The longest a job's title may be, named because something has to compose one.
+ *
+ * `ServiceDoneScreen` builds a job out of a failed check and the machine it was
+ * found on. Both halves are bounded — a check is 80 and a machine name is 80 —
+ * and 80 + 80 is not 120, so the composition could refuse where neither part
+ * would. See `jobTitle` below.
+ */
+export const TASK_TITLE_MAX = 120;
+
 const taskShape = {
-  title: z.string().min(1).max(120),
+  title: z.string().min(1).max(TASK_TITLE_MAX),
   dueAtDate: z.number().int().optional(),
   recurrence: z.enum(TASK_RECURRENCES).default('none'),
   completedAt: z.number().int().optional(),
@@ -19,6 +29,51 @@ const taskShape = {
 
 export const taskCreateSchema = z.object(taskShape).strict();
 export const taskUpdateSchema = updateSchemaOf(taskShape);
+
+/**
+ * A job title out of a finding and what it was found on.
+ *
+ * ## Why this is here and not on the screen that says it
+ *
+ * `ServiceDoneScreen` wrote `` `${line} — ${machine.name}` `` inline. A check
+ * is up to 80 characters and a machine name up to 80, so the result reaches 163
+ * against a cap of 120 — and the refusal landed **after the
+ * `serviceCompletion` was already durable**, because the screen enqueued them
+ * one at a time. The farm saw the save fail, pressed again, and wrote a second
+ * completion; the job it had actually noticed was never raised either time.
+ *
+ * The queue fixed its half of that (`enqueueAll`, all or none). This is the
+ * other half: a title that cannot be refused. It lives beside the cap so the
+ * two cannot drift, which is the whole reason `TASK_TITLE_MAX` is named.
+ *
+ * ## What it gives up when it has to
+ *
+ * The finding comes first and the context is trimmed, in that order, because
+ * that is the order they matter in: "hydraulic hose weeping" is the thing a
+ * keeper has to act on, and which tractor it was is also carried exactly by the
+ * task's `subjectId` and said again in its note. Losing the tail of the name
+ * costs a word on a list; losing the row costs the repair.
+ *
+ * ## Counted the way the cap counts
+ *
+ * `z.string().max()` measures `.length`, which is UTF-16 code units — so the
+ * trim has to be in the same units or a title of 120 emoji-bearing characters
+ * is 121 units and refused anyway, which is the whole failure again. Cutting by
+ * code unit can land between the halves of a surrogate pair, so the lead half
+ * is dropped when it does: a lone surrogate survives neither JSON nor a screen.
+ */
+export function jobTitle(finding: string, context: string): string {
+  const whole = `${finding} — ${context}`;
+  if (whole.length <= TASK_TITLE_MAX) return whole;
+
+  // The finding on its own is already within the cap — a check is bounded at
+  // 80 — so this can only ever be trimming the context.
+  let cut = whole.slice(0, TASK_TITLE_MAX - 1);
+  const last = cut.charCodeAt(cut.length - 1);
+  if (last >= 0xd800 && last <= 0xdbff) cut = cut.slice(0, -1);
+
+  return `${cut}…`;
+}
 
 // ── photo (mutable) ──────────────────────────────────────────────────────────
 

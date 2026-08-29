@@ -1,6 +1,6 @@
 import { useCallback, useSyncExternalStore } from 'react';
 import { nudge, subscribe, type SyncState } from '@homefarm/core/sync/engine';
-import { type EnqueueInput, enqueue } from '@homefarm/core/sync/queue';
+import { type EnqueueInput, enqueue, enqueueAll } from '@homefarm/core/sync/queue';
 
 /**
  * The engine's state, and the write path.
@@ -41,6 +41,27 @@ export function useSync(): SyncState {
 export function useLog(): (input: EnqueueInput) => Promise<void> {
   return useCallback(async (input: EnqueueInput) => {
     await enqueue(input);
+    nudge();
+  }, []);
+}
+
+/**
+ * Several mutations as one thing somebody did.
+ *
+ * `useLog` in a loop is not this, and the difference is the split state:
+ * `enqueueAll` validates every payload before it stores any, so a refusal on
+ * the third leaves the first two unwritten. Called one at a time, the first two
+ * are already durable and only the third is refused — and what the person sees
+ * is a failure, so they press again and write the first two a second time.
+ *
+ * `ServiceDoneScreen` is the case that found it: a service marked done, plus a
+ * job for each check that was not right. See `queue.ts` for the whole argument,
+ * and `backup/restore.ts` for the other caller.
+ */
+export function useLogAll(): (inputs: readonly EnqueueInput[]) => Promise<void> {
+  return useCallback(async (inputs: readonly EnqueueInput[]) => {
+    if (inputs.length === 0) return;
+    await enqueueAll(inputs);
     nudge();
   }, []);
 }
