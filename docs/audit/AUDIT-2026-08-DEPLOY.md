@@ -243,10 +243,49 @@ setting is read after the source, by index.*
 - **D17** The archive's content is never verified — only that it exceeds 4096
   bytes, a constant with no relation to the source. A farm database with photos
   is hundreds of megabytes; a 5 KB archive passes, uploads, and moves the marker.
+
+  *Fixed at both ends. The floor is now derived from the source — `db.stats()`
+  says what this database holds, and gzip on BSON does well but not fiftyfold, so
+  an archive under a fiftieth of it is not a copy of it. Deliberately loose: this
+  guards against a collapse, not against a compression model, and a false alarm
+  here fails a backup that was fine. The 4096 constant stays as an independent
+  lower bound rather than as the check.*
+
+  *And the archive is read back before it is uploaded. `mongorestore --dryRun`
+  walks the whole file and reports what it would restore without writing, so a
+  truncated dump — what a killed `mongodump` leaves — is caught here rather than
+  on the day somebody needs it. Guarded on the flag existing, because the tools
+  come from a distribution package this project does not pin and a verification
+  that fails a good backup is worse than one that is skipped and says so.*
+
+  ***This and D18 made each other invisible.** The likeliest way to produce a
+  five-kilobyte archive was a correct dump of the wrong, empty database.*
 - **D18** The backup dumps whatever database the **URI path** names, while the
   rest of the codebase treats that path as cosmetic and selects on `MONGODB_DB`.
   After a `--keep-db` rename, or on any box where the two disagree, it backs up
   the wrong database and reports success.
+
+  *Fixed. The name is resolved exactly as `databaseName()` resolves it, the path
+  is stripped out of the URI so `--db` is the only thing naming a database, and
+  the success line says which one it took. Asserted **against `databaseName()`
+  itself** rather than against a restatement of its rule, so a change to the
+  API's fallback fails the backup's test.*
+
+  *When the two disagree it says so on the way past, because the operator almost
+  certainly believes the URI is the one that counts. It is not — here or in the
+  API — and `backup.env` being a separate file from `api.env` is what makes them
+  drift: two halves edited at different times by different steps.*
+
+  ***The restore path had the mirror of this and is documented rather than
+  changed.** `mongorestore --archive` restores each namespace under the name it
+  was dumped as, so pointing the URI at a differently-named target does not move
+  it. Renaming on restore is `--nsFrom`/`--nsTo` and is a deliberate act with its
+  own arguments; guessing at it inside the one path that runs after a farm has
+  already lost data is the wrong place to be clever. It now says where the
+  records will land and how to put them elsewhere.*
+
+  *`homefarm-backup.service` documents `MONGODB_DB` beside `MONGODB_URI`, which
+  it did not.*
 - **D19** Both identity checks on a published APK sit inside
   `if command -v unzip`, and nothing installs `unzip`. Without it, any zip named
   `.apk` is published as the farm's app — the exact failure the file says was
