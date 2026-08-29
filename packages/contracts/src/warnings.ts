@@ -1,6 +1,6 @@
 import { SPECIES_TRAITS, type Species } from './entities/livestock';
 import { deciCToFahrenheit } from './units';
-import { type Forecast, type ForecastDay, dayStart } from './weather';
+import { type Forecast, type ForecastDay, dayAfter, dayStart } from './weather';
 
 /**
  * What the forecast means for THIS farm.
@@ -331,9 +331,11 @@ export function warningsFor(
   if (weather === null || weather.stale) return [];
 
   const today = dayStart(now);
-  const days = weather.forecast.days.filter(
-    (day) => day.day >= today && day.day <= today + DAY_MS,
-  );
+  // Today and tomorrow, by the calendar. `today + DAY_MS` lands an hour short
+  // of tomorrow's key on the fall-back night and dropped every warning this
+  // function has for it — see `dayAfter`.
+  const tomorrow = dayAfter(today);
+  const days = weather.forecast.days.filter((day) => day.day >= today && day.day <= tomorrow);
 
   const drafts = days.flatMap((day) => [
     ...frostWarnings(day, farm),
