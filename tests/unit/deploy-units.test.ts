@@ -173,3 +173,56 @@ describe('deploy.sh can be pointed at the checkout it actually lives in', () => 
     expect(executable(read('deploy.sh'))).toContain('BASH_SOURCE');
   });
 });
+
+/**
+ * The account, on a re-run against a different database.
+ *
+ * `setup-mongo.sh` decides whether to create the application account by
+ * counting users named `homefarm` — and the roles that account holds are
+ * granted **per database**, at creation. So a re-run with a different
+ * `MONGODB_DB` took the "already exists" branch, said so, and left the account
+ * with `readWrite` on the old database only.
+ *
+ * What that produces is not a box that fails to start. The API connects,
+ * authenticates against `admin` perfectly well, and then every query comes back
+ * `not authorized on <db>` — a box that provisioned cleanly, reported success,
+ * and cannot read or write one record.
+ *
+ * Asserted against the source, like everything else in this file: the failure
+ * needs a live mongod, a first run, and a second run with a changed name.
+ */
+describe('setup-mongo.sh on a box whose database name has changed', () => {
+  const source = executable(read('setup-mongo.sh'));
+
+  it('asks whether the account can reach THIS database, not only whether it exists', () => {
+    // The existence check is what was there; on its own it is the defect.
+    expect(source).toContain('countDocuments({user:"homefarm"})');
+    // And the second question, which decides the branch that was missing.
+    expect(source).toContain("r.db === '${DB_NAME}'");
+  });
+
+  it('grants the roles when it holds none there', () => {
+    expect(source).toContain('grantRolesToUser');
+    expect(source).toContain("{ role: 'readWrite', db: '${DB_NAME}' }");
+    expect(source).toContain("{ role: 'dbAdmin',   db: '${DB_NAME}' }");
+  });
+
+  /**
+   * Inside the auth-disabled window, which is the only place the command is
+   * permitted — and before the window is closed and verified, so a grant that
+   * fails cannot leave authorization off.
+   */
+  it('grants inside the window the trap protects', () => {
+    const opened = source.indexOf('AUTH_WINDOW_OPEN=1');
+    const granted = source.indexOf('grantRolesToUser');
+    // The LAST one: the flag is initialised to 0 at the top so the trap can be
+    // armed before the window opens, and it is the closing assignment that has
+    // to come after the grant.
+    const closed = source.lastIndexOf('AUTH_WINDOW_OPEN=0');
+
+    expect(opened).toBeGreaterThan(0);
+    expect(granted).toBeGreaterThan(opened);
+    expect(closed).toBeGreaterThan(granted);
+  });
+});
+
