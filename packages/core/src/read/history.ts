@@ -6,6 +6,7 @@ import {
   type Entity,
   feedLogCreateSchema,
   formatMass,
+  isAppendOnly,
   formatProduce,
   gramsToUg,
   harvestCreateSchema,
@@ -80,6 +81,29 @@ export interface HistoryEvent {
   id: string;
   /** Typed, not a loose string — the screen enqueues a mutation against it. */
   entity: Entity;
+  /**
+   * Whether "take this back out" means what it says on this row.
+   *
+   * **`id` is not always a record of the row's own.** Most builders here read an
+   * append-only log, so the row and the record are the same thing and a delete
+   * removes exactly what is described. Three do not: `task`, `maintenance` and
+   * `incubation` build a row out of a *field* on a mutable record — a
+   * `completedAt`, a `lastDoneAtDate`, a `hatchedAt` — and `id` is then the
+   * parent record's own id.
+   *
+   * For two of those a delete is catastrophic and silent. `Timeline` offered
+   * one on the premise that *"every entity a history row can be built from is
+   * append-only"*, so one tap on a service row archived **the whole recurring
+   * oil-change schedule** rather than the service it named. The `incubation`
+   * builder had already written the reason down — *"a `maintenance` row is one
+   * service and archiving it takes the whole recurring schedule"* — while
+   * explaining why its own case was the exception.
+   *
+   * So the screen is told rather than left to infer. Decided in `eventsFrom`
+   * from the entity, not per builder: thirteen builders is thirteen chances to
+   * forget, and the one that forgot would be the one that archived something.
+   */
+  removable: boolean;
   /** When the farm says it happened. */
   at: number;
   /**
@@ -140,12 +164,33 @@ function startOfDay(at: number): number {
  * a newer build, a payload half-migrated — must not blank the whole history.
  * The alternative is one bad row costing a farm every other row it has.
  */
+/**
+ * The one mutable entity whose history row IS its own record.
+ *
+ * A set of eggs and its hatch are the same thing — one set, one hatch — so
+ * taking the row back out removes precisely what it describes. `task` and
+ * `maintenance` are not: their rows are one completion of something that
+ * recurs, and deleting the parent takes the schedule with it.
+ *
+ * A list rather than a flag each builder sets, so a builder added later is
+ * **not removable until somebody says why it should be**. That is the safe
+ * direction: forgetting to opt in costs a button, forgetting to opt out costs
+ * a farm its oil-change schedule.
+ */
+const REMOVABLE_MUTABLE: readonly Entity[] = ['incubation'];
+
 async function eventsFrom<T>(
   entity: Entity,
   schema: z.ZodType<T>,
-  build: (value: T, id: string) => HistoryEvent | null,
+  /**
+   * `Omit<…, 'removable'>` deliberately: a builder **cannot** set it, so the
+   * decision has exactly one home and a new builder cannot get it wrong by
+   * copying a neighbour that had it right for a different reason.
+   */
+  build: (value: T, id: string) => Omit<HistoryEvent, 'removable'> | null,
 ): Promise<HistoryEvent[]> {
   const records = await localStore().readRecordsByEntity(entity);
+  const removable = isAppendOnly(entity) || REMOVABLE_MUTABLE.includes(entity);
 
   return records
     .filter((record) => !record.deleted)
@@ -153,7 +198,7 @@ async function eventsFrom<T>(
       const parsed = schema.safeParse(record.value);
       if (!parsed.success) return [];
       const event = build(parsed.data, record.targetId);
-      return event === null ? [] : [event];
+      return event === null ? [] : [{ ...event, removable }];
     });
 }
 
