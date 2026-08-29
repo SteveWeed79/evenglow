@@ -291,6 +291,24 @@ setting is read after the source, by index.*
   of which `setup-box.sh` says it cannot reach. `ops.ts` gets this right with
   `OPS_HOST ?? '127.0.0.1'`; the API has no equivalent knob.
 
+  *Fixed with the knob `ops.ts` already had: `API_HOST ?? '127.0.0.1'`, same
+  default and same sentence, so it is one rule rather than two decisions.
+  `API_HOST=0.0.0.0` is there for a container, where loopback is the container's
+  own and a published port would otherwise reach nothing.*
+
+  ***This changes what an existing box is reachable on**, and it is worth saying
+  plainly: anything talking to `:3001` directly rather than through Caddy stops
+  working. On the deployment this repository builds, nothing does — Caddy
+  reverse-proxies to `127.0.0.1:3001` on the same machine, and `deploy.sh` probes
+  the same loopback address.*
+
+  ***`ops.ts`'s own comment was the clearest statement of the defect** and is
+  corrected with it. It justified its loopback default by contrast with an API
+  that *"listens on `0.0.0.0` because it must be reachable"* — a premise that was
+  never true here. What binding every interface actually bought was a second door
+  past Caddy, past TLS, and past whatever the proxy does about headers and rate
+  limits.*
+
 ### Backup and release
 
 - **D17** The archive's content is never verified — only that it exceeds 4096
