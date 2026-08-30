@@ -4,7 +4,7 @@
     "slug": "homefarm",
     "owner": "swbuilds-team",
     "scheme": "homefarm",
-    "version": "0.3.13",
+    "version": "0.3.14",
     "orientation": "default",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon/homefarm.png",
