@@ -128,6 +128,35 @@ describe('R7 — secondary prose is quieter and still AAA', () => {
   });
 });
 
+/**
+ * A card has an edge of its own.
+ *
+ * Not a WCAG rule — the 3:1 floor below is for a boundary that carries
+ * meaning, and the hairline border is what carries this one. This is the
+ * *surface* against the wall behind it, and it went unmeasured because nothing
+ * requires it: daylight shipped at 1.09:1, lamplight at 1.13, and **bright sun
+ * at 1.018** — white paper on off-white paper, in the theme that exists for
+ * reading a screen in a field at noon. Six cards on a hub read as one field,
+ * reported off the tablet exactly that way.
+ *
+ * The floor is picked rather than derived, and the reasoning is worth stating:
+ * there is no standard to inherit here, the three themes now sit between 1.18
+ * and 1.22, and a number under what shipped is a guard rather than a
+ * restatement. What it forbids is the case that was actually wrong — a surface
+ * separated from its ground by nothing but a border.
+ *
+ * Which surface moves is per theme and is not arbitrary. Every ink is measured
+ * at its worst against the *lighter* of the two grounds, so on a dark theme
+ * the free direction is down (deepen the wall) and on a light one it is up
+ * (lift the card). Moving the other one instead spends contrast the quiet
+ * tiers do not have — daylight's `muted` clears AA by 0.32.
+ */
+describe('a card can be told from the wall', () => {
+  it.each(themes)('%s separates its surfaces', (_name, theme) => {
+    expect(contrast(theme.ground, theme.raised)).toBeGreaterThanOrEqual(1.15);
+  });
+});
+
 describe('labels clear AA, which is what a label needs', () => {
   /**
    * `muted` is deliberately below 7:1 — it is the quiet token and quietness is
