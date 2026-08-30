@@ -1,22 +1,23 @@
-import { StyleSheet, Text, View } from 'react-native';
-import { Arch } from './Arch';
+import { StyleSheet, Text } from 'react-native';
+import { Surface } from './Surface';
 import { Touch, type TouchProps } from './Touch';
 import { Worn } from './Worn';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, LIFT, RADII, SPACE, TYPE } from '../theme/tokens';
 
 /**
- * A surface on the wall, in two shapes — and which one is not decoration.
+ * A surface on the wall — one shape now, where there were two.
  *
- * **The arch is load-bearing: arch = something you can act on.** A panel that
- * only tells you something wears no door. So `<Panel>` is a plain card and
- * `<ArchPanel>` is the doorway, and a screen that mixes them up has said
- * something untrue about what its contents do.
+ * **The arch used to be load-bearing: arch = something you can act on**, and a
+ * panel that only told you something wore no door. The farmer removed the
+ * motif, so that distinction is gone from the paint: `<Panel>` and `<Card>`
+ * are the same rounded rectangle and only pressability separates them.
  *
- * The arch could not survive as a style. `--arch` is two radii per corner —
- * half the width across, a fixed 32 down — and RN's `borderRadius` is circular
- * only with no second value. So it is drawn: `<Arch>` measures itself and
- * paints one path behind its children.
+ * What carries the difference now is `<Touch>`, which `<Card>` wraps and
+ * `<Panel>` does not — the chevron, the press state and the button role. That
+ * was always the literal affordance; the arch was a second, silent copy of it,
+ * and losing it costs the across-the-room recognition UX-SPEC §2 wanted rather
+ * than any information about what a card does.
  */
 
 export function Panel({
@@ -29,50 +30,62 @@ export function Panel({
   const { colors } = useTheme();
 
   return (
-    <View
-      style={[styles.panel, LIFT, { backgroundColor: colors.raised, borderColor: colors.border }]}
-    >
-      {/* The lit top edge and shaded bottom one. Was an inset box-shadow,
-          which RN does not have — see Worn.tsx. */}
-      <Worn radius={RADII.softHead} />
-      {label ? <Text style={[styles.label, { color: colors.muted }]}>{label}</Text> : null}
-      {children}
-    </View>
-  );
-}
-
-/**
- * The doorway. For anything the farmer acts on.
- *
- * Padding goes on the content, not on `<Arch>` — it reports nothing about
- * layout, it only paints. And no `<Worn>` inside it: the top edge is a curve
- * here, and a straight hairline across it would cut the head off. An arch that
- * wants a lit edge takes the `stroke` prop instead.
- */
-export function ArchPanel({
-  children,
-  spring,
-}: {
-  children: React.ReactNode;
-  spring?: number;
-}): React.ReactElement {
-  const { colors } = useTheme();
-
-  return (
-    <Arch
+    <Surface
       fill={colors.raised}
       stroke={colors.border}
       strokeWidth={colors.borderWidth}
-      {...(spring === undefined ? {} : { spring })}
-      style={[styles.arch, LIFT]}
+      glow={colors.glow}
+      style={[styles.panel, LIFT]}
     >
+      {/* The lit top edge and shaded bottom one. Was an inset box-shadow,
+          which RN does not have — see Worn.tsx. Kept: it is a hairline at the
+          very edge and the glow is a wash below it, so they stack rather than
+          fight. */}
+      <Worn radius={RADII.softHead} />
+      {label ? <Text style={[styles.label, { color: colors.muted }]}>{label}</Text> : null}
       {children}
-    </Arch>
+    </Surface>
   );
 }
 
 /**
- * The doorway with a hand on it: an `<ArchPanel>` you can press.
+ * @deprecated The arch is gone; this is `<Panel>` under its old name.
+ *
+ * Kept rather than deleted because removing a name is not what was asked for,
+ * and an alias costs one line. It has no call sites — it never had any, which
+ * is the defect `motif.test.tsx` was written about — so the rename can happen
+ * whenever without touching a screen.
+ */
+export const ArchPanel = Panel;
+
+/**
+ * A `<Panel>` you can press.
+ *
+ * ## What the motif was, and why removing it costs less than it looks
+ *
+ * The section below is kept because it records why the arch was spread across
+ * every card in the first place — it had shipped on the Tally alone, read as an
+ * oddity, and was reported off the tablet as *the arch cards feeling out of
+ * place*. Widening it was the fix for that, and it worked: they stopped looking
+ * out of place and started looking like a bay window on a wide card, because
+ * the head is `w / 2` across and 32 down, so at card width the ellipse is 500
+ * by 32 — a warped top edge rather than a doorway.
+ *
+ * That is the whole argument against it, and it is a scaling problem rather
+ * than a taste one: the motif reads at chip and button width and dissolves
+ * everywhere else. The farmer's call was to remove it and put the lamp glow on
+ * every card instead, which keeps the light that made a card feel lit and drops
+ * the silhouette that only worked narrow.
+ *
+ * ## The head is gone, so the padding that cleared it is too
+ *
+ * A first line of text used to start below `SPACE.xl` because the head was 32
+ * deep at the jambs and a line at the left padding met the curve halfway down.
+ * With a flat top edge there is nothing to clear, so this is `SPACE.lg` like
+ * every other surface — which makes every card in the app shorter by the
+ * difference, and is the one change here that is not about colour.
+ *
+ * ## The original note on the motif, kept
  *
  * ## Why the motif was spending nothing
  *
@@ -88,24 +101,14 @@ export function ArchPanel({
  * motif — reported off the tablet as the arch cards feeling out of place,
  * which they did, because there was one of them.
  *
- * ## The head is painted, so the content has to clear it
- *
- * `<Arch>` reports nothing about layout; it measures itself and paints behind
- * whatever it is given. The head is `ARCH.spring` deep **at the jambs** and
- * nothing at the centre, so a first line of text starting at the left padding
- * meets the curve about halfway down it. `SPACE.xl` of top padding clears that
- * with room, which is what makes a card sit *inside* its doorway rather than
- * under it — and it is why an arched card is taller than the rectangle it
- * replaces.
- *
  * ## Pressable outside, painted inside
  *
- * `Touch` wraps rather than nests inside, so the whole door is the tap target
+ * `Touch` wraps rather than nests inside, so the whole card is the tap target
  * and the grid's stretched cell is what it grows into (`flexGrow`, see
- * `Grid`). The arch fills that with `flex: 1`, which is what keeps the painted
- * face the same height as the card beside it.
+ * `Grid`). The surface fills that with `flex: 1`, which is what keeps the
+ * painted face the same height as the card beside it.
  */
-export function ArchCard({
+export function Card({
   onPress,
   affordance = 'chevron',
   testID,
@@ -130,17 +133,21 @@ export function ArchCard({
       // Fills the cell `<Grid>` already stretched — see `Grid`.
       style={({ pressed }) => [styles.door, { opacity: pressed ? 0.8 : 1 }]}
     >
-      <Arch
+      <Surface
         fill={colors.raised}
         stroke={colors.border}
         strokeWidth={colors.borderWidth}
+        glow={colors.glow}
         style={styles.doorFace}
       >
         {children}
-      </Arch>
+      </Surface>
     </Touch>
   );
 }
+
+/** @deprecated The arch is gone; this is `<Card>` under its old name. */
+export const ArchCard = Card;
 
 export function Body({ children }: { children: React.ReactNode }): React.ReactElement {
   const { colors } = useTheme();
@@ -148,35 +155,22 @@ export function Body({ children }: { children: React.ReactNode }): React.ReactEl
 }
 
 const styles = StyleSheet.create({
+  /**
+   * No border or background of its own — `<Surface>` paints both. The radius
+   * stays so children clip to the same corners the path draws, and `overflow`
+   * keeps `<Worn>`'s hairlines inside them.
+   */
   panel: {
     borderRadius: RADII.softHead,
-    borderWidth: StyleSheet.hairlineWidth,
     padding: SPACE.lg,
     gap: SPACE.sm,
     overflow: 'hidden',
   },
-  /**
-   * No paint of its own: the arch inside does that, and a background here
-   * would be a rectangle showing at the shoulders of the head.
-   */
   door: { flexGrow: 1 },
   doorFace: {
     flex: 1,
-    // Clears the head — see `ArchCard`. Everything else matches the rectangle
-    // this replaced, so only the top of a card moved.
-    paddingTop: SPACE.xl,
-    paddingHorizontal: SPACE.lg,
-    paddingBottom: SPACE.lg,
-    gap: SPACE.sm,
-  },
-  /**
-   * The head needs room the corners of a card do not. Top padding clears the
-   * spring so a first line of text sits inside the curve rather than under it.
-   */
-  arch: {
-    paddingTop: SPACE.xl + SPACE.md,
-    paddingHorizontal: SPACE.lg,
-    paddingBottom: SPACE.lg,
+    // Was `SPACE.xl` to clear the arched head. There is no head — see `Card`.
+    padding: SPACE.lg,
     gap: SPACE.sm,
   },
   label: {

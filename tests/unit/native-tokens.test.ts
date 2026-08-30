@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ARCH, FONTS, TAP, THEMES, TYPE, type ThemeName } from '@homefarm/mobile/theme/tokens';
-import { archPath } from '@homefarm/mobile/theme/arch';
+import { FONTS, SURFACE, TAP, THEMES, TYPE, type ThemeName } from '@homefarm/mobile/theme/tokens';
+import { cardPath } from '@homefarm/mobile/theme/surface';
 
 /**
  * The CSS-parsing checks, ported.
@@ -131,38 +131,51 @@ describe('type', () => {
   });
 });
 
-describe('the arch, drawn', () => {
+describe('the card face, drawn', () => {
   /**
-   * The whole reason `<Arch>` exists. `--arch` is half the width across and a
-   * fixed 32 down; RN's borderRadius is circular only, so at any width wider
-   * than it is tall a circular radius either domes the top or flattens it.
-   * These assert the ellipse survived the port.
+   * ## Why this is drawn at all
+   *
+   * A rounded rectangle is exactly what `borderRadius` expresses, so the SVG
+   * that `archPath` needed — two radii per corner, which RN cannot say — has no
+   * such excuse now. It stayed for the glow: a radial gradient clipped to the
+   * card, which RN has no styled form of, and which spills at the corners if it
+   * is a layer over the surface instead of inside it.
+   *
+   * So these assert the shape a style would have given, from a path.
    */
-  it('uses half the width as the horizontal radius', () => {
-    const d = archPath(200, 120, ARCH.spring, ARCH.foot);
-    // The head arc: A rx ry 0 0 1 <w> <ry>
-    expect(d).toContain(`A100 ${ARCH.spring} 0 0 1 200 ${ARCH.spring}`);
-  });
-
-  it('keeps the head shallow as the surface gets wider', () => {
-    // A circular radius would grow with the width. This must not.
-    const narrow = archPath(120, 120, ARCH.spring, ARCH.foot);
-    const wide = archPath(400, 120, ARCH.spring, ARCH.foot);
-    expect(narrow).toContain(`A60 ${ARCH.spring}`);
-    expect(wide).toContain(`A200 ${ARCH.spring}`);
+  it('uses the same radius on every corner', () => {
+    const d = cardPath(200, 120, SURFACE.radius);
+    const r = SURFACE.radius;
+    // Four corner arcs, one radius, no ellipse anywhere.
+    expect(d.match(new RegExp(`A${r} ${r} 0 0 1`, 'g'))).toHaveLength(4);
   });
 
   /**
-   * A chip is shorter than the spring. Without the clamp the head would be
-   * taller than the shape and the path would fold through itself.
+   * The defect the arch had, asserted from the other side. Its head was `w / 2`
+   * across, so it grew with the surface and dissolved into a flat bulge on a
+   * wide card — which is why it was removed. A corner must not do that.
    */
-  it('clamps the head so a short surface cannot invert', () => {
-    const d = archPath(200, 20, ARCH.spring, ARCH.foot);
-    expect(d).not.toContain('NaN');
-    expect(d).toContain('A100 12'); // 20 tall minus the 8 foot
+  it('keeps the corner the same as the surface gets wider', () => {
+    const narrow = cardPath(120, 120, SURFACE.radius);
+    const wide = cardPath(400, 120, SURFACE.radius);
+    const corner = `A${SURFACE.radius} ${SURFACE.radius}`;
+    expect(narrow).toContain(corner);
+    expect(wide).toContain(corner);
+  });
+
+  /**
+   * A chip can be shorter than twice the radius, and a surface is measured at
+   * zero on its first layout. Without the clamp the first draws a path folded
+   * through itself and the second an arc SVG renders as a blot.
+   */
+  it('clamps the radius so a short or unmeasured surface cannot invert', () => {
+    expect(cardPath(200, 16, SURFACE.radius)).toContain('A8 8');
+    const unmeasured = cardPath(0, 0, SURFACE.radius);
+    expect(unmeasured).not.toContain('NaN');
+    expect(unmeasured).not.toContain('-');
   });
 
   it('closes the path, so it fills rather than strokes an open curve', () => {
-    expect(archPath(200, 120, ARCH.spring, ARCH.foot).trimEnd().endsWith('Z')).toBe(true);
+    expect(cardPath(200, 120, SURFACE.radius).trimEnd().endsWith('Z')).toBe(true);
   });
 });

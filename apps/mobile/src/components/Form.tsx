@@ -3,7 +3,7 @@ import { Animated, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { reportTrouble } from '../hooks/useTrouble';
 import { describeLogFailure } from '@homefarm/core/sync/failure';
-import { Arch } from './Arch';
+import { Surface } from './Surface';
 import { Icon, type IconName } from './Icon';
 import { Body, Panel } from './Panel';
 import { useRevealOnFocus } from './reveal';
@@ -522,26 +522,26 @@ export function Primary({
       accessibilityState={{ disabled }}
       {...(testID === undefined ? {} : { testID })}
       // No paint of its own now: the arch inside is the button's face, and a
-      // background here would show as a rectangle at the head's shoulders.
+      // background here would show as a rectangle behind the painted face.
       style={({ pressed }) => [styles.primary, { opacity: disabled ? 0.4 : pressed ? 0.8 : 1 }]}
     >
       {/**
-        * The doorway, on the one control every screen ends with.
+        * The painted face, on the one control every screen ends with.
         *
-        * UX-SPEC §2 lists primary buttons among the things that are *"arched at
-        * the top and squared at the base"*, and this was `RADII.softHead` — so
-        * the motif that is supposed to make the app recognisable from across a
-        * room appeared on the Tally and nowhere else.
+        * This was an arch — UX-SPEC §2 listed primary buttons among the things
+        * *"arched at the top and squared at the base"* — and the motif has been
+        * removed for scaling badly across a card's width. A button is one of the
+        * two places it did read, being narrow, but a motif kept on the buttons
+        * alone is the same oddity the arch already was when it was on the Tally
+        * alone. So it goes with the rest.
         *
-        * A wide button takes the full spring without becoming a dome: the head
-        * is an ellipse `w / 2` across and `ARCH.spring` down, so at 300dp wide
-        * it is a shallow curve rather than the half-circle a narrow one would
-        * get. The label is centred, where the curve is at its highest, so it
-        * needs no padding it did not already have.
+        * **No glow here, unlike every card.** The face is `lantern`, a brass
+        * fill rather than a surface, and a light wash over it would only mute
+        * the one saturated thing on the screen. The glow lights what is quiet.
         */}
-      <Arch fill={colors.lantern} style={styles.primaryFace}>
+      <Surface fill={colors.lantern} style={styles.primaryFace}>
         <Text style={[styles.primaryLabel, { color: colors.lanternOn }]}>{label}</Text>
-      </Arch>
+      </Surface>
     </Touch>
   );
 }

@@ -3,7 +3,7 @@ import { Animated, StyleSheet, Text, useWindowDimensions, View } from 'react-nat
 import * as Haptics from 'expo-haptics';
 import { describeLogFailure } from '@homefarm/core/sync/failure';
 import { loggedConfirmation } from '@homefarm/core/voice';
-import { Arch } from './Arch';
+import { Surface } from './Surface';
 import { NumberField } from './Form';
 import { Touch } from './Touch';
 import { tallySize } from '../theme/tally';
@@ -177,7 +177,7 @@ export function Tally({
    * is brightest at 5am and faintest at noon without this knowing which.
    */
   return (
-    <Arch
+    <Surface
       fill={colors.raised}
       stroke={colors.border}
       strokeWidth={colors.borderWidth}
@@ -285,7 +285,7 @@ export function Tally({
       >
         {confirmation ?? ' '}
       </Animated.Text>
-    </Arch>
+    </Surface>
   );
 }
 

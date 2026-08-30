@@ -6,7 +6,7 @@ import { groupPhrase } from '@homefarm/core/voice';
 import { Primary } from '../components/Form';
 import { Grid } from '../components/Grid';
 import { Icon } from '../components/Icon';
-import { ArchCard, Body, Panel } from '../components/Panel';
+import { Card, Body, Panel } from '../components/Panel';
 import { PaneTitle, Screen } from '../components/Screen';
 import { growOutWindow, layOnsetWindow } from '../hooks/useDues';
 import { useGroups } from '../hooks/useGroups';
@@ -116,7 +116,7 @@ function GroupCard({ group, onPress }: { group: Group; onPress: () => void }): R
   const breed = group.breedId === undefined ? undefined : libraryBreed(group.breedId);
 
   return (
-    <ArchCard onPress={onPress} testID={`group-${group.id}`}>
+    <Card onPress={onPress} testID={`group-${group.id}`}>
       <View style={styles.head}>
         <View style={styles.name}>
           <Text style={[styles.groupName, { color: colors.ink }]}>{group.name}</Text>
@@ -174,7 +174,7 @@ function GroupCard({ group, onPress }: { group: Group; onPress: () => void }): R
       <View style={styles.more}>
         <Icon name="forward" size={20} color={colors.lanternInk} />
       </View>
-    </ArchCard>
+    </Card>
   );
 }
 
