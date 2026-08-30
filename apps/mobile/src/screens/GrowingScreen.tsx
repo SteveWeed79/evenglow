@@ -4,7 +4,7 @@ import { type Bed, occupants, type Planting } from '@homefarm/core/read/growing'
 import { listVarieties } from '@homefarm/core/read/growing';
 import { Primary } from '../components/Form';
 import { Grid } from '../components/Grid';
-import { Arch } from '../components/Arch';
+import { Surface } from '../components/Surface';
 import { Icon } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
@@ -126,15 +126,16 @@ function BedCard({
   const { colors } = useTheme();
 
   /*
-   * An arch rather than a rectangle, because a bed is somewhere you go — see
-   * `ArchCard`. Not an `<ArchCard>` itself: the whole card is not one button,
-   * the heading inside it is.
+   * Lit like every other card, because a bed is somewhere you go — see `Card`.
+   * Not a `<Card>` itself: the whole card is not one button, the heading inside
+   * it is, so this paints the face and lets `<Touch>` sit within it.
    */
   return (
-    <Arch
+    <Surface
       fill={colors.raised}
       stroke={colors.border}
       strokeWidth={colors.borderWidth}
+      glow={colors.glow}
       style={styles.card}
     >
       {/* The heading opens the bed itself, which is where what grew here
@@ -205,7 +206,7 @@ function BedCard({
       >
         <Text style={[styles.plantLabel, { color: colors.ink }]}>Plant something here</Text>
       </Touch>
-    </Arch>
+    </Surface>
   );
 }
 
@@ -244,7 +245,7 @@ const styles = StyleSheet.create({
   card: {
     // Fills the cell its `<Grid>` wrapper already stretched — see `Grid`.
     flexGrow: 1,
-    // Top padding clears the head; the rest is the rectangle's. See `ArchCard`.
+    // Top padding clears the head; the rest is the rectangle's. See `Card`.
     paddingTop: SPACE.xl,
     paddingHorizontal: SPACE.lg,
     paddingBottom: SPACE.lg,

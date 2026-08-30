@@ -14,12 +14,16 @@
  *
  * ## What could not survive the port, and what replaced it
  *
- * **The arch.** `--arch` is an *elliptical* radius — half the width across, a
- * fixed 32 down — and RN's `borderRadius` is circular only with no second
- * value. At any width wider than it is tall a circular radius either domes the
- * whole top or flattens into a rounded rectangle, and both were rejected on
- * the web for the same reason. So the motif is drawn: see `components/Arch.tsx`.
- * `ARCH` below is its geometry, not a style.
+ * **The arch, and then the arch itself.** `--arch` was an *elliptical* radius —
+ * half the width across, a fixed 32 down — which RN's circular-only
+ * `borderRadius` cannot express, so the motif was drawn rather than styled.
+ * The motif has since been removed: it grew with the surface, so a wide card
+ * got a 500-by-32 head that read as a warped top edge rather than a doorway.
+ *
+ * The drawing survived it. `components/Surface.tsx` paints a rounded rectangle
+ * a style could have given, because the lamp glow is a radial gradient clipped
+ * to the card and RN has no styled form of one. `SURFACE` below is that
+ * geometry, not a style.
  *
  * **`color-mix()`.** Resolved to literals, each commented with its expression.
  *
@@ -416,19 +420,25 @@ export const LAYOUT = {
 } as const;
 
 /**
- * The arch's geometry — used by `<Arch>`, which draws it. NOT a border radius.
+ * The card face's geometry — used by `<Surface>`, which draws it.
  *
- * `spring` is the vertical radius of the head; the horizontal radius is always
- * half the width, which is what makes it elliptical and what RN cannot express.
+ * `radius` matches `RADII.softHead` deliberately: with the arch gone every
+ * surface in the app is the same rounded rectangle, and a painted card sitting
+ * beside a styled one at a different radius is the seam this removes.
+ *
+ * `glowHead` is how far down the face the lamp reaches, not a radius. It was
+ * the arch's `spring` — the depth of the head the light came through — and it
+ * keeps that value because the light kept its size when the curve went.
  */
-export const ARCH = { spring: 32, foot: 8 } as const;
+export const SURFACE = { radius: 12, glowHead: 32 } as const;
 
 export const RADII = {
-  /** Chips and pills — things that were never arches. */
+  /** Chips and pills. */
   pill: 999,
   /**
-   * For surfaces that were never arches. This is NOT a stand-in for the motif;
-   * anything that should read as a doorway uses `<Arch>`.
+   * Every surface that is styled rather than painted. `<Surface>` draws the
+   * same radius from `SURFACE.radius`; these two are one shape in two places
+   * because a gradient cannot be styled and a hairline need not be drawn.
    */
   softHead: 12,
 } as const;

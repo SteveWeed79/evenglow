@@ -4,7 +4,7 @@ import { listInventory, listMachines, type Machine, runningLow } from '@homefarm
 import { Primary, Row } from '../components/Form';
 import { Grid } from '../components/Grid';
 import { Icon } from '../components/Icon';
-import { ArchCard, Body, Panel } from '../components/Panel';
+import { Card, Body, Panel } from '../components/Panel';
 import { PaneTitle, Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
 import { useTheme } from '../theme/ThemeProvider';
@@ -128,7 +128,7 @@ function MachineCard({
   const description = [machine.make, machine.model].filter(Boolean).join(' ');
 
   return (
-    <ArchCard onPress={onPress} testID={`machine-${machine.id}`}>
+    <Card onPress={onPress} testID={`machine-${machine.id}`}>
       <View style={styles.head}>
         <View style={styles.name}>
           <Text style={[styles.machineName, { color: colors.ink }]}>{machine.name}</Text>
@@ -180,7 +180,7 @@ function MachineCard({
       <View style={styles.more}>
         <Icon name="forward" size={20} color={colors.lanternInk} />
       </View>
-    </ArchCard>
+    </Card>
   );
 }
 

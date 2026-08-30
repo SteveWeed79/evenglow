@@ -25,10 +25,11 @@ import { useTheme } from '../theme/ThemeProvider';
  *
  * ## Where this cannot go
  *
- * Only on rectangles. Inside an `<Arch>` the top edge is a curve, and a
+ * Every surface is a rectangle now, so the old restriction is gone: this used
+ * to be excluded from an `<Arch>`, where the top edge was a curve and a
  * straight hairline across it would cut the head off. An arch that wants a lit
  * edge gets it from a second stroked path, not from this — see the `stroke`
- * prop on `<Arch>`.
+ * prop on `<Surface>`.
  */
 export function Worn({ radius = 0 }: { radius?: number }): React.ReactElement {
   const { colors } = useTheme();
