@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { THEMES, type Theme, type ThemeName } from '@homefarm/mobile/theme/tokens';
+import { SPACE, SURFACE, THEMES, type Theme, type ThemeName } from '@homefarm/mobile/theme/tokens';
 
 /**
  * R7, which has had a "Test" column saying *contrast check in CI* since the
@@ -151,6 +151,112 @@ describe('R7 — secondary prose is quieter and still AAA', () => {
  * (lift the card). Moving the other one instead spends contrast the quiet
  * tiers do not have — daylight's `muted` clears AA by 0.32.
  */
+/**
+ * The glow, composited — the case every other test in this file is blind to.
+ *
+ * ## What went wrong, and why nothing caught it
+ *
+ * Every check above measures a flat token against a flat surface. The lamp glow
+ * is neither: it is a semi-transparent brass gradient painted *over* `raised`,
+ * so the colour a label actually sits on is a composite that appears nowhere in
+ * the palette. When the glow went from the Tally alone onto every card, a
+ * `muted` label at `SPACE.lg` landed on 2.73:1 against its 4.5 floor and `ink`
+ * on 7.11 against 7 — and the suite stayed green, because the tokens it was
+ * comparing had not moved.
+ *
+ * The fix was geometry: the light is centred on the top edge and fades to
+ * nothing before the content starts. So what has to be asserted is not an
+ * opacity but a **clearance** — that at the y where the first line begins,
+ * there is no glow left to darken it.
+ *
+ * ## Why the falloff is modelled rather than rendered
+ *
+ * `<Surface>` draws an `<Ellipse>` at `cy = 0` with `ry = glowReach`, filled
+ * with a two-stop `RadialGradient` — full colour at the centre, transparent at
+ * the edge. Alpha down the centreline is therefore linear in `y / glowReach`,
+ * which is the one line of arithmetic below. Rendering it would need a browser
+ * and would assert the same number.
+ */
+describe('the lamp glow leaves the text alone', () => {
+  /** src-over, the compositing SVG does. */
+  function over(fg: string, alpha: number, bg: string): string {
+    const ch = (hex: string, i: number): number => parseInt(hex.replace('#', '').slice(i, i + 2), 16);
+    const mix = (i: number): string =>
+      Math.round(ch(fg, i) * alpha + ch(bg, i) * (1 - alpha))
+        .toString(16)
+        .padStart(2, '0');
+    return `#${mix(0)}${mix(2)}${mix(4)}`;
+  }
+
+  /** The token's own alpha, scaled by the gradient's linear falloff at `y`. */
+  function glowAt(theme: Theme, y: number, reach: number): number {
+    if (theme.glow === null) return 0;
+    const peak = Number(/[\d.]+\)$/.exec(theme.glow)?.[0].slice(0, -1) ?? 0);
+    return y >= reach ? 0 : peak * (1 - y / reach);
+  }
+
+  function glowHex(theme: Theme): string {
+    const [r, g, b] = (/rgba\((\d+),\s*(\d+),\s*(\d+)/.exec(theme.glow ?? '') ?? []).slice(1);
+    return `#${[r, g, b].map((v) => Number(v).toString(16).padStart(2, '0')).join('')}`;
+  }
+
+  /**
+   * The two surfaces that light anything, with the y their first line starts
+   * at. Both come from the components rather than being restated: a card pads
+   * `SPACE.lg`, the Tally `SPACE.xl + SPACE.lg`.
+   */
+  const lit: [string, number, number][] = [
+    ['a card', SPACE.lg, SURFACE.glowReach],
+    ['the Tally', SPACE.xl + SPACE.lg, SURFACE.glowReachTally],
+  ];
+
+  for (const [theme, name] of [
+    [THEMES.lamplight, 'lamplight'],
+    [THEMES.daylight, 'daylight'],
+    [THEMES.sun, 'sun'],
+  ] as [Theme, string][]) {
+    for (const [where, contentTop, reach] of lit) {
+      it(`holds every floor where ${where}'s text begins, in ${name}`, () => {
+        const alpha = glowAt(theme, contentTop, reach);
+        const under = alpha === 0 ? theme.raised : over(glowHex(theme), alpha, theme.raised);
+
+        expect(contrast(theme.ink, under), `ink on ${name} ${where}`).toBeGreaterThanOrEqual(7);
+        expect(contrast(theme.inkQuiet, under), `inkQuiet on ${name} ${where}`).toBeGreaterThanOrEqual(7);
+        expect(contrast(theme.muted, under), `muted on ${name} ${where}`).toBeGreaterThanOrEqual(4.5);
+      });
+    }
+  }
+
+  /**
+   * And the other half of the bargain: the light has to be doing something.
+   *
+   * A glow dimmed until it were safe would pass everything above and be
+   * pointless — the whole reason it is on a card is that lamplight has no
+   * luminance headroom left to separate a surface from its wall. So the lit
+   * edge is held to a floor of its own, well above the 1.15 a flat card needs.
+   */
+  it('still separates a lamplit card from its wall at the edge', () => {
+    const theme = THEMES.lamplight;
+    const peak = glowAt(theme, 0, SURFACE.glowReach);
+    const edge = over(glowHex(theme), peak, theme.raised);
+    expect(contrast(theme.ground, edge)).toBeGreaterThanOrEqual(2);
+  });
+
+  /**
+   * **The light themes carry no glow, and that is asserted rather than
+   * assumed.** Over a near-white card the wash darkens toward the wall: it took
+   * daylight from 1.222 to 1.064 and sun from 1.180 to 1.031, subtracting the
+   * separation it was added to make. Anything that reintroduced it here would
+   * pass every check above — it damages the card edge, not the text — so this
+   * is the only place that would notice.
+   */
+  it('is a lamplight feature, because on a pale card it subtracts', () => {
+    expect(THEMES.daylight.glow).toBeNull();
+    expect(THEMES.sun.glow).toBeNull();
+    expect(THEMES.lamplight.glow).not.toBeNull();
+  });
+});
+
 describe('a card can be told from the wall', () => {
   it.each(themes)('%s separates its surfaces', (_name, theme) => {
     expect(contrast(theme.ground, theme.raised)).toBeGreaterThanOrEqual(1.15);

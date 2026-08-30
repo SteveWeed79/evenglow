@@ -144,8 +144,20 @@ export interface Theme {
   alertTint: string;
   /** color-mix(in oklab, ink 55%, transparent) */
   scrim: string;
-  /** Lamp glow, as an SVG RadialGradient stop — RN has no radial-gradient. */
-  glow: string;
+  /**
+   * Lamp glow, as an SVG RadialGradient stop — RN has no radial-gradient.
+   *
+   * **`null` on the two light themes, and that is the whole point of the
+   * token being nullable.** A warm wash over a near-white card darkens it
+   * toward the wall's own tone, so on daylight and bright sun the light made
+   * a card *harder* to pick out than no light at all: separation fell from
+   * 1.222 to 1.064 and from 1.180 to 1.031, the second of which is a card top
+   * indistinguishable from the wall behind it. The glow only adds where the
+   * surface is darker than the light, which is lamplight and nowhere else.
+   *
+   * Those two themes take the luminance step instead — see their grounds.
+   */
+  glow: string | null;
   /** The highlight on a worn top edge. Was an inset box-shadow. */
   worn: string;
   /** The shade on the bottom edge. The other half of the same inset. */
@@ -192,13 +204,25 @@ const LEAF = { daylight: '#61824b', lamplight: '#6b8f52', sun: '#61824b' } as co
 export const THEMES: Record<ThemeName, Theme> = {
   daylight: {
     /**
-     * **The card lifts; the ground stays put.** Loam's quiet tier is 4.82:1 on
-     * the ground and the AA floor is 4.5, so darkening the wall to separate
-     * the two is 0.32 of headroom away from unreadable labels. Every ink is
-     * measured at its worst against the *ground* here, so lifting `raised`
-     * toward the cream instead costs nothing at all and buys the same step.
+     * **Both surfaces moved, in the end, and the wall moved second.**
+     *
+     * The card lifted first, on the reasoning that loam's quiet tier is 4.82:1
+     * on the ground against a 4.5 floor — 0.32 of headroom, so darkening the
+     * wall looked like the expensive direction. That bought 1.222:1, which is
+     * not a visible edge, and the glow that was supposed to finish the job made
+     * it worse here rather than better (1.064 — see `glow`).
+     *
+     * So the wall spends what headroom there is, and there is very little:
+     * `#ebe4d0` takes the card to **1.245** from 1.222. `muted` lands at 4.73
+     * and `lanternInk` at 4.62, both against 4.5 floors, and it is the brass
+     * rather than the label that runs out first — a fact the suite had to point
+     * out, because the search that picked this value did not think to ask it.
+     *
+     * That is the end of the road in this theme. Daylight's card is separated
+     * by its 2px border far more than by its luminance, and no rearrangement of
+     * these two surfaces changes that.
      */
-    ground: '#ede6d2', raised: '#fffdf3', ink: '#241c14', muted: '#6e6152',
+    ground: '#ebe4d0', raised: '#fffdf3', ink: '#241c14', muted: '#6e6152',
     /** 8.08:1 on ground, 9.88:1 on raised — between ink's 13.47 and muted's 4.82. */
     inkQuiet: '#484136',
     lantern: '#e9b23c',
@@ -209,7 +233,7 @@ export const THEMES: Record<ThemeName, Theme> = {
     leaf: LEAF.daylight,
     ...ACCENTS,
     border: 'rgba(36,28,20,0.22)', borderWidth: 2,
-    alertTint: '#f3e2d8', scrim: 'rgba(36,28,20,0.55)', glow: 'rgba(233,178,60,0.22)',
+    alertTint: '#f3e2d8', scrim: 'rgba(36,28,20,0.55)', glow: null,
     worn: 'rgba(255,255,255,0.7)', shade: 'rgba(36,28,20,0.06)',
   },
   lamplight: {
@@ -232,19 +256,29 @@ export const THEMES: Record<ThemeName, Theme> = {
     leaf: LEAF.lamplight,
     ...ACCENTS,
     border: 'rgba(240,231,213,0.22)', borderWidth: 2,
-    alertTint: '#372620', scrim: 'rgba(0,0,0,0.6)', glow: 'rgba(233,178,60,0.30)',
+    alertTint: '#372620', scrim: 'rgba(0,0,0,0.6)', glow: 'rgba(233,178,60,0.34)',
     worn: 'rgba(240,231,213,0.12)', shade: 'rgba(0,0,0,0.25)',
   },
   sun: {
     /**
-     * **The worst of the three, and the theme it matters most in.** White
-     * paper on off-white paper is 1.02:1 — a card with no edge but its border,
-     * outdoors, in the theme built for reading a screen in a field. `raised`
-     * is already white and has nowhere to go, so the ground takes the step;
-     * sun has the headroom for it, with the quiet tier landing at 11.59:1
-     * against a 7:1 floor where the other two themes have tenths to spare.
+     * **The worst of the three, and the theme it matters most in.** White paper
+     * on off-white paper was 1.02:1 — a card with no edge but its border,
+     * outdoors, in the theme built for reading a screen in a field. `raised` is
+     * already white and has nowhere to go, so the ground takes the step.
+     *
+     * It went to `#f2ecdb` first, for 1.180, and again to `#ece5d3` for
+     * **1.256** once the glow was found to be subtracting here rather than
+     * adding — a warm wash over white measured 1.031 against the wall, which is
+     * no edge at all.
+     *
+     * This theme has more room than the other two in its text tiers — `muted`
+     * is 7.86:1 against a 4.5 floor — and none of that is what stops it.
+     * **`lanternInk` is**: the readable brass is on a 4.5 floor of its own and
+     * reads 4.67 here, so about one more step exists and then the brass label
+     * goes before any sentence does. Worth knowing before anyone tries to walk
+     * this ground darker again.
      */
-    ground: '#f2ecdb', raised: '#ffffff', ink: '#14100a', muted: '#4a4238',
+    ground: '#ece5d3', raised: '#ffffff', ink: '#14100a', muted: '#4a4238',
     /** 11.59:1 on ground, 13.68:1 on raised — between ink's 16.06 and muted's 8.36. */
     inkQuiet: '#312d27',
     /**
@@ -264,7 +298,7 @@ export const THEMES: Record<ThemeName, Theme> = {
     leaf: LEAF.sun,
     ...ACCENTS,
     border: '#14100a', borderWidth: 2,
-    alertTint: '#fdeeea', scrim: 'rgba(20,16,10,0.55)', glow: 'rgba(166,111,0,0.16)',
+    alertTint: '#fdeeea', scrim: 'rgba(20,16,10,0.55)', glow: null,
     worn: 'rgba(255,255,255,0.9)', shade: 'rgba(20,16,10,0.08)',
   },
 };
@@ -430,7 +464,31 @@ export const LAYOUT = {
  * the arch's `spring` — the depth of the head the light came through — and it
  * keeps that value because the light kept its size when the curve went.
  */
-export const SURFACE = { radius: 12, glowHead: 32 } as const;
+export const SURFACE = {
+  radius: 12,
+  /**
+   * How far down the face the lamp reaches, from the top edge. Not a radius.
+   *
+   * **This is the number that has to stay under a surface's top padding**, and
+   * it did not when the glow first went onto every card: the light was centred
+   * 11 in and reached 61 down, so a `muted` label at `SPACE.lg` sat in 0.257 of
+   * brass and measured **2.73:1 against a 4.5 floor**. `ink` was 7.11 — on R7's
+   * floor rather than the 12.56 it has on the bare card.
+   *
+   * The fix is geometry rather than dimming. Centred on the top edge and
+   * stopping short of the content, the light is *brighter* where it does the
+   * work — 2.62:1 card-to-wall against the 2.38 the deeper wash managed — and
+   * costs the text nothing at all, because it has faded to zero before the
+   * first line begins. A lamp above the card rather than a haze inside it.
+   */
+  glowReach: 16,
+  /**
+   * The Tally's, which can be deeper because its content starts at
+   * `SPACE.xl + SPACE.lg` rather than `SPACE.lg`. Same rule, more room: 44
+   * still fades out before 52.
+   */
+  glowReachTally: 44,
+} as const;
 
 export const RADII = {
   /** Chips and pills. */
