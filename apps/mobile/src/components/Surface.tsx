@@ -15,18 +15,27 @@
  * around it stayed: one `<Svg>` fills the face and clips the light to the same
  * outline.
  *
- * ## The glow is on every surface now, and that reverses a rule
+ * ## The glow is on every card, and only after dark
  *
  * UX-SPEC §2 rationed gradients to one — *"no gradients beyond the single lamp
- * glow"* — and `Arch.tsx` gave the reason: a door with light behind it reads as
- * somewhere to go, and four of them read as a gradient habit. The farmer asked
- * for the light on every card, which is a decision about their own interface,
- * and §2 has been rewritten to say so rather than left contradicting the code.
+ * glow"* — on the reasoning that a lit surface reads as somewhere to go and four
+ * of them read as a gradient habit. That was overturned: cards were not
+ * separating from the wall at all, and on a dark theme there is no luminance
+ * left to separate them with.
  *
- * What survives of the old restraint is scale. The glow token carries its own
- * alpha per theme and this takes the colour rather than deciding an opacity, so
- * the Tally is still the brightest thing on any screen — it is simply the
- * largest surface, and the same wash over a bigger head reads as more light.
+ * **It is a lamplight feature, not an every-theme one.** Over a near-white card
+ * the same warm wash darkens the surface toward the wall's own tone, so on
+ * daylight and bright sun it subtracted from the separation instead of adding —
+ * 1.222 to 1.064, and 1.180 to a card top that measured 1.031 against its wall,
+ * which is no edge at all. Those two themes carry `glow: null` and take the
+ * luminance step their light surfaces can afford instead.
+ *
+ * ## The light stops before the text does
+ *
+ * The first version of this put the wash *through* the card, and a `muted`
+ * label at `SPACE.lg` measured 2.73:1 against a 4.5 floor. See `glowReach`: the
+ * light is centred on the top edge and transparent before the content starts,
+ * which is both more legible and a brighter edge than the deeper wash managed.
  */
 
 import { useId, useState } from 'react';
@@ -42,14 +51,25 @@ export interface SurfaceProps {
   /** Corner radius. Lower it for chips, leave it for cards. */
   radius?: number;
   /**
+   * How far down the face the light reaches. **Must stay under the top padding
+   * of whatever this is wrapping** — see `SURFACE.glowReach`, which is the
+   * default and is sized for a card whose content starts at `SPACE.lg`. The
+   * Tally passes a deeper one because its content starts further down.
+   */
+  glowReach?: number;
+  /**
    * Lamplight across the head of the card, as the theme's `glow` token.
    *
-   * The token already carries its own alpha per theme — 22% in daylight, 30%
-   * in lamplight, 16% in bright sun — so this takes the colour and fades it to
-   * transparent rather than deciding an opacity of its own. That is what keeps
-   * it brightest at 5am and faintest at noon without this knowing which.
+   * **`null` is a real value here, not an omission.** Two of the three themes
+   * carry no glow at all: over a near-white card a warm wash darkens it toward
+   * the wall and *removes* the separation it was added to create. So the token
+   * is nullable and this accepts the null rather than making every caller ask
+   * whether their theme is the lit one.
+   *
+   * The token carries its own alpha, so this takes the colour and fades it to
+   * transparent rather than deciding an opacity of its own.
    */
-  glow?: string;
+  glow?: string | null;
   style?: StyleProp<ViewStyle>;
   children?: React.ReactNode;
 }
@@ -59,6 +79,7 @@ export function Surface({
   stroke,
   strokeWidth = 2,
   radius = SURFACE.radius,
+  glowReach = SURFACE.glowReach,
   glow,
   style,
   children,
@@ -91,7 +112,7 @@ export function Surface({
           style={{ position: 'absolute', left: 0, top: 0 }}
           pointerEvents="none"
         >
-          {glow === undefined ? null : (
+          {glow == null ? null : (
             <Defs>
               <RadialGradient id={`glow-${id}`}>
                 <Stop offset="0" stopColor={glow} />
@@ -108,19 +129,22 @@ export function Surface({
           <Path d={d} x={inset} y={inset} fill={fill} />
 
           {/**
-           * High and wider than it is tall, so the light gathers along the top
-           * edge rather than washing the whole face. With the arched head gone
-           * there is no curve for it to come through, so what it has to read as
-           * now is a lamp above the card — which means it must stay at the top
-           * and must not reach the bottom edge, or the card looks lit from
-           * inside and the ink sits in haze.
+           * **Centred on the top edge, so the light is gone before the text
+           * starts.** It was centred 11 in and reached 61 down, which put a
+           * `muted` label at 2.73:1 on a 4.5 floor — the light was landing on
+           * the content instead of above it.
+           *
+           * Half the ellipse is off the card and clipped away, which is the
+           * point: what remains is a band that is brightest at the edge and
+           * transparent by `glowReach`. Brighter where it separates the card
+           * from the wall, nothing at all where somebody has to read.
            */}
-          {glow === undefined ? null : (
+          {glow == null ? null : (
             <Ellipse
               cx={size.w / 2}
-              cy={SURFACE.glowHead * 0.35}
+              cy={0}
               rx={size.w * 0.62}
-              ry={SURFACE.glowHead * 1.9}
+              ry={glowReach}
               fill={`url(#glow-${id})`}
               clipPath={`url(#face-${id})`}
             />
@@ -128,7 +152,7 @@ export function Surface({
 
           {/* The outline last, so the glow cannot wash out the edge it is
               supposed to be lighting. */}
-          {stroke === undefined ? null : (
+          {stroke == null ? null : (
             <Path d={d} x={inset} y={inset} fill="none" stroke={stroke} strokeWidth={strokeWidth} />
           )}
         </Svg>
