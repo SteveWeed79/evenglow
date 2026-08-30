@@ -5,6 +5,13 @@ import { describe, expect, it } from 'vitest';
 /**
  * What `check-box.sh` says about a failed unit, and which kind it is.
  *
+ * `check:names-ok-file` — the retired name is this file's entire subject. Every
+ * `steading-*` below is a unit that really is still on the live box, and the
+ * one thing being tested is whether the script tells those apart from a
+ * `homefarm-*` unit that has genuinely failed. Rewriting them to the new name
+ * would test nothing. `check-box.sh` carries the same marker for the same
+ * reason.
+ *
  * ## The two dead units, and why they are a finding rather than untidiness
  *
  * `rename-to-homefarm.sh` runs `systemctl disable --now` over the five
