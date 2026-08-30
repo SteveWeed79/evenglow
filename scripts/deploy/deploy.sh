@@ -532,6 +532,36 @@ fi
 # private, and is not needed otherwise.
 say "The app"
 
+# ── The tool the publish below refuses to run without ───────────────────────
+#
+# `publish-apk.sh` needs `unzip` for the two checks that establish a fetched
+# file is an APK and is *this* application, and it refuses to publish without
+# them rather than skipping them — any zip on a url is otherwise published as
+# the farm's app.
+#
+# **`setup-box.sh` installs it, and that reaches boxes built after it was
+# written and no others.** The box pulls this repository every five minutes, so
+# the new `setup-box.sh` is already sitting on it; nothing runs a first-run
+# script again. The fix arrives as text, the box goes on refusing every build,
+# and the deploy that carried the fix is the thing that cannot apply it.
+#
+# Backfilled here for the reason `/var/lib/homefarm/dist` is created here as
+# well as in `setup-box.sh`: a box grows what a later release assumes without
+# being rebuilt. One `command -v` per tick after the first.
+#
+# Best effort, deliberately. Apt being unreachable must not fail a deploy that
+# has already restarted the API — and a box that cannot install it is exactly
+# where it was, with the shelf holding the APK it has and the refusal below
+# saying why.
+if ! command -v unzip >/dev/null 2>&1; then
+  if apt-get update -qq >/dev/null 2>&1 && apt-get install -y unzip >/dev/null 2>&1; then
+    note "installed unzip — publish-apk.sh cannot verify a build without it"
+  else
+    note "COULD NOT INSTALL unzip, so no build can be published until it is there:"
+    note "    sudo apt-get install -y unzip"
+  fi
+fi
+
 # The decision — which tag, which asset, and every refusal — is in
 # `scripts/lib/release-apk.mjs`, held by `tests/unit/release-apk.test.ts`, for
 # the reason `scripts/lib/apk.mjs` gives about workflow files: it applies about
