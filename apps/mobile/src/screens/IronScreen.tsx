@@ -164,8 +164,20 @@ function MachineCard({
         </Text>
       )}
 
+      {/**
+        * The mark, without the word.
+        *
+        * Every card said "OPEN ›" although the whole card is the button and,
+        * since the motif was spent, wears a door that says so. Six of them
+        * down a column is the repetition R3's affordance work exists to
+        * remove: a chevron already promises "goes somewhere else", and the
+        * word beside it promises it twice.
+        *
+        * Kept at the foot rather than moved into the head, because the head is
+        * a name against a figure at display size and a third thing in that row
+        * would crowd the number the eye is there to compare.
+        */}
       <View style={styles.more}>
-        <Text style={[styles.label, { color: colors.lanternInk }]}>Open</Text>
         <Icon name="forward" size={20} color={colors.lanternInk} />
       </View>
     </ArchCard>

@@ -999,5 +999,25 @@ const styles = StyleSheet.create({
   },
   rowWords: { flex: 1, gap: 2 },
   rowTitle: { fontFamily: FONTS.body, fontSize: TYPE.body },
-  rowDetail: { fontFamily: FONTS.data, fontSize: TYPE.label, letterSpacing: 0.4 },
+  /**
+   * **The body face, because a detail line is a sentence.**
+   *
+   * This was the data face — `RecursiveMono` at label size with tracking — and
+   * a `Row` is what The farm, Settings and Log something are built from. So
+   * every door on the hub described itself in monospace: *"Groups,
+   * individuals, health, and what they produce"*, set as though it were a
+   * meter reading. A screen of that reads like a terminal, which is the one
+   * thing UX-SPEC §2 says this app is not.
+   *
+   * The spec spends the data face on *"pantry-label typography — section
+   * labels, small-caps, tracked... structural, not decorative"*, and `Screen`
+   * makes the same argument about its own subtitle: setting a proper noun in
+   * tracked caps *"is the same mistake as printing a species' collective noun
+   * as telemetry"*. The rule was written down and this line was the one place
+   * that broke it, on the screen a farm opens most.
+   *
+   * Body size rather than label size, too. It is a sentence, and a sentence
+   * set two steps under its own title is a footnote.
+   */
+  rowDetail: { fontFamily: FONTS.body, fontSize: TYPE.body, lineHeight: TYPE.body * 1.35 },
 });

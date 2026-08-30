@@ -174,15 +174,31 @@ const ACCENTS = { rowan: '#c4442c', damson: '#8a6484' } as const;
  * darkening it everywhere would dim the healthy colour at night to fix a
  * problem it only has in daylight.
  */
-const LEAF = { daylight: '#61824b', lamplight: '#6b8f52', sun: '#6b8f52' } as const;
+/**
+ * Sun joined daylight when its ground stopped being white.
+ *
+ * `#6b8f52` measured 3.64:1 on the old near-white sun ground and 3.02:1 on the
+ * cream one that replaced it — a mark sitting on the 3:1 floor itself, in the
+ * theme that exists for a screen in a field at noon. The darker cut restores
+ * the margin at 3.71:1. Same reasoning as daylight's, and now the same value:
+ * a light ground needs a darker leaf.
+ */
+const LEAF = { daylight: '#61824b', lamplight: '#6b8f52', sun: '#61824b' } as const;
 
 export const THEMES: Record<ThemeName, Theme> = {
   daylight: {
-    ground: '#ede6d2', raised: '#f5f0e1', ink: '#241c14', muted: '#6e6152',
-    /** 8.08:1 on ground, 8.84:1 on raised — between ink's 13.47 and muted's 4.82. */
+    /**
+     * **The card lifts; the ground stays put.** Loam's quiet tier is 4.82:1 on
+     * the ground and the AA floor is 4.5, so darkening the wall to separate
+     * the two is 0.32 of headroom away from unreadable labels. Every ink is
+     * measured at its worst against the *ground* here, so lifting `raised`
+     * toward the cream instead costs nothing at all and buys the same step.
+     */
+    ground: '#ede6d2', raised: '#fffdf3', ink: '#241c14', muted: '#6e6152',
+    /** 8.08:1 on ground, 9.88:1 on raised — between ink's 13.47 and muted's 4.82. */
     inkQuiet: '#484136',
     lantern: '#e9b23c',
-    /** 5.15:1 on raised, 4.71:1 on ground. */
+    /** 5.76:1 on raised, 4.71:1 on ground. */
     lanternInk: '#8a5b00',
     /** 8.71:1 on the brass fill. */
     lanternOn: '#241c14',
@@ -193,8 +209,16 @@ export const THEMES: Record<ThemeName, Theme> = {
     worn: 'rgba(255,255,255,0.7)', shade: 'rgba(36,28,20,0.06)',
   },
   lamplight: {
-    ground: '#201913', raised: '#2c2319', ink: '#f0e7d5', muted: '#9c8e7a',
-    /** 8.81:1 on ground, 7.83:1 on raised — between ink's 12.56 and muted's 4.82. */
+    /**
+     * **The wall deepens; the card stays put.** On a dark theme every ink is
+     * at its worst against `raised` — the lighter of the two — so darkening
+     * the ground moves nothing that is measured, and lifting the card would
+     * move all of it. Reported off the tablet as a screen of cards that read
+     * as one brown field: at `#201913` the two were 1.13:1 apart, which is a
+     * boundary only the hairline was drawing.
+     */
+    ground: '#16110c', raised: '#2c2319', ink: '#f0e7d5', muted: '#9c8e7a',
+    /** 9.52:1 on ground, 7.83:1 on raised — between ink's 12.56 and muted's 4.82. */
     inkQuiet: '#c0b8a8',
     lantern: '#e9b23c',
     /** 8:1 on raised — brass on a dark wall needs no darkening. */
@@ -208,8 +232,16 @@ export const THEMES: Record<ThemeName, Theme> = {
     worn: 'rgba(240,231,213,0.12)', shade: 'rgba(0,0,0,0.25)',
   },
   sun: {
-    ground: '#fffdf6', raised: '#ffffff', ink: '#14100a', muted: '#4a4238',
-    /** 13.44:1 on ground, 13.68:1 on raised — between ink's 18.62 and muted's 9.70. */
+    /**
+     * **The worst of the three, and the theme it matters most in.** White
+     * paper on off-white paper is 1.02:1 — a card with no edge but its border,
+     * outdoors, in the theme built for reading a screen in a field. `raised`
+     * is already white and has nowhere to go, so the ground takes the step;
+     * sun has the headroom for it, with the quiet tier landing at 11.59:1
+     * against a 7:1 floor where the other two themes have tenths to spare.
+     */
+    ground: '#f2ecdb', raised: '#ffffff', ink: '#14100a', muted: '#4a4238',
+    /** 11.59:1 on ground, 13.68:1 on raised — between ink's 16.06 and muted's 8.36. */
     inkQuiet: '#312d27',
     /**
      * Darkened deliberately: brass on white does not hold 7:1, and a fill that
