@@ -967,6 +967,10 @@ const styles = StyleSheet.create({
   },
   secondaryLabel: { fontFamily: FONTS.body, fontSize: TYPE.body },
   row: {
+    // A row is a grid cell on the hubs — The farm, Settings, Log something —
+    // and fills it rather than leaving the slack under a one-line row beside a
+    // two-line one. See `Grid` for why this is `flexGrow` and why it is here.
+    flexGrow: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACE.md,

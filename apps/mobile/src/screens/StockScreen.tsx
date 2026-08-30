@@ -177,6 +177,8 @@ function GroupCard({ group, onPress }: { group: Group; onPress: () => void }): R
 
 const styles = StyleSheet.create({
   card: {
+    // Fills the cell its `<Grid>` wrapper already stretched — see `Grid`.
+    flexGrow: 1,
     padding: SPACE.lg,
     borderRadius: RADII.softHead,
     borderWidth: StyleSheet.hairlineWidth,
@@ -197,5 +199,13 @@ const styles = StyleSheet.create({
   // the data face is actually for.
   lede: { fontFamily: FONTS.body, fontSize: TYPE.body, lineHeight: TYPE.body * 1.35 },
   clock: { fontFamily: FONTS.body, fontSize: TYPE.body, lineHeight: TYPE.body * 1.35 },
-  more: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs, alignSelf: 'flex-end' },
+  // Sits on the bottom edge of a stretched card rather than floating mid-air
+  // with the slack under it. No free space, no effect — so a phone is unmoved.
+  more: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACE.xs,
+    alignSelf: 'flex-end',
+    marginTop: 'auto',
+  },
 });
