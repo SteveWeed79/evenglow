@@ -4,15 +4,14 @@ import { listInventory, listMachines, type Machine, runningLow } from '@homefarm
 import { Primary, Row } from '../components/Form';
 import { Grid } from '../components/Grid';
 import { Icon } from '../components/Icon';
-import { Body, Panel } from '../components/Panel';
+import { ArchCard, Body, Panel } from '../components/Panel';
 import { PaneTitle, Screen } from '../components/Screen';
-import { Touch } from '../components/Touch';
 import { useLive } from '../hooks/useLive';
 import { useTheme } from '../theme/ThemeProvider';
 import { useNav } from '../hooks/useNav';
 import { useWindow } from '../hooks/useWindow';
 import { MachineBody } from './MachineScreen';
-import { FONTS, LAYOUT, RADII, SPACE, TYPE } from '../theme/tokens';
+import { FONTS, LAYOUT, SPACE, TYPE } from '../theme/tokens';
 
 /**
  * Iron — equipment and machines.
@@ -129,15 +128,7 @@ function MachineCard({
   const description = [machine.make, machine.model].filter(Boolean).join(' ');
 
   return (
-    <Touch affordance="chevron"
-      onPress={onPress}
-      accessibilityRole="button"
-      testID={`machine-${machine.id}`}
-      style={({ pressed }) => [
-        styles.card,
-        { backgroundColor: colors.raised, borderColor: colors.border, opacity: pressed ? 0.8 : 1 },
-      ]}
-    >
+    <ArchCard onPress={onPress} testID={`machine-${machine.id}`}>
       <View style={styles.head}>
         <View style={styles.name}>
           <Text style={[styles.machineName, { color: colors.ink }]}>{machine.name}</Text>
@@ -177,19 +168,11 @@ function MachineCard({
         <Text style={[styles.label, { color: colors.lanternInk }]}>Open</Text>
         <Icon name="forward" size={20} color={colors.lanternInk} />
       </View>
-    </Touch>
+    </ArchCard>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    // Fills the cell its `<Grid>` wrapper already stretched — see `Grid`.
-    flexGrow: 1,
-    padding: SPACE.lg,
-    borderRadius: RADII.softHead,
-    borderWidth: StyleSheet.hairlineWidth,
-    gap: SPACE.sm,
-  },
   head: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
   name: { flex: 1, gap: 2 },
   meter: { alignItems: 'flex-end' },

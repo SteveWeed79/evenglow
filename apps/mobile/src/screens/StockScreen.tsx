@@ -6,16 +6,15 @@ import { groupPhrase } from '@homefarm/core/voice';
 import { Primary } from '../components/Form';
 import { Grid } from '../components/Grid';
 import { Icon } from '../components/Icon';
-import { Body, Panel } from '../components/Panel';
+import { ArchCard, Body, Panel } from '../components/Panel';
 import { PaneTitle, Screen } from '../components/Screen';
-import { Touch } from '../components/Touch';
 import { growOutWindow, layOnsetWindow } from '../hooks/useDues';
 import { useGroups } from '../hooks/useGroups';
 import { useTheme } from '../theme/ThemeProvider';
 import { useNav } from '../hooks/useNav';
 import { useWindow } from '../hooks/useWindow';
 import { GroupBody } from './GroupScreen';
-import { FONTS, LAYOUT, RADII, SPACE, TYPE } from '../theme/tokens';
+import { FONTS, LAYOUT, SPACE, TYPE } from '../theme/tokens';
 
 /**
  * Stock — the animals you keep.
@@ -117,15 +116,7 @@ function GroupCard({ group, onPress }: { group: Group; onPress: () => void }): R
   const breed = group.breedId === undefined ? undefined : libraryBreed(group.breedId);
 
   return (
-    <Touch affordance="chevron"
-      onPress={onPress}
-      accessibilityRole="button"
-      testID={`group-${group.id}`}
-      style={({ pressed }) => [
-        styles.card,
-        { backgroundColor: colors.raised, borderColor: colors.border, opacity: pressed ? 0.8 : 1 },
-      ]}
-    >
+    <ArchCard onPress={onPress} testID={`group-${group.id}`}>
       <View style={styles.head}>
         <View style={styles.name}>
           <Text style={[styles.groupName, { color: colors.ink }]}>{group.name}</Text>
@@ -171,19 +162,11 @@ function GroupCard({ group, onPress }: { group: Group; onPress: () => void }): R
         <Text style={[styles.label, { color: colors.lanternInk }]}>Open</Text>
         <Icon name="forward" size={20} color={colors.lanternInk} />
       </View>
-    </Touch>
+    </ArchCard>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    // Fills the cell its `<Grid>` wrapper already stretched — see `Grid`.
-    flexGrow: 1,
-    padding: SPACE.lg,
-    borderRadius: RADII.softHead,
-    borderWidth: StyleSheet.hairlineWidth,
-    gap: SPACE.sm,
-  },
   head: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
   name: { flex: 1, gap: 2 },
   count: { alignItems: 'flex-end' },

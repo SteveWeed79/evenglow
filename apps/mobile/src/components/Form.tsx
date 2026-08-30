@@ -3,6 +3,7 @@ import { Animated, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { reportTrouble } from '../hooks/useTrouble';
 import { describeLogFailure } from '@homefarm/core/sync/failure';
+import { Arch } from './Arch';
 import { Icon, type IconName } from './Icon';
 import { Body, Panel } from './Panel';
 import { useRevealOnFocus } from './reveal';
@@ -520,12 +521,27 @@ export function Primary({
       accessibilityRole="button"
       accessibilityState={{ disabled }}
       {...(testID === undefined ? {} : { testID })}
-      style={({ pressed }) => [
-        styles.primary,
-        { backgroundColor: colors.lantern, opacity: disabled ? 0.4 : pressed ? 0.8 : 1 },
-      ]}
+      // No paint of its own now: the arch inside is the button's face, and a
+      // background here would show as a rectangle at the head's shoulders.
+      style={({ pressed }) => [styles.primary, { opacity: disabled ? 0.4 : pressed ? 0.8 : 1 }]}
     >
-      <Text style={[styles.primaryLabel, { color: colors.lanternOn }]}>{label}</Text>
+      {/**
+        * The doorway, on the one control every screen ends with.
+        *
+        * UX-SPEC §2 lists primary buttons among the things that are *"arched at
+        * the top and squared at the base"*, and this was `RADII.softHead` — so
+        * the motif that is supposed to make the app recognisable from across a
+        * room appeared on the Tally and nowhere else.
+        *
+        * A wide button takes the full spring without becoming a dome: the head
+        * is an ellipse `w / 2` across and `ARCH.spring` down, so at 300dp wide
+        * it is a shallow curve rather than the half-circle a narrow one would
+        * get. The label is centred, where the curve is at its highest, so it
+        * needs no padding it did not already have.
+        */}
+      <Arch fill={colors.lantern} style={styles.primaryFace}>
+        <Text style={[styles.primaryLabel, { color: colors.lanternOn }]}>{label}</Text>
+      </Arch>
     </Touch>
   );
 }
@@ -933,12 +949,14 @@ const styles = StyleSheet.create({
     fontSize: TYPE.lede,
     textAlign: 'center',
   },
-  primary: {
+  primary: { minHeight: TAP.primary, marginTop: SPACE.sm },
+  // The face fills the target, so the whole door is pressable rather than the
+  // label's own box.
+  primaryFace: {
+    flex: 1,
     minHeight: TAP.primary,
-    borderRadius: RADII.softHead,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: SPACE.sm,
   },
   primaryLabel: { fontFamily: FONTS.display, fontSize: TYPE.lede },
   secondary: {
