@@ -4,6 +4,7 @@ import { type Bed, occupants, type Planting } from '@homefarm/core/read/growing'
 import { listVarieties } from '@homefarm/core/read/growing';
 import { Primary } from '../components/Form';
 import { Grid } from '../components/Grid';
+import { Arch } from '../components/Arch';
 import { Icon } from '../components/Icon';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
@@ -124,8 +125,18 @@ function BedCard({
 }): React.ReactElement {
   const { colors } = useTheme();
 
+  /*
+   * An arch rather than a rectangle, because a bed is somewhere you go — see
+   * `ArchCard`. Not an `<ArchCard>` itself: the whole card is not one button,
+   * the heading inside it is.
+   */
   return (
-    <View style={[styles.card, { backgroundColor: colors.raised, borderColor: colors.border }]}>
+    <Arch
+      fill={colors.raised}
+      stroke={colors.border}
+      strokeWidth={colors.borderWidth}
+      style={styles.card}
+    >
       {/* The heading opens the bed itself, which is where what grew here
           before lives. The card shows what is in it now; a bed's other half is
           its succession, and that had nowhere to be read. */}
@@ -194,7 +205,7 @@ function BedCard({
       >
         <Text style={[styles.plantLabel, { color: colors.ink }]}>Plant something here</Text>
       </Touch>
-    </View>
+    </Arch>
   );
 }
 
@@ -233,9 +244,10 @@ const styles = StyleSheet.create({
   card: {
     // Fills the cell its `<Grid>` wrapper already stretched — see `Grid`.
     flexGrow: 1,
-    padding: SPACE.lg,
-    borderRadius: RADII.softHead,
-    borderWidth: StyleSheet.hairlineWidth,
+    // Top padding clears the head; the rest is the rectangle's. See `ArchCard`.
+    paddingTop: SPACE.xl,
+    paddingHorizontal: SPACE.lg,
+    paddingBottom: SPACE.lg,
     gap: SPACE.sm,
   },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
