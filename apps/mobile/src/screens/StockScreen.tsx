@@ -33,7 +33,9 @@ export function StockScreen(): React.ReactElement {
   const { panes } = useWindow();
   const [chosen, setChosen] = useState<string | null>(null);
 
-  if (loading) return <Screen title="Stock" back>{null}</Screen>;
+  // `wide` while it reads, because the hub it becomes is wide and the hero
+  // sits inside that cap — see `Loading`.
+  if (loading) return <Screen title="Stock" back wide>{null}</Screen>;
 
   /**
    * List-detail, on the same terms as Iron and History.

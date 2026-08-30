@@ -160,7 +160,17 @@ export function Screen({
    * do, from the same tokens, which is the method `landscape-fold.test.ts`
    * already established for this codebase.
    */
-  const content = split ? LAYOUT.column : Math.min(usable, cap) - SPACE.lg * 2;
+  /**
+   * On a split screen this is what `above` spans — both panes and the spacer
+   * between them. Each pane hands its own width down inside itself (see
+   * `Pane`), so this is no longer doing two jobs with one number: it was
+   * `LAYOUT.column`, which was right for the leading pane, understated the
+   * band above it, and would have had a grid in the *aside* dividing 600dp
+   * into a 480dp column.
+   */
+  const content = split
+    ? LAYOUT.column + LAYOUT.spacer + asidePane
+    : Math.min(usable, cap) - SPACE.lg * 2;
   const navigation = useNavigation<NativeStackNavigationProp<RootParamList>>();
   const trouble = useTrouble();
 
@@ -407,30 +417,12 @@ export function Screen({
         * any of those moves.
         */
        <View style={styles.panes}>
-         <ScrollView
-           ref={leading.view}
-           style={{ width: LAYOUT.column }}
-           contentContainerStyle={styles.pane}
-           keyboardShouldPersistTaps="handled"
-           onScroll={(event) => {
-             leading.at.current = event.nativeEvent.contentOffset.y;
-           }}
-           scrollEventThrottle={16}
-         >
-           <RevealProvider value={reveal.leading}>{children}</RevealProvider>
-         </ScrollView>
-         <ScrollView
-           ref={trailing.view}
-           style={{ width: asidePane }}
-           contentContainerStyle={styles.pane}
-           keyboardShouldPersistTaps="handled"
-           onScroll={(event) => {
-             trailing.at.current = event.nativeEvent.contentOffset.y;
-           }}
-           scrollEventThrottle={16}
-         >
-           <RevealProvider value={reveal.trailing}>{aside}</RevealProvider>
-         </ScrollView>
+         <Pane width={LAYOUT.column} surface={leading} reveal={reveal.leading}>
+           {children}
+         </Pane>
+         <Pane width={asidePane} surface={trailing} reveal={reveal.trailing}>
+           {aside}
+         </Pane>
        </View>
      ) : (
        <>
@@ -632,6 +624,47 @@ export function Screen({
     </View>
    </ContentWidthProvider>
    </RevealProvider>
+  );
+}
+
+/**
+ * One pane: a scroll surface, and the two things its contents must be told.
+ *
+ * Written once rather than twice because the two panes differ only in width
+ * and what goes in them, and a pair of near-identical scroll views is how one
+ * of them quietly loses a prop.
+ */
+function Pane({
+  width,
+  surface,
+  reveal,
+  children,
+}: {
+  width: number;
+  surface: Surface;
+  reveal: Reveal;
+  children: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <ScrollView
+      ref={surface.view}
+      style={{ width }}
+      contentContainerStyle={styles.pane}
+      keyboardShouldPersistTaps="handled"
+      // Where this pane is, so a field in it can be scrolled up from wherever
+      // it happens to be rather than from the top.
+      onScroll={(event) => {
+        surface.at.current = event.nativeEvent.contentOffset.y;
+      }}
+      scrollEventThrottle={16}
+    >
+      {/* What a `<Grid>` in here divides up is this pane, not the screen. And
+          a field in here says it is in *this* pane by being under this
+          provider, which is why the reveal is passed in rather than read. */}
+      <ContentWidthProvider value={width}>
+        <RevealProvider value={reveal}>{children}</RevealProvider>
+      </ContentWidthProvider>
+    </ScrollView>
   );
 }
 

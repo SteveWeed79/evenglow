@@ -1,7 +1,7 @@
 import { StyleSheet, View } from 'react-native';
 import { duesFor } from '@homefarm/contracts';
 import { DueRow } from './DueRow';
-import { Loading } from './Missing';
+import { LoadingPanel } from './Missing';
 import { Body, Panel } from './Panel';
 import { useFinishDue, useOpenDue } from '../hooks/useDueActions';
 import { useDues } from '../hooks/useDues';
@@ -82,7 +82,8 @@ export function Coming({
   const open = useOpenDue();
   const finish = useFinishDue();
 
-  if (loading) return <Loading title={label} />;
+  // A panel, not a screen — see `LoadingPanel`.
+  if (loading) return <LoadingPanel label={label} />;
 
   const ids = typeof subject === 'string' ? [subject] : subject;
   const now = Date.now();
