@@ -34,6 +34,10 @@ OK(){ printf '  \033[32mok  \033[0m %s\n' "$*"; ok=$((ok+1)); }
 NO(){ printf '  \033[31mFAIL\033[0m %s\n' "$*"; bad=$((bad+1)); }
 HM(){ printf '  \033[33mnote\033[0m %s\n' "$*"; warn=$((warn+1)); }
 H (){ printf '\n\033[1m%s\033[0m\n' "$*"; }
+# A follow-up line under a finding, indented to where its message starts. Not a
+# result of its own — it counts toward nothing and only ever explains the line
+# above it.
+TIP(){ printf '       %s\n' "$*"; }
 
 H "Paths and ownership"
 for d in "/opt/$NEW" "/etc/$NEW" "/var/lib/$NEW"; do
@@ -68,8 +72,65 @@ systemctl is-active --quiet "$NEW-ops" 2>/dev/null && HM "ops board is RUNNING �
 for t in "$NEW-deploy.timer" "$NEW-backup.timer" "$NEW-backup-check.timer"; do
   systemctl is-enabled --quiet "$t" 2>/dev/null && OK "$t enabled" || HM "$t not enabled"
 done
-FAILED="$(systemctl --failed --no-legend --plain 2>/dev/null | awk '{print $1}' | tr '\n' ' ')"
-[ -z "$FAILED" ] && OK "no failed units" || NO "failed: $FAILED"
+# ── A failed unit, and which kind of failed ─────────────────────────────────
+#
+# **`rename-to-homefarm.sh` stopped the old units and never removed them.** It
+# runs `systemctl disable --now` over the five `steading-*` names and moves on;
+# their files stay in /etc/systemd/system, and a unit that failed before it was
+# disabled stays failed. So every box that was renamed rather than built fresh
+# carries permanent entries here — the live one has carried two since the
+# rename.
+#
+# **Still a FAIL, and the reason is not the dead units.** They serve nothing and
+# cost nothing on their own. What they cost is the alarm:
+# `homefarm-backup-check` reports "no backup in 36 hours" *by going red*, and
+# `systemctl --failed` is where somebody would see it. A list that always has
+# something in it is a list nobody reads a new line in — which is this script's
+# own subject, a signal that is technically present and useless.
+#
+# Split rather than merely listed, so a genuine failure cannot be read as more
+# of the same and so the line can say what to do about the leftovers. **This
+# script changes nothing** and does not start here: the command is printed for
+# a person to run.
+#
+# ## Three details in that command, each of which was wrong first
+#
+# **`disable --now` before the removal**, because an enabled unit has symlinks
+# in `*.wants/` that a deleted file leaves dangling — `daemon-reload` then
+# complains about a unit nobody can look at any more. `rename-to-homefarm.sh`
+# already disabled these, so on the live box it is a no-op; a box where it half
+# ran is exactly the one that needs it. Failures are swallowed for the same
+# reason: disabling a unit that is already gone must not stop the removal.
+#
+# **`-rf` and no suffix**, because a unit can have a drop-in *directory* beside
+# it. The live box carries `steading-api.service.d/netlink.conf` — the
+# hand-applied `AF_NETLINK` fix from the first deployment, which is now a
+# tracked line in `homefarm-api.service` and needs nothing done to keep it. A
+# glob ending in `.service` walks straight past that directory and leaves an
+# orphan configuring a unit that no longer exists.
+#
+# **`ls` first**, and it is not politeness. This is the only line in this script
+# that suggests deleting anything, on a box holding a farm's only copy of its
+# records; a person looking at what the glob covers before running it is the
+# whole safety property.
+#
+# Trimmed rather than left with the trailing space `tr` leaves, because `$STALE`
+# is interpolated into a command a person is meant to paste. Followed by a
+# redirect it would otherwise have to read `${STALE}2>...`, which is one brace
+# away from expanding a variable named `STALE2` and exiting on `set -u`.
+FAILED="$(systemctl --failed --no-legend --plain 2>/dev/null | awk '{print $1}')"
+STALE="$(printf '%s\n' "$FAILED" | grep "^$OLD-" | tr '\n' ' ' | sed 's/ *$//' || true)"
+LIVE="$(printf '%s\n' "$FAILED" | grep -v "^$OLD-" | grep . | tr '\n' ' ' | sed 's/ *$//' || true)"
+
+[ -z "$LIVE" ] && OK "no failed units" || NO "failed: $LIVE"
+if [ -n "$STALE" ]; then
+  NO "left over from the rename, permanently red: $STALE"
+  TIP "these hide the next real one. Look, then remove them:"
+  TIP "    ls -la /etc/systemd/system/$OLD-*"
+  TIP "    sudo systemctl disable --now $STALE 2>/dev/null"
+  TIP "    sudo rm -rf /etc/systemd/system/$OLD-*"
+  TIP "    sudo systemctl daemon-reload && sudo systemctl reset-failed"
+fi
 
 H "The API"
 curl -fsS "localhost:$PORT/health" >/dev/null 2>&1 && OK "/health answers on $PORT" || NO "/health does not answer on $PORT"
