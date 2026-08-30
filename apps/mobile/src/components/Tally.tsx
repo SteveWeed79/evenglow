@@ -9,7 +9,7 @@ import { Touch } from './Touch';
 import { tallySize } from '../theme/tally';
 import { useFade } from '../theme/motion';
 import { useTheme } from '../theme/ThemeProvider';
-import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
+import { FONTS, RADII, SPACE, SURFACE, TAP, TYPE } from '../theme/tokens';
 
 /**
  * The signature control (UX-SPEC §3).
@@ -182,6 +182,7 @@ export function Tally({
       stroke={colors.border}
       strokeWidth={colors.borderWidth}
       glow={colors.glow}
+      glowReach={SURFACE.glowReachTally}
       style={styles.arch}
     >
       <Text style={[styles.label, { color: colors.muted }]}>{label}</Text>

@@ -139,7 +139,9 @@ Two deliberate swerves away from the obvious:
 
 ### The motif: the lamp on the card
 
-Every surface is the same rounded rectangle, and what carries the burrow is **light**: a soft radial warmth across the head of every card, brightest at 5am and faintest at noon, as though a lamp hung above the wall. It appears everywhere, costs nothing, needs no illustration, and makes the app recognizable from across a room.
+Every surface is the same rounded rectangle, and what carries the burrow is **light**: a soft warmth along the top edge of every card, as though a lamp hung above the wall. It costs nothing, needs no illustration, and makes the app recognizable from across a room.
+
+**It is a lamplight feature.** Over a near-white card the same warm wash darkens the surface *toward* the wall's own tone and subtracts the separation it was there to create — daylight measured 1.222:1 flat and 1.064 lit, bright sun 1.180 and 1.031, the last of which is a card top indistinguishable from its wall. So the two light themes carry no glow and take a darker ground instead — to 1.245 and 1.256, which is all the room they have. What runs out first in both is `lanternInk`, the readable brass, on a 4.5:1 floor of its own.
 
 **This replaced the arch, which was the motif until it was seen at size.** `--arch` was an elliptical radius — 50% of the width across, a fixed 2rem down — so that a doorway got a wide shallow head on straight jambs rather than the semicircular dome a single circular radius gives. That much worked. What did not is that the head scaled with the surface: on a card 500dp wide the ellipse is 500 by 32, which reads as a warped top edge rather than a door. The motif was legible on a chip and a button and dissolved on everything larger, which is most of the app.
 
@@ -242,7 +244,9 @@ export function Tally({
 .tally__commit { background: var(--lantern); color: #201913; width: 100%; }
 ```
 
-The lamp glow sits high on the card, above its content — light falling on the head from something hung over the wall. **On every card**, which is the reversal recorded above; it was one per screen while it was a doorway's light rather than a room's. It stays off `lantern` fills, though: the primary button is the one saturated thing on a screen and a wash over brass only mutes it.
+The lamp glow sits on the top edge of the card, above its content — light falling from something hung over the wall. **On every card, after dark**: it was one glow per screen while it was a doorway's light rather than a room's, and it is off entirely in daylight and bright sun, where it made cards harder to pick out rather than easier.
+
+**The light stops before the text starts, and that is a floor rather than a preference.** The first version washed *through* the card and put a `muted` label on 2.73:1 against a 4.5 minimum — a gradient defeats a palette check, because the colour underneath the text appears nowhere in the palette. `tests/unit/contrast.test.ts` composites it now. It also stays off `lantern` fills: the primary button is the one saturated thing on a screen and a wash over brass only mutes it.
 
 Haptic feedback matters more than it sounds: through a glove it's often the only confirmation the tap registered. This is a concrete argument for the native shell — the web `navigator.vibrate` API is unsupported in iOS Safari, so on a PWA this feature would simply not exist on half the phones in the world. The Capacitor plugin works everywhere.
 
