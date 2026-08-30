@@ -231,6 +231,8 @@ const styles = StyleSheet.create({
   },
   seasonWords: { flex: 1, fontFamily: FONTS.body, fontSize: TYPE.body },
   card: {
+    // Fills the cell its `<Grid>` wrapper already stretched — see `Grid`.
+    flexGrow: 1,
     padding: SPACE.lg,
     borderRadius: RADII.softHead,
     borderWidth: StyleSheet.hairlineWidth,
@@ -262,7 +264,12 @@ const styles = StyleSheet.create({
     minHeight: TAP.min,
     borderRadius: RADII.softHead,
     borderWidth: StyleSheet.hairlineWidth,
-    marginTop: SPACE.xs,
+    // Sits on the bottom edge of a stretched card, so the button lines up with
+    // the one in the bed beside it however many plantings each holds. It
+    // replaces a 4dp `SPACE.xs` top margin and takes the card's own `SPACE.sm`
+    // gap instead, which is the whole of the change on a phone: an auto margin
+    // with no free space to absorb is nothing.
+    marginTop: 'auto',
   },
   plantLabel: { fontFamily: FONTS.body, fontSize: TYPE.body },
 });

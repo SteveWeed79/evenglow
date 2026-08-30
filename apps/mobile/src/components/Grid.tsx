@@ -131,6 +131,29 @@ const styles = StyleSheet.create({
    * percentage, because the two do not compose: `flexBasis: '50%'` already
    * accounts for all the width and the gaps are then extra, so two columns
    * overflow their container by exactly one gap. See `cellWidth`.
+   *
+   * ## Why a card in here needs `flexGrow: 1` of its own
+   *
+   * **The cells are already equal height and the cards are not.** `alignItems`
+   * defaults to `stretch`, per flex line, so the sizing views above match the
+   * tallest cell in their row without being asked — that is why a row of chips
+   * elsewhere in the app already comes out level. What breaks the chain here is
+   * the wrapper itself: the card inside it is an ordinary block child of a
+   * column, so it takes its content's height and leaves the rest of the cell
+   * empty under its own border. A group card carrying "Ready to process at
+   * 65–87 weeks" therefore stands 60dp taller than the one beside it, and the
+   * row reads ragged. Reported off the tablet, on Stock and on The farm.
+   *
+   * So each card opts in with `flexGrow: 1`, and **`flexGrow` rather than
+   * `flex`**: `flex: 1` also sets `flexBasis: 0`, and below the threshold this
+   * component returns its children bare into a column of their own height —
+   * where a zero basis is measured as no height at all and every card on every
+   * phone collapses. `flexGrow` alone does nothing without free space to take,
+   * which is exactly the one-column case.
+   *
+   * It is asked of the card rather than done here because a card is a `Touch`,
+   * whose `style` is a function of the pressed state — there is no style for
+   * this to merge into from the outside without breaking that.
    */
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.md },
 });
