@@ -271,6 +271,40 @@ describe('what reaches a phone', () => {
     );
   });
 
+  /**
+   * And so is a box built before it was written — which is every box that
+   * exists.
+   *
+   * `setup-box.sh` runs once, by hand, at the beginning. The deploy pulls this
+   * repository onto the box every five minutes, so a hardening added to that
+   * script lands on the machine as text and is never executed again: the box
+   * receives the fix for its own condition and cannot apply it. Reported as an
+   * install page that never advanced past a build published before the check
+   * became a refusal.
+   *
+   * Which is the shape `/var/lib/homefarm/dist` already had — created in
+   * `deploy.sh` as well, "so a box built before /app existed grows one without
+   * being rebuilt". The same backfill, for a package rather than a directory.
+   */
+  it('backfills unzip from deploy.sh, before it tries to publish', () => {
+    const deploy = executable(read('deploy.sh'));
+
+    expect(deploy).toContain('apt-get install -y unzip');
+    // Guarded, so every tick after the first is one `command -v`.
+    expect(deploy).toContain('command -v unzip');
+
+    const install = deploy.indexOf('apt-get install -y unzip');
+    expect(install).toBeLessThan(deploy.indexOf('publish-apk.sh'));
+
+    // **And it cannot take the deploy down with it.** This runs after the API
+    // has been restarted; apt being unreachable is not a reason to fail a
+    // deploy that has already succeeded at the part that matters. A box that
+    // cannot install it keeps the APK on its shelf and says so.
+    const block = deploy.slice(deploy.indexOf('command -v unzip'), install + 200);
+    expect(block).not.toContain('die ');
+    expect(block).not.toContain('exit 1');
+  });
+
   it('counts the APKs on a release rather than only whether one exists', () => {
     const workflow = readFileSync(
       join(__dirname, '..', '..', '.github', 'workflows', 'apk.yml'),
