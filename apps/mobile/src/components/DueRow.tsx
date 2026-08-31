@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { type Due, dueDate, type Urgency, urgencyOf } from '@homefarm/contracts';
 import { Icon } from './Icon';
@@ -138,6 +138,52 @@ export function DueRow({
    */
   const [armed, setArmed] = useState(false);
 
+  /**
+   * And then said so, which it never did.
+   *
+   * ## A write with no visible result reads as a broken button
+   *
+   * Reported from the tablet: vaccinations marked done, the row still saying
+   * *"in 12 months"*, and no way to tell whether anything had been recorded.
+   * Nothing was wrong with the write — What happened showed it — and nothing
+   * could have shown on the row either, because `when()` prints
+   * `Math.round(days / 30)` months, so **every date between 345 and 374 days
+   * out renders "in 12 months"**. A twelve-month interval resets to 365, which
+   * is inside that band. The row was incapable of moving.
+   *
+   * That is not fixable by making the date finer. "in 11.9 months" is not a
+   * thing to print on a row read at arm's length, and the same collapse happens
+   * at every grain: a job on a 14-day interval marked done a day early goes
+   * from "in 13 days" to "in 14 days", which is a change nobody watching a
+   * button will catch either.
+   *
+   * So the confirmation is the button's own, and it belongs there rather than
+   * on the date. Three seconds, the interval `Tally` uses for the same job.
+   *
+   * ## The past tense finally lands where it is true
+   *
+   * The note above records the past-tense label being pulled OUT of the armed
+   * state, because "Vaccinated" beside an un-pressed button claimed a job was
+   * finished when nothing had been written. This is the state where that
+   * sentence is a fact rather than a claim, and it is the one place it was
+   * never shown.
+   */
+  const [saved, setSaved] = useState(false);
+
+  /**
+   * Cleared on unmount, because a row that is discharged usually stops being
+   * rendered: the list recomputes on the next engine publish and a row whose
+   * record now exists may leave it. A three-second timer holding a `setState`
+   * on that component would fire into nothing and warn.
+   */
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (timer.current !== null) clearTimeout(timer.current);
+    },
+    [],
+  );
+
   const body = (
     <>
 
@@ -149,31 +195,61 @@ export function DueRow({
       {due.done === undefined || onDone === undefined ? null : (
         <Touch affordance="border"
           onPress={() => {
+            /**
+             * **Guarded here rather than with `disabled`.** `Touch` does not
+             * take that prop — it wraps `Pressable` and forwards what it names
+             * — so the first version of this was inert, and two more presses
+             * during the confirmation armed and wrote a second careLog for a
+             * job done once. An append-only record with no undo is the wrong
+             * place to find that out; the test that caught it presses four
+             * times.
+             */
+            if (saved) return;
             if (!armed) {
               setArmed(true);
               return;
             }
             setArmed(false);
             onDone();
+            setSaved(true);
+            if (timer.current !== null) clearTimeout(timer.current);
+            timer.current = setTimeout(() => setSaved(false), 3_000);
           }}
           accessibilityRole="button"
-          accessibilityLabel={armed ? `Confirm: ${due.done.label}` : `${due.title}: mark done`}
+          accessibilityLabel={
+            saved
+              ? `${due.done.label}, recorded`
+              : armed
+                ? `Confirm: ${due.done.label}`
+                : `${due.title}: mark done`
+          }
           hitSlop={8}
           testID={`due-done-${due.key}`}
           style={({ pressed }) => [
             styles.done,
             {
               backgroundColor: armed ? colors.lantern : 'transparent',
-              borderColor: armed ? colors.lanternInk : colors.border,
+              borderColor: saved ? colors.leaf : armed ? colors.lanternInk : colors.border,
               opacity: pressed ? 0.75 : 1,
             },
           ]}
         >
-          {/* No tick while it is armed. A tick is the app's mark for a thing
-              that has happened, and nothing has happened yet. */}
-          <Icon name={armed ? 'forward' : 'check'} size={16} color={armed ? colors.lanternOn : colors.muted} />
-          <Text style={[styles.doneLabel, { color: armed ? colors.lanternOn : colors.muted }]}>
-            {armed ? 'Tap again' : 'Done'}
+          {/* No tick while it is armed — a tick is the app's mark for a thing
+              that has happened, and nothing has happened yet. Once it has, the
+              tick is exactly right, and it goes leaf like every other
+              completed thing in the app. */}
+          <Icon
+            name={armed ? 'forward' : 'check'}
+            size={16}
+            color={saved ? colors.leaf : armed ? colors.lanternOn : colors.muted}
+          />
+          <Text
+            style={[
+              styles.doneLabel,
+              { color: saved ? colors.leaf : armed ? colors.lanternOn : colors.muted },
+            ]}
+          >
+            {saved ? due.done.label : armed ? 'Tap again' : 'Done'}
           </Text>
         </Touch>
       )}
