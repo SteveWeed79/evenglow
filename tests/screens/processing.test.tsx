@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { massEntryToUg, newId, processingDue } from '@homefarm/contracts';
-import { lastCullByGroup, listGroups, processedByGroup } from '@homefarm/core/read/groups';
+import { lastHarvestByGroup, listGroups, processedByGroup } from '@homefarm/core/read/groups';
 import { localStore } from '@homefarm/core/db/store';
 import { enqueue } from '@homefarm/core/sync/queue';
 import { dueDestination } from '../../apps/mobile/src/hooks/useDueActions';
@@ -93,7 +93,7 @@ describe('recording that they were taken', () => {
 
     // The same record the loss screen writes, deliberately: two kinds meaning
     // "these are no longer alive" would need reconciling in five read paths.
-    const culled = await lastCullByGroup();
+    const culled = await lastHarvestByGroup();
     expect(culled.get(GROUP)).toBeGreaterThan(0);
 
     const group = (await listGroups()).find((g) => g.id === GROUP);
@@ -243,7 +243,7 @@ describe('what the totals mean', () => {
     });
 
     expect((await processedByGroup()).get(GROUP)).toBeUndefined();
-    expect((await lastCullByGroup()).get(GROUP)).toBeUndefined();
+    expect((await lastHarvestByGroup()).get(GROUP)).toBeUndefined();
   });
 
   /** A fox is not a harvest. Every other cause is a loss and stays one. */

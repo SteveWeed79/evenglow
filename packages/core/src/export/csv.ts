@@ -275,9 +275,17 @@ export async function buildExport(range: ExportRange = {}): Promise<Sheet[]> {
       // Kept, and always empty on anything this app has written: nothing ever
       // collected it. See `mortalityCreateSchema`.
       'Cull weight (g)',
-      // What a cull actually yielded, in the same micrograms the weights sheet
-      // uses. This is the column "meat produced per flock" is summed from, and
-      // until the processing screen existed there was nothing to put in it.
+      // What a harvest actually yielded, in the same micrograms the weights
+      // sheet uses. This is the column "meat produced per flock" is summed
+      // from, and until the processing screen existed there was nothing to put
+      // in it.
+      //
+      // The sheet is still called `losses` and still carries every mortality
+      // row, which is right — it is the whole record of animals leaving a
+      // group. What separates a harvest from a loss is the `Cause` column,
+      // which now says `harvest` where it used to say `cull` for the same act.
+      // The sheet name is deliberately NOT changed: a farm with a spreadsheet
+      // built on these exports should not have it break over a word.
       'Dressed weight (ug)',
     ],
     await rowsFrom(

@@ -44,9 +44,25 @@ const LABELS: Record<Cause, string> = {
   injury: 'Injury',
   age: 'Old age',
   cull: 'Culled',
+  harvest: 'Taken for meat',
   unknown: 'Do not know',
   other: 'Something else',
 };
+
+/**
+ * What this screen offers, which is not every cause.
+ *
+ * **`harvest` is not a loss and must not be reachable from a screen headed
+ * "Record a loss".** Taking a flock at weight is the purpose of having raised
+ * it; it has its own screen, headed "Take them for meat", which also collects
+ * the dressed weight this one has no field for. Offering it here would file a
+ * farm's best day under the record nobody wants to make — the exact confusion
+ * that screen was built to end, left standing in the chooser.
+ *
+ * `cull` stays. It is a deliberate act and still a loss: the animal did not
+ * work out and the farm got nothing for it. That is what this screen is for.
+ */
+const LOSS_CAUSES = MORTALITY_CAUSES.filter((cause) => cause !== 'harvest');
 
 export function LossScreen({ route }: ScreenProps<'Loss'>): React.ReactElement {
   const { groupId } = route.params;
@@ -126,7 +142,7 @@ export function LossScreen({ route }: ScreenProps<'Loss'>): React.ReactElement {
       </Field>
 
       <Field label="What happened?">
-        <Choice options={MORTALITY_CAUSES} value={cause} onChange={setCause} labels={LABELS} />
+        <Choice options={LOSS_CAUSES} value={cause} onChange={setCause} labels={LABELS} />
       </Field>
 
       {cause === 'predator' ? (

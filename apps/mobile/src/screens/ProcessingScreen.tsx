@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
 import {
   formatMass,
@@ -9,6 +9,7 @@ import {
 import { listGroups, processedByGroup } from '@homefarm/core/read/groups';
 import {
   Choice,
+  Confirm,
   Failure,
   Field,
   NumberField,
@@ -113,13 +114,57 @@ export function ProcessingScreen({ route }: ScreenProps<'Processing'>): React.Re
   const [chosen, setChosen] = useState<Unit | null>(null);
   const [note, setNote] = useState('');
 
-  const { saving, failure, save } = useSaver(useLeave());
+  const leave = useLeave();
+
+  /**
+   * A meat flock has an ending and the app never acknowledged one.
+   *
+   * Asked from the farm as *"when does their group disappear?"*, and the answer
+   * was: never, on its own. Taking the birds clears the processing row and does
+   * nothing else — the head count stays as the keeper set it (deliberately, see
+   * the panel below), the group stays on Stock, and the only exit is `Put this
+   * group away` at the foot of the edit screen with nothing pointing at it. So
+   * next spring's batch arrives beside a flock that went in the freezer in
+   * August, and Stock becomes a graveyard.
+   *
+   * Offered rather than done. Archiving is the farm's call — a keeper who holds
+   * a few back, or who is about to record a second batch, has a group that is
+   * not finished — and the app has no business deciding a flock is over. What
+   * it can do is stop making somebody remember.
+   *
+   * Measured against the head count because that is the only figure the app has
+   * for how many were in this group, and it is the farm's own — the same
+   * authority every other decision on this screen defers to.
+   */
+  const [finished, setFinished] = useState(false);
+
+  /**
+   * Read at commit rather than at render: `processedByGroup` re-reads once the
+   * write lands, so a render-time comparison would race the publish that caused
+   * it. The question is "did the batch I just recorded finish the group", and
+   * that is answerable only from what was known when it was sent.
+   */
+  const finishes = useRef(false);
+
+  const { saving, failure, save } = useSaver(
+    useCallback(() => {
+      if (finishes.current) {
+        setFinished(true);
+        return;
+      }
+      leave();
+    }, [leave]),
+  );
+
+  const { saving: archiving, failure: archiveFailure, save: saveArchive } = useSaver(leave);
 
   const choices = MASS_ENTRY_CHOICES[units];
   const unit: Unit = chosen ?? choices[0];
   const dressed = toMass(amount, unit);
 
   const commit = useCallback(() => {
+    finishes.current = group !== null && (already?.get(groupId)?.count ?? 0) + count >= group.count;
+
     void save(async () => {
       await log({
         entity: 'mortality',
@@ -128,7 +173,14 @@ export function ProcessingScreen({ route }: ScreenProps<'Processing'>): React.Re
           occurredAt: Date.now(),
           flockId: groupId,
           count,
-          cause: 'cull' as const,
+          /**
+           * `harvest`, which is what this act is. It was `cull` because that
+           * was the only cause the schema had — and a cull is a different
+           * thing: an animal that did not work out, which the farm got nothing
+           * for. Writing them alike meant `lossesByGroup` reported a finished
+           * batch of broilers as birds *lost*.
+           */
+          cause: 'harvest' as const,
           /**
            * Omitted rather than zero when the box is empty. A farm that
            * processes without weighing has recorded that it processed, which is
@@ -140,12 +192,65 @@ export function ProcessingScreen({ route }: ScreenProps<'Processing'>): React.Re
         },
       });
     });
-  }, [save, log, groupId, count, dressed, note]);
+  }, [save, log, groupId, count, dressed, note, group, already]);
+
+  const putAway = useCallback(() => {
+    void saveArchive(async () => {
+      await log({
+        entity: 'flock',
+        op: 'delete',
+        targetId: groupId,
+        payload: { reason: 'Taken for meat' },
+      });
+    });
+  }, [saveArchive, log, groupId]);
 
   if (groups === null) return <Loading title="Processing" />;
   if (group === null) return <Missing title="Processing" what="That group" />;
 
   const done = already?.get(groupId) ?? { count: 0, massUg: 0 };
+
+  /**
+   * The ending, offered once the whole group is accounted for.
+   *
+   * Replaces the form rather than sitting under it. The batch has been written
+   * — that is what got us here — and leaving the stepper on screen beside it
+   * would invite recording it twice, on an append-only entity with no undo.
+   *
+   * Two ways out and neither is buried: put it away, or leave it be. "Leave it
+   * be" is a real answer rather than a cancel — a keeper holding a few birds
+   * back has a group that is still running, and the app must not imply
+   * otherwise by making the other button the only one.
+   */
+  if (finished) {
+    return (
+      <Screen title="Take them for meat" back>
+        <Text style={[styles.label, { color: colors.muted }]}>{group.name}</Text>
+
+        <Panel label="That is the whole group">
+          <Body>
+            {done.count} taken from {group.name}
+            {done.massUg > 0 ? `, ${formatMass(done.massUg, units)} dressed` : ''}. That is everyone
+            you said was there.
+          </Body>
+          <Body>
+            Putting them away keeps every record — the feed, the weights, what they yielded — and
+            stops {group.name} appearing in your lists. Nothing is deleted, and nothing here has to
+            be done now.
+          </Body>
+          <Failure message={archiveFailure} />
+          <Confirm
+            label={`Put ${group.name} away`}
+            armedLabel="Tap again to put them away"
+            onConfirm={putAway}
+            testID="put-group-away"
+          />
+        </Panel>
+
+        <Primary label="Leave it be" disabled={archiving} onPress={leave} testID="keep-group" />
+      </Screen>
+    );
+  }
 
   return (
     <Screen title="Take them for meat" back>
