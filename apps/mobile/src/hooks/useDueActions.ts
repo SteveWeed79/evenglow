@@ -74,7 +74,7 @@ export function dueDestination(due: Due): DueDestination | null {
    * This sent "Roasters reach processing weight" to `Weigh`, on the reading
    * that the row is about a weight. It is not — it is about a date, and the
    * act that answers it is taking the birds. **Weighing does not discharge the
-   * row**: `processingDue` clears on a cull (`lastCullByGroup`) and on nothing
+   * row**: `processingDue` clears on a cull (`lastHarvestByGroup`) and on nothing
    * else, so a keeper tapped the row, weighed the group, and found it still
    * there the next morning with no way to tell why.
    *

@@ -24,7 +24,7 @@ import { listBreedings, listIncubations } from '@homefarm/core/read/breeding';
 import { lastCareBySubject, listCareLogs } from '@homefarm/core/read/care';
 import {
   currentFeedPlans,
-  lastCullByGroup,
+  lastHarvestByGroup,
   lastShornByGroup,
   listGroups,
 } from '@homefarm/core/read/groups';
@@ -162,7 +162,7 @@ export function useDues(): DuesView {
     const [lastCulled, lastShorn] = await Promise.all([
       // What discharges the processing row: a deliberate cull, which is what a
       // farm records when the birds are processed. See `processingDue`.
-      lastCullByGroup(),
+      lastHarvestByGroup(),
       // A clip on a named animal counts for its group — a farm shears the whole
       // paddock in one afternoon and records whichever subject was to hand.
       lastShornByGroup(new Map(animals.map((animal) => [animal.id, animal.flockId]))),

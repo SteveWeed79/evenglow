@@ -466,15 +466,57 @@ export const feedLogCreateSchema = z
 
 // ── mortality (append-only) ──────────────────────────────────────────────────
 
+/**
+ * Why an animal is no longer in the group.
+ *
+ * ## `harvest` is not a kind of loss, and it was filed as one
+ *
+ * Taking a meat bird at weight is the entire purpose of having raised it. It
+ * was written as `cull`, which is a different act: a cull is removing an animal
+ * that is not working out — a hen that has stopped laying, a ewe with bad teeth
+ * — and it is a decision about an animal that disappointed you. Reported from
+ * the farm in one line: *"an animal taken for meat isn't culled it's
+ * harvested."*
+ *
+ * The cost was not only the word. Both landed as `cause: 'cull'`, so nothing
+ * downstream could tell them apart: `lossesByGroup` counted a finished batch of
+ * broilers as birds *lost*, which is what a group's own screen then said, and
+ * the CSV export blended the two into one column.
+ *
+ * **Additive, so the server ships first.** An old server validates `cause`
+ * against its own enum and answers 400 for a value it does not know, while an
+ * old client simply never sends one. Same rule the mutation envelope states
+ * about widening the entity list, and for the same reason. It does not bump
+ * `MUTATION_SCHEMA_VERSION`.
+ *
+ * **Records written before the split stay `cull` and still count as taken.**
+ * Every reader that asks "was this group processed" accepts both — see
+ * `lastHarvestByGroup`. Nothing is migrated: the history is what happened, and
+ * a farm's older row does not become wrong because the vocabulary improved.
+ */
 export const MORTALITY_CAUSES = [
   'predator',
   'illness',
   'injury',
   'age',
   'cull',
+  'harvest',
   'unknown',
   'other',
 ] as const;
+
+/**
+ * The causes that mean the animals were TAKEN, deliberately, by the farm.
+ *
+ * `harvest` is the word for it and `cull` is here because that is what the app
+ * wrote before there was a `harvest` — not because a cull is a harvest. Both
+ * discharge the processing row and neither is a loss.
+ */
+export const TAKEN_CAUSES = ['harvest', 'cull'] as const;
+
+export function isTaken(cause: string): boolean {
+  return (TAKEN_CAUSES as readonly string[]).includes(cause);
+}
 
 export const mortalityCreateSchema = z
   .object({
@@ -512,9 +554,10 @@ export const mortalityCreateSchema = z
      * and a farm that switches to metric later reads the same record back
      * exactly rather than approximately.
      *
-     * Only meaningful with `cause: 'cull'`; a fox leaves no dressed weight. Not
-     * refined against it, because a schema that refuses the pair would turn a
-     * mis-tapped cause into a rejected mutation rather than an edit.
+     * Only meaningful on a taken cause — see `isTaken`; a fox leaves no dressed
+     * weight. Not refined against it, because a schema that refuses the pair
+     * would turn a mis-tapped cause into a rejected mutation rather than an
+     * edit.
      */
     dressedMassUg: microgramsSchema.optional(),
   })

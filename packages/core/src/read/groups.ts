@@ -4,6 +4,7 @@ import {
   feedPlanCreateSchema,
   flockCreateSchema,
   idMintedAt,
+  isTaken,
   type Species,
 } from '@homefarm/contracts';
 import { localStore } from '../db/store';
@@ -193,7 +194,7 @@ const storedMortality = z.object({
   flockId: z.string(),
   count: z.number().int(),
   cause: z.string(),
-  /** Only ever set on a cull, and only when the farm weighed. See `processedByGroup`. */
+  /** Only ever set on a taken cause, and only when the farm weighed. See `processedByGroup`. */
   dressedMassUg: z.number().int().optional(),
 });
 
@@ -204,6 +205,28 @@ const storedMortality = z.object({
  * keeper says is there, and quietly decrementing it from mortality rows would
  * mean two sources of truth for the same number disagreeing the first time
  * somebody also edited the group by hand.
+ *
+ * ## A harvested bird is not a lost one
+ *
+ * **This counted every mortality row whatever its cause**, so a batch of
+ * broilers taken at weight — the entire purpose of having raised them — was
+ * added to the same figure as a fox kill, and a group's own screen reported
+ * *"7 lost since you started recording"* about seven birds that went in the
+ * freezer exactly as planned. The app telling a farm its best day was a bad
+ * one.
+ *
+ * **Only `harvest` is excluded, and `cull` is deliberately still a loss.** They
+ * are not the same act: a cull is an animal that did not work out — a hen off
+ * lay, a ewe with bad teeth — and the farm got nothing for it, which is what a
+ * loss is. A harvest is the yield. `isTaken` treats them alike because it
+ * answers a different question — "were these taken by the farm, so does the
+ * processing row clear" — and that one has to accept the `cull` rows written
+ * before there was a `harvest`.
+ *
+ * Which means a farm's older harvests, stored as culls, go on counting here.
+ * Nothing can tell them apart in retrospect; that information was never
+ * recorded, and a rule invented to guess would be worse than a figure that is
+ * honest about the era it came from.
  */
 export async function lossesByGroup(): Promise<Map<string, number>> {
   const records = await localStore().readRecordsByEntity('mortality');
@@ -212,7 +235,7 @@ export async function lossesByGroup(): Promise<Map<string, number>> {
   for (const record of records) {
     if (record.deleted) continue;
     const parsed = storedMortality.safeParse(record.value);
-    if (!parsed.success) continue;
+    if (!parsed.success || parsed.data.cause === 'harvest') continue;
 
     totals.set(parsed.data.flockId, (totals.get(parsed.data.flockId) ?? 0) + parsed.data.count);
   }
@@ -221,25 +244,30 @@ export async function lossesByGroup(): Promise<Map<string, number>> {
 }
 
 /**
- * When each group was last deliberately culled, which is what discharges the
+ * When each group was last taken for meat, which is what discharges the
  * processing row.
  *
- * `cause: 'cull'` and nothing else. Every other cause on `MORTALITY_CAUSES` is
- * a loss — a predator, an illness, old age — and a flock that lost a bird to a
- * fox has not been processed. `processingDue` decides whether the date is late
- * enough to count; this only says when the last one was.
+ * A taken cause and nothing else — see `isTaken`. Every other cause on
+ * `MORTALITY_CAUSES` is a loss, and a flock that lost a bird to a fox has not
+ * been processed. `processingDue` decides whether the date is late enough to
+ * count; this only says when the last one was.
+ *
+ * **Was `lastCullByGroup`, and accepts `cull` still.** That is the value the
+ * app wrote for a harvest before the two acts were separated, so every record a
+ * farm already has keeps discharging the row it always discharged. The name
+ * changed because the old one described the storage rather than the question.
  *
  * The newest wins rather than the first, so a farm that processes in two
  * batches is answered by the batch it has just done.
  */
-export async function lastCullByGroup(): Promise<Map<string, number>> {
+export async function lastHarvestByGroup(): Promise<Map<string, number>> {
   const records = await localStore().readRecordsByEntity('mortality');
   const latest = new Map<string, number>();
 
   for (const record of records) {
     if (record.deleted) continue;
     const parsed = storedMortality.safeParse(record.value);
-    if (!parsed.success || parsed.data.cause !== 'cull') continue;
+    if (!parsed.success || !isTaken(parsed.data.cause)) continue;
 
     const { flockId, occurredAt } = parsed.data;
     if (occurredAt > (latest.get(flockId) ?? -Infinity)) latest.set(flockId, occurredAt);
@@ -251,8 +279,9 @@ export async function lastCullByGroup(): Promise<Map<string, number>> {
 /**
  * What each group has been taken for, and what it yielded.
  *
- * `cause: 'cull'` only, on the same reading `lastCullByGroup` uses: every other
- * cause is a loss, and a flock that lost a bird to a fox has not been processed.
+ * A taken cause only, on the same reading `lastHarvestByGroup` uses: every
+ * other cause is a loss, and a flock that lost a bird to a fox has not been
+ * processed.
  *
  * **The mass is summed and the count is summed, and neither is divided here.**
  * Per head is the caller's arithmetic because the two numbers do not always
@@ -271,7 +300,7 @@ export async function processedByGroup(): Promise<Map<string, { count: number; m
   for (const record of records) {
     if (record.deleted) continue;
     const parsed = storedMortality.safeParse(record.value);
-    if (!parsed.success || parsed.data.cause !== 'cull') continue;
+    if (!parsed.success || !isTaken(parsed.data.cause)) continue;
 
     const { flockId, count, dressedMassUg } = parsed.data;
     const running = totals.get(flockId) ?? { count: 0, massUg: 0 };

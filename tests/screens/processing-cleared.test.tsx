@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { newId } from '@homefarm/contracts';
-import { lastCullByGroup } from '@homefarm/core/read/groups';
+import { lastHarvestByGroup } from '@homefarm/core/read/groups';
 import { enqueue } from '@homefarm/core/sync/queue';
 import { freshStore } from '../support/store';
 import { mount } from '../support/screen';
@@ -124,7 +124,7 @@ describe('what the reader picks out', () => {
     await cull(20, second);
     await cull(20, first);
 
-    expect(await lastCullByGroup()).toEqual(new Map([[GROUP, second]]));
+    expect(await lastHarvestByGroup()).toEqual(new Map([[GROUP, second]]));
   });
 
   it('ignores every cause that is not a cull', async () => {
@@ -135,6 +135,6 @@ describe('what the reader picks out', () => {
       payload: { flockId: GROUP, count: 2, cause: 'illness', occurredAt: Date.now() },
     });
 
-    expect(await lastCullByGroup()).toEqual(new Map());
+    expect(await lastHarvestByGroup()).toEqual(new Map());
   });
 });

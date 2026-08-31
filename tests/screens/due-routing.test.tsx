@@ -65,7 +65,7 @@ describe('a row that says the birds are ready', () => {
    * the fix routed the **processing** row to the scale. That was better than a
    * hub and it was still the wrong destination, for a reason no assertion here
    * could see: **weighing does not discharge a processing row.**
-   * `processingDue` clears on a cull (`lastCullByGroup`) and on nothing else.
+   * `processingDue` clears on a cull (`lastHarvestByGroup`) and on nothing else.
    * So the row led somewhere, the keeper weighed the birds, and the row was
    * there again the next morning — which is the file header's own "a
    * processing row that did nothing useful", surviving its own fix in a
