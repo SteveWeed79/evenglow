@@ -10,7 +10,7 @@ import {
   type Species,
 } from '@homefarm/contracts';
 import { listGroups } from '@homefarm/core/read/groups';
-import { listMachines } from '@homefarm/core/read/iron';
+import { listMachines, scoopGramsFrom, takesScoop } from '@homefarm/core/read/iron';
 import {
   Chip,
   Choice,
@@ -98,6 +98,8 @@ export function AddItemScreen({ route }: ScreenProps<'AddItem'>): React.ReactEle
   const [species, setSpecies] = useState<Species[]>([]);
   /** What the whole lot cost, as typed. Divided by `quantity` before storing. */
   const [paid, setPaid] = useState('');
+  /** What one scoop of it holds, as typed, in `unit`. Optional — see below. */
+  const [scoop, setScoop] = useState('');
 
   const currency = useCurrency();
 
@@ -126,6 +128,20 @@ export function AddItemScreen({ route }: ScreenProps<'AddItem'>): React.ReactEle
     [groups],
   );
 
+  /**
+   * The scoop, in grams, or null when it was not answered or cannot be.
+   *
+   * Asked here so a farm can say it once, while unpacking the sack — but it
+   * is genuinely optional and stays that way. `FeedScreen` asks again at the
+   * moment somebody is holding the scoop and wondering why the shelf did not
+   * move, and `EditItemScreen` keeps it changeable afterwards. Three chances
+   * to answer a question that costs nothing to leave alone.
+   */
+  const scoopGrams = useMemo(
+    () => (takesScoop({ kind, unit }) ? scoopGramsFrom(unit, Number(scoop)) : null),
+    [kind, unit, scoop],
+  );
+
   const { saving, failure, save } = useSaver(useLeave());
 
   const commit = useCallback(() => {
@@ -148,10 +164,27 @@ export function AddItemScreen({ route }: ScreenProps<'AddItem'>): React.ReactEle
           // would put it in the "can this service be done" question wrongly.
           ...(kind === 'part' && equipmentId !== null ? { equipmentId } : {}),
           ...(costCents === null ? {} : { costCents }),
+          // Left out rather than nulled when unanswered: a create may not
+          // carry null at all (`contracts/clearing.ts`), and there is nothing
+          // to clear on a sack that does not exist yet.
+          ...(scoopGrams === null ? {} : { scoopGrams }),
         },
       });
     });
-  }, [save, log, name, kind, unit, quantity, warns, reorderBelow, equipmentId, species, costCents]);
+  }, [
+    save,
+    log,
+    name,
+    kind,
+    unit,
+    quantity,
+    warns,
+    reorderBelow,
+    equipmentId,
+    species,
+    costCents,
+    scoopGrams,
+  ]);
 
   const iron = machines ?? [];
 
@@ -212,6 +245,22 @@ export function AddItemScreen({ route }: ScreenProps<'AddItem'>): React.ReactEle
             steps={[1, 5]}
             suffix={unit}
             testID="item-reorder"
+          />
+        </Field>
+      ) : null}
+
+      {takesScoop({ kind, unit }) ? (
+        <Field
+          label="What does one scoop hold? (optional)"
+          hint="Weigh your scoop once and every feed logged in scoops comes off this sack exactly. Skip it and a scoop stays an estimate — you can say later."
+        >
+          <NumberField
+            value={scoop}
+            onChangeText={setScoop}
+            placeholder="2"
+            suffix={unit}
+            accessibilityLabel="What one scoop of this holds"
+            testID="item-scoop"
           />
         </Field>
       ) : null}

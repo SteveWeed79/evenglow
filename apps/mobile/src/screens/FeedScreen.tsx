@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { lastFedByGroup, listGroups } from '@homefarm/core/read/groups';
-import { listInventory } from '@homefarm/core/read/iron';
+import { listInventory, scoopGramsFrom, scoopIn, takesScoop } from '@homefarm/core/read/iron';
 import {
   Choice,
   Field,
@@ -15,7 +15,7 @@ import { Screen } from '../components/Screen';
 import { Tally } from '../components/Tally';
 import { Touch } from '../components/Touch';
 import { useLive } from '../hooks/useLive';
-import { useLeave } from '../hooks/useNav';
+import { useLeave, useNav } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import { reportTrouble } from '../hooks/useTrouble';
 import type { ScreenProps } from '../navigation/Root';
@@ -71,11 +71,25 @@ import { FONTS, SPACE, TAP, TYPE } from '../theme/tokens';
  * those as the same question — it copies the sack's unit into the measure — so
  * this is the condition that was already being relied on, now acted on.
  *
- * **Scoops still change nothing**, and the screen says so rather than leaving
- * somebody to notice. A scoop is a real unit on a real farm and an imprecise
- * one everywhere else; the record keeps its 907 g approximation because that
- * is what was fed, and the shelf keeps the number the farm can check against a
- * bag on the floor.
+ * **Scoops change nothing until the farm says what a scoop is**, and the screen
+ * says which of the two it is rather than leaving somebody to notice. A scoop
+ * is a real unit on a real farm and an imprecise one everywhere else, so an
+ * unanswered scoop keeps its 907 g approximation in the record and leaves the
+ * shelf at the number a farm can check against a bag on the floor. Once
+ * `scoopGrams` is set it is arithmetic like pounds, and the sack comes down.
+ *
+ * ## Where the scoop is answered
+ *
+ * Here, and in two other places, because for a long time it was only here —
+ * behind four stacked conditions, and gone the moment it was answered. The
+ * report was simply *"I don't see where the user can add the weight that their
+ * scoop holds"*, which is what an unfindable field looks like from outside.
+ *
+ * It is a fact about the sack, so `AddItemScreen` asks when the sack goes on
+ * the shelf and `EditItemScreen` owns it thereafter. This screen still asks,
+ * because standing in the barn wondering why the shelf did not move is the
+ * moment the question makes sense — and once answered it shows what it is
+ * using and offers the way back, instead of going quiet.
  *
  * **Last write wins**, as it does for every mutable field here. Two people
  * feeding from the same sack on two phones will both compute from fifty and
@@ -229,6 +243,9 @@ export function FeedScreen({ route }: ScreenProps<'Feed'>): React.ReactElement {
     return sack;
   }, [sack, measure]);
 
+  /** What this sack's scoop was said to hold, in its own unit. Null if never. */
+  const said = sack === null ? null : scoopIn(sack);
+
   /** Grams in one of whatever is being counted, using the sack's own scoop. */
   const gramsPer = useCallback(
     (): number => (measure === 'scoop' ? (sack?.scoopGrams ?? GRAMS.scoop) : GRAMS[measure]),
@@ -245,21 +262,16 @@ export function FeedScreen({ route }: ScreenProps<'Feed'>): React.ReactElement {
    * remembered, and from then on scoops are exact.
    */
   const learnScoop = useCallback(async () => {
-    const said = Number(scoop);
-    if (sack === null || scoop.trim() === '' || !Number.isFinite(said) || said <= 0) return;
+    if (sack === null) return;
+    const grams = scoopGramsFrom(sack.unit, Number(scoop));
+    if (grams === null) return;
 
-    await log({
-      entity: 'inventory',
-      op: 'update',
-      targetId: sack.id,
-      payload: {
-        scoopGrams: Math.round(said * (sack.unit === 'kg' ? GRAMS.kg : GRAMS.lb)),
-      },
-    });
+    await log({ entity: 'inventory', op: 'update', targetId: sack.id, payload: { scoopGrams: grams } });
     setScoop('');
   }, [log, sack, scoop]);
 
   const leave = useLeave();
+  const nav = useNav();
 
   /**
    * ── Who owns the outcome of a tally ───────────────────────────────────────
@@ -429,10 +441,36 @@ export function FeedScreen({ route }: ScreenProps<'Feed'>): React.ReactElement {
         * about to happen costs one line and removes both surprises.
         */}
       {drawnFrom !== null ? (
-        <Text style={[styles.note, { color: colors.inkQuiet }]} testID="feed-shelf-note">
-          Comes off the shelf — {drawnFrom.name} has {drawnFrom.quantity} {drawnFrom.unit} left.
-        </Text>
-      ) : sack !== null && measure === 'scoop' && (sack.unit === 'lb' || sack.unit === 'kg') ? (
+        <>
+          <Text style={[styles.note, { color: colors.inkQuiet }]} testID="feed-shelf-note">
+            Comes off the shelf — {drawnFrom.name} has {drawnFrom.quantity} {drawnFrom.unit} left
+            {/* What the sum is being done with, when it is a scoop. A farm
+                that can see "at 2 lb a scoop" can tell at a glance that the
+                app has the right scoop; one that cannot has to infer it from
+                how fast the sack goes down. */}
+            {measure === 'scoop' && said !== null ? `, at ${said} ${drawnFrom.unit} a scoop` : ''}.
+          </Text>
+
+          {/**
+            * And a way back to it, because the field that set it is gone.
+            *
+            * The ask below only renders while `scoopGrams` is unset, so
+            * answering it removed the only control that could ever change the
+            * answer — a scoop typed as 20 lb instead of 2 multiplied every
+            * scoop-measured feed by ten, permanently, from the farm's point of
+            * view. The number is a fact about the sack, so correcting it lands
+            * on the screen that owns the sack.
+            */}
+          {measure === 'scoop' && said !== null ? (
+            <Secondary
+              label="That is not my scoop"
+              icon="forward"
+              onPress={() => nav.navigate('EditItem', { itemId: drawnFrom.id })}
+              testID="feed-scoop-change"
+            />
+          ) : null}
+        </>
+      ) : sack !== null && measure === 'scoop' && takesScoop(sack) ? (
         /* Only worth asking where the answer would change something. Knowing
            what a scoop holds cannot draw down a sack counted in bags. */
         <Field

@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { listInventory, runningLow, type StockItem } from '@homefarm/core/read/iron';
+import { listInventory, runningLow, scoopIn, type StockItem } from '@homefarm/core/read/iron';
 import { Primary, Secondary, Stepper } from '../components/Form';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
@@ -79,6 +79,16 @@ function ItemCard({ item }: { item: StockItem }): React.ReactElement {
 
   const isLow = item.reorderBelow !== undefined && item.quantity <= item.reorderBelow;
 
+  /**
+   * What the scoop holds, said on the card.
+   *
+   * It is the figure that decides whether feeding by the scoop draws this sack
+   * down, and it was invisible everywhere — so a farm had no way to check what
+   * the app thought their scoop was, let alone spot a 20 lb typo for 2. One
+   * line, where the sack is.
+   */
+  const scoop = scoopIn(item);
+
   return (
     <View
       style={[
@@ -93,6 +103,7 @@ function ItemCard({ item }: { item: StockItem }): React.ReactElement {
       <Text style={[styles.detail, { color: colors.muted }]}>
         {item.kind} · {item.unit}
         {item.reorderBelow === undefined ? '' : ` · order below ${item.reorderBelow}`}
+        {scoop === null ? '' : ` · scoop ${scoop} ${item.unit}`}
       </Text>
 
       {/**
@@ -112,6 +123,26 @@ function ItemCard({ item }: { item: StockItem }): React.ReactElement {
         icon="forward"
         onPress={() => nav.navigate('AdjustStock', { itemId: item.id })}
         testID={`adjust-${item.id}`}
+      />
+
+      {/**
+        * Changing the sack itself, from the sack itself.
+        *
+        * This screen is where somebody stands looking at an item that is
+        * wrong, and every way to correct anything but the number went through
+        * "Something happened to it" — a button that means *record an event*,
+        * and reads like it. So the name, the unit, the reorder level and the
+        * scoop were all four taps deep behind a label that promises something
+        * else, and the audit found nobody would guess it. R1's budget is for
+        * logging rather than editing, but two taps to the screen that owns the
+        * item is the shape the rest of the app uses: every group hub ends in
+        * "Change this group".
+        */}
+      <Secondary
+        label="Change this"
+        icon="forward"
+        onPress={() => nav.navigate('EditItem', { itemId: item.id })}
+        testID={`edit-${item.id}`}
       />
     </View>
   );

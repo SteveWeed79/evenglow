@@ -1,12 +1,13 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { INVENTORY_KINDS, INVENTORY_UNITS } from '@homefarm/contracts';
-import { listInventory } from '@homefarm/core/read/iron';
+import { listInventory, scoopGramsFrom, scoopIn, takesScoop } from '@homefarm/core/read/iron';
 import {
   Chip,
   Confirm,
   Failure,
   Field,
+  NumberField,
   Primary,
   TextField,
   useSaver,
@@ -45,6 +46,22 @@ import { SPACE } from '../theme/tokens';
  * the count reached zero would teach people to type a zero they do not mean —
  * which is worse than an archived item with a number on it, because the
  * adjustment history would then carry a use that never happened.
+ *
+ * ## The scoop lives here now, and it had nowhere to live before
+ *
+ * Reported: *"I don't see where the user can add the weight that their scoop
+ * holds."* It could be added, and only in one place — `FeedScreen` — behind
+ * four conditions stacked on each other: the typed feed had to match a shelf
+ * sack by name, the measure had to be scoops, the sack had to be counted in
+ * lb or kg, and **the scoop had to be unanswered**. Answer it once and the
+ * field vanished for good, so a scoop entered as 20 lb instead of 2 was
+ * permanent from the UI and quietly multiplied every feed by ten.
+ *
+ * A sack's scoop is a fact about the sack, like its unit and its reorder
+ * level, so it belongs on the screen where the sack is described — findable
+ * by somebody looking for it rather than only by somebody who happened to be
+ * mid-feed. `FeedScreen` still asks, because the moment of noticing is worth
+ * catching; it now points here to change an answer instead of hiding it.
  */
 export function EditItemScreen({ route }: ScreenProps<'EditItem'>): React.ReactElement {
   const { itemId } = route.params;
@@ -59,6 +76,8 @@ export function EditItemScreen({ route }: ScreenProps<'EditItem'>): React.ReactE
     kind: string;
     unit: string;
     reorderBelow: number;
+    /** What one scoop holds, in whatever `unit` currently says. See `retare`. */
+    scoop: string;
     supplier: string;
     note: string;
   } | null>(null);
@@ -69,16 +88,36 @@ export function EditItemScreen({ route }: ScreenProps<'EditItem'>): React.ReactE
   if (items === null) return <Loading title="Shelf" />;
   if (item === null) return <Missing title="Shelf" what="That item" />;
 
+  const stored = scoopIn(item);
+
   const current = edits ?? {
     name: item.name,
     kind: item.kind,
     unit: item.unit,
     reorderBelow: item.reorderBelow ?? 0,
+    scoop: stored === null ? '' : String(stored),
     supplier: item.supplier ?? '',
     note: item.note ?? '',
   };
 
   const change = (next: Partial<typeof current>): void => setEdits({ ...current, ...next });
+
+  const asks = takesScoop(current);
+
+  /**
+   * Changing what the sack is counted in must not resize the scoop.
+   *
+   * The field states the scoop in the sack's own unit, so correcting a sack
+   * from lb to kg would otherwise leave "2" standing and silently mean 2 kg —
+   * a scoop that grew by a factor of two and a bit because somebody fixed an
+   * unrelated typo. The weight is what is real, so it is held and the number
+   * is re-expressed around it.
+   */
+  const retare = (unit: string): void => {
+    const grams = scoopGramsFrom(current.unit, Number(current.scoop));
+    const held = grams === null ? null : scoopIn({ unit, scoopGrams: grams });
+    change({ unit, scoop: held === null ? current.scoop : String(held) });
+  };
 
   const commit = (): void => {
     void save(async () => {
@@ -93,6 +132,18 @@ export function EditItemScreen({ route }: ScreenProps<'EditItem'>): React.ReactE
           // Zero means "never nag", which is a real answer and different from
           // a threshold of nought — so it clears rather than storing one.
           reorderBelow: current.reorderBelow > 0 ? current.reorderBelow : null,
+          /**
+           * Emptied means "I do not know what my scoop holds any more", which
+           * is a real answer: it puts the sack back to the estimate and stops
+           * the shelf drawing down for scoops, rather than freezing whatever
+           * was said. Null is how the wire says that (`contracts/clearing.ts`).
+           *
+           * Sent on every save, including where the field is not shown — a
+           * feed corrected from lb to bags can no longer state a scoop, and
+           * leaving the old grams behind would have the shelf drawing down on
+           * a figure the screen has stopped displaying.
+           */
+          scoopGrams: scoopGramsFrom(current.unit, Number(current.scoop)),
           supplier: current.supplier.trim() === '' ? null : current.supplier.trim(),
           note: current.note.trim() === '' ? null : current.note.trim(),
         },
@@ -146,11 +197,34 @@ export function EditItemScreen({ route }: ScreenProps<'EditItem'>): React.ReactE
               label={unit}
               selected={current.unit === unit}
               testID={`unit-${unit}`}
-              onPress={() => change({ unit })}
+              onPress={() => retare(unit)}
             />
           ))}
         </View>
       </Field>
+
+      {/* Feed counted by weight only — see `takesScoop`. Asking what a scoop
+          of bedding holds, or of a feed counted in bales, is asking for a
+          number that could not be used for anything. */}
+      {asks ? (
+        <Field
+          label="What does one scoop hold?"
+          hint={
+            stored === null
+              ? 'Weigh the scoop once — a full one, of this sack. Until you do, a scoop is logged as an estimate and the shelf is left alone.'
+              : 'Change it if you have a different scoop, or empty it to go back to an estimate.'
+          }
+        >
+          <NumberField
+            value={current.scoop}
+            onChangeText={(scoop) => change({ scoop })}
+            placeholder="2"
+            suffix={current.unit}
+            accessibilityLabel="What one scoop of this holds"
+            testID="edit-item-scoop"
+          />
+        </Field>
+      ) : null}
 
       <Field
         label="Tell me when it drops below"

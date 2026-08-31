@@ -293,3 +293,53 @@ export async function listInventory(): Promise<StockItem[]> {
 export function runningLow(items: readonly StockItem[]): StockItem[] {
   return items.filter((i) => i.reorderBelow !== undefined && i.quantity <= i.reorderBelow);
 }
+
+// ── the scoop ────────────────────────────────────────────────────────────────
+
+/**
+ * What one of a sack's own units weighs, in grams.
+ *
+ * Only `lb` and `kg`, because those are the only units a scoop can be stated
+ * against. A sack counted in bags or bales says nothing about what goes in a
+ * trough, so `scoopGramsFrom` returns null there rather than guessing — the
+ * same condition `FeedScreen` already draws the shelf down on.
+ *
+ * 454 rather than the 453.59237 in `contracts/units.ts`, and deliberately.
+ * That module converts *measured* weights, where the extra digits are real.
+ * This one converts a number a person types while holding the scoop — "two
+ * pounds" — and it is the figure every scoop already stored was computed
+ * with. Sharpening it would move records nobody asked to have moved.
+ */
+const GRAMS_PER_UNIT: Readonly<Record<string, number>> = { lb: 454, kg: 1000 };
+
+/**
+ * Whether it is worth asking what this item's scoop holds.
+ *
+ * Feed only, and only where the answer would change something: knowing what a
+ * scoop holds cannot draw down a sack counted in bags, and bedding is not fed
+ * by the scoop.
+ */
+export function takesScoop(item: Pick<StockItem, 'kind' | 'unit'>): boolean {
+  return item.kind === 'feed' && item.unit in GRAMS_PER_UNIT;
+}
+
+/**
+ * What this sack's scoop holds, in the sack's own unit — the number a farm
+ * typed, given back to them to read or correct.
+ *
+ * Null when nothing was said, or when the sack is counted in something a
+ * scoop cannot be stated against. Two decimals, because a scoop is a half or
+ * a quarter of something and never four digits of one.
+ */
+export function scoopIn(item: Pick<StockItem, 'unit' | 'scoopGrams'>): number | null {
+  const per = GRAMS_PER_UNIT[item.unit];
+  if (per === undefined || item.scoopGrams === undefined) return null;
+  return Math.round((item.scoopGrams / per) * 100) / 100;
+}
+
+/** Grams for a scoop stated in the sack's own unit. Null when it cannot be. */
+export function scoopGramsFrom(unit: string, said: number): number | null {
+  const per = GRAMS_PER_UNIT[unit];
+  if (per === undefined || !Number.isFinite(said) || said <= 0) return null;
+  return Math.round(said * per);
+}
