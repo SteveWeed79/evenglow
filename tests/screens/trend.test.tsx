@@ -81,6 +81,42 @@ describe('the numbers', () => {
   });
 
   /**
+   * The axis named the wrong bucket on one of the two chips.
+   *
+   * `Trend` hardcoded "this week" under its last column, so the twelve-MONTH
+   * chart announced its final bar as a week. A two-state bug where one state is
+   * right is the kind that survives every reading of the component — the string
+   * is correct in the file, and only the other chip disagrees — so it takes a
+   * test that presses the chip.
+   */
+  it('names the bucket the chips actually selected', async () => {
+    await eggs(3, 12);
+
+    const screen = await mount(<TrendScreen {...routeProps({ groupId: GROUP })} />);
+    expect(screen.text()).toContain('this week');
+    expect(screen.text()).not.toContain('this month');
+
+    await screen.pressLabel('12 months');
+    expect(screen.text()).toContain('this month');
+    expect(screen.text()).not.toContain('this week');
+  });
+
+  /**
+   * Two numbers a line apart that measure different things, with nothing saying
+   * so: the figure by the axis is the tallest bucket in the window, and the
+   * sentence under it is the last COMPLETE bucket. Reported off the tablet as
+   * the screen making no sense, and it does not — "56 eggs" over "6 eggs last
+   * time round" is a contradiction until one of them says what it is.
+   */
+  it('says the scale figure is a peak rather than a total', async () => {
+    await eggs(16, 100);
+    await eggs(9, 120);
+
+    const screen = await mount(<TrendScreen {...routeProps({ groupId: GROUP })} />);
+    expect(screen.text()).toContain('most ');
+  });
+
+  /**
    * A farm that has just installed the app must be told the window is empty,
    * not shown a flat chart it has to interpret. Twelve zero-height bars and no
    * words is indistinguishable from a broken read.

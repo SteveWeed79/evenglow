@@ -157,6 +157,7 @@ export function TrendScreen({ route }: ScreenProps<'Trend'>): React.ReactElement
           <Chart
             key={product}
             title={PRODUCT_LABELS[product]}
+            grain={grain}
             unit={PRODUCT_UNITS[product]}
             points={points}
             {...(() => {
@@ -171,6 +172,7 @@ export function TrendScreen({ route }: ScreenProps<'Trend'>): React.ReactElement
       {data === null || data.feed.every((point) => point.amount === 0) ? null : (
         <Chart
           title="Feed"
+          grain={grain}
           unit=""
           points={data.feed}
           // Stored in grams; `formatMass` speaks micrograms, and the farm
@@ -183,6 +185,7 @@ export function TrendScreen({ route }: ScreenProps<'Trend'>): React.ReactElement
       {data === null || data.spend.every((point) => point.amount === 0) ? null : (
         <Chart
           title="What the feed cost"
+          grain={grain}
           unit=""
           points={data.spend}
           format={(minor) => formatMoney(minor, currency)}
@@ -271,12 +274,20 @@ function PerEggPanel({
 
 function Chart({
   title,
+  grain,
   unit,
   points,
   format,
   testID,
 }: {
   title: string;
+  /**
+   * Threaded through rather than read from a context, because it is the screen
+   * that owns the chips and this is the screen's own private component. It has
+   * to arrive here at all: `Trend` used to name its last column "this week"
+   * from a hardcoded string, which was right on one of the two chips.
+   */
+  grain: Grain;
   unit: string;
   points: Point[];
   format?: (amount: number) => string;
@@ -294,6 +305,7 @@ function Chart({
         <>
           <Trend
             points={points}
+            grain={grain}
             unit={unit}
             {...(format === undefined ? {} : { format })}
             testID={testID}
