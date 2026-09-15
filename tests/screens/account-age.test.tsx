@@ -44,6 +44,18 @@ function captureBody(): { of: (path: string) => Record<string, unknown> | undefi
 beforeEach(async () => {
   await freshStore();
   setApiBase('https://farm.test');
+
+  /**
+   * **Stubbed for every case, including the ones that never submit.**
+   *
+   * This suite pressed controls without a stub and passed on a laptop, where
+   * an unresolvable host fails in milliseconds. On CI it goes through a proxy
+   * and hangs — which leaves `saving` true, which disables the Google button,
+   * which failed an assertion about the age gate for a reason that had nothing
+   * to do with it. A screen test that reaches the network is a screen test
+   * that is timing-dependent on somebody else's DNS.
+   */
+  vi.stubGlobal('fetch', async () => new Response('{}', { status: 500 }));
 });
 
 afterEach(() => {
@@ -73,10 +85,19 @@ describe('where the question is asked', () => {
    * And not on sign-in. This is the assertion that would fail if somebody
    * moved the control up to sit with the email and password, which is exactly
    * where it looks like it belongs.
+   *
+   * **Asserted on the screen as it opens, and not by pressing "Sign in".** The
+   * mode chip and the submit button carry the same words, `pressLabel` takes
+   * the first exact match, and the match it takes is the *button* — so that
+   * press submits a sign-in rather than changing tab. It cost an afternoon on
+   * CI, where the request it fires hangs instead of failing, leaving the form
+   * mid-save and every control on it disabled.
    */
   it('does not ask it of somebody signing in', async () => {
     const screen = await mount(signedOut());
-    await screen.pressLabel('Sign in');
+
+    // The precondition, stated rather than assumed: only sign-in offers this.
+    expect(screen.has('account-forgot')).toBe(true);
 
     expect(screen.has('account-age')).toBe(false);
     screen.unmount();
@@ -126,10 +147,11 @@ describe('what it gates', () => {
     // mount, and this whole case would pass by finding nothing.
     expect(screen.has('account-google')).toBe(true);
 
-    // The button is also disabled while the auth request is still being
-    // prepared, so this settles that first. Asserting before it does would
-    // pass on `!ready` and go on passing with the age gate deleted.
-    await screen.type('account-farm', 'Hollow Farm');
+    // The button is also disabled while the auth request is being prepared and
+    // while anything is in flight, so this settles both first. Asserting
+    // before it does would pass for the wrong reason and go on passing with
+    // the age gate deleted.
+    await screen.settle();
 
     expect(screen.get('account-google').props.accessibilityState?.disabled).toBe(true);
     await screen.press('account-age');
@@ -144,9 +166,10 @@ describe('what it gates', () => {
    */
   it('leaves the Google button alone on the sign-in tab', async () => {
     const screen = await mount(signedOut());
-    await screen.pressLabel('Sign in');
-    await screen.type('account-email', 'sam@example.test');
+    await screen.settle();
 
+    expect(screen.has('account-forgot')).toBe(true);
+    expect(screen.has('account-age')).toBe(false);
     expect(screen.get('account-google').props.accessibilityState?.disabled).toBeFalsy();
     screen.unmount();
   });
