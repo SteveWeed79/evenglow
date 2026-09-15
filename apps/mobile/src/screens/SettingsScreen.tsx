@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { NOT_VETERINARY_ADVICE } from '@homefarm/contracts';
 import { readExposure } from '@homefarm/core/backup/exposure';
 import { readSite } from '@homefarm/core/read/growing';
 import { Choice, Row } from '../components/Form';
@@ -313,6 +314,23 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
         * and the row above already leads to making an account, so this says
         * where the records are and stops.
         */}
+      {/**
+        * What this app is not — `UNCONSIDERED.md` `[16]`.
+        *
+        * **Both places, one string.** The withdrawal banner carries it at the
+        * moment it applies, which is where it does the work; this is where
+        * somebody reading about the app finds it, and a farm that has never
+        * treated an animal has no banner to have read it on.
+        *
+        * Above "This device" rather than at the foot: this is about the farm's
+        * records, and the panel below is about the handset. It is not a row,
+        * because there is nothing to open — a chevron leading nowhere is the
+        * dead control this app refuses elsewhere.
+        */}
+      <Panel label="Medicines and withdrawal">
+        <Body>{NOT_VETERINARY_ADVICE}</Body>
+      </Panel>
+
       <Panel label="This device">
         {account === undefined ? null : account === null ? (
           <Body>

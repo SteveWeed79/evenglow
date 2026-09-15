@@ -31,7 +31,8 @@
       },
       "distribution": "store",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.swbuild.dev"
+        "EXPO_PUBLIC_API_URL": "https://api.swbuild.dev",
+        "EXPO_PUBLIC_CHANNEL": "play"
       },
       "autoIncrement": true
     }

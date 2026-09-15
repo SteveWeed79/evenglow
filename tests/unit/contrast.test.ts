@@ -344,3 +344,39 @@ describe('the check itself', () => {
     expect(contrast('#ffffff', '#ffffff')).toBeCloseTo(1, 5);
   });
 });
+
+/**
+ * The withdrawal band, which is a third surface that carries prose.
+ *
+ * `GROUNDS` above is deliberately still the two it was. Adding `alertTint`
+ * there was tried and is wrong: it applies every tier to the tint, including
+ * pairs nothing draws — `rowan` is the band's own left rule and is measured
+ * against the *screen* behind it rather than against the fill it borders, and
+ * `muted` never appears on the band at all. Two of those asserted combinations
+ * failed on a palette that is fine, which is the shape of a check that gets
+ * disabled rather than read.
+ *
+ * So this measures what the band actually sets, and nothing else. It matters
+ * because `[16]`'s veterinary line put a second, quieter tier on a tinted
+ * surface no test had ever looked at: the message had always been `ink`, which
+ * clears everything by a mile, and `inkQuiet` is the tier with margin to lose.
+ */
+describe('the withdrawal band, where a warning and its caveat share a tint', () => {
+  it.each(themes)('%s reads both lines on the tint', (_name, theme) => {
+    // The withheld message. 7:1, like every other sentence that leads.
+    expect(contrast(theme.ink, theme.alertTint), 'ink on alertTint').toBeGreaterThanOrEqual(7);
+
+    /**
+     * And the veterinary line under it.
+     *
+     * `inkQuiet` rather than `muted`, which this file says elsewhere is for
+     * "labels, units, dividers, timestamps — never a sentence" — so the
+     * quiet-prose tier is the only correct one here, and it is held to the
+     * same 7:1 as `ink` precisely so quiet never means hard to read.
+     */
+    expect(
+      contrast(theme.inkQuiet, theme.alertTint),
+      'inkQuiet on alertTint',
+    ).toBeGreaterThanOrEqual(7);
+  });
+});
