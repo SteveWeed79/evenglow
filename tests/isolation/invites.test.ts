@@ -269,7 +269,7 @@ describeDb('accepting', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/invites/accept',
-      payload: { token, email: 'sam@example.test', password: 'a properly long one', name: 'Sam' },
+      payload: { token, email: 'sam@example.test', password: 'a properly long one', name: 'Sam', ageConfirmed: true },
     });
 
     expect(res.statusCode).toBe(201);
@@ -292,7 +292,7 @@ describeDb('accepting', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/invites/accept',
-      payload: { token, email: 'someone@else.test', password: 'a properly long one', name: 'Nope' },
+      payload: { token, email: 'someone@else.test', password: 'a properly long one', name: 'Nope', ageConfirmed: true },
     });
 
     expect(res.statusCode).toBe(404);
@@ -304,7 +304,13 @@ describeDb('accepting', () => {
   it('refuses a second acceptance of the same link', async () => {
     const app = await server();
     const { token } = await inviteOnA(app, 'sam@example.test');
-    const payload = { token, email: 'sam@example.test', password: 'a properly long one', name: 'Sam' };
+    const payload = {
+      token,
+      email: 'sam@example.test',
+      password: 'a properly long one',
+      name: 'Sam',
+      ageConfirmed: true,
+    };
 
     expect((await app.inject({ method: 'POST', url: '/invites/accept', payload })).statusCode).toBe(201);
     expect((await app.inject({ method: 'POST', url: '/invites/accept', payload })).statusCode).toBe(404);
@@ -327,7 +333,7 @@ describeDb('accepting', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/invites/accept',
-      payload: { token, email: 'sam@example.test', password: 'a properly long one', name: 'Sam' },
+      payload: { token, email: 'sam@example.test', password: 'a properly long one', name: 'Sam', ageConfirmed: true },
     });
 
     expect(res.statusCode).toBe(404);
@@ -346,7 +352,7 @@ describeDb('accepting', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/invites/accept',
-      payload: { token, email: email(OWNER_B), password: 'a properly long one', name: 'B' },
+      payload: { token, email: email(OWNER_B), password: 'a properly long one', name: 'B', ageConfirmed: true },
     });
 
     expect(res.statusCode).toBe(409);

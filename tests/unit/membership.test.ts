@@ -177,7 +177,7 @@ describe('invite shapes', () => {
 
   /** The same 12-character floor sign-up uses. An invite is not a side door. */
   it('holds an accepted password to the same floor as a sign-up', () => {
-    const base = { token: 'T'.repeat(43), email: 'sam@example.com', name: 'Sam' };
+    const base = { token: 'T'.repeat(43), email: 'sam@example.com', name: 'Sam', ageConfirmed: true } as const;
     expect(inviteAcceptSchema.safeParse({ ...base, password: 'short' }).success).toBe(false);
     expect(inviteAcceptSchema.safeParse({ ...base, password: 'a-long-enough-one' }).success).toBe(true);
   });
@@ -313,7 +313,10 @@ describe('join codes', () => {
       email: 'pat@example.test',
       password: 'a properly long passphrase',
       name: 'Pat',
-    };
+      // An account is being made, so the age floor applies — see
+      // `tests/unit/age-gate.test.ts`, which is about the assertion itself.
+      ageConfirmed: true,
+    } as const;
 
     expect(joinCodeRedeemSchema.safeParse(base).success).toBe(true);
     // Short passwords are refused at the boundary, not at the database.
@@ -333,7 +336,8 @@ describe('signup', () => {
     email: 'sam@example.test',
     password: 'a properly long passphrase',
     name: 'Sam',
-  };
+    ageConfirmed: true,
+  } as const;
 
   it('takes the id the device minted', () => {
     expect(signupSchema.safeParse(base).success).toBe(true);

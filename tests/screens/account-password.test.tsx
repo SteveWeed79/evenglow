@@ -90,6 +90,10 @@ describe('typing it twice', () => {
     await screen.type('account-email', 'sam@example.com');
     await screen.type('account-password', 'a good long password');
     await screen.type('account-password-confirm', 'a good long passwrod');
+    // The age floor gates this button too, and it is not what this case is
+    // about — ticked here so the mismatch is the only thing left refusing.
+    // `tests/screens/account-age.test.tsx` is where the tick itself is tested.
+    await screen.press('account-age');
 
     expect(screen.get('account-submit').props.disabled).toBe(true);
     expect(screen.text()).toContain('do not match');

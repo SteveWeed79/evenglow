@@ -230,10 +230,19 @@ either alone:
 location permission is optional, the support report is optional, and the records
 half of a support report is off by default and refused server-side.
 
-**Target audience — 13 and over.** The documents claim it; as of this writing
-**there is no age gate in the app**, so the claim lives only in the policy.
-Either build the gate or stop claiming it, but the Console declaration and the
-app must not disagree.
+**Target audience — 13 and over, and the app now enforces it.** Every route
+that creates an account — signup, a join code, an invitation and a first Google
+sign-in — refuses a body without the assertion, and the sign-up screen asks for
+it. `MINIMUM_AGE` in `packages/contracts/src/age.ts` is the only place the
+number lives, so the Console answer, the policy, the terms and the app cannot
+drift apart.
+
+**What is stored is that it was asserted, and when.** No date of birth, so this
+adds no data type to the form above.
+
+**The floor is on an account, not on the app.** A child using the offline app on
+a family handset is asked nothing and sends nothing, which is worth stating
+plainly if the Console asks how the audience is determined.
 
 ---
 
@@ -259,7 +268,7 @@ nothing is the error that survives review and fails an audit.
    current questions.
 2. **Settle the two open items above** — the farm records' data type, and
    whether the weather transfer is declared as sharing.
-3. **Settle the age gate**, so the Console answer and the app agree.
+3. ~~**Settle the age gate.**~~ Built — see "Target audience" above.
 4. **Re-check §3 and §4 of `docs/PRIVACY-FACTS.md`**, which go stale the moment
    the code moves — particularly if billing, email or backups become live, since
    all three are declared "not yet" here.

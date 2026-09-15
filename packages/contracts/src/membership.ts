@@ -1,4 +1,6 @@
 import { z } from 'zod';
+
+import { ageConfirmedSchema } from './age';
 import { type Role, ROLES, roleSchema } from './roles';
 
 /**
@@ -168,6 +170,9 @@ export const inviteAcceptSchema = z
     email: z.string().email().max(254),
     password: passwordSchema,
     name: z.string().min(1).max(80),
+    // An invitation creates an account, so the floor applies here too — see
+    // `age.ts` on why this is parsed rather than checked in the handler.
+    ageConfirmed: ageConfirmedSchema,
   })
   .strict();
 
@@ -206,6 +211,7 @@ export const signupSchema = z
     email: z.string().email().max(254),
     password: passwordSchema,
     name: z.string().min(1).max(80),
+    ageConfirmed: ageConfirmedSchema,
   })
   .strict();
 
@@ -350,6 +356,7 @@ export const joinCodeRedeemSchema = z
     email: z.string().email().max(254),
     password: passwordSchema,
     name: z.string().min(1).max(80),
+    ageConfirmed: ageConfirmedSchema,
   })
   .strict();
 
@@ -392,6 +399,24 @@ export const googleSignInSchema = z
     orgId: z.string().length(26).optional(),
     orgName: z.string().min(1).max(120).optional(),
     name: z.string().min(1).max(80).optional(),
+    /**
+     * **Optional here and required by the handler, which is the one place the
+     * age floor is not enforced by parsing.**
+     *
+     * This schema serves two operations that cannot be told apart from the
+     * body: a first Google sign-in that creates an account, and a sign-in on a
+     * second phone by somebody who has had one for a year. Requiring the
+     * assertion would make the second ask again — and would refuse every build
+     * already on a handset, on the route somebody uses to get back in.
+     *
+     * Requiring it whenever the org fields are present was the near miss: a
+     * device holding an unclaimed farm sends those on an *ordinary* sign-in
+     * too, so that rule would lock out the same people.
+     *
+     * So `/auth/google` checks it on the branch that inserts a user, and
+     * `tests/isolation/age-gate.test.ts` is what keeps that true.
+     */
+    ageConfirmed: ageConfirmedSchema.optional(),
   })
   .strict();
 

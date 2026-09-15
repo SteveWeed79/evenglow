@@ -119,6 +119,22 @@ export interface UserDoc {
    * `major.minor.patch`. See `recordLastSeen` for why that is a parse and not a
    * store.
    */
+  /**
+   * When this person said they met the age floor, and **not what they said**.
+   *
+   * A birth date would be the stronger record and it is the wrong one to keep:
+   * collecting a date of birth to enforce a rule about collecting personal
+   * data adds a data type to the Play declaration, a line to the privacy
+   * policy and a retention question, all to hold something nobody verifies.
+   * The timestamp is what makes the policy's sentence a description of
+   * something that happened rather than a claim.
+   *
+   * **Optional, because accounts made before the gate existed have no such
+   * moment.** Backfilling a date would be writing down an assertion nobody
+   * made, which is worse than the gap — a field that is absent says "before
+   * the gate", and that is the truth about those accounts.
+   */
+  ageAssertedAt?: Date;
   lastSeen?: { at: Date; client?: string };
 }
 

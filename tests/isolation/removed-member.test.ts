@@ -140,6 +140,7 @@ describeDb('after somebody is removed from a farm', () => {
         email: HAND_EMAIL,
         password: PASSWORD,
         name: 'The hand',
+        ageConfirmed: true,
       },
     });
 
@@ -166,6 +167,7 @@ describeDb('after somebody is removed from a farm', () => {
         email: HAND_EMAIL,
         password: PASSWORD,
         name: 'The hand',
+        ageConfirmed: true,
       },
     });
 
