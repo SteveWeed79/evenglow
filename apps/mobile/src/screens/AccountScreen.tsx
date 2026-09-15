@@ -1,8 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
-import { looksLikeJoinCode, ROLE_WORDS } from '@homefarm/contracts';
+import { type DeletionOutcome, looksLikeJoinCode, ROLE_WORDS } from '@homefarm/contracts';
 import { readExposure } from '@homefarm/core/backup/exposure';
-import { Choice, Failure, Field, Primary, Secondary, TextField, useSaver } from '../components/Form';
+import {
+  Choice,
+  Confirm,
+  Failure,
+  Field,
+  Primary,
+  Secondary,
+  TextField,
+  Toggle,
+  useSaver,
+} from '../components/Form';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { Touch } from '../components/Touch';
@@ -13,6 +23,8 @@ import {
   type BillingState,
   type CachedClaims,
   claimFarm,
+  deleteAccount,
+  previewDeletion,
   googleSignIn,
   joinFarm,
   acceptInvite,
@@ -89,8 +101,15 @@ const MIN_PASSWORD = 12;
 
 export function AccountScreen({
   onSignedIn,
+  onSignedOut,
 }: {
   onSignedIn: (claims: CachedClaims) => void;
+  /**
+   * What the app does once this device no longer has an account — the same
+   * callback Settings' sign-out hands to `Boot`, reached here only after a
+   * deletion. Optional so a caller that never deletes owes nothing.
+   */
+  onSignedOut?: () => void;
 }): React.ReactElement {
   const { colors } = useTheme();
 
@@ -151,6 +170,72 @@ export function AccountScreen({
   const [linkBusy, setLinkBusy] = useState(false);
   const [linkFailure, setLinkFailure] = useState<string | null>(null);
   const [linkedTo, setLinkedTo] = useState<string | null>(null);
+
+  /**
+   * Leaving, kept apart from every other panel's state for the reason the two
+   * above are: a refusal about a password must land under the button that
+   * asked for it, and nothing else on this screen may navigate away or clear a
+   * field because a deletion did or did not happen.
+   *
+   * `deleted` is the answer the server gave, held so the screen can say what
+   * was taken *after* the credentials are gone — at that point `claims` is
+   * stale, and this is the only branch that renders on purpose against a
+   * stale one.
+   */
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [clearPhone, setClearPhone] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteFailure, setDeleteFailure] = useState<string | null>(null);
+  const [deleted, setDeleted] = useState<DeletionOutcome | null>(null);
+  /** How many other people go with the farm. Null until the server has said. */
+  const [wouldTake, setWouldTake] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!deleteOpen) return;
+    let live = true;
+    void previewDeletion().then((count) => {
+      if (live) setWouldTake(count);
+    });
+    return () => {
+      live = false;
+    };
+  }, [deleteOpen]);
+
+  const runDeletion = useCallback(
+    (proof: { password?: string; idToken?: string }) => {
+      setDeleteBusy(true);
+      setDeleteFailure(null);
+      void (async () => {
+        try {
+          setDeleted(await deleteAccount({ ...proof, clearThisPhone: clearPhone }));
+          setDeletePassword('');
+        } catch (error) {
+          setDeleteFailure(
+            error instanceof Error
+              ? error.message
+              : 'The account could not be deleted. Try again in a minute.',
+          );
+        } finally {
+          setDeleteBusy(false);
+        }
+      })();
+    },
+    [clearPhone],
+  );
+
+  const deleteWithPassword = useCallback(() => {
+    runDeletion({ password: deletePassword });
+  }, [runDeletion, deletePassword]);
+
+  /** The Google sheet's answer. Backing out is a decision, not a failure. */
+  const deleteWithGoogle = useCallback(
+    (idToken: string | null) => {
+      if (idToken === null) return;
+      runDeletion({ idToken });
+    },
+    [runDeletion],
+  );
 
   const [verifySent, setVerifySent] = useState<string | null>(null);
   const [verifyCode, setVerifyCode] = useState('');
@@ -482,6 +567,44 @@ export function AccountScreen({
 
   if (!known) return <Screen title="Your account" back>{null}</Screen>;
 
+  /**
+   * Gone, and this is the one thing said afterwards.
+   *
+   * Rendered from `deleted` rather than from `claims`, which is stale by now —
+   * `deleteAccount` signed the device out and this component was not told, on
+   * purpose: the moment `onSignedOut` runs, `Boot` reopens the device's own
+   * farm and this screen is unmounted with it. So the sentence is shown first
+   * and the reopen waits for a tap. A deletion that ended on Today with no word
+   * about what had happened would read as the app having crashed.
+   */
+  if (deleted !== null) {
+    return (
+      <Screen title="Your account" back>
+        <Panel label="Deleted">
+          <Body>
+            {deleted.deleted === 'farm'
+              ? deleted.members === 0
+                ? 'Your account and the farm have been deleted from the server.'
+                : `Your account and the farm have been deleted from the server, along with ${
+                    deleted.members === 1 ? 'the other account' : `the ${deleted.members} other accounts`
+                  } on it.`
+              : 'Your account has been deleted. The farm carries on without you.'}
+          </Body>
+          <Body>
+            {clearPhone
+              ? 'The records on this phone go with it. The app opens on a fresh farm.'
+              : 'Everything logged on this phone is still here, and the app goes on working without an account.'}
+          </Body>
+          <Primary
+            label="Carry on"
+            onPress={() => onSignedOut?.()}
+            testID="delete-continue"
+          />
+        </Panel>
+      </Screen>
+    );
+  }
+
   if (claims !== null) {
     return (
       <Screen title="Your account" back>
@@ -770,6 +893,102 @@ export function AccountScreen({
             />
           </Panel>
         )}
+
+        {/**
+          * Leaving — `docs/ACCOUNT-DELETION.md`.
+          *
+          * Last on the screen and behind a tap, for the reason the promotion
+          * code field is at the bottom of its panel: almost nobody came here
+          * for this, and a form that deletes a farm has no business being the
+          * first thing under the sign-in state. Whoever needs it will find it.
+          *
+          * **The warning is built from a number, not a clause.** The server is
+          * asked how many other people a deletion takes (`previewDeletion`),
+          * because "other members may be affected" is scrolled past and "two
+          * other people lose their accounts" is weighed. Until it answers the
+          * panel says the rule in general terms rather than a number it has
+          * not got.
+          *
+          * **The password is required, exactly as it is one panel up for a
+          * change of address**, and for a sharper version of that reason: an
+          * address can be moved back and a farm cannot. An account Google
+          * created has no password and proves itself with Google instead —
+          * offered only when this device has been told there is one to offer.
+          */}
+        <Panel label="Delete your account">
+          {deleteOpen ? (
+            <>
+              <Body>
+                {wouldTake === null
+                  ? 'If you are the farm’s only owner, this deletes the farm from the server — every record, every photo, and everybody else’s account on it. Otherwise only your own account goes and the farm carries on.'
+                  : wouldTake === 0
+                    ? 'This deletes your account from the server. If you are the farm’s only owner, the farm goes with it — every record and every photo.'
+                    : `You are the farm’s only owner, so this deletes the farm from the server — every record, every photo — and the ${
+                        wouldTake === 1 ? 'other account' : `${wouldTake} other accounts`
+                      } on it.`}
+              </Body>
+              <Body>
+                {billing?.syncing === true && billing.expiresAt !== null
+                  ? 'A subscription is not cancelled by this. Cancel it in Google Play first, or the store goes on charging for a farm that no longer exists.'
+                  : 'Everything logged on this phone stays on it unless you say otherwise below. This deletes what the server holds.'}
+              </Body>
+
+              <Toggle
+                label="Also clear the records off this phone"
+                value={clearPhone}
+                onChange={setClearPhone}
+                testID="delete-clear-phone"
+              />
+
+              <Field
+                label="Your password"
+                hint="Asked for because a stolen session must not be able to delete a farm."
+              >
+                <TextField
+                  value={deletePassword}
+                  onChangeText={setDeletePassword}
+                  secret
+                  testID="delete-password"
+                />
+              </Field>
+
+              <Failure message={deleteFailure} />
+
+              <Confirm
+                label={deleteBusy ? 'Deleting…' : 'Delete my account'}
+                armedLabel="Tap again to delete it"
+                onConfirm={deleteWithPassword}
+                testID="delete-confirm"
+              />
+
+              {/**
+                * The other proof, for an account with no password to give.
+                * Not gated on the password box being empty: an account with
+                * both may use either, and the server decides.
+                */}
+              {GOOGLE_AVAILABLE && claims.googleLinked === true ? (
+                <GoogleButton
+                  disabled={deleteBusy}
+                  onToken={deleteWithGoogle}
+                  label="Confirm with Google instead"
+                  testID="delete-google"
+                />
+              ) : null}
+            </>
+          ) : (
+            <>
+              <Body>
+                Take your account off the farm’s server. Nothing on this phone is touched unless
+                you ask.
+              </Body>
+              <Secondary
+                label="Delete my account…"
+                onPress={() => setDeleteOpen(true)}
+                testID="delete-open"
+              />
+            </>
+          )}
+        </Panel>
       </Screen>
     );
   }

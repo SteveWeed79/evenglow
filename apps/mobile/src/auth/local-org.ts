@@ -1,6 +1,6 @@
 import { isUlid, newId } from '@homefarm/contracts';
 import { knownFarmIds } from '../db/open';
-import { disposeWhenClosed } from '../db/store';
+import { disposeWhenClosed, isMarkedForDisposal } from '../db/store';
 import {
   clearLocalOrg,
   readLocalOrgRaw,
@@ -62,7 +62,10 @@ export async function ensureLocalOrgId(): Promise<string> {
   const existing = await readLocalOrgId();
   if (existing !== null) return existing;
 
-  const known = await knownFarmIds();
+  // A file marked for disposal is still on disk until the next store switch,
+  // and adopting it here would be reopening a farm somebody has just asked to
+  // have removed. See `abandonLocalOrg`.
+  const known = (await knownFarmIds()).filter((id) => !isMarkedForDisposal(id));
 
   /**
    * The way back from a join.
@@ -212,4 +215,28 @@ export async function discardEmptyLocalOrg(): Promise<void> {
 
   await clearLocalOrg();
   disposeWhenClosed(current);
+}
+
+/**
+ * Throws away a farm's records on this device, because the person asked.
+ *
+ * **The one destructive path in this file, and it is reached from exactly one
+ * place**: the account screen, after the server has confirmed the account is
+ * deleted and only when the person also chose to clear this phone. Sign-out
+ * keeps the records on purpose (`session.ts`), and `discardEmptyLocalOrg` above
+ * refuses a farm with anything in it. This is the case both of those set aside
+ * — a farm that no longer exists anywhere and whose owner has said so twice.
+ *
+ * The pointer is cleared only when it names this farm. After a join it names
+ * nothing (`retireLocalOrgId` moved it aside), and the retired list is left
+ * exactly as it is: the device's own farm is not the one being abandoned, and
+ * the next launch should come back to it.
+ *
+ * The file itself goes at the next store switch, which the caller triggers by
+ * signing out — the same moment `discardEmptyLocalOrg`'s file goes, and for the
+ * same reason: it is open until then.
+ */
+export async function abandonLocalOrg(orgId: string): Promise<void> {
+  disposeWhenClosed(orgId);
+  if ((await readLocalOrgId()) === orgId) await clearLocalOrg();
 }

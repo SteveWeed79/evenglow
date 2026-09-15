@@ -275,7 +275,9 @@ export function Root({
       <Stack.Screen name="Support" component={SupportScreen} />
       <Stack.Screen name="Members" component={MembersScreen} />
       <Stack.Screen name="Licences" component={LicencesScreen} />
-      <Stack.Screen name="Account">{() => <AccountScreen onSignedIn={onSignedIn} />}</Stack.Screen>
+      <Stack.Screen name="Account">
+        {() => <AccountScreen onSignedIn={onSignedIn} onSignedOut={onSignedOut} />}
+      </Stack.Screen>
 
       <Stack.Screen name="AddGroup" component={AddGroupScreen} />
       <Stack.Screen name="Group" component={GroupScreen} />

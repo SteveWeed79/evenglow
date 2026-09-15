@@ -453,9 +453,46 @@ period rather than a task.
       which install a farm gets. `[9]`
       Interacts with `PICK-UP-HERE.md` §3 — one route per device, because a
       mismatched signature forces an uninstall and an uninstall takes the farm.
-- [ ] **Account deletion, in-app and as a web URL** reachable without the app. `[4]`
-- [ ] **Decide what deletion means** on the server, in backups, and for a
-      lapsed farm. `[5]`
+- [x] **Account deletion, in-app and as a web URL** reachable without the app.
+      `[4]` — *designed and built September 2026:*
+      [`ACCOUNT-DELETION.md`](ACCOUNT-DELETION.md)
+      One rule does the work: **the last owner takes the farm with them, anybody
+      else takes only themselves.** A farm is its owner's; a hand's account is
+      membership of somebody else's farm, so their leaving takes the person and
+      leaves the records — the same rule removal already follows. The last owner
+      has nobody to leave it to, and an unowned farm is one nobody can ever act
+      on, export or delete.
+      **Three doors, one deletion.** `POST /account/delete` on a session for the
+      app, `GET` for the page Play requires, and that page's form on an email and
+      password with no session at all. `db/deletion.ts` is what all three do.
+      **A session is not a proof.** Every deletion needs the password or a fresh
+      Google token for the account's own subject — the bar `/auth/email` sets for
+      a change of address, for a sharper version of the reason: an address can be
+      moved back and a farm cannot.
+      **Nothing on the handset is touched unless asked**, which keeps sign-out's
+      promise rather than quietly reversing it, and the warning carries the
+      number of other accounts that would go rather than a clause about members
+      possibly being affected.
+      **Still open, and it is not code:** the S3 lifecycle rule named below has
+      to be set when the bucket is created, or the privacy policy describes
+      something that is not true.
+- [x] **Decide what deletion means** on the server, in backups, and for a
+      lapsed farm. `[5]` — *answered in `ACCOUNT-DELETION.md`, the same work*
+      **On the server: immediate and complete**, no soft-delete and no grace
+      period. Invariant 7 is about a *device's* outbox, where the history is the
+      duplicate defence; an audit trail of a farm that asked not to exist is
+      precisely the thing the request is about.
+      **In backups: until the copy rolls, and the number is 30 days.** That is
+      what the privacy policy will state, and **it is not set yet** — the bucket
+      does not exist. Whoever creates it sets the lifecycle rule at the same
+      time.
+      **A lapsed subscription is never a deletion**, which is the half worth
+      writing down: pull is deliberately ungated on billing, and deleting a farm
+      to save disk would be the betrayal that argument exists to prevent.
+      **It does not cancel a Play subscription** — this service cannot, the
+      purchase is between the farm and the store — so both doors say so before
+      the button rather than leaving somebody charged for a farm that no longer
+      exists.
 - [ ] **Complete the Data Safety declaration.** `[3]`
 - [ ] **Name the processors** — Oracle Cloud (the box), S3, GitHub, Google,
       weather.gov, the Census geocoder. `[7]`

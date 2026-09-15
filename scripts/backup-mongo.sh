@@ -62,6 +62,15 @@
 #
 # Rotation is an S3 lifecycle rule on the prefix, not logic in here. A bucket
 # setting cannot silently stop working the way a script can.
+#
+# **Set that rule to 30 days when the bucket is created, and not later.** It is
+# no longer only a housekeeping number: `docs/ACCOUNT-DELETION.md` answers what
+# deleting an account means in backups, and the answer the privacy policy will
+# state is *"until the copy rolls, which is 30 days"*. A farm deleted today is
+# in every dump taken before today and expires on this schedule and no other.
+# A bucket with no lifecycle rule keeps a deleted farm's records for ever while
+# the policy says otherwise, which is the one failure here that is an
+# enforcement matter rather than an operational one.
 
 set -Eeuo pipefail
 
