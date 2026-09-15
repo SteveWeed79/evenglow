@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetApiBase, setApiBase } from '@homefarm/core/api';
+import { SUPPORT_REPORTS_ARE_PUBLIC } from '@homefarm/contracts';
 import { listTickets, pendingTickets } from '@homefarm/core/support/tickets';
 import { shared } from '../support/native/react-native';
 import { freshStore } from '../support/store';
@@ -68,6 +69,25 @@ describe('what the screen asks for', () => {
 
     expect(screen.text()).toContain('nothing here you have to fill in');
     expect(screen.has('support-send')).toBe(true);
+  });
+
+  /**
+   * The panel used to describe only the contents, and the contents are
+   * reassuring: no names, no farm, no locations. What it never said is where
+   * the report goes — a public issue tracker — which is the fact that decides
+   * whether somebody writes a neighbour's name into the line below.
+   */
+  it('says where the report goes, not only what it contains', async () => {
+    const screen = await mount(<SupportScreen />);
+
+    expect(screen.text()).toContain(SUPPORT_REPORTS_ARE_PUBLIC);
+  });
+
+  /** And again beside the box, which is where somebody is when it matters. */
+  it('warns beside the line somebody types into', async () => {
+    const screen = await mount(<SupportScreen />);
+
+    expect(screen.text()).toContain('anybody can read it');
   });
 
   it('offers the other way out beside the ordinary one, not behind its failure', async () => {
