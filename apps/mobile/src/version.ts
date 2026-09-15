@@ -32,3 +32,32 @@ export const APP_VERSION: string = app.expo.version;
  * without splitting the report it arrived with.
  */
 export const APP_BUILD: string = process.env.EXPO_PUBLIC_BUILD ?? '';
+
+/**
+ * How this copy of the app was installed, which decides what it may say about
+ * updates — `[23]`, and the reason it is a build-time stamp.
+ *
+ * **A Play build must never offer an APK link.** Google Play's Device and
+ * Network Abuse policy forbids an app distributed through Play from updating
+ * itself by any other route, and the box cannot answer for a Play device
+ * anyway: it knows what was published, while Play decides what each device may
+ * have — staged rollouts, review, an unsupported API level. A nag nobody can
+ * act on is worse than silence, so on Play the question goes to Play.
+ *
+ * `getInstallSourceInfo()` would be the runtime answer and needs a native
+ * module this app does not have. A stamp costs nothing and `TESTING-BUILD.md`
+ * already draws the line it needs: `production` is the AAB for Play, and every
+ * other profile is an APK we serve ourselves.
+ *
+ * **Absent means the shelf**, which is the right default twice over — every
+ * build that exists today came from the shelf, and a local `expo run:android`
+ * sets nothing. The value that has to be declared is the one with the policy
+ * attached, so a profile nobody remembered to stamp cannot silently become a
+ * Play build that offers a download.
+ */
+export const APP_CHANNEL: string = process.env.EXPO_PUBLIC_CHANNEL ?? 'shelf';
+
+/** Whether this build is allowed to send somebody to the box for an APK. */
+export function installsFromShelf(): boolean {
+  return APP_CHANNEL !== 'play';
+}

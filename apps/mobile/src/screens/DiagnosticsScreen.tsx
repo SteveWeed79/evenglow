@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Linking, StyleSheet, Text, View } from 'react-native';
 import { diagnostics, type Diagnostics, nudge, subscribe } from '@homefarm/core/sync/engine';
 import { pullOnce } from '@homefarm/core/sync/pull';
 import { type StorageReport, storageReport } from '@homefarm/core/sync/storage';
@@ -7,6 +7,7 @@ import { readCachedClaims } from '../auth/session';
 import { readLocalOrgId } from '../auth/local-org';
 import { apiFault, explainFault } from '../boot/config';
 import { APP_BUILD, APP_VERSION } from '../version';
+import { type ShelfUpdate, shelfInstallUrl, shelfUpdate } from '../update/shelf';
 import { localStore } from '@homefarm/core/db/store';
 import type { SessionEnd } from '@homefarm/core/db/port';
 import { Row, Secondary } from '../components/Form';
@@ -38,12 +39,49 @@ export function DiagnosticsScreen(): React.ReactElement {
   const [pulling, setPulling] = useState(false);
   const [farmId, setFarmId] = useState<string | null>(null);
   const [ended, setEnded] = useState<SessionEnd | null>(null);
+  /** The shelf's build, when it is newer than this one. Null means nothing to say. */
+  const [update, setUpdate] = useState<ShelfUpdate | null>(null);
 
   useEffect(() => {
     void readCachedClaims().then((claims) =>
       claims === null ? readLocalOrgId().then(setFarmId) : setFarmId(claims.orgId),
     );
     void localStore().getSessionEnd().then(setEnded);
+  }, []);
+
+  /**
+   * Asked once, when this screen opens.
+   *
+   * Not at boot and not on a timer: it is one request whose only consumer is
+   * this panel, and a farm that never opens the sync screen is a farm that has
+   * no use for the answer. `live` guards the unmount, so a slow box cannot set
+   * state on a screen somebody has already left.
+   */
+  useEffect(() => {
+    let live = true;
+    void shelfUpdate().then((found) => {
+      if (live) setUpdate(found);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  /**
+   * The install page rather than the APK itself.
+   *
+   * It explains Chrome's download warning and Play Protect's unknown-developer
+   * warning *before* somebody hits them — two refusals that both look like the
+   * app is dangerous and are both routine. Handing over the file directly would
+   * mean writing that explanation into this screen instead, where it would be
+   * read by people who are not about to install anything.
+   *
+   * Swallowed: a handset with no browser to open a link in is not a state this
+   * screen can do anything about, and the address is on the page it came from.
+   */
+  const openShelf = useCallback(() => {
+    const url = shelfInstallUrl();
+    if (url !== null) void Linking.openURL(url).catch(() => undefined);
   }, []);
 
   // Fixed for the life of the process — applied once in `start()`, before any
@@ -89,6 +127,41 @@ export function DiagnosticsScreen(): React.ReactElement {
       {fault === null ? null : (
         <Panel label="This app has no farm server">
           <Body>{explainFault(fault)}</Body>
+        </Panel>
+      )}
+
+      {/**
+        * A newer build on the shelf — `[23]`.
+        *
+        * **The one thing a sideloaded install could never find out.** Android
+        * tells a farm nothing about a build it did not install, so every fix
+        * shipped after that install was invisible until somebody said so out
+        * loud. `shelfUpdate` is silent on Play, offline, an unconfigured
+        * build, and a box that has never published.
+        *
+        * **News, not a fault**, so it is not in the trouble colours and there
+        * is nothing to dismiss: it goes away by being acted on, and until
+        * then nothing is wrong with the phone and nothing is at risk. It is
+        * also deliberately not a wall — this app works with no server at all
+        * (D14), and blocking the screens over a version would break the
+        * premise to enforce a nicety.
+        *
+        * Below the server fault, because a build that cannot reach the box is
+        * told the more useful thing first and this one could not have been
+        * checked anyway.
+        */}
+      {update === null ? null : (
+        <Panel label="There is a newer build">
+          <Body>
+            This phone is on {APP_VERSION}, and {update.version}
+            {update.code === undefined ? '' : ` (build ${update.code})`} is on the farm server.
+            Nothing is wrong and nothing is at risk — installing over the top keeps your records.
+          </Body>
+          <Secondary
+            label="Get it from the farm server"
+            onPress={openShelf}
+            testID="update-open"
+          />
         </Panel>
       )}
 

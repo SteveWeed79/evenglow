@@ -285,6 +285,45 @@ fi
 install -d -m 0755 "$STATE"
 printf '%s' "$STAMP" > "$STATE/.version"
 
+# ── The same two numbers, published for the app to read ─────────────────────
+#
+# `[23]`: a sideloaded install has no updater, so a farm is never told a newer
+# build exists. This is the file the app asks for — `apps/mobile/src/update/`
+# — and it is deliberately the shelf that answers rather than the API.
+#
+# **The shelf is the honest source.** It is what a farm would actually install
+# from, so the version sitting here is the version that can be had. The API
+# would answer with what the *server* is running, which is a different number
+# and not one anybody can act on.
+#
+# **In `$DIST` rather than `$STATE`, which inverts the rule directly above.**
+# `.version` is a deploy marker and is kept out of the served tree on purpose.
+# This is the opposite kind of thing: it exists in order to be fetched, and it
+# discloses nothing the install page has not shown in plain text since it was
+# written. Caddy serves it from the same `/app/` block, matched before the
+# reverse proxy, so the API's surface does not grow by a byte — the same
+# argument the page itself was built on. Its `no-cache` comes from the `@page`
+# matcher there, which is every path that is not an APK: a check for a newer
+# build answered out of a cache is not a check.
+#
+# Only when both numbers are really known, and only when they look like what
+# they are. A hand-edited label must not become a version the app compares
+# against — the reader treats an unparseable value as "nothing to say", so the
+# cost of a malformed file is silence, but writing one would be this script
+# inventing a fact.
+case "$VERSION" in
+  *[!0-9.]*|'') ;;
+  *)
+    case "$CODE" in
+      *[!0-9]*|'') ;;
+      *)
+        printf '{"version":"%s","code":"%s"}\n' "$VERSION" "$CODE" > "$DIST/version.json"
+        chmod 0644 "$DIST/version.json"
+        ;;
+    esac
+    ;;
+esac
+
 "$(cd "$(dirname "$0")" && pwd)/render-install-page.sh" "$DIST" "$STAMP"
 note "install page refreshed${STAMP:+ — $STAMP}"
 

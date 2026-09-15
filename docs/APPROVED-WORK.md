@@ -406,8 +406,23 @@ period rather than a task.
       and fails in production, for everybody, on the day the store opens.
 - [ ] **Write the privacy policy.** `[1]` — also a prerequisite for both queues.
 - [ ] **Write the terms of service and EULA.** `[2]`
-- [ ] **Write the "not veterinary advice" line and place it.** `[16]`
+- [x] **Write the "not veterinary advice" line and place it.** `[16]`
       Settings, and beside the withdrawal banner. Two sentences.
+      *Built September 2026 — `contracts/advice.ts`, one constant for both.*
+      **The second sentence is the one that earns its place.** "Not veterinary
+      advice" alone is the boilerplate everybody scrolls past and is also not
+      the useful fact; the useful fact is that this app does arithmetic on a
+      withdrawal period somebody typed in, so the date on screen is exactly as
+      right as what was entered. It names the mechanism rather than disclaiming
+      in the abstract, which is what UX-SPEC §6 asks.
+      **The band is the half that does the work** — it is the screen somebody
+      is on when they decide whether to sell, and a disclaimer under Settings is
+      one nobody reads at the moment it applies. One constant for both, because
+      two wordings would drift and the one that drifted would be the band's.
+      **It put prose on `alertTint`, a surface no test had measured**, so
+      `contrast.test.ts` gained a check for exactly the two tiers the band
+      sets. Adding the tint to the shared `GROUNDS` list was tried first and is
+      wrong — it asserts pairs nothing draws.
 - [x] **Clear the name — it did not clear, and the name is now Evenglow.**
       `[13]` — checked 19 August 2026. **Brechy LLC has a pre-launch page for an
       app called Steading**, same product and same "Scottish for farmstead"
@@ -1022,10 +1037,33 @@ period rather than a task.
       ask.*
 
       **Phase 1 — ask the box. No new dependency, and it works today.**
-      The shelf already renders a version stamp
+      ~~The shelf already renders a version stamp
       (`scripts/deploy/render-install-page.sh`), and every release now has a
       tag and an APK behind it. Serve that stamp as JSON, compare it to
-      `APP_VERSION`, and put a banner with the `/app/` link on the sync screen.
+      `APP_VERSION`, and put a banner with the `/app/` link on the sync
+      screen.~~ **Built September 2026, as written.**
+      `publish-apk.sh` writes `version.json` beside the install page and Caddy
+      serves it from the same `/app/` block — matched before the reverse proxy,
+      so the API's surface does not grow by a byte, which is the argument the
+      page itself was built on. `apps/mobile/src/update/shelf.ts` reads it and
+      `DiagnosticsScreen` draws the panel.
+      **The shelf answers rather than the API**, and that is the load-bearing
+      choice: the shelf is what a farm would actually install from, so the
+      version sitting there is the version that can be had. The API would answer
+      with what the *server* is running, which is a different number and not one
+      anybody can act on.
+      **`EXPO_PUBLIC_CHANNEL` is the stamp the four settled points asked for**,
+      set to `play` on the `production` profile and absent everywhere else.
+      Absent means the shelf, so a profile nobody remembered to stamp cannot
+      silently become a Play build that offers a download.
+      **It is a banner and not a wall**, per the note below: the queue and every
+      other panel are untouched.
+      **Silent on every failure** — offline, no server, a box that never
+      published, a file it cannot parse. Each of those returns the same null, so
+      each is asserted separately: a banner that never appears looks exactly
+      like a farm that is up to date, and nobody would report it.
+      **Phase 2 is still open**, and so is the second half of `[24]`: nothing
+      raises `MINIMUM_CLIENT_VERSION` yet, which stays deliberately empty.
 
       **Phase 2 — ask Play, once there is a listing.** `AppUpdateManager`'s
       `IMMEDIATE` flow: Play downloads, installs and restarts, so the

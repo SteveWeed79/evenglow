@@ -75,9 +75,45 @@ export function isClientTooOld(reported: string | undefined, minimum: string | n
   const client = parseVersion(reported);
   if (client === null) return true;
 
-  if (client.major !== floor.major) return client.major < floor.major;
-  if (client.minor !== floor.minor) return client.minor < floor.minor;
-  return client.patch < floor.patch;
+  return compare(client, floor) < 0;
+}
+
+/**
+ * Negative when `a` is older, positive when newer, zero when the same.
+ *
+ * Extracted when a second caller appeared rather than written speculatively:
+ * the floor above asks *is this too old to be allowed*, and the shelf check
+ * asks *is there something newer to go and get*. Both are the same three
+ * integer comparisons, and two copies would be two places for the
+ * major-before-minor ordering to be got wrong.
+ */
+function compare(a: ParsedVersion, b: ParsedVersion): number {
+  if (a.major !== b.major) return a.major - b.major;
+  if (a.minor !== b.minor) return a.minor - b.minor;
+  return a.patch - b.patch;
+}
+
+/**
+ * Whether `candidate` is a later release than `current` — the shelf check.
+ *
+ * **Both must parse, and an unreadable one is never "newer".** This decides
+ * whether to tell a farm to go and install something, and the two ways to get
+ * an unparseable value here are a box serving a file somebody hand-edited and a
+ * response that is not what it claims to be. Neither is grounds for sending
+ * somebody to download an APK, so the honest answer to "I cannot read this" is
+ * silence rather than a banner.
+ *
+ * That is the opposite default from `isClientTooOld`, and deliberately: being
+ * strict there withholds *sync* from a build the server has decided it cannot
+ * talk to, and being strict here would nag a farm about an update that may not
+ * exist.
+ */
+export function isNewerVersion(candidate: string, current: string): boolean {
+  const next = parseVersion(candidate);
+  const now = parseVersion(current);
+  if (next === null || now === null) return false;
+
+  return compare(next, now) > 0;
 }
 
 /** The header a client states its version in. */
