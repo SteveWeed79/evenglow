@@ -1,6 +1,7 @@
 import type { NavigatorScreenParams } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { PRIVACY_POLICY, TERMS_OF_SERVICE } from '@homefarm/contracts';
 import type { CachedClaims } from '../auth/session';
 import { useRotation } from '../hooks/useRotation';
 import { AddAnimalScreen } from '../screens/AddAnimalScreen';
@@ -41,6 +42,7 @@ import { IncubationsScreen } from '../screens/IncubationsScreen';
 import { InventoryScreen } from '../screens/InventoryScreen';
 import { AccountScreen } from '../screens/AccountScreen';
 import { LicencesScreen } from '../screens/LicencesScreen';
+import { LegalScreen } from '../screens/LegalScreen';
 import { LogHoursScreen } from '../screens/LogHoursScreen';
 import { LossScreen } from '../screens/LossScreen';
 import { ProcessingScreen } from '../screens/ProcessingScreen';
@@ -142,6 +144,14 @@ export type RootParamList = {
   Support: undefined;
   Members: undefined;
   Licences: undefined;
+  /**
+   * The privacy policy and the terms, one screen and two documents.
+   *
+   * The document travels in the route rather than the screen choosing from
+   * a flag, so a third one costs a row and nothing else.
+   */
+  Privacy: undefined;
+  Terms: undefined;
   /**
    * Where an account is asked for, and the only place it is.
    *
@@ -275,6 +285,10 @@ export function Root({
       <Stack.Screen name="Support" component={SupportScreen} />
       <Stack.Screen name="Members" component={MembersScreen} />
       <Stack.Screen name="Licences" component={LicencesScreen} />
+      <Stack.Screen name="Privacy">
+        {() => <LegalScreen document={PRIVACY_POLICY} />}
+      </Stack.Screen>
+      <Stack.Screen name="Terms">{() => <LegalScreen document={TERMS_OF_SERVICE} />}</Stack.Screen>
       <Stack.Screen name="Account">
         {() => <AccountScreen onSignedIn={onSignedIn} onSignedOut={onSignedOut} />}
       </Stack.Screen>

@@ -281,6 +281,29 @@ export function SettingsScreen({ onSignedOut }: { onSignedOut: () => void }): Re
           testID="go-licences"
           onPress={() => nav.navigate('Licences')}
         />
+        {/**
+          * What we do with your records, and what you agreed to.
+          *
+          * **In the app rather than only at a URL**, because D14 makes a build
+          * with no server an ordinary state and a farm must be able to read
+          * what it agreed to without one. The server renders the same two
+          * documents for the store listing, from the same source.
+          *
+          * Beside Licences, which is the other thing here that is text rather
+          * than a control.
+          */}
+        <Row
+          title="Privacy"
+          detail="What is kept, what is sent, and what is not"
+          testID="go-privacy"
+          onPress={() => nav.navigate('Privacy')}
+        />
+        <Row
+          title="Terms"
+          detail="What this app promises, and what it does not"
+          testID="go-terms"
+          onPress={() => nav.navigate('Terms')}
+        />
       </Grid>
 
       {/* ## The third theme had no way in
