@@ -128,6 +128,10 @@ function claim(over: Record<string, unknown> = {}) {
     email: `new-${ulid()}@example.test`.toLowerCase(),
     password: PASSWORD,
     name: 'Sam',
+    // The age floor. In the helper rather than in each case, because every
+    // test here is about something else and a body missing it is a 400 that
+    // would be read as the thing under test failing.
+    ageConfirmed: true,
     ...over,
   };
 }
@@ -353,7 +357,7 @@ describeDb('join codes', () => {
     const joined = await app.inject({
       method: 'POST',
       url: '/join-codes/redeem',
-      payload: { code, email: `hand2-${ulid()}@example.test`, password: PASSWORD, name: 'Pat' },
+      payload: { code, email: `hand2-${ulid()}@example.test`, password: PASSWORD, name: 'Pat', ageConfirmed: true },
     });
 
     expect(joined.statusCode).toBe(201);
@@ -374,14 +378,14 @@ describeDb('join codes', () => {
     const first = await app.inject({
       method: 'POST',
       url: '/join-codes/redeem',
-      payload: { code, email: `a-${ulid()}@example.test`, password: PASSWORD, name: 'Pat' },
+      payload: { code, email: `a-${ulid()}@example.test`, password: PASSWORD, name: 'Pat', ageConfirmed: true },
     });
     expect(first.statusCode).toBe(201);
 
     const second = await app.inject({
       method: 'POST',
       url: '/join-codes/redeem',
-      payload: { code, email: `b-${ulid()}@example.test`, password: PASSWORD, name: 'Alex' },
+      payload: { code, email: `b-${ulid()}@example.test`, password: PASSWORD, name: 'Alex', ageConfirmed: true },
     });
 
     // The same answer a guess gets. A spent code and a wrong one are the same
@@ -397,7 +401,7 @@ describeDb('join codes', () => {
     const guessed = await app.inject({
       method: 'POST',
       url: '/join-codes/redeem',
-      payload: { code: 'ZZZZZZ', email: `c-${ulid()}@example.test`, password: PASSWORD, name: 'Pat' },
+      payload: { code: 'ZZZZZZ', email: `c-${ulid()}@example.test`, password: PASSWORD, name: 'Pat', ageConfirmed: true },
     });
 
     // Age the real one past its window.
@@ -408,7 +412,7 @@ describeDb('join codes', () => {
     const stale = await app.inject({
       method: 'POST',
       url: '/join-codes/redeem',
-      payload: { code, email: `d-${ulid()}@example.test`, password: PASSWORD, name: 'Pat' },
+      payload: { code, email: `d-${ulid()}@example.test`, password: PASSWORD, name: 'Pat', ageConfirmed: true },
     });
 
     expect(guessed.statusCode).toBe(404);
@@ -432,7 +436,7 @@ describeDb('join codes', () => {
     const spent = await app.inject({
       method: 'POST',
       url: '/join-codes/redeem',
-      payload: { code: first, email: `e-${ulid()}@example.test`, password: PASSWORD, name: 'Pat' },
+      payload: { code: first, email: `e-${ulid()}@example.test`, password: PASSWORD, name: 'Pat', ageConfirmed: true },
     });
 
     // An owner who taps twice has one code that works — the one on screen.
@@ -451,7 +455,7 @@ describeDb('join codes', () => {
     const joined = await app.inject({
       method: 'POST',
       url: '/join-codes/redeem',
-      payload: { code: typed, email: `f-${ulid()}@example.test`, password: PASSWORD, name: 'Pat' },
+      payload: { code: typed, email: `f-${ulid()}@example.test`, password: PASSWORD, name: 'Pat', ageConfirmed: true },
     });
 
     expect(joined.statusCode).toBe(201);

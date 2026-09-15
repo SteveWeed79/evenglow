@@ -15,6 +15,7 @@ import {
   newId,
   NO_MAIL_CONFIGURED,
   normalizeResetCode,
+  AGE_NOT_CONFIRMED,
   RESET_CODE_TTL_MINUTES,
   RESET_REFUSAL,
   resetSchema,
@@ -300,6 +301,9 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
           // through an invite or a join code, which name their own role.
           role: 'owner',
           createdAt: now,
+          // The assertion `signupSchema` would not parse without. What is kept
+          // is the moment, never a date of birth — see `UserDoc.ageAssertedAt`.
+          ageAssertedAt: now,
         });
       } catch {
         // Lost the race on the email between the check above and here. Take
@@ -432,6 +436,21 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
         });
       }
 
+      /**
+       * **The one age check that is not done by parsing**, and it is here
+       * rather than on the schema for the reason `googleSignInSchema` sets
+       * out: this body cannot be told apart from an ordinary sign-in's, so a
+       * required field would make a farmer of forty assert their age every
+       * time they signed in on a second phone.
+       *
+       * Below the branch that creates nothing, and above the one that does. An
+       * account that already exists has asserted this once already; the
+       * question is only ever asked of somebody about to have one.
+       */
+      if (parsed.data.ageConfirmed !== true) {
+        return reply.status(400).send({ error: AGE_NOT_CONFIRMED });
+      }
+
       if (!isUlid(orgId)) {
         return reply.status(400).send({ error: 'That farm id is not one this app could have made.' });
       }
@@ -468,6 +487,7 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
           orgId,
           role: 'owner',
           createdAt: now,
+          ageAssertedAt: now,
         });
       } catch (error) {
         await deleteOrgIfEmpty(orgId).catch(() => undefined);

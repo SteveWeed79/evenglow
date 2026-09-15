@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Share, StyleSheet, Text, View } from 'react-native';
-import type { SupportBundle } from '@homefarm/contracts';
+import { SUPPORT_REPORTS_ARE_PUBLIC, type SupportBundle } from '@homefarm/contracts';
 import type { StoredTicket } from '@homefarm/core/db/port';
 import {
   flushTickets,
@@ -191,9 +191,19 @@ export function SupportScreen(): React.ReactElement {
           It carries no names, no farm, no locations and none of your records unless you say so
           below.
         </Body>
+        {/**
+         * The destination, beside the sentence about the contents.
+         *
+         * The two belong together: "it carries no names" is the sentence that
+         * makes somebody comfortable writing one into the line below.
+         */}
+        <Body>{SUPPORT_REPORTS_ARE_PUBLIC}</Body>
       </Panel>
 
-      <Field label="Anything you want to add?" hint="One line. Skip it if you would rather.">
+      <Field
+        label="Anything you want to add?"
+        hint="One line, and anybody can read it. Skip it if you would rather."
+      >
         <TextField
           value={said}
           onChangeText={setSaid}

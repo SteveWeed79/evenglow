@@ -291,7 +291,7 @@ describeDb('a credential spent on an account that could not be made', () => {
     const accepted = await app.inject({
       method: 'POST',
       url: '/invites/accept',
-      payload: { token, email: taken, password: PASSWORD, name: 'Hopeful' },
+      payload: { token, email: taken, password: PASSWORD, name: 'Hopeful', ageConfirmed: true },
     });
 
     // Refused — correctly, the address really is taken.
@@ -333,7 +333,7 @@ describeDb('a credential spent on an account that could not be made', () => {
     const redeemed = await app.inject({
       method: 'POST',
       url: '/join-codes/redeem',
-      payload: { code, email: taken, password: PASSWORD, name: 'Hopeful' },
+      payload: { code, email: taken, password: PASSWORD, name: 'Hopeful', ageConfirmed: true },
     });
 
     expect(redeemed.statusCode).toBe(409);

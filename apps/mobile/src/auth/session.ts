@@ -360,6 +360,14 @@ export async function claimFarm(input: {
   name: string;
   email: string;
   password: string;
+  /**
+   * What the person actually ticked, passed through rather than assumed.
+   *
+   * The screen will not enable the button without it, so this is `true` by the
+   * time it is sent — and sending a constant instead would make the tick
+   * decorative, which is the one thing an assertion must never be.
+   */
+  ageConfirmed: boolean;
 }): Promise<CachedClaims> {
   const res = await fetch(url('/auth/signup'), {
     method: 'POST',
@@ -389,6 +397,15 @@ export async function googleSignIn(input: {
   idToken: string;
   orgId: string;
   orgName: string;
+  /**
+   * Sent on every call, and read by the server only when it is about to make
+   * an account (`/auth/google` branch 3).
+   *
+   * This is the sign-up half of the one button that does both, so the screen
+   * gates it exactly as it gates the password path. Somebody who turns out to
+   * already have an account is signed in and this is ignored.
+   */
+  ageConfirmed: boolean;
 }): Promise<CachedClaims> {
   const res = await fetch(url('/auth/google'), {
     method: 'POST',
@@ -423,6 +440,7 @@ export async function joinFarm(input: {
   name: string;
   email: string;
   password: string;
+  ageConfirmed: boolean;
 }): Promise<CachedClaims> {
   const res = await fetch(url('/join-codes/redeem'), {
     method: 'POST',
@@ -533,6 +551,7 @@ export async function acceptInvite(input: {
   name: string;
   email: string;
   password: string;
+  ageConfirmed: boolean;
 }): Promise<CachedClaims> {
   const res = await fetch(url('/invites/accept'), {
     method: 'POST',

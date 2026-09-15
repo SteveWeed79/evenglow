@@ -1,3 +1,4 @@
+import { MINIMUM_AGE } from './age';
 import { PRODUCT_NAME } from './product';
 
 /**
@@ -221,11 +222,11 @@ export const PRIVACY_POLICY: LegalDocument = {
     { kind: 'heading', text: 'Children' },
     {
       kind: 'paragraph',
-      text: `${PRODUCT_NAME} is not directed to children under 13. You must be at least 13 to create an ${PRODUCT_NAME} account.`,
+      text: `${PRODUCT_NAME} is not directed to children under ${MINIMUM_AGE}. You must be at least ${MINIMUM_AGE} to create an ${PRODUCT_NAME} account, and the app asks you to confirm it.`,
     },
     {
       kind: 'paragraph',
-      text: "A child under 13 may use the offline app only with a parent or guardian's supervision and may not create an account. If you believe a child under 13 has provided us personal information through an account, contact us and we will address the request.",
+      text: `A child under ${MINIMUM_AGE} may use the offline app only with a parent or guardian's supervision and may not create an account. If you believe a child under ${MINIMUM_AGE} has provided us personal information through an account, contact us and we will address the request.`,
     },
 
     { kind: 'heading', text: 'Your choices and questions' },
@@ -266,7 +267,7 @@ export const TERMS_OF_SERVICE: LegalDocument = {
     { kind: 'heading', text: 'Accounts' },
     {
       kind: 'paragraph',
-      text: 'You must be at least 13 years old to create an account. You are responsible for providing accurate account information, safeguarding your credentials, and promptly notifying us if you believe your account has been accessed without authorization.',
+      text: `You must be at least ${MINIMUM_AGE} years old to create an account, and you confirm it when you make one. You are responsible for providing accurate account information, safeguarding your credentials, and promptly notifying us if you believe your account has been accessed without authorization.`,
     },
     {
       kind: 'paragraph',

@@ -250,6 +250,7 @@ describeDb('the last owner deleting their account', () => {
         email: OWNER_EMAIL,
         password: PASSWORD,
         name: 'The owner',
+        ageConfirmed: true,
       },
     });
 

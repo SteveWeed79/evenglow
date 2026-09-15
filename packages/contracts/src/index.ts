@@ -19,6 +19,7 @@ export * from './recovery';
 export * from './verification';
 export * from './deletion';
 export * from './advice';
+export * from './age';
 export * from './legal';
 export * from './support';
 export * from './backup';

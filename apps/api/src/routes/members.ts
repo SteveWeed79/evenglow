@@ -198,6 +198,9 @@ export async function memberRoutes(app: FastifyInstance, env: Env): Promise<void
           orgId: invite.orgId,
           role: invite.role,
           createdAt: new Date(),
+          // An invitation makes an account like any other, so it carries the
+          // same record. `inviteAcceptSchema` is what refused a body without it.
+          ageAssertedAt: new Date(),
         });
       } catch (error) {
         await unacceptInvite(hashed, userId).catch(() => undefined);
@@ -283,6 +286,7 @@ export async function memberRoutes(app: FastifyInstance, env: Env): Promise<void
           orgId: joinCode.orgId,
           role: joinCode.role,
           createdAt: now,
+          ageAssertedAt: now,
         });
       } catch (error) {
         await unredeemJoinCode(joinCode._id, userId).catch(() => undefined);

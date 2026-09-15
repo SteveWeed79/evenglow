@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
-import { type DeletionOutcome, looksLikeJoinCode, ROLE_WORDS } from '@homefarm/contracts';
+import {
+  AGE_CONFIRMATION,
+  AGE_WHY,
+  type DeletionOutcome,
+  looksLikeJoinCode,
+  ROLE_WORDS,
+} from '@homefarm/contracts';
 import { readExposure } from '@homefarm/core/backup/exposure';
 import {
   Choice,
@@ -373,6 +379,16 @@ export function AccountScreen({
   const [password, setPassword] = useState('');
   /** The second box, on the two modes that create a password rather than check one. */
   const [confirm, setConfirm] = useState('');
+
+  /**
+   * The age assertion, per visit and never remembered.
+   *
+   * Not persisted anywhere on the device, deliberately: what is worth keeping
+   * is the server's record that somebody said it while creating an account,
+   * and a remembered tick would let the next person to pick up the handset
+   * make an account without ever being asked.
+   */
+  const [oldEnough, setOldEnough] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   /**
    * The recovery form, which replaces the sign-in form rather than sitting
@@ -463,6 +479,14 @@ export function AccountScreen({
               idToken,
               orgId: await ensureLocalOrgId(),
               orgName: farmName.trim() === '' ? 'My farm' : farmName.trim(),
+              /**
+               * False on the sign-in tab, where nothing was asked and nothing
+               * should be. The server reads this only on the branch that
+               * creates an account, so a person signing in is unaffected — and
+               * the one who turns out not to have an account is told which box
+               * to tick (`AGE_NOT_CONFIRMED`).
+               */
+              ageConfirmed: oldEnough,
             }),
           );
         } catch (error) {
@@ -472,7 +496,7 @@ export function AccountScreen({
         }
       });
     },
-    [save, onSignedIn, farmName],
+    [save, onSignedIn, farmName, oldEnough],
   );
 
   const submit = useCallback(() => {
@@ -488,12 +512,19 @@ export function AccountScreen({
           // the same place: an account on somebody else's farm, signed in.
           onSignedIn(
             looksLikeJoinCode(code)
-              ? await joinFarm({ code, name: name.trim(), email: email.trim(), password })
+              ? await joinFarm({
+                  code,
+                  name: name.trim(),
+                  email: email.trim(),
+                  password,
+                  ageConfirmed: oldEnough,
+                })
               : await acceptInvite({
                   token: code,
                   name: name.trim(),
                   email: email.trim(),
                   password,
+                  ageConfirmed: oldEnough,
                 }),
           );
           return;
@@ -512,6 +543,7 @@ export function AccountScreen({
             name: name.trim(),
             email: email.trim(),
             password,
+            ageConfirmed: oldEnough,
           }),
         );
       } catch (error) {
@@ -529,7 +561,7 @@ export function AccountScreen({
           : new Error('Could not reach the farm. Check the connection and try again.');
       }
     });
-  }, [save, mode, onSignedIn, email, password, name, farmName, code]);
+  }, [save, mode, onSignedIn, email, password, name, farmName, code, oldEnough]);
 
   /** Step one: ask for a code. The answer never says whether the account exists. */
   const askForCode = useCallback(() => {
@@ -1016,7 +1048,11 @@ export function AccountScreen({
         : farmName.trim() !== '' &&
           name.trim() !== '' &&
           email.trim() !== '' &&
-          password.length >= MIN_PASSWORD) && matches;
+          password.length >= MIN_PASSWORD) &&
+    matches &&
+    // Every mode but sign-in ends in a new account, and none of them may be
+    // reached without the assertion the server will refuse the body without.
+    (mode === 'signin' || oldEnough);
 
   return (
     <Screen title="Your account" back>
@@ -1379,6 +1415,40 @@ export function AccountScreen({
         <Failure message="Those two do not match." />
       ) : null}
 
+      {/**
+        * The age floor, asked where an account is about to be made and
+        * nowhere else — `UNCONSIDERED.md` `[3]`.
+        *
+        * ## Why it is a tick and not a date of birth
+        *
+        * A birth date would be the stronger record and the worse trade: it
+        * adds a data type to the Play declaration, a retention question to the
+        * policy and a field to every sign-up, in exchange for a number nobody
+        * verifies. What the rule actually needs is that we did not knowingly
+        * take an account from a child, and a tick carries that.
+        *
+        * ## Why the hint says what it says
+        *
+        * `AGE_WHY` exists because the obvious reading of this box is that the
+        * app is for adults, and it is not. A ten-year-old feeding the hens on
+        * the family handset is the use this app was built for and nothing here
+        * touches them. The floor is on an account, which is the only thing
+        * that sends a person's details anywhere.
+        *
+        * Absent on sign-in: somebody who already has an account answered this
+        * when they made it, and asking again would be theatre.
+        */}
+      {mode === 'signin' ? null : (
+        <Field label="Before you finish" hint={AGE_WHY}>
+          <Toggle
+            label={AGE_CONFIRMATION}
+            value={oldEnough}
+            onChange={setOldEnough}
+            testID="account-age"
+          />
+        </Field>
+      )}
+
       <Failure message={failure} />
 
       <Primary
@@ -1423,7 +1493,16 @@ export function AccountScreen({
         * fails on every tap is worse than no button.
         */}
       {GOOGLE_AVAILABLE && mode !== 'join' ? (
-        <GoogleButton disabled={saving} onToken={withGoogle} />
+        /**
+         * Gated by the tick on the claim tab, because that press makes an
+         * account as surely as the button above it does. Left alone on the
+         * sign-in tab, where the same press almost always signs somebody in
+         * and the rare exception is answered by `AGE_NOT_CONFIRMED`.
+         */
+        <GoogleButton
+          disabled={saving || (mode === 'claim' && !oldEnough)}
+          onToken={withGoogle}
+        />
       ) : null}
 
       <Text style={[styles.note, { color: colors.inkQuiet }]}>

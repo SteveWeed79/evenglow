@@ -286,8 +286,11 @@ backup at all yet, and nothing monitors the box's uptime.
 > and be read.** A policy naming an address nobody receives is worse than none.
 > **4. Mail domain** — unchanged and still open; the server sends no mail yet.
 > **5. Children** — not directed to under 13, and 13 is the floor for an
-> account. **Still open: the app has no age gate**, so the claim lives only in
-> the documents.
+> account. **Answered and built.** The four routes that create an account refuse
+> a body without the assertion, the sign-up screen asks for it, and
+> `MINIMUM_AGE` is the one place the number lives — the policy, the terms, the
+> app and the server refusal all read it from there. The server records
+> `ageAssertedAt` and no date of birth.
 > **6. Medicine retention** — resolved by putting the obligation on the farm
 > rather than building retention into the app: the terms tell somebody to export
 > before deleting, and name Veterinary Feed Directive and organic-certification
@@ -309,10 +312,17 @@ These block the document. None of them can be inferred from the code.
 4. **What domain does mail come from?** `swbuild.dev` is the domain; the app is
    called Evenglow. A reset from a domain a farm has never heard of is
    indistinguishable from phishing.
-5. **Children.** The app has no age gate and no age handling of any kind.
-   Farming is a family activity and a teenager may well be the one logging eggs.
-   Somebody must decide the intended audience before the Data Safety form is
-   filled in.
+5. **Children — answered.** There is an age gate now (`contracts/src/age.ts`),
+   and what it gates is deliberately narrow: **an account**, not the app. A
+   teenager logging eggs on the family handset is the use this was built for,
+   nothing asks them anything, and nothing about them leaves the phone. The
+   floor applies where a person's details reach a server, which is the only
+   place it means anything.
+
+   What is stored is `ageAssertedAt` — a timestamp, never a date of birth.
+   Keeping one to enforce a rule about collecting personal data would add a
+   data type to the Data Safety form and a retention line to this policy, in
+   exchange for a number nobody verifies.
 6. **Medicine and withdrawal records** may be subject to a statutory retention
    period, which would conflict with immediate deletion (`[19]`). This one has a
    real chance of changing §6, so settle it before the policy is written.

@@ -24,6 +24,38 @@ import { z } from 'zod';
  * See `docs/SUPPORT-LOOP.md` S2.
  */
 
+/**
+ * Where a report ends up, said before somebody types into it.
+ *
+ * ## The screen described the contents and never the destination
+ *
+ * "It carries no names, no farm, no locations and none of your records" is
+ * true and it is the wrong reassurance on its own, because the one thing the
+ * bundle does carry is **whatever the farmer chose to write**, and a ticket
+ * becomes a GitHub issue on this project's repository, which is public. A
+ * person told only that the report is anonymous will put a neighbour's name,
+ * a vet's name or a field's location in that line — the app having just told
+ * them it carries no names.
+ *
+ * So the destination is named where the sentence about contents already is,
+ * and again beside the box, which is where somebody is when the warning is
+ * worth anything.
+ *
+ * ## Build-time copy about a runtime fact, deliberately
+ *
+ * The app cannot ask GitHub whether the repository is public — `support/
+ * github.ts` makes that point for the records half, whose gate lives on the
+ * server for exactly this reason. This sentence is therefore a constant, and
+ * it is wrong in the safe direction if the repository is ever made private:
+ * over-caution about a public tracker costs a farmer nothing, and the opposite
+ * error publishes a name. **If that visibility ever changes, this sentence and
+ * `SupportConfig.acceptRecords` change together or not at all.**
+ */
+export const SUPPORT_REPORTS_ARE_PUBLIC =
+  'Reports are filed on the public issue tracker where this app is built, so ' +
+  'anything you type here can be read by anybody. Leave out names, addresses ' +
+  'and anything else you would not put on a noticeboard.';
+
 export const SUPPORT_BUNDLE_VERSION = 1;
 
 /**
