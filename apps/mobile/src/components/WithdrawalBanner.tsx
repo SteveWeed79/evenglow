@@ -1,5 +1,9 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { type ActiveWithdrawal, withdrawalMessage } from '@homefarm/contracts';
+import {
+  type ActiveWithdrawal,
+  NOT_VETERINARY_ADVICE,
+  withdrawalMessage,
+} from '@homefarm/contracts';
 import { useTheme } from '../theme/ThemeProvider';
 import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
 
@@ -27,7 +31,28 @@ export function WithdrawalBanner({
       style={[styles.band, { backgroundColor: colors.alertTint, borderColor: colors.rowan }]}
       accessibilityRole="alert"
     >
-      <Text style={[styles.words, { color: colors.ink }]}>{withdrawalMessage(withdrawal)}</Text>
+      <View style={styles.stack}>
+        <Text style={[styles.words, { color: colors.ink }]}>{withdrawalMessage(withdrawal)}</Text>
+        {/**
+          * Where the number came from, under the number — `[16]`.
+          *
+          * **Here rather than only in Settings**, because this is the screen
+          * somebody is on when they decide whether to sell. A disclaimer filed
+          * under Settings is one nobody reads at the moment it applies, and
+          * that moment is this one.
+          *
+          * `inkQuiet` rather than `muted`: this is a sentence, and
+          * `contrast.test.ts` says in so many words that `muted` is for
+          * "labels, units, dividers, timestamps — never a sentence". It is
+          * also the tier held to the same 7:1 as `ink`, which matters on a
+          * tinted band that the suite did not cover until this line existed.
+          *
+          * It does not compete with the message above it. The withheld line
+          * leads at body size in `ink`; this follows, quieter and smaller,
+          * which is the ordering the type scale already uses for a hint.
+          */}
+        <Text style={[styles.advice, { color: colors.inkQuiet }]}>{NOT_VETERINARY_ADVICE}</Text>
+      </View>
     </View>
   );
 }
@@ -43,5 +68,12 @@ const styles = StyleSheet.create({
     // it, so it reads as part of the group rather than as a separate alert.
     borderLeftWidth: 4,
   },
-  words: { flex: 1, fontFamily: FONTS.body, fontSize: TYPE.body, lineHeight: TYPE.body * 1.35 },
+  /** The two lines, so the band's own row layout stays about the band. */
+  stack: { flex: 1, gap: SPACE.xs },
+  words: { fontFamily: FONTS.body, fontSize: TYPE.body, lineHeight: TYPE.body * 1.35 },
+  advice: {
+    fontFamily: FONTS.body,
+    fontSize: TYPE.body - 2,
+    lineHeight: (TYPE.body - 2) * 1.35,
+  },
 });
