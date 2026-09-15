@@ -82,7 +82,7 @@ export const PRIVACY_POLICY: LegalDocument = {
     },
     {
       kind: 'paragraph',
-      text: "If you create an account and use synchronization, your farm records are stored on Evenglow's server so you can use them across devices or with farm hands.",
+      text: `If you create an account and use synchronization, your farm records are stored on ${PRODUCT_NAME}'s server so you can use them across devices or with farm hands.`,
     },
     {
       kind: 'paragraph',
@@ -231,7 +231,7 @@ export const PRIVACY_POLICY: LegalDocument = {
     { kind: 'heading', text: 'Your choices and questions' },
     {
       kind: 'paragraph',
-      text: 'You can use Evenglow without an account, decline optional location permission, use a typed address for weather, export your records, and request account deletion.',
+      text: `You can use ${PRODUCT_NAME} without an account, decline optional location permission, use a typed address for weather, export your records, and request account deletion.`,
     },
     { kind: 'contact', label: 'For privacy questions or requests, contact Steve at', email: CONTACT_EMAIL },
 

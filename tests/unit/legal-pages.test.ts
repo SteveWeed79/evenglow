@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PRIVACY_PATH, PRIVACY_POLICY, TERMS_PATH } from '@homefarm/contracts';
+import { PRIVACY_PATH, PRIVACY_POLICY, PRODUCT_NAME, TERMS_PATH } from '@homefarm/contracts';
 
 /**
  * The two documents as web pages — the addresses Google Play's listing points
@@ -124,6 +124,6 @@ describe('the privacy page', () => {
   it('escapes without mangling ordinary punctuation', async () => {
     const res = await fetchPage(PRIVACY_PATH);
     expect(res.body).not.toContain('&amp;#');
-    expect(res.body).toContain("Evenglow's server");
+    expect(res.body).toContain(`${PRODUCT_NAME}'s server`);
   });
 });
