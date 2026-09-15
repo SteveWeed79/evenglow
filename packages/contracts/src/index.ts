@@ -17,6 +17,7 @@ export * from './membership';
 export * from './product';
 export * from './recovery';
 export * from './verification';
+export * from './deletion';
 export * from './support';
 export * from './backup';
 export * from './entities';

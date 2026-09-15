@@ -2,8 +2,18 @@ import { apiBase, currentAccessToken, setAccessToken, syncHeaders } from '@homef
 import type { LocalStore } from '@homefarm/core/db/port';
 import { localStore } from '@homefarm/core/db/store';
 import { z } from 'zod';
-import { roleSchema } from '@homefarm/contracts';
-import { discardEmptyLocalOrg, readLocalOrgId, retireLocalOrgId } from './local-org';
+import {
+  ACCOUNT_DELETE_PATH,
+  type DeletionOutcome,
+  deletionOutcomeSchema,
+  roleSchema,
+} from '@homefarm/contracts';
+import {
+  abandonLocalOrg,
+  discardEmptyLocalOrg,
+  readLocalOrgId,
+  retireLocalOrgId,
+} from './local-org';
 import {
   type CachedClaims,
   clearCredentials,
@@ -1244,4 +1254,82 @@ export async function linkGoogle(input: {
 
   const linked = (body as { linked?: { email?: unknown } } | null)?.linked?.email;
   return typeof linked === 'string' ? linked : null;
+}
+
+// ── Leaving ──────────────────────────────────────────────────────────────────
+
+const previewSchema = z.object({ members: z.number().int().nonnegative() }).passthrough();
+
+/**
+ * How many other people a deletion would take with it.
+ *
+ * Asked of the server rather than read off the cached roster, because this
+ * number is the one the warning is built from and the roster is UX (invariant
+ * 8). Null when the server cannot be reached: the panel then says the general
+ * sentence rather than a number it has not got, and the deletion itself is
+ * still refused offline by the round trip it needs.
+ */
+export async function previewDeletion(): Promise<number | null> {
+  if (currentAccessToken() === null && (await refreshSession()) === null) return null;
+
+  try {
+    const res = await fetch(url(`${ACCOUNT_DELETE_PATH}/preview`), { headers: syncHeaders({}) });
+    if (!res.ok) return null;
+    return previewSchema.parse(await res.json()).members;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Deletes the account, and then signs this device out of it.
+ *
+ * The server does the deleting and answers what it took — the whole farm, or
+ * this one person — parsed rather than believed (invariant 11), because the
+ * screen says a different sentence for each and must not guess. The proof is
+ * the account's password or a fresh Google token, exactly as `changeEmail` and
+ * `linkGoogle` ask, and the server refuses a session on its own.
+ *
+ * **Then `signOut`, and only on success.** The tokens are already dead on the
+ * server, so the logout call it makes lands on nothing and is swallowed as it
+ * always is; what matters is the local half — credentials cleared, the
+ * transition begun, Diagnostics told — which is the same half every sign-out
+ * does. A deletion that failed leaves the device exactly as it was.
+ *
+ * **The records stay unless asked.** Sign-out keeps them on purpose, and this
+ * keeps that rule: the server has forgotten the farm, the phone has not. When
+ * the person also chose to clear this phone, the farm's file is marked to go at
+ * the store switch the sign-out triggers — see `abandonLocalOrg` for why it
+ * cannot go sooner.
+ */
+export async function deleteAccount(input: {
+  password?: string;
+  idToken?: string;
+  clearThisPhone: boolean;
+}): Promise<DeletionOutcome> {
+  if (currentAccessToken() === null && (await refreshSession()) === null) {
+    throw new SignInError('This device is not signed in any more. Sign in and try again.');
+  }
+
+  const claims = await readCachedClaims();
+
+  const proof = {
+    ...(input.password === undefined || input.password === '' ? {} : { password: input.password }),
+    ...(input.idToken === undefined ? {} : { idToken: input.idToken }),
+  };
+
+  const res = await fetch(url(ACCOUNT_DELETE_PATH), {
+    method: 'POST',
+    headers: syncHeaders({ 'content-type': 'application/json' }),
+    body: JSON.stringify(proof),
+  });
+
+  if (!res.ok) throw await refusal(res, 'The account could not be deleted. Try again in a minute.');
+
+  const outcome = deletionOutcomeSchema.parse(await res.json());
+
+  if (input.clearThisPhone && claims !== null) await abandonLocalOrg(claims.orgId);
+  await signOut();
+
+  return outcome;
 }

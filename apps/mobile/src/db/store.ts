@@ -49,6 +49,19 @@ export function disposeWhenClosed(orgId: string): void {
 }
 
 /**
+ * Whether a farm is on its way out, for the one reader that must not adopt it.
+ *
+ * `ensureLocalOrgId` reopens the only database on disk when nothing names a
+ * farm — and it runs *before* the switch that carries out a disposal, so a
+ * file marked here is still on disk when it looks. Without this, deleting an
+ * account and its records would end with the app adopting the very file it
+ * was about to remove, and removing it from under an open store.
+ */
+export function isMarkedForDisposal(orgId: string): boolean {
+  return disposable.has(orgId);
+}
+
+/**
  * Deletes it, if it was marked. Answers whether it was.
  *
  * Separate from the switch that calls it so the rule can be tested without a
@@ -110,7 +123,18 @@ export function openLocalStore(orgId: string): Promise<LocalStore> {
   return store;
 }
 
-/** Tests only: drops the handle so the next call rebuilds it. */
+/**
+ * Tests only: drops the handle so the next call rebuilds it.
+ *
+ * **The disposal marks go with it**, and that is not tidiness. A mark is a
+ * standing instruction to delete a farm's database at the next store switch,
+ * so one left behind by a previous test is a deletion carried out on the
+ * strength of a decision made about a different farm — which is worse than the
+ * stale handle this function was written for, and looks exactly like the bug it
+ * would be in production. Found by a test that asserted a refused deletion
+ * leaves the records alone and saw the mark from the test before it.
+ */
 export function resetLocalStoreHandle(): void {
   opened = null;
+  disposable.clear();
 }

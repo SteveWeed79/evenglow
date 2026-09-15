@@ -5,6 +5,7 @@ import { ping } from './db/client';
 import { type Env, readEnv } from './env';
 import { setSecurityHeaders } from './headers';
 import { errorBody } from './http';
+import { accountRoutes } from './routes/account';
 import { authRoutes } from './routes/auth';
 import { billingRoutes } from './routes/billing';
 import { memberRoutes } from './routes/members';
@@ -109,6 +110,7 @@ export async function buildServer(env: Env = readEnv()): Promise<FastifyInstance
   });
 
   await authRoutes(app, env);
+  await accountRoutes(app, env);
   await billingRoutes(app, env);
   await memberRoutes(app, env);
   await supportRoutes(app, env);

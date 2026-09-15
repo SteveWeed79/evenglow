@@ -56,6 +56,16 @@ export interface Blobs {
   /** What is stored, without moving the bytes. */
   head(id: string): Promise<StoredBlob | null>;
   remove(id: string): Promise<void>;
+  /**
+   * Every byte this org has stored, gone. Answers how many files went.
+   *
+   * For account deletion and nothing else: a farm leaving takes its pictures
+   * with it, and the bucket is the one place a photo's bytes live once the
+   * record is gone. Scoped exactly as every other method here is — the filter
+   * is `metadata.orgId` and nothing wider — so a deletion can never reach a
+   * neighbour's images however it is called.
+   */
+  removeAll(): Promise<number>;
 }
 
 const BUCKET = 'photoBytes';
@@ -127,6 +137,20 @@ export async function blobsFor(orgId: string): Promise<Blobs> {
     async remove(id): Promise<void> {
       const found = await findOne(id);
       if (found) await bucket.delete(found._id);
+    },
+
+    async removeAll(): Promise<number> {
+      const files = await bucket
+        .find({ 'metadata.orgId': orgId })
+        .project({ _id: 1 })
+        .toArray();
+
+      // One at a time through the bucket, so the chunks go with each file.
+      // A `deleteMany` on `photoBytes.files` alone would leave every chunk
+      // behind as orphaned bytes nothing could ever find or free.
+      for (const file of files) await bucket.delete(file._id);
+
+      return files.length;
     },
   };
 }
