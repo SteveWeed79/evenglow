@@ -273,7 +273,28 @@ backup at all yet, and nothing monitors the box's uptime.
 
 ---
 
-## 9. What the drafter must be told before writing — **UNDECIDED**
+## 9. What the drafter must be told before writing
+
+> **Answered, September 2026.** The documents were written and live in
+> `packages/contracts/src/legal.ts`. What each of these was settled as is
+> recorded beside it; the ones still open are marked.
+>
+> **1. Controller** — Steve Weed, as an individual. No entity. Play still needs
+> a payee (`[14]`).
+> **2. Jurisdiction** — Kansas law, venue in Crawford County. United States.
+> **3. Contact** — `steve@swbuild.dev`. **Still open: that mailbox has to exist
+> and be read.** A policy naming an address nobody receives is worse than none.
+> **4. Mail domain** — unchanged and still open; the server sends no mail yet.
+> **5. Children** — not directed to under 13, and 13 is the floor for an
+> account. **Still open: the app has no age gate**, so the claim lives only in
+> the documents.
+> **6. Medicine retention** — resolved by putting the obligation on the farm
+> rather than building retention into the app: the terms tell somebody to export
+> before deleting, and name Veterinary Feed Directive and organic-certification
+> records. This is why deletion can stay immediate.
+> **7. Bundled library licensing** — still open (`[15]`).
+> **8. Hosting** — the API serves both at `/privacy` and `/terms`, rendered from
+> the same source the app reads.
 
 These block the document. None of them can be inferred from the code.
 

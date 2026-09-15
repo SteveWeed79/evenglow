@@ -3,6 +3,10 @@ import type { FastifyInstance } from 'fastify';
 import {
   ACCOUNT_DELETE_PATH,
   type DeleteAccount,
+  PRIVACY_PATH,
+  PRIVACY_POLICY,
+  TERMS_OF_SERVICE,
+  TERMS_PATH,
   deleteAccountSchema,
   deleteByCredentialsSchema,
   DELETION_PROOF_NEEDED,
@@ -20,6 +24,7 @@ import { boardPolicy } from '../headers';
 import { errorBody, HttpError } from '../http';
 import { inOrgOrder } from '../org-lane';
 import { accountDeletePage } from './account-page';
+import { legalPage } from './legal-page';
 
 /**
  * Leaving: an account deleted at the request of the person it belongs to.
@@ -70,6 +75,34 @@ export async function accountRoutes(app: FastifyInstance, env: Env): Promise<voi
       .header('content-security-policy', boardPolicy(nonce))
       .send(accountDeletePage(nonce));
   });
+
+  /**
+   * The privacy policy and the terms, at the addresses the store listing gives.
+   *
+   * Here rather than in a file Caddy serves, for `account-page.ts`'s reason:
+   * the page is rendered from `contracts/legal.ts`, so it is reviewed like code
+   * and cannot fall out of step with what the app shows. Both carry a nonced
+   * policy and no script at all — a document that is only read has no
+   * behaviour.
+   *
+   * Cached for an hour rather than `no-store`. These change a few times a year,
+   * a store reviewer may fetch them repeatedly, and unlike the deletion form
+   * there is nothing here somebody would be harmed by seeing a slightly stale
+   * copy of. The effective date on the page is what settles which version it is.
+   */
+  for (const [path, document] of [
+    [PRIVACY_PATH, PRIVACY_POLICY],
+    [TERMS_PATH, TERMS_OF_SERVICE],
+  ] as const) {
+    app.get(path, async (_request, reply) => {
+      const nonce = randomBytes(16).toString('base64url');
+      return reply
+        .type('text/html; charset=utf-8')
+        .header('cache-control', 'public, max-age=3600')
+        .header('content-security-policy', boardPolicy(nonce))
+        .send(legalPage(document, nonce));
+    });
+  }
 
   await app.register(async (scope) => {
     await scope.register(import('@fastify/rate-limit'), { max: 5, timeWindow: '1 minute' });

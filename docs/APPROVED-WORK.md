@@ -404,8 +404,30 @@ period rather than a task.
       Play re-signs, so the certificate an OAuth client is keyed to differs
       between the store route and the shelf. Passes every test available today
       and fails in production, for everybody, on the day the store opens.
-- [ ] **Write the privacy policy.** `[1]` — also a prerequisite for both queues.
-- [ ] **Write the terms of service and EULA.** `[2]`
+- [x] **Write the privacy policy.** `[1]` — also a prerequisite for both queues.
+      *Written September 2026. `docs/PRIVACY-FACTS.md` is what it was drafted
+      from, sourced to the code; `packages/contracts/src/legal.ts` is the result
+      and the only copy.*
+      **It lives in the contracts package, not in a markdown file**, because it
+      has to be readable in two places that would otherwise drift: in the app
+      with no network — D14 makes a build with no server ordinary, and a farm
+      must be able to read what it agreed to — and at a URL, which Play
+      requires. Structured blocks rather than markdown, so no parser and no
+      dependency, and both renderers are exhaustive over the four kinds.
+      **Three things the review added** that the first draft did not carry: that
+      a last owner's deletion takes every other account on the farm, that a
+      removed member's name and previous address are kept with the farm, and
+      that each syncing device has an identifier.
+      **Still open:** the contact mailbox has to exist, and there is no age gate
+      behind the "13 or over" claim.
+- [x] **Write the terms of service and EULA.** `[2]` — *written September
+      2026, same module and same two renderings.*
+      **The retention question is answered by putting the obligation where it
+      belongs.** `[19]` asked whether medicine records need a statutory
+      retention floor, which would have contradicted immediate deletion. The
+      terms tell a farm to export before deleting and name Veterinary Feed
+      Directive and organic-certification records — so the app can keep deleting
+      on request, and the farm keeps what it is required to keep.
 - [x] **Write the "not veterinary advice" line and place it.** `[16]`
       Settings, and beside the withdrawal banner. Two sentences.
       *Built September 2026 — `contracts/advice.ts`, one constant for both.*

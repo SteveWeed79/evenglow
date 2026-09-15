@@ -1,4 +1,4 @@
-import { ACCOUNT_DELETE_PATH, PRODUCT_NAME } from '@homefarm/contracts';
+import { ACCOUNT_DELETE_PATH, PRIVACY_PATH, PRODUCT_NAME, TERMS_PATH } from '@homefarm/contracts';
 
 /**
  * The page a person reaches without the app, to delete their account.
@@ -108,6 +108,10 @@ export function accountDeletePage(nonce: string): string {
     or the store will go on charging for a farm that no longer exists.</p>
     <p class="hint">Deleted farms remain in encrypted server backups for a
     limited time before those are removed too.</p>
+    <!-- Somebody who arrived here from a store listing may never have seen
+         either document. They are one hop away rather than restated. -->
+    <p class="hint"><a href="${PRIVACY_PATH}">Privacy policy</a> &middot;
+    <a href="${TERMS_PATH}">Terms of service</a></p>
   </div>
 
   <form id="form" class="card">
