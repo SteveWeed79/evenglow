@@ -1,5 +1,4 @@
 import { useCallback, useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
 import {
   enteredToStored,
   entryUnit,
@@ -25,8 +24,6 @@ import { useLog } from '../hooks/useSync';
 import { reportTrouble } from '../hooks/useTrouble';
 import { useUnits } from '../hooks/useUnits';
 import type { ScreenProps } from '../navigation/Root';
-import { useTheme } from '../theme/ThemeProvider';
-import { FONTS, TYPE } from '../theme/tokens';
 
 /**
  * Milk, fibre and honey — everything off an animal that is not an egg.
@@ -42,6 +39,13 @@ import { FONTS, TYPE } from '../theme/tokens';
  * after the eggs would have cleared — so the same banner and the same
  * deliberate confirm tap the egg tally uses are wired in, reading the same
  * `activeWithdrawals` arithmetic rather than a second copy of it.
+ *
+ * It applies to the milk, and only when milk is what is being recorded. The
+ * band used to sit over the whole screen, so a fleece taken off a doe on a
+ * milk hold was met with "Milk withheld" and a second press — a warning about
+ * the wrong bucket, which is the kind that teaches people to press through
+ * warnings. Fibre and honey have no withdrawal kind (`withdrawalKindFor`),
+ * so switching to them clears the band.
  *
  * Out of scope, deliberately: creamery workflows and milk testing. This
  * records a volume, not a supply chain.
@@ -84,7 +88,6 @@ export function ProduceScreen({ route }: ScreenProps<'Produce'>): React.ReactEle
   const { groupId } = route.params;
   const log = useLog();
   const units = useUnits();
-  const { colors } = useTheme();
 
   const groups = useLive(listGroups);
   const today = useLive(produceToday);
@@ -146,13 +149,11 @@ export function ProduceScreen({ route }: ScreenProps<'Produce'>): React.ReactEle
   if (groups === null) return <Loading title="Produce" />;
   if (group === null) return <Missing title="Produce" what="That group" />;
 
-  const withdrawal = longestWithdrawal(withdrawals?.get(groupId) ?? []);
+  const withdrawal = kind === 'milk' ? longestWithdrawal(withdrawals?.get(groupId) ?? []) : null;
   const already = today?.get(`${groupId}:${kind}`);
 
   return (
-    <Screen title="What they gave" back>
-      <Text style={[styles.label, { color: colors.muted }]}>{group.name}</Text>
-
+    <Screen title="What they gave" subtitle={group.name} back>
       {withdrawal ? <WithdrawalBanner withdrawal={withdrawal} /> : null}
 
       <Field label="What did you take?">
@@ -190,11 +191,3 @@ export function ProduceScreen({ route }: ScreenProps<'Produce'>): React.ReactEle
   );
 }
 
-const styles = StyleSheet.create({
-  label: {
-    fontFamily: FONTS.data,
-    fontSize: TYPE.label,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-});

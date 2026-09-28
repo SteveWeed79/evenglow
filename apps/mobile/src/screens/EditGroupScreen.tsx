@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import {
   breedsForSpecies,
+  dayStart,
   type FlockPurpose,
   formatRange,
   purposeGroupsFor,
@@ -272,7 +273,7 @@ export function EditGroupScreen({ route }: ScreenProps<'EditGroup'>): React.Reac
       <Toggle
         label="I know when they hatched or were born"
         value={current.bornAt !== null}
-        onChange={(known) => change({ bornAt: known ? startOfDay(Date.now()) : null })}
+        onChange={(known) => change({ bornAt: known ? dayStart(Date.now()) : null })}
       />
 
       {current.bornAt === null ? null : (
@@ -300,12 +301,6 @@ export function EditGroupScreen({ route }: ScreenProps<'EditGroup'>): React.Reac
       </Panel>
     </Screen>
   );
-}
-
-function startOfDay(at: number): number {
-  const date = new Date(at);
-  date.setHours(0, 0, 0, 0);
-  return date.getTime();
 }
 
 const styles = StyleSheet.create({

@@ -279,3 +279,55 @@ describeDb('how many notifications one caller may send', () => {
     expect(answers.slice(60).every((a) => a.statusCode === 429)).toBe(true);
   });
 });
+
+/**
+ * A notification about a token the store has since forgotten.
+ *
+ * Google purges a purchase some time after it ends, and a late or replayed
+ * notification can name one. The reader answers null for that — "the store
+ * does not know this token" — and the route must treat it the way it treats
+ * an outage: whatever is stored stands. Written as `lapsed`, a replayed
+ * notification about last year's purchase ended this year's.
+ */
+describeDb('a notification for a token the store no longer knows', () => {
+  it('leaves the farm exactly as it was', async () => {
+    const Fastify = (await import('fastify')).default;
+    const { billingRoutes } = await import('@homefarm/api/routes/billing');
+    const { readEnv } = await import('@homefarm/api/env');
+
+    const orgId = ulid();
+    const token = `forgotten-${orgId}`;
+    const held = { state: 'active', source: 'play', expiresAt: Date.now() + 86_400_000, updatedAt: Date.now() };
+    await harness!.db.collection('orgs').insertOne({
+      _id: orgId as never,
+      name: 'Hollow Farm',
+      createdAt: new Date(),
+      subscription: held,
+      playPurchaseToken: token,
+    } as never);
+
+    const app = Fastify({ logger: false });
+    await billingRoutes(
+      app,
+      readEnv({
+        AUTH_SECRET: SECRET,
+        MONGODB_URI: harness!.uri,
+        MONGODB_DB: 'homefarm_store_notifications',
+        GOOGLE_PLAY_SERVICE_ACCOUNT: PLAY_ACCOUNT,
+        GOOGLE_PLAY_PACKAGE: 'dev.swbuild.homefarm',
+      }),
+      { readSubscription: async () => null },
+    );
+    const res = await app.inject({
+      method: 'POST',
+      url: '/billing/notifications',
+      payload: envelope({ subscriptionNotification: { purchaseToken: token } }) as never,
+    });
+    await app.close();
+
+    expect(res.statusCode).toBe(200);
+    const org = await harness!.db.collection('orgs').findOne({ _id: orgId as never });
+    expect(org?.subscription).toEqual(held);
+    expect(org?.playPurchaseToken).toBe(token);
+  });
+});

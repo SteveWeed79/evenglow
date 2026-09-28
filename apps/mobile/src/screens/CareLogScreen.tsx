@@ -1,10 +1,11 @@
 import { useCallback, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import {
   CARE_KIND_LABELS,
   CARE_KINDS,
-  type CareKind,
   careIntervalDays,
+  type CareKind,
+  daysBetween,
   newId,
 } from '@homefarm/contracts';
 import { lastCareBySubject, listCareLogs } from '@homefarm/core/read/care';
@@ -17,8 +18,7 @@ import { useLive } from '../hooks/useLive';
 import { useLeave } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import type { ScreenProps } from '../navigation/Root';
-import { useTheme } from '../theme/ThemeProvider';
-import { FONTS, SPACE, TYPE } from '../theme/tokens';
+import { SPACE } from '../theme/tokens';
 
 /**
  * "I wormed the goats on Tuesday."
@@ -44,7 +44,6 @@ const LABELS = CARE_KIND_LABELS;
 export function CareLogScreen({ route }: ScreenProps<'CareLog'>): React.ReactElement {
   const { groupId } = route.params;
   const log = useLog();
-  const { colors } = useTheme();
 
   const groups = useLive(listGroups);
   const careLogs = useLive(listCareLogs);
@@ -83,9 +82,7 @@ export function CareLogScreen({ route }: ScreenProps<'CareLog'>): React.ReactEle
   const applicable = CARE_KINDS.filter((k) => careIntervalDays(group.species, k) !== null);
 
   return (
-    <Screen title="Log a job done" back>
-      <Text style={[styles.label, { color: colors.muted }]}>{group.name}</Text>
-
+    <Screen title="Log a job done" subtitle={group.name} back>
       <Field label="What did you do?">
         <View style={styles.chips}>
           {applicable.map((option) => (
@@ -128,8 +125,6 @@ export function CareLogScreen({ route }: ScreenProps<'CareLog'>): React.ReactEle
   );
 }
 
-const DAY_MS = 86_400_000;
-
 /**
  * What logging this actually changes, in a sentence.
  *
@@ -144,16 +139,10 @@ function describeInterval(last: number | undefined, days: number | null): string
     return `${every} Nothing recorded yet, which is why it is sitting on Today — logging it now starts the clock.`;
   }
 
-  const since = Math.round((Date.now() - last) / DAY_MS);
+  const since = daysBetween(last, Date.now());
   return `${every} Last recorded ${since === 0 ? 'today' : `${since} days ago`}.`;
 }
 
 const styles = StyleSheet.create({
-  label: {
-    fontFamily: FONTS.data,
-    fontSize: TYPE.label,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.md },
 });

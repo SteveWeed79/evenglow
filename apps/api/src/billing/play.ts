@@ -211,7 +211,7 @@ export async function readPlaySubscription(
   purchaseToken: string,
   now = Date.now(),
   fetchImpl = fetch,
-): Promise<Subscription> {
+): Promise<Subscription | null> {
   const token = await accessToken(config, fetchImpl);
 
   const url =
@@ -223,11 +223,16 @@ export async function readPlaySubscription(
 
   /**
    * A 404 is a real answer rather than an outage: Google does not know this
-   * token, so it buys nothing. Anything else is the store being unreachable,
-   * and **an unreachable store must never downgrade a paying farm** — it
-   * throws, the route reports it, and whatever was already stored stands.
+   * token, so it buys nothing — and it is *null* rather than `lapsed`, because
+   * "buys nothing" and "this farm's subscription has ended" are different
+   * facts. Answered as `lapsed`, a token that was never the farm's wrote
+   * "subscription ended" over a paying farm's record; the callers decide what
+   * an unknown token means where they stand. Anything else is the store being
+   * unreachable, and **an unreachable store must never downgrade a paying
+   * farm** — it throws, the route reports it, and whatever was already stored
+   * stands.
    */
-  if (res.status === 404) return { state: 'lapsed', source: 'play', updatedAt: now };
+  if (res.status === 404) return null;
   if (!res.ok) throw new HttpError(502, 'Could not reach the store to check that purchase.');
 
   return subscriptionFrom(await res.json().catch(() => null), now);

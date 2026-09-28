@@ -2,18 +2,19 @@ import { describe, expect, it } from 'vitest';
 import {
   entitlementOf,
   formatPromoCode,
+  HELD_LABEL,
+  heldLabel,
   normalizeJoinCode,
   PROMO_CODE_LENGTH,
   promoGrantSchema,
-  subscriptionFromPromo,
-  heldLabel,
-  HELD_LABEL,
-  SUBSCRIPTION_STATES,
-  SYNC_REFUSALS,
-  subscriptionSchema,
-  syncRefusalMessage,
+  promoOutcome,
   type Subscription,
-} from '@homefarm/contracts';
+  SUBSCRIPTION_STATES,
+  subscriptionFromPromo,
+  subscriptionSchema,
+  SYNC_REFUSALS,
+  syncRefusalMessage,
+} from '@homefarm/contracts'
 import { readPlayConfig, subscriptionFrom } from '@homefarm/api/billing/play';
 import { readEnv } from '@homefarm/api/env';
 
@@ -482,5 +483,49 @@ describe('the code itself', () => {
     expect(promoGrantSchema.safeParse({ days: -5 }).success).toBe(false);
     expect(promoGrantSchema.safeParse({ days: 1.5 }).success).toBe(false);
     expect(promoGrantSchema.safeParse({ days: null }).success).toBe(true);
+  });
+});
+
+/**
+ * What a farm holds after redeeming, which is not always the grant. The two
+ * rules are the two the route got wrong; `promo-codes.test.ts` drives the
+ * route itself against a database.
+ */
+describe('promoOutcome', () => {
+  const NOW = Date.parse('2026-08-05T14:00:00Z');
+  const DAY = 86_400_000;
+  const promo = (days: number | null) => subscriptionFromPromo({ days }, NOW);
+
+  it('gives a farm with nothing the grant', () => {
+    expect(promoOutcome(undefined, promo(30), false, NOW)).toEqual(promo(30));
+  });
+
+  it('answers a retry with what the farm already has, not a fresh period', () => {
+    const held = { ...promo(30), expiresAt: NOW + 1 * DAY };
+    expect(promoOutcome(held, promo(30), true, NOW)).toBe(held);
+  });
+
+  it('gives a retry the grant only when nothing at all is stored', () => {
+    expect(promoOutcome(undefined, promo(30), true, NOW)).toEqual(promo(30));
+  });
+
+  it('never shortens a paid entitlement', () => {
+    const year = { state: 'active' as const, source: 'play' as const, expiresAt: NOW + 365 * DAY, updatedAt: NOW };
+    expect(promoOutcome(year, promo(14), false, NOW)).toBe(year);
+    // Longer wins, and forever is longest.
+    expect(promoOutcome(year, promo(400), false, NOW)).toEqual(promo(400));
+    expect(promoOutcome(year, promo(null), false, NOW)).toEqual(promo(null));
+  });
+
+  it('keeps a subscription that never ends', () => {
+    const forever = { state: 'active' as const, source: 'promo' as const, updatedAt: NOW };
+    expect(promoOutcome(forever, promo(400), false, NOW)).toBe(forever);
+  });
+
+  it('replaces one that has lapsed or run out', () => {
+    const lapsed = { state: 'lapsed' as const, source: 'play' as const, updatedAt: NOW };
+    const ran = { state: 'active' as const, source: 'play' as const, expiresAt: NOW - DAY, updatedAt: NOW };
+    expect(promoOutcome(lapsed, promo(14), false, NOW)).toEqual(promo(14));
+    expect(promoOutcome(ran, promo(14), false, NOW)).toEqual(promo(14));
   });
 });

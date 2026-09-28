@@ -160,16 +160,26 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
 
     const { known, unmodelable } = readableRows(parsed.data.mutations);
     outcome.unmodelable += unmodelable;
-    // Recorded as well as returned. The pass that discovers a record type this
-    // build cannot read is not the moment anybody is looking at a screen, and
-    // a count that lives only in this function's return value is a count the
-    // diagnostics sheet cannot show.
-    await localStore().noteUnmodelable(unmodelable);
 
     const result = await applyPage(known, parsed.data);
     outcome.applied += result.applied;
     outcome.skipped += result.skipped;
     outcome.more = parsed.data.more;
+
+    /**
+     * Recorded as well as returned. The pass that discovers a record type this
+     * build cannot read is not the moment anybody is looking at a screen, and
+     * a count that lives only in this function's return value is a count the
+     * diagnostics sheet cannot show.
+     *
+     * **After the page lands, and only for a page taken whole.** A paused page
+     * leaves the watermark short of these rows, so the next pass fetches and
+     * counts them again — noted before `applyPage`, a `beehive` row behind one
+     * pending local edit was counted once per pass until the edit flushed. A
+     * page that throws notes nothing, which is also right: nothing of it was
+     * kept.
+     */
+    if (!result.paused) await localStore().noteUnmodelable(unmodelable);
 
     /**
      * ── A pull counts as having synced, and only a flush used to ────────────

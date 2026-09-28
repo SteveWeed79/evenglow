@@ -22,7 +22,7 @@ import {
 } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Notes } from '../components/Notes';
-import { Body, Panel } from '../components/Panel';
+import { Body, Label, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { Coming } from '../components/Coming';
 import { Timeline } from '../components/Timeline';
@@ -174,9 +174,9 @@ export function PlantingScreen({ route }: ScreenProps<'Planting'>): React.ReactE
 
   return (
     <Screen title={variety?.name ?? 'A planting'} back>
-      <Text style={[styles.label, { color: colors.muted }]}>
+      <Label>
         {variety?.crop ?? 'Growing'} · {bed?.name ?? 'a bed'} · season {planting.season}
-      </Text>
+      </Label>
 
       {/*
         The two things this planting belongs to, both of which now have a
@@ -396,12 +396,6 @@ const styles = StyleSheet.create({
   actions: { gap: SPACE.sm },
   when: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   whenLabel: {
-    fontFamily: FONTS.data,
-    fontSize: TYPE.label,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-  label: {
     fontFamily: FONTS.data,
     fontSize: TYPE.label,
     letterSpacing: 1.2,

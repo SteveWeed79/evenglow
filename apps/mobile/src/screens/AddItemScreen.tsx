@@ -2,7 +2,9 @@ import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import {
   formatMoney,
+  INVENTORY_KIND_WORDS,
   INVENTORY_KINDS,
+  INVENTORY_UNIT_WORDS,
   INVENTORY_UNITS,
   minorPer,
   newId,
@@ -54,25 +56,6 @@ import { SPACE } from '../theme/tokens';
  * half the feedings.
  */
 
-const KIND_LABELS = {
-  feed: 'Feed',
-  bedding: 'Bedding',
-  medicine: 'Medicine',
-  part: 'A part',
-  other: 'Something else',
-} as const;
-
-const UNIT_LABELS = {
-  kg: 'Kilos',
-  lb: 'Pounds',
-  bag: 'Bags',
-  bale: 'Bales',
-  litre: 'Litres',
-  gallon: 'Gallons',
-  dose: 'Doses',
-  each: 'Each',
-} as const;
-
 export function AddItemScreen({ route }: ScreenProps<'AddItem'>): React.ReactElement {
   const log = useLog();
   const machines = useLive(listMachines);
@@ -82,7 +65,12 @@ export function AddItemScreen({ route }: ScreenProps<'AddItem'>): React.ReactEle
   const [kind, setKind] = useState<(typeof INVENTORY_KINDS)[number]>(
     route.params.equipmentId === undefined ? 'feed' : 'part',
   );
-  const [unit, setUnit] = useState<(typeof INVENTORY_UNITS)[number]>('bag');
+  // A part is counted, and feed comes in bags: the first unit offered is the
+  // one the kind it opened with is bought in, so a filter for the tractor does
+  // not start life as a bag of filters.
+  const [unit, setUnit] = useState<(typeof INVENTORY_UNITS)[number]>(
+    route.params.equipmentId === undefined ? 'bag' : 'each',
+  );
   /**
    * Nothing, until somebody says otherwise.
    *
@@ -168,11 +156,11 @@ export function AddItemScreen({ route }: ScreenProps<'AddItem'>): React.ReactEle
       </Field>
 
       <Field label="What kind?">
-        <Choice options={INVENTORY_KINDS} value={kind} onChange={setKind} labels={KIND_LABELS} />
+        <Choice options={INVENTORY_KINDS} value={kind} onChange={setKind} labels={INVENTORY_KIND_WORDS} />
       </Field>
 
       <Field label="Counted in">
-        <Choice options={INVENTORY_UNITS} value={unit} onChange={setUnit} labels={UNIT_LABELS} />
+        <Choice options={INVENTORY_UNITS} value={unit} onChange={setUnit} labels={INVENTORY_UNIT_WORDS} />
       </Field>
 
       <Field label="How many now?">

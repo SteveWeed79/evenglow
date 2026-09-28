@@ -739,7 +739,6 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   controls: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
-  date: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
   control: {
     minWidth: TAP.min / 2,
     minHeight: TAP.min / 2,

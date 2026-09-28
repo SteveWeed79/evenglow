@@ -135,8 +135,18 @@ export async function blobsFor(orgId: string): Promise<Blobs> {
     },
 
     async remove(id): Promise<void> {
-      const found = await findOne(id);
-      if (found) await bucket.delete(found._id);
+      /**
+       * Every revision under the name, not the newest.
+       *
+       * `put` leaves the old revision until the new one lands, so a crash
+       * between the two leaves two files. Deleting one of them served the
+       * other from `get` for a photo the farm had deleted.
+       */
+      const files = await bucket
+        .find({ filename: id, 'metadata.orgId': orgId })
+        .project({ _id: 1 })
+        .toArray();
+      for (const file of files) await bucket.delete(file._id);
     },
 
     async removeAll(): Promise<number> {

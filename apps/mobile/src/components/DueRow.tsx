@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { type Due, dueDate, type Urgency, urgencyOf } from '@homefarm/contracts';
+import { daysBetween, type Due, dueDate, type Urgency, urgencyOf } from '@homefarm/contracts';
 import { Icon } from './Icon';
 import { Touch } from './Touch';
 import { useTheme } from '../theme/ThemeProvider';
@@ -13,8 +13,6 @@ import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
  * reserved for what you act on, and a due row is read and then acted on
  * somewhere else.
  */
-
-const DAY_MS = 86_400_000;
 
 /**
  * When it is due, in the words someone would use.
@@ -49,16 +47,11 @@ function when(due: Due, now: number): string {
    * is eleven hours ahead: +0.46, which rounds to 0 and prints **"today"** —
    * precisely the failure the note claimed to prevent, arriving every afternoon.
    *
-   * Anchoring both ends to local midnight is the whole fix. `Math.round` on the
-   * difference of two midnights is also right across a daylight-saving change,
-   * where a day is 23 or 25 hours and the ratio is 0.96 or 1.04.
+   * Anchoring both ends to local midnight is the whole fix, and it lives in
+   * `daysBetween` now rather than here: this was the first of four places to
+   * need it, and the other three each found the same bug on their own.
    */
-  const midnight = (ms: number): number => {
-    const date = new Date(ms);
-    date.setHours(0, 0, 0, 0);
-    return date.getTime();
-  };
-  const days = Math.round((midnight(at) - midnight(now)) / DAY_MS);
+  const days = daysBetween(now, at);
 
   if (days < -1) return `${Math.abs(days)} days ago`;
   if (days === -1) return 'yesterday';
@@ -229,7 +222,12 @@ const styles = StyleSheet.create({
   done: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: SPACE.xs,
+    // A label line and 4dp of padding made this 25dp tall — a control on the
+    // one row a farmer taps twice, at less than half the floor. It cannot be
+    // the full 56 inside a 56 row, so it is the accessibility floor with slop.
+    minHeight: TAP.floor,
     paddingVertical: SPACE.xs,
     paddingHorizontal: SPACE.sm,
     borderRadius: RADII.softHead,

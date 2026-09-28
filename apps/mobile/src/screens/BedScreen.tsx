@@ -16,7 +16,7 @@ import { useLive } from '../hooks/useLive';
 import { useNav } from '../hooks/useNav';
 import type { ScreenProps } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
-import { FONTS, SPACE, TYPE } from '../theme/tokens';
+import { FONTS, TYPE } from '../theme/tokens';
 
 /**
  * One bed, what is in it, and what has been in it.
@@ -166,10 +166,8 @@ function plantedWhen(planting: Planting): string {
 }
 
 const styles = StyleSheet.create({
-  identity: {
-    fontFamily: FONTS.data,
-    fontSize: TYPE.label,
-    letterSpacing: 0.4,
-    paddingHorizontal: SPACE.md,
-  },
+  // No inset: the hero above it sits on the column's own edge, and a line
+  // that starts 12dp to the right of its title reads as belonging to
+  // something else.
+  identity: { fontFamily: FONTS.data, fontSize: TYPE.label, letterSpacing: 0.4 },
 });

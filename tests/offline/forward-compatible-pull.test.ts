@@ -170,6 +170,50 @@ describe('a page carrying an entity this build does not know', () => {
   });
 
   /**
+   * Once, even when the page has to be fetched twice.
+   *
+   * A page that pauses behind a pending local edit leaves the watermark short
+   * of the rows after it, and the next pass fetches them again. Counted before
+   * the page was applied, the `beehive` row behind the edit was noted on every
+   * pass until the edit flushed — one strange row, a count that climbed by
+   * itself.
+   */
+  it('counts a row once when the page pauses behind a local edit', async () => {
+    const mine = await localStore().enqueue({
+      entity: 'flock',
+      op: 'create',
+      targetId: newId(),
+      payload: { name: 'Mine', species: 'goat', count: 9 },
+    });
+    const rows: Row[] = [
+      { entity: 'flock', serverTs: 10, targetId: mine.targetId, payload: { name: 'Theirs' } },
+      { entity: 'beehive', serverTs: 20 },
+    ];
+    const feed = (since: number) =>
+      Promise.resolve({
+        status: 200,
+        body: {
+          mutations: rows.filter((r) => r.serverTs > since).map(row),
+          through: rows[rows.length - 1]?.serverTs ?? since,
+          throughId: `${'0'.repeat(20)}${String(rows.length - 1).padStart(6, '0')}`,
+          more: false,
+        },
+      });
+
+    // Paused at the first row, so the hive is fetched again next time.
+    await pullOnce(feed);
+    expect(await localStore().unmodelableRows()).toBe(0);
+
+    // The edit lands, the page is taken whole, and the hive is counted — once.
+    await localStore().resolveBatch(
+      [mine],
+      [{ id: mine.id, status: 'applied' }],
+    );
+    await pullOnce(feed);
+    expect(await localStore().unmodelableRows()).toBe(1);
+  });
+
+  /**
    * And it resets when the projection repair starts, because that winds the
    * watermark to zero and reads every row again — a total that survived it
    * would double. The same reasoning `record_gen` gets: marks are only

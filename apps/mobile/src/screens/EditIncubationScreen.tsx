@@ -1,14 +1,15 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import {
+  addCalendarDays,
   breedsForSpecies,
   candlingDay,
   EGG_SOURCES,
   INCUBATION_DAYS,
   INCUBATION_METHODS,
   laysEggs,
-  SPECIES_TRAITS,
   type Species,
+  SPECIES_TRAITS,
 } from '@homefarm/contracts';
 import { listIncubations } from '@homefarm/core/read/breeding';
 import { listGroups } from '@homefarm/core/read/groups';
@@ -417,10 +418,9 @@ export function EditIncubationScreen({
   );
 }
 
-const DAY_MS = 86_400_000;
-
+/** The hatch date, stepped on the calendar so autumn does not print it a day early. */
 function when(from: number, days: number): string {
-  return new Date(from + days * DAY_MS).toLocaleDateString(undefined, {
+  return new Date(addCalendarDays(from, days)).toLocaleDateString(undefined, {
     day: 'numeric',
     month: 'long',
   });

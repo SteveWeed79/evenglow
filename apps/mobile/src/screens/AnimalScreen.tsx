@@ -14,7 +14,7 @@ import { useNav } from '../hooks/useNav';
 import { useUnits } from '../hooks/useUnits';
 import type { ScreenProps } from '../navigation/Root';
 import { useTheme } from '../theme/ThemeProvider';
-import { FONTS, SPACE, TYPE } from '../theme/tokens';
+import { FONTS, TYPE } from '../theme/tokens';
 
 /**
  * One animal, and everything the farm has recorded about her.
@@ -130,10 +130,19 @@ export function AnimalScreen({ route }: ScreenProps<'Animal'>): React.ReactEleme
             testID="go-group"
             onPress={() => nav.navigate('Group', { groupId: group.id })}
           />
+          {/**
+            * Straight onto the scale, with her already chosen.
+            *
+            * This was titled "Weigh, treat or log a job" and opened the
+            * group's weigh screen with the group selected — two of the three
+            * things it named are not on that screen at all, and the one that
+            * is needed her picked again from a list. Treating and jobs are on
+            * the group hub, one row up.
+            */}
           <Row
-            title="Weigh, treat or log a job"
+            title={`Weigh ${animal.name}`}
             testID="go-weigh"
-            onPress={() => nav.navigate('Weigh', { groupId: group.id })}
+            onPress={() => nav.navigate('Weigh', { groupId: group.id, animalId })}
           />
         </Panel>
       )}
@@ -183,12 +192,10 @@ export function AnimalScreen({ route }: ScreenProps<'Animal'>): React.ReactEleme
 }
 
 const styles = StyleSheet.create({
-  identity: {
-    fontFamily: FONTS.data,
-    fontSize: TYPE.label,
-    letterSpacing: 0.4,
-    paddingHorizontal: SPACE.md,
-  },
+  // No inset: the hero above it sits on the column's own edge, and a line
+  // that starts 12dp to the right of its title reads as belonging to
+  // something else.
+  identity: { fontFamily: FONTS.data, fontSize: TYPE.label, letterSpacing: 0.4 },
   figure: { fontFamily: FONTS.display, fontSize: TYPE.hero },
   when: { fontFamily: FONTS.data, fontSize: TYPE.label, letterSpacing: 0.4 },
 });

@@ -5,7 +5,7 @@ import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { Tally } from '../components/Tally';
 import { useLive } from '../hooks/useLive';
-import { useNav } from '../hooks/useNav';
+import { useLeave } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import type { ScreenProps } from '../navigation/Root';
 
@@ -19,7 +19,7 @@ import type { ScreenProps } from '../navigation/Root';
  */
 export function LogHoursScreen({ route }: ScreenProps<'LogHours'>): React.ReactElement {
   const { machineId } = route.params;
-  const nav = useNav();
+  const leave = useLeave();
   const log = useLog();
 
   const machines = useLive(listMachines);
@@ -32,9 +32,9 @@ export function LogHoursScreen({ route }: ScreenProps<'LogHours'>): React.ReactE
         op: 'create',
         payload: { occurredAt: Date.now(), equipmentId: machineId, hours },
       });
-      nav.goBack();
+      leave();
     },
-    [log, machineId, nav],
+    [log, machineId, leave],
   );
 
   if (machines === null) return <Loading title="Hours" />;

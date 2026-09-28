@@ -1,15 +1,17 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import {
+  addCalendarDays,
   breedsForSpecies,
   candlingDay,
+  dayStart,
   EGG_SOURCES,
   INCUBATION_DAYS,
   INCUBATION_METHODS,
   laysEggs,
   newId,
-  SPECIES_TRAITS,
   type Species,
+  SPECIES_TRAITS,
 } from '@homefarm/contracts';
 import { listGroups } from '@homefarm/core/read/groups';
 import {
@@ -76,7 +78,7 @@ export function SetEggsScreen(): React.ReactElement {
    * which is the whole cost of asking.
    */
   const [eggsSet, setEggsSet] = useState(0);
-  const [setAt, setSetAt] = useState(() => startOfDay(Date.now()));
+  const [setAt, setSetAt] = useState(() => dayStart(Date.now()));
   const [source, setSource] = useState<(typeof EGG_SOURCES)[number]>('own');
   const [method, setMethod] = useState<(typeof INCUBATION_METHODS)[number]>('incubator');
   const [breedId, setBreedId] = useState<string | null>(null);
@@ -241,19 +243,12 @@ export function SetEggsScreen(): React.ReactElement {
   );
 }
 
-const DAY_MS = 86_400_000;
-
+/** The hatch date, stepped on the calendar so autumn does not print it a day early. */
 function when(from: number, days: number): string {
-  return new Date(from + days * DAY_MS).toLocaleDateString(undefined, {
+  return new Date(addCalendarDays(from, days)).toLocaleDateString(undefined, {
     day: 'numeric',
     month: 'long',
   });
-}
-
-function startOfDay(at: number): number {
-  const date = new Date(at);
-  date.setHours(0, 0, 0, 0);
-  return date.getTime();
 }
 
 const styles = StyleSheet.create({

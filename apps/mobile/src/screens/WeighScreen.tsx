@@ -23,7 +23,7 @@ import {
   useSaver,
 } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
-import { Body, Panel } from '../components/Panel';
+import { Body, Label, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
 import { useLeave } from '../hooks/useNav';
@@ -138,7 +138,12 @@ export function WeighScreen({ route }: ScreenProps<'Weigh'>): React.ReactElement
    * after mount, so a stored default would be imperial on a metric farm.
    */
   const [chosen, setChosen] = useState<Unit | null>(null);
-  const [animalId, setAnimalId] = useState<string | null>(null);
+  /**
+   * Who is on the scale. Opened from an animal's own screen it is her, and
+   * the "Who?" picker starts on her name; opened from the group it is the
+   * group until somebody says otherwise.
+   */
+  const [animalId, setAnimalId] = useState<string | null>(route.params.animalId ?? null);
   /**
    * A box each, one at a time, or one figure for the lot.
    *
@@ -294,6 +299,7 @@ export function WeighScreen({ route }: ScreenProps<'Weigh'>): React.ReactElement
   return (
     <Screen
       title="Weigh"
+      subtitle={group.name}
       back
       {...(history.length === 0
         ? {}
@@ -302,12 +308,12 @@ export function WeighScreen({ route }: ScreenProps<'Weigh'>): React.ReactElement
               <Panel label="Last three">
                 {history.map((entry) => (
                   <View key={entry.id} style={styles.past}>
-                    <Text style={[styles.label, { color: colors.muted }]}>
+                    <Label>
                       {new Date(entry.occurredAt).toLocaleDateString(undefined, {
                         day: 'numeric',
                         month: 'short',
                       })}
-                    </Text>
+                    </Label>
                     <Text style={[styles.pastMass, { color: colors.ink }]}>
                       {formatMass(entry.massUg, units)}
                     </Text>
@@ -317,8 +323,6 @@ export function WeighScreen({ route }: ScreenProps<'Weigh'>): React.ReactElement
             ),
           })}
     >
-      <Text style={[styles.label, { color: colors.muted }]}>{group.name}</Text>
-
       {named.length > 0 ? (
         <Field label="Who?">
           <Choice
@@ -589,12 +593,6 @@ const styles = StyleSheet.create({
    */
   past: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   pastMass: { fontFamily: FONTS.display, fontSize: TYPE.title, fontVariant: ['tabular-nums'] },
-  label: {
-    fontFamily: FONTS.data,
-    fontSize: TYPE.label,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
 });
 
 /**

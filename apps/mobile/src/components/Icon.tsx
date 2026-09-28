@@ -135,6 +135,27 @@ const MARKS: Record<string, { readonly 32: readonly El[]; readonly 24: readonly 
     32: [['P', 'M4 10h24M4 16h24M4 22h24'], ['R', 9, 8, 4, 4, null, true], ['R', 20, 14, 4, 4, null, true], ['R', 13, 20, 4, 4, null, true]],
     24: [['P', 'M3 7h18M3 12h18M3 17h18'], ['R', 6.5, 5.5, 3, 3, null, true], ['R', 13.5, 10.5, 3, 3, null, true], ['R', 9.5, 15.5, 3, 3, null, true]],
   },
+  /**
+   * Three dots: **there is more behind this, in place.**
+   *
+   * The sixth affordance mark, and the one that was asked for and never drawn.
+   * `Notes` and every history row in `Timeline` have rendered
+   * `<Icon name="more">` since the day their options folded behind a tap, on
+   * the promise that *"the mark on the right is the promise: three dots where
+   * there is something behind it, nothing where there is not."* The set had no
+   * such mark, `Icon` draws nothing for a name it does not know, and
+   * `check:icons` only reads `name="…"` literals — so a mark chosen inside a
+   * ternary went unchecked and every note and every history row in the app
+   * showed **nothing** on the right until it was tapped, when a minus appeared.
+   * The promise was being made by a blank.
+   *
+   * Solid rather than stroked, because a stroked dot at this size is a ring
+   * that closes into a smudge; three filled circles read at 16.
+   */
+  'more': {
+    32: [['C', 8, 16, 2.5, true], ['C', 16, 16, 2.5, true], ['C', 24, 16, 2.5, true]],
+    24: [['C', 6, 12, 2, true], ['C', 12, 12, 2, true], ['C', 18, 12, 2, true]],
+  },
 
   /**
    * The sky, in the seven states `Condition` has.

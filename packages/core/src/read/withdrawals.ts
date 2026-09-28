@@ -4,6 +4,7 @@ import {
   type ActiveWithdrawal,
   MEDICATION_ROUTES,
   type TreatmentRecord,
+  WITHDRAWAL_KINDS,
   type WithdrawalKind,
 } from '@homefarm/contracts';
 import { localStore } from '../db/store';
@@ -85,7 +86,7 @@ export async function treatmentsFor(
   );
 
   const holdingByTreatment = new Map<string, WithdrawalKind[]>();
-  for (const kind of ['egg', 'meat', 'milk'] as const) {
+  for (const kind of WITHDRAWAL_KINDS) {
     for (const open of activeWithdrawals(treatments, kind, [subjectId], now)) {
       holdingByTreatment.set(open.medicationId, [
         ...(holdingByTreatment.get(open.medicationId) ?? []),
@@ -127,14 +128,40 @@ export async function withdrawalsBySubject(
   subjectIds: readonly string[],
   now: number = Date.now(),
 ): Promise<Map<string, ActiveWithdrawal[]>> {
-  const treatments = await listTreatments();
-  const active = activeWithdrawals(treatments, kind, subjectIds, now);
+  return gather(await listTreatments(), [kind], subjectIds, now);
+}
 
+/**
+ * Every open withdrawal of **every** kind, keyed the same way.
+ *
+ * One read of the treatments rather than one per kind, for the two callers
+ * that need the lot: Today's tallies and the group screen's bands. Both used
+ * to ask for `'egg'` alone — `useGroups` records what that cost a dairy herd
+ * — and a reader that answers the whole question is what stops the third
+ * caller making the same choice. Each entry carries its `kind`, so
+ * `withdrawalsFor` and `longestPerKind` split the list back up where it is
+ * shown.
+ */
+export async function allWithdrawalsBySubject(
+  subjectIds: readonly string[],
+  now: number = Date.now(),
+): Promise<Map<string, ActiveWithdrawal[]>> {
+  return gather(await listTreatments(), WITHDRAWAL_KINDS, subjectIds, now);
+}
+
+function gather(
+  treatments: readonly TreatmentRecord[],
+  kinds: readonly WithdrawalKind[],
+  subjectIds: readonly string[],
+  now: number,
+): Map<string, ActiveWithdrawal[]> {
   const bySubject = new Map<string, ActiveWithdrawal[]>();
-  for (const withdrawal of active) {
-    const existing = bySubject.get(withdrawal.subjectId) ?? [];
-    existing.push(withdrawal);
-    bySubject.set(withdrawal.subjectId, existing);
+  for (const kind of kinds) {
+    for (const withdrawal of activeWithdrawals(treatments, kind, subjectIds, now)) {
+      const existing = bySubject.get(withdrawal.subjectId) ?? [];
+      existing.push(withdrawal);
+      bySubject.set(withdrawal.subjectId, existing);
+    }
   }
 
   return bySubject;

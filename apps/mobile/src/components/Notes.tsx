@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { mayChangeNote, newId, type NoteSubject, type Role } from '@homefarm/contracts';
+import { daysBetween, mayChangeNote, newId, type NoteSubject, type Role } from '@homefarm/contracts';
 import { listNotes, type Note, notesOn } from '@homefarm/core/read/notes';
 import { saidConfirmation } from '@homefarm/core/voice';
 import { Confirm, Confirmation, Failure, Primary, Secondary, TextField, useSaver } from './Form';
@@ -388,8 +388,6 @@ function NoteRow({
   );
 }
 
-const DAY_MS = 86_400_000;
-
 /**
  * When it was left, in the words someone would use.
  *
@@ -398,7 +396,9 @@ const DAY_MS = 86_400_000;
  * is the whole answer.
  */
 function when(at: number): string {
-  const days = Math.round((Date.now() - at) / DAY_MS);
+  // Calendar days, not elapsed ones: a note from yesterday evening is
+  // "yesterday" at ten the next night, not "2 days ago".
+  const days = daysBetween(at, Date.now());
 
   if (days <= 0) {
     return new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });

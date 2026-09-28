@@ -208,6 +208,53 @@ describeDb('a purchase token belongs to one farm', () => {
   });
 });
 
+/**
+ * A token the store does not know buys nothing and binds nothing.
+ *
+ * The route used to write `lapsed` and the posted token onto the farm when
+ * Google answered 404 — so a hand posting junk downgraded a paying farm to
+ * "subscription ended" and re-bound its purchase to a string no store
+ * notification would ever match again. Every role may post here because any
+ * member may pay; that is the reason a bad post has to be harmless.
+ */
+describeDb('a token the store does not know', () => {
+  async function withStore(answer: null) {
+    const Fastify = (await import('fastify')).default;
+    const { billingRoutes } = await import('@homefarm/api/routes/billing');
+    const { readEnv } = await import('@homefarm/api/env');
+    const app = Fastify({ logger: false });
+    await billingRoutes(
+      app,
+      readEnv({
+        AUTH_SECRET: SECRET,
+        MONGODB_URI: harness!.uri,
+        MONGODB_DB: 'homefarm_purchase',
+        GOOGLE_PLAY_SERVICE_ACCOUNT: PLAY_ACCOUNT,
+        GOOGLE_PLAY_PACKAGE: 'dev.swbuild.homefarm',
+      }),
+      { readSubscription: async () => answer },
+    );
+    return app;
+  }
+
+  it('is refused, and the farm keeps what it had', async () => {
+    const app = await withStore(null);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/billing/play',
+      headers: { authorization: await tokenFor(OWNER_A, ORG_A) },
+      payload: { purchaseToken: 'a-token-google-has-never-seen' },
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(404);
+    const org = await harness!.db.collection('orgs').findOne({ _id: ORG_A as never });
+    expect(org?.subscription).toMatchObject({ state: 'active', source: 'play' });
+    expect(org?.playPurchaseToken).toBe(TOKEN);
+  });
+});
+
 describeDb('the index behind the check', () => {
   beforeEach(async () => {
     const { applyIndexes } = await import('@homefarm/api/db/indexes');

@@ -46,9 +46,7 @@ export function AnimalsScreen({ route }: ScreenProps<'Animals'>): React.ReactEle
   const traits = SPECIES_TRAITS[group.species];
 
   return (
-    <Screen title="Named animals" back>
-      <Text style={[styles.label, { color: colors.muted }]}>{group.name}</Text>
-
+    <Screen title="Named animals" subtitle={group.name} back>
       {named.length === 0 ? (
         <Panel label="None named yet">
           {/* Empty screens invite (UX-SPEC §6). */}
@@ -118,10 +116,4 @@ const styles = StyleSheet.create({
   },
   name: { fontFamily: FONTS.display, fontSize: TYPE.title },
   detail: { fontFamily: FONTS.data, fontSize: TYPE.label, letterSpacing: 0.4 },
-  label: {
-    fontFamily: FONTS.data,
-    fontSize: TYPE.label,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
 });

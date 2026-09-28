@@ -160,9 +160,7 @@ export function FeedPlanScreen({ route }: ScreenProps<'FeedPlan'>): React.ReactE
   const unit = units === 'imperial' ? 'oz' : 'g';
 
   return (
-    <Screen title="What they should get" back>
-      <Text style={[styles.label, { color: colors.muted }]}>{group.name}</Text>
-
+    <Screen title="What they should get" subtitle={group.name} back>
       {current === null ? (
         <Panel label="No ration yet">
           <Body>
@@ -257,10 +255,4 @@ export function FeedPlanScreen({ route }: ScreenProps<'FeedPlan'>): React.ReactE
 
 const styles = StyleSheet.create({
   note: { fontFamily: FONTS.body, fontSize: TYPE.body, marginTop: SPACE.xs },
-  label: {
-    fontFamily: FONTS.data,
-    fontSize: TYPE.label,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
 });

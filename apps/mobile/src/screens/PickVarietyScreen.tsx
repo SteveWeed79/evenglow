@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import {
   fahrenheitToDeciC,
@@ -27,7 +27,7 @@ import {
   type Variety,
 } from '@homefarm/core/read/growing';
 import { describeLogFailure } from '@homefarm/core/sync/failure';
-import { Secondary } from '../components/Form';
+import { Failure, Primary, Secondary, TextField } from '../components/Form';
 import { Icon } from '../components/Icon';
 import { Loading, Missing } from '../components/Missing';
 import { Body, Panel } from '../components/Panel';
@@ -289,26 +289,14 @@ export function PickVarietyScreen({ route }: ScreenProps<'PickVariety'>): React.
 
         <Plan choice={chosen} site={site} season={season} />
 
-        {failure ? (
-          <Panel>
-            <Body>{failure}</Body>
-          </Panel>
-        ) : null}
+        <Failure message={failure} />
 
-        <Touch affordance="brass"
+        <Primary
+          label={`Plan it into ${bed.name}`}
           onPress={() => void plant()}
           disabled={saving}
-          accessibilityRole="button"
           testID="plant-it"
-          style={({ pressed }) => [
-            styles.primary,
-            { backgroundColor: colors.lantern, opacity: saving || pressed ? 0.75 : 1 },
-          ]}
-        >
-          <Text style={[styles.primaryLabel, { color: colors.lanternOn }]}>
-            Plan it into {bed.name}
-          </Text>
-        </Touch>
+        />
 
         <Touch affordance="chevron" onPress={() => setChosen(null)} accessibilityRole="button" style={styles.back}>
           <Text style={[styles.backLabel, { color: colors.muted }]}>Choose something else</Text>
@@ -369,21 +357,15 @@ export function PickVarietyScreen({ route }: ScreenProps<'PickVariety'>): React.
 
   return (
     <Screen title={`Plant in ${bed.name}`} back>
-      <View style={styles.search}>
-        <TextInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Tomato, kale, garlic…"
-          placeholderTextColor={colors.muted}
-          autoCapitalize="none"
-          autoCorrect={false}
-          testID="variety-search"
-          style={[
-            styles.field,
-            { backgroundColor: colors.raised, borderColor: colors.border, color: colors.ink },
-          ]}
-        />
-      </View>
+      {/* The one text field on this screen was its own `TextInput`, so it was
+          the one field in the app the keyboard could cover. */}
+      <TextField
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Tomato, kale, garlic…"
+        search
+        testID="variety-search"
+      />
 
       {/* Varieties rather than crops, because these are already the answer:
           somebody who grew Sungold last year is not being asked which tomato. */}
@@ -656,7 +638,6 @@ function Plan({
 }
 
 const styles = StyleSheet.create({
-  search: { gap: SPACE.sm },
   group: { gap: SPACE.sm },
   section: { gap: SPACE.sm },
   nested: { marginLeft: SPACE.lg },
@@ -666,14 +647,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     textTransform: 'uppercase',
     marginTop: SPACE.xs,
-  },
-  field: {
-    minHeight: TAP.min,
-    borderRadius: RADII.softHead,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: SPACE.lg,
-    fontFamily: FONTS.body,
-    fontSize: TYPE.body,
   },
   row: {
     flexDirection: 'row',
@@ -696,14 +669,6 @@ const styles = StyleSheet.create({
   planRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: SPACE.md },
   planLabel: { fontFamily: FONTS.data, fontSize: TYPE.label, letterSpacing: 0.6 },
   planDate: { fontFamily: FONTS.body, fontSize: TYPE.body },
-  primary: {
-    minHeight: TAP.primary,
-    borderRadius: RADII.softHead,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: SPACE.sm,
-  },
-  primaryLabel: { fontFamily: FONTS.display, fontSize: TYPE.lede },
   back: { minHeight: TAP.min, alignItems: 'center', justifyContent: 'center' },
   backLabel: { fontFamily: FONTS.body, fontSize: TYPE.body },
 });

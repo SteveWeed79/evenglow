@@ -5,7 +5,7 @@ import { Primary, Row } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Notes } from '../components/Notes';
 import { Photos } from '../components/Photos';
-import { Body, Panel } from '../components/Panel';
+import { Body, Label, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { Coming } from '../components/Coming';
 import { Timeline } from '../components/Timeline';
@@ -71,7 +71,7 @@ export function MachineBody({ machine }: { machine: Machine }): React.ReactEleme
   return (
     <>
       {description ? (
-        <Text style={[styles.label, { color: colors.muted }]}>{description}</Text>
+        <Label>{description}</Label>
       ) : null}
 
       <Panel label="The meter">
@@ -79,7 +79,7 @@ export function MachineBody({ machine }: { machine: Machine }): React.ReactEleme
           <>
             <View style={styles.reading}>
               <Text style={[styles.hours, { color: colors.ink }]}>{machine.hours ?? '—'}</Text>
-              <Text style={[styles.label, { color: colors.muted }]}>hours</Text>
+              <Label>hours</Label>
             </View>
             {/**
              * Null until there are two readings, and shown as null rather than
@@ -172,10 +172,4 @@ export function MachineBody({ machine }: { machine: Machine }): React.ReactEleme
 const styles = StyleSheet.create({
   reading: { flexDirection: 'row', alignItems: 'baseline', gap: SPACE.sm },
   hours: { fontFamily: FONTS.display, fontSize: TYPE.hero, fontVariant: ['tabular-nums'] },
-  label: {
-    fontFamily: FONTS.data,
-    fontSize: TYPE.label,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
 });

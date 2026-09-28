@@ -351,7 +351,8 @@ describe('changing something on the shelf', () => {
     await ironAndShelf();
 
     const screen = await mount(<EditItemScreen {...routeProps({ itemId: ITEM })} />);
-    await screen.pressLabel('bag');
+    // The chip says what the add screen's says — "Bags", not the wire word.
+    await screen.pressLabel('Bags');
     await screen.press('save-item');
     screen.unmount();
 

@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { BREEDING_METHODS, GESTATION_DAYS, newId } from '@homefarm/contracts';
+import { addCalendarDays, BREEDING_METHODS, dayStart, GESTATION_DAYS, newId } from '@homefarm/contracts';
 import { listAnimals, possibleDams } from '@homefarm/core/read/animals';
 import { listBreedings } from '@homefarm/core/read/breeding';
 import { listGroups } from '@homefarm/core/read/groups';
@@ -35,13 +35,11 @@ import { FONTS, RADII, SPACE, TYPE } from '../theme/tokens';
  */
 
 const METHOD_LABELS = { natural: 'Ran together', ai: 'AI' } as const;
-const DAY_MS = 86_400_000;
 
 export function BreedingScreen({ route }: ScreenProps<'Breeding'>): React.ReactElement {
   const { groupId } = route.params;
   const nav = useNav();
   const log = useLog();
-  const { colors } = useTheme();
 
   const groups = useLive(listGroups);
   const animals = useLive(listAnimals);
@@ -49,7 +47,7 @@ export function BreedingScreen({ route }: ScreenProps<'Breeding'>): React.ReactE
   const group = groups?.find((g) => g.id === groupId) ?? null;
 
   const [damId, setDamId] = useState<string | null>(null);
-  const [bredAt, setBredAt] = useState(() => startOfDay(Date.now()));
+  const [bredAt, setBredAt] = useState(() => dayStart(Date.now()));
   const [method, setMethod] = useState<(typeof BREEDING_METHODS)[number]>('natural');
   const [sireNote, setSireNote] = useState('');
 
@@ -112,9 +110,7 @@ export function BreedingScreen({ route }: ScreenProps<'Breeding'>): React.ReactE
   }
 
   return (
-    <Screen title="Matings" back>
-      <Text style={[styles.label, { color: colors.muted }]}>{group.name}</Text>
-
+    <Screen title="Matings" subtitle={group.name} back>
       {mine.length > 0 ? (
         <View style={styles.list}>
           {mine.map((breeding) => (
@@ -175,7 +171,7 @@ export function BreedingScreen({ route }: ScreenProps<'Breeding'>): React.ReactE
           {damId === null ? null : (
             <Panel label="Due">
               <Body>
-                About {new Date(bredAt + gestation * DAY_MS).toLocaleDateString(undefined, {
+                About {new Date(addCalendarDays(bredAt, gestation)).toLocaleDateString(undefined, {
                   day: 'numeric',
                   month: 'long',
                   year: 'numeric',
@@ -252,7 +248,8 @@ function BreedingCard({
     [save, log, id, liveBorn, stillborn],
   );
 
-  const due = bredAt + gestation * DAY_MS;
+  // Stepped on the calendar: a fixed span lands the evening before across a clock change.
+  const due = addCalendarDays(bredAt, gestation);
 
   return (
     <View style={[styles.card, { backgroundColor: colors.raised, borderColor: colors.border }]}>
@@ -298,12 +295,6 @@ function BreedingCard({
   );
 }
 
-function startOfDay(at: number): number {
-  const date = new Date(at);
-  date.setHours(0, 0, 0, 0);
-  return date.getTime();
-}
-
 const styles = StyleSheet.create({
   list: { gap: SPACE.sm },
   card: {
@@ -314,10 +305,4 @@ const styles = StyleSheet.create({
   },
   name: { fontFamily: FONTS.display, fontSize: TYPE.title },
   detail: { fontFamily: FONTS.data, fontSize: TYPE.label, letterSpacing: 0.4 },
-  label: {
-    fontFamily: FONTS.data,
-    fontSize: TYPE.label,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
 });

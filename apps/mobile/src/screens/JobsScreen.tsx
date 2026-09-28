@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { type Due, newId, TASK_RECURRENCES, taskDues, urgencyOf } from '@homefarm/contracts';
+import { dayStart, type Due, newId, TASK_RECURRENCES, taskDues, urgencyOf } from '@homefarm/contracts';
 import { listTaskCompletions } from '@homefarm/core/read/completions';
 import { listGroups } from '@homefarm/core/read/groups';
 import { listMachines } from '@homefarm/core/read/iron';
@@ -9,7 +9,7 @@ import { dueWhen } from '../components/DueRow';
 import { Chip, Choice, Confirm, DayPick, Failure, Field, Primary, Row, TextField, Toggle, useSaver } from '../components/Form';
 import { Icon } from '../components/Icon';
 import { Loading } from '../components/Missing';
-import { Body, Panel } from '../components/Panel';
+import { Body, Label, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
 import { useLog } from '../hooks/useSync';
@@ -84,7 +84,7 @@ export function JobsScreen(): React.ReactElement {
   const [title, setTitle] = useState('');
   const [recurrence, setRecurrence] = useState<(typeof TASK_RECURRENCES)[number]>('none');
   const [dated, setDated] = useState(true);
-  const [dueAtDate, setDueAtDate] = useState(() => startOfDay(Date.now()));
+  const [dueAtDate, setDueAtDate] = useState(() => dayStart(Date.now()));
   /** What the job is about, or null for one that belongs to the farm at large. */
   const [subjectId, setSubjectId] = useState<string | null>(null);
 
@@ -251,7 +251,7 @@ export function JobsScreen(): React.ReactElement {
     (task) =>
       isSettled(task) &&
       task.completedAt !== undefined &&
-      task.completedAt >= startOfDay(Date.now()),
+      task.completedAt >= dayStart(Date.now()),
   );
 
   return (
@@ -380,7 +380,7 @@ export function JobsScreen(): React.ReactElement {
 
       {finished.length > 0 ? (
         <>
-          <Text style={[styles.label, { color: colors.muted }]}>Done today</Text>
+          <Label>Done today</Label>
           {finished.map((task) => (
             <View key={task.id} style={styles.job}>
               {/**
@@ -483,12 +483,6 @@ function finishedWhen(task: Task): string {
     hour: 'numeric',
     minute: '2-digit',
   })}`;
-}
-
-function startOfDay(at: number): number {
-  const date = new Date(at);
-  date.setHours(0, 0, 0, 0);
-  return date.getTime();
 }
 
 const styles = StyleSheet.create({

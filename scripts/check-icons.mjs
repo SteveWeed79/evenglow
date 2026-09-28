@@ -131,6 +131,26 @@ const usagePatterns = [
   { pattern: /\bicon="([a-z-]+)"/g, needsImport: false },
   { pattern: /\bmark="([a-z-]+)"/g, needsImport: false },
   { pattern: /\bicon:\s*'([a-z-]+)'/g, needsImport: false },
+  /**
+   * A mark chosen at render time: `name={open ? 'minus' : 'more'}`.
+   *
+   * **The hole the first four left.** `Notes` and `Timeline` pick their mark
+   * inside a ternary, so the quoted-literal patterns above never saw the word
+   * `more` — and the set had no `more`. Both rendered a blank where the
+   * comment beside them promised three dots, for as long as the ternary had
+   * existed, with this check green throughout.
+   *
+   * The two branches are read and the test before the `?` is not: the lamp
+   * toggle compares a *theme* called `lamplight` there, and a theme is not a
+   * mark. A name that comes from a lookup (`SKY_MARKS[...]`) is typed
+   * `IconName` and the compiler holds it to the set. Same import guard as
+   * the plain `name=`, for the same reason: a route or a field can be chosen
+   * by ternary too.
+   */
+  {
+    pattern: /\bname=\{[^}]*\?\s*'([a-z-]+)'\s*:\s*'([a-z-]+)'\s*\}/g,
+    needsImport: true,
+  },
 ];
 
 /**
@@ -150,13 +170,18 @@ for (const file of walk(SOURCE)) {
   for (const { pattern, needsImport } of usagePatterns) {
     if (needsImport && !/\bIcon\b/.test(text)) continue;
 
-    for (const [, name] of text.matchAll(pattern)) {
-      if (named.has(name)) continue;
-      // Lowercase and hyphenated is what a mark name looks like; a route
-      // called "Today" or a field called "name" is not one.
-      if (!/^[a-z]+(-[a-z]+)*$/.test(name)) continue;
+    for (const match of text.matchAll(pattern)) {
+      // One capture for a literal, two for a conditional's branches.
+      const names = match.slice(1).filter((word) => word !== undefined);
 
-      fail(`${relative} asks for icon "${name}", which is not in the set.`);
+      for (const name of names) {
+        if (named.has(name)) continue;
+        // Lowercase and hyphenated is what a mark name looks like; a route
+        // called "Today" or a field called "name" is not one.
+        if (!/^[a-z]+(-[a-z]+)*$/.test(name)) continue;
+
+        fail(`${relative} asks for icon "${name}", which is not in the set.`);
+      }
     }
   }
 }

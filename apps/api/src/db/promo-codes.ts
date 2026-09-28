@@ -122,7 +122,8 @@ export async function createPromoCode(input: {
 export type PromoRefusal = 'unknown' | 'spent' | 'expired' | 'already';
 
 export type PromoResult =
-  | { ok: true; grant: PromoGrant }
+  /** `already`: this farm had spent it before, and is being handed the same answer again. */
+  | { ok: true; grant: PromoGrant; already: boolean }
   | { ok: false; reason: PromoRefusal };
 
 /**
@@ -161,9 +162,10 @@ export async function redeemPromoCode(
     return { ok: false, reason: 'expired' };
   }
 
-  // Already spent by this farm: hand back what it bought rather than refusing.
+  // Already spent by this farm: hand back what it bought rather than refusing
+  // — and say so, because the route must not count a fresh period from now.
   if (found.redeemedBy.some((r) => r.orgId === orgId)) {
-    return { ok: true, grant: found.grant };
+    return { ok: true, grant: found.grant, already: true };
   }
 
   const claimed = await codes.findOneAndUpdate(
@@ -179,5 +181,5 @@ export async function redeemPromoCode(
 
   if (claimed === null) return { ok: false, reason: 'spent' };
 
-  return { ok: true, grant: claimed.grant };
+  return { ok: true, grant: claimed.grant, already: false };
 }

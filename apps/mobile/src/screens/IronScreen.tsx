@@ -4,7 +4,7 @@ import { listInventory, listMachines, type Machine, runningLow } from '@homefarm
 import { Primary, Row } from '../components/Form';
 import { Grid } from '../components/Grid';
 import { Icon } from '../components/Icon';
-import { Card, Body, Panel } from '../components/Panel';
+import { Body, Card, Label, Panel } from '../components/Panel';
 import { PaneTitle, Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
 import { useTheme } from '../theme/ThemeProvider';
@@ -133,14 +133,14 @@ function MachineCard({
         <View style={styles.name}>
           <Text style={[styles.machineName, { color: colors.ink }]}>{machine.name}</Text>
           {description ? (
-            <Text style={[styles.label, { color: colors.muted }]}>{description}</Text>
+            <Label>{description}</Label>
           ) : null}
         </View>
 
         {machine.hours !== null ? (
           <View style={styles.meter}>
             <Text style={[styles.meterValue, { color: colors.ink }]}>{machine.hours}</Text>
-            <Text style={[styles.label, { color: colors.muted }]}>hours</Text>
+            <Label>hours</Label>
           </View>
         ) : null}
       </View>
@@ -191,12 +191,6 @@ const styles = StyleSheet.create({
   machineName: { fontFamily: FONTS.display, fontSize: TYPE.title },
   meterValue: { fontFamily: FONTS.display, fontSize: TYPE.title, fontVariant: ['tabular-nums'] },
   usage: { fontFamily: FONTS.body, fontSize: TYPE.body },
-  label: {
-    fontFamily: FONTS.data,
-    fontSize: TYPE.label,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
   // Sits on the bottom edge of a stretched card rather than floating mid-air
   // with the slack under it. No free space, no effect — so a phone is unmoved.
   more: {

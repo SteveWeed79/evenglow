@@ -3,10 +3,11 @@ import { z } from 'zod';
 import {
   entitlementOf,
   normalizeJoinCode,
+  promoOutcome,
   promoRedeemSchema,
   subscriptionFromPromo,
   syncRefusalMessage,
-} from '@homefarm/contracts';
+} from '@homefarm/contracts'
 import { redeemPromoCode } from '../db/promo-codes';
 import { requireClaims, requireMutationClaims } from '../auth/require';
 import { readPlaySubscription } from '../billing/play';
@@ -161,13 +162,28 @@ export async function billingRoutes(
           return reply.status(404).send({ error: 'That code does not work.' });
         }
 
-        const subscription = subscriptionFromPromo(result.grant, Date.now());
-        await setSubscription(claims.orgId, subscription);
+        /**
+         * Not simply the grant. `promoOutcome` says which of the two rules
+         * apply: a farm re-posting a code it already spent keeps what it has
+         * rather than a period counted afresh from this retry, and a farm with
+         * a longer entitlement — a Play year against a promo fortnight — keeps
+         * the longer one. Written only when it changed, so a retry writes
+         * nothing at all.
+         */
+        const now = Date.now();
+        const org = await findOrgById(claims.orgId);
+        const subscription = promoOutcome(
+          org?.subscription,
+          subscriptionFromPromo(result.grant, now),
+          result.already,
+          now,
+        );
+        if (subscription !== org?.subscription) await setSubscription(claims.orgId, subscription);
 
         return reply.send({
           state: subscription.state,
           expiresAt: subscription.expiresAt ?? null,
-          syncing: entitlementOf(subscription, Date.now()).syncing,
+          syncing: entitlementOf(subscription, now).syncing,
           message: null,
         });
       } catch (error) {
@@ -234,6 +250,26 @@ export async function billingRoutes(
         }
 
         const subscription = await readSubscription(config, parsed.data.purchaseToken);
+
+        /**
+         * A token the store does not know buys nothing and binds nothing.
+         *
+         * This wrote `lapsed` and the posted token onto the farm, so a hand
+         * posting junk — or a client with a bug — downgraded a paying farm to
+         * "subscription ended" and re-bound its purchase to a string Google
+         * has never seen, which no later store notification could repair:
+         * notifications are matched by token, and the real one no longer
+         * matched. The route is open to every role because any member may pay;
+         * that is a reason to make a bad post harmless, and this is what makes
+         * it so. Refused, and nothing about the farm changes.
+         */
+        if (subscription === null) {
+          throw new HttpError(
+            404,
+            'The store does not know that purchase. Nothing about this farm was changed.',
+          );
+        }
+
         // The token is stored beside the state so a later store notification —
         // which names the purchase and not the farm — can be matched back.
         try {
@@ -399,7 +435,11 @@ export async function billingRoutes(
       if (org === null) return reply.status(200).send({ ok: true });
 
       try {
-        await setSubscription(org, await readSubscription(config, purchaseToken));
+        const current = await readSubscription(config, purchaseToken);
+        // A notification about a token the store has since forgotten says
+        // nothing about the farm; whatever is stored stands, as it would for
+        // an outage.
+        if (current !== null) await setSubscription(org, current);
       } catch {
         /**
          * The store was unreachable while telling us about itself.

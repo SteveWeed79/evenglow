@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
 import {
+  addCalendarDays,
   candlingDay,
   INCUBATION_DAYS,
   incubationStage,
@@ -17,14 +17,12 @@ import { Coming } from '../components/Coming';
 import { Confirmation, Failure, Field, Primary, Row, Stepper, useSaver } from '../components/Form';
 import { Loading, Missing } from '../components/Missing';
 import { Notes } from '../components/Notes';
-import { Body, Panel } from '../components/Panel';
+import { Body, Label, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
 import { useLog } from '../hooks/useSync';
 import { useLeave, useNav } from '../hooks/useNav';
 import type { ScreenProps } from '../navigation/Root';
-import { useTheme } from '../theme/ThemeProvider';
-import { FONTS, SPACE, TYPE } from '../theme/tokens';
 
 /**
  * One set of eggs, and the two steps that close it.
@@ -71,7 +69,6 @@ export function IncubationScreen({ route }: ScreenProps<'Incubation'>): React.Re
 function Detail({ incubation }: { incubation: IncubationEntry }): React.ReactElement {
   const log = useLog();
   const nav = useNav();
-  const { colors } = useTheme();
 
   /**
    * The one count that does NOT start at zero, deliberately.
@@ -148,7 +145,7 @@ function Detail({ incubation }: { incubation: IncubationEntry }): React.ReactEle
 
   return (
     <Screen title={incubation.label} back>
-      <Text style={[styles.label, { color: colors.muted }]}>
+      <Label>
         {incubation.eggsSet} eggs · set{' '}
         {new Date(incubation.setAt).toLocaleDateString(undefined, {
           day: 'numeric',
@@ -157,7 +154,7 @@ function Detail({ incubation }: { incubation: IncubationEntry }): React.ReactEle
         {/* Said here because the eggs were the last moment anybody knew for
             certain what these are. */}
         {breedName === null ? '' : ` · ${breedName}`}
-      </Text>
+      </Label>
 
       {/**
         * Where this set has got to, and it is derived rather than recorded.
@@ -283,21 +280,11 @@ function Detail({ incubation }: { incubation: IncubationEntry }): React.ReactEle
   );
 }
 
-const DAY_MS = 86_400_000;
-
+/** The hatch date, stepped on the calendar so autumn does not print it a day early. */
 function when(from: number, days: number): string {
-  return new Date(from + days * DAY_MS).toLocaleDateString(undefined, {
+  return new Date(addCalendarDays(from, days)).toLocaleDateString(undefined, {
     day: 'numeric',
     month: 'long',
   });
 }
 
-const styles = StyleSheet.create({
-  label: {
-    fontFamily: FONTS.data,
-    fontSize: TYPE.label,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    marginBottom: SPACE.xs,
-  },
-});

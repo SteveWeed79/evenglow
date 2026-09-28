@@ -141,6 +141,36 @@ export const INVENTORY_KINDS = ['feed', 'bedding', 'medicine', 'part', 'other'] 
 /** Deliberately coarse. A smallholder counts bags and bales, not grams. */
 export const INVENTORY_UNITS = ['kg', 'lb', 'bag', 'bale', 'litre', 'gallon', 'dose', 'each'] as const;
 
+export type InventoryKind = (typeof INVENTORY_KINDS)[number];
+export type InventoryUnit = (typeof INVENTORY_UNITS)[number];
+
+/**
+ * What each kind and unit is called on a chip.
+ *
+ * Here rather than on the screen that adds an item, because the screen that
+ * *edits* one had no copy and showed the wire words — `kg`, `part`, `other` —
+ * beside the same choices the add screen offered as "Kilos", "A part" and
+ * "Something else". One table, so the two screens cannot disagree again.
+ */
+export const INVENTORY_KIND_WORDS: Record<InventoryKind, string> = {
+  feed: 'Feed',
+  bedding: 'Bedding',
+  medicine: 'Medicine',
+  part: 'A part',
+  other: 'Something else',
+};
+
+export const INVENTORY_UNIT_WORDS: Record<InventoryUnit, string> = {
+  kg: 'Kilos',
+  lb: 'Pounds',
+  bag: 'Bags',
+  bale: 'Bales',
+  litre: 'Litres',
+  gallon: 'Gallons',
+  dose: 'Doses',
+  each: 'Each',
+};
+
 const inventoryShape = {
   name: z.string().min(1).max(120),
   kind: z.enum(INVENTORY_KINDS),

@@ -43,5 +43,6 @@ export * from './due/feed';
 export * from './due/parts';
 export * from './due/tasks';
 export * from './weather';
+export * from './calendar';
 export * from './warnings';
 export * from './library';

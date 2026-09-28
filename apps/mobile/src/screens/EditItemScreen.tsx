@@ -1,12 +1,18 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { INVENTORY_KINDS, INVENTORY_UNITS } from '@homefarm/contracts';
+import {
+  INVENTORY_KIND_WORDS,
+  INVENTORY_KINDS,
+  INVENTORY_UNIT_WORDS,
+  INVENTORY_UNITS,
+} from '@homefarm/contracts';
 import { listInventory } from '@homefarm/core/read/iron';
 import {
   Chip,
   Confirm,
   Failure,
   Field,
+  NumberField,
   Primary,
   TextField,
   useSaver,
@@ -58,7 +64,14 @@ export function EditItemScreen({ route }: ScreenProps<'EditItem'>): React.ReactE
     name: string;
     kind: string;
     unit: string;
-    reorderBelow: number;
+    /**
+     * As typed, not as a number. Parsing on every keystroke meant "2." could
+     * not be typed — the dot went in, came back as `2`, and the next digit
+     * landed as `25` — and the field showed `''` for a threshold of nought,
+     * which is a real answer here. `NumberField` keeps the text honest and
+     * the number is made once, on save.
+     */
+    reorderBelow: string;
     supplier: string;
     note: string;
   } | null>(null);
@@ -73,7 +86,7 @@ export function EditItemScreen({ route }: ScreenProps<'EditItem'>): React.ReactE
     name: item.name,
     kind: item.kind,
     unit: item.unit,
-    reorderBelow: item.reorderBelow ?? 0,
+    reorderBelow: item.reorderBelow === undefined ? '' : String(item.reorderBelow),
     supplier: item.supplier ?? '',
     note: item.note ?? '',
   };
@@ -81,6 +94,7 @@ export function EditItemScreen({ route }: ScreenProps<'EditItem'>): React.ReactE
   const change = (next: Partial<typeof current>): void => setEdits({ ...current, ...next });
 
   const commit = (): void => {
+    const threshold = Number(current.reorderBelow);
     void save(async () => {
       await log({
         entity: 'inventory',
@@ -92,7 +106,7 @@ export function EditItemScreen({ route }: ScreenProps<'EditItem'>): React.ReactE
           unit: current.unit,
           // Zero means "never nag", which is a real answer and different from
           // a threshold of nought — so it clears rather than storing one.
-          reorderBelow: current.reorderBelow > 0 ? current.reorderBelow : null,
+          reorderBelow: Number.isFinite(threshold) && threshold > 0 ? threshold : null,
           supplier: current.supplier.trim() === '' ? null : current.supplier.trim(),
           note: current.note.trim() === '' ? null : current.note.trim(),
         },
@@ -127,7 +141,7 @@ export function EditItemScreen({ route }: ScreenProps<'EditItem'>): React.ReactE
           {INVENTORY_KINDS.map((kind) => (
             <Chip
               key={kind}
-              label={kind}
+              label={INVENTORY_KIND_WORDS[kind]}
               selected={current.kind === kind}
               testID={`kind-${kind}`}
               onPress={() => change({ kind })}
@@ -143,7 +157,7 @@ export function EditItemScreen({ route }: ScreenProps<'EditItem'>): React.ReactE
           {INVENTORY_UNITS.map((unit) => (
             <Chip
               key={unit}
-              label={unit}
+              label={INVENTORY_UNIT_WORDS[unit]}
               selected={current.unit === unit}
               testID={`unit-${unit}`}
               onPress={() => change({ unit })}
@@ -156,11 +170,9 @@ export function EditItemScreen({ route }: ScreenProps<'EditItem'>): React.ReactE
         label="Tell me when it drops below"
         hint="Zero to never be told. Set it high enough that there is time to order."
       >
-        <TextField
-          value={current.reorderBelow === 0 ? '' : String(current.reorderBelow)}
-          onChangeText={(text) => change({ reorderBelow: Number(text.replace(/[^\d.]/g, '')) })}
-          keyboardType="decimal-pad"
-          maxLength={8}
+        <NumberField
+          value={current.reorderBelow}
+          onChangeText={(reorderBelow) => change({ reorderBelow })}
           placeholder="2"
           testID="edit-item-reorder"
         />

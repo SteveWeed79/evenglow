@@ -305,10 +305,18 @@ export async function authRoutes(app: FastifyInstance, env: Env): Promise<void> 
           // is the moment, never a date of birth — see `UserDoc.ageAssertedAt`.
           ageAssertedAt: now,
         });
-      } catch {
-        // Lost the race on the email between the check above and here. Take
-        // the empty org back out rather than leaving the id spent.
+      } catch (error) {
+        // Take the empty org back out rather than leaving the id spent.
         await deleteOrgIfEmpty(orgId).catch(() => undefined);
+        /**
+         * Only a lost race on the email — the unique index refusing a second
+         * account between the check above and here — is "already registered".
+         * This caught everything, so a database that failed after the org
+         * insert answered a new farmer with "sign in with it instead", to an
+         * account that does not exist. The Google branch below rethrows, and
+         * `/invites/accept` asks `isDuplicateKey` first; this does the same.
+         */
+        if (!isDuplicateKey(error)) throw error;
         return reply.status(409).send({
           error: `That email is already registered with ${PRODUCT_NAME}. Sign in with it instead.`,
         });

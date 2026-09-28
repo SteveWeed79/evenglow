@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { formatMoney, formatRate, minorPer, newId } from '@homefarm/contracts';
+import { addCalendarDays, formatMoney, formatRate, minorPer, newId } from '@homefarm/contracts';
 import { feedCostPerEgg, feedSpend } from '@homefarm/core/read/cost';
 import { enqueue } from '@homefarm/core/sync/queue';
 import { freshStore } from '../support/store';
@@ -32,6 +32,16 @@ async function fed(daysAgo: number, costCents?: number, flockId = GROUP): Promis
       amountGrams: 1362,
       ...(costCents === undefined ? {} : { costCents }),
     },
+  });
+}
+
+/** A feeding at an exact moment, for the edges of a window. */
+async function fedAt(occurredAt: number, costCents: number): Promise<void> {
+  await enqueue({
+    entity: 'feedLog',
+    op: 'create',
+    targetId: newId(),
+    payload: { occurredAt, flockId: GROUP, amountGrams: 1362, costCents },
   });
 }
 
@@ -118,6 +128,26 @@ describe('what went out on feed', () => {
 });
 
 describe('cost per egg', () => {
+  /**
+   * The window is whole days, from the first one's midnight.
+   *
+   * It was measured from the minute the screen opened, so the feedings inside
+   * "the last 30 days" changed between breakfast and supper with nothing
+   * logged — and the sentence sat under a chart whose buckets start at
+   * midnight. Thirty days ending today is today and the twenty-nine before
+   * it, and a feeding at one in the morning on the first of them is in.
+   */
+  it('counts the whole of the first day of the window', async () => {
+    const firstDay = addCalendarDays(NOW, -29);
+    await fedAt(firstDay + 3_600_000, 300);
+    // Eleven at night the day before: out, however close to the line.
+    await fedAt(firstDay - 3_600_000, 700);
+    await collected(2, 10);
+
+    const per = await feedCostPerEgg(GROUP, 30, NOW);
+    expect(per.spent).toBe(300);
+  });
+
   it('divides what was spent by what was collected', async () => {
     await fed(2, 1000);
     await collected(2, 40);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import {
   MEDICATION_ROUTES,
   newId,
@@ -27,8 +27,7 @@ import { useLive } from '../hooks/useLive';
 import { useLeave } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import type { ScreenProps } from '../navigation/Root';
-import { useTheme } from '../theme/ThemeProvider';
-import { FONTS, SPACE, TYPE } from '../theme/tokens';
+import { SPACE } from '../theme/tokens';
 
 /**
  * Recording a treatment — and with it, the withdrawal window.
@@ -69,7 +68,6 @@ export function TreatmentScreen({ route }: ScreenProps<'Treatment'>): React.Reac
   const { groupId, treatmentId } = route.params;
   const editing = treatmentId !== undefined;
   const log = useLog();
-  const { colors } = useTheme();
 
   const groups = useLive(listGroups);
   const group = groups?.find((g) => g.id === groupId) ?? null;
@@ -259,9 +257,7 @@ export function TreatmentScreen({ route }: ScreenProps<'Treatment'>): React.Reac
   const anyWithdrawal = WITHDRAWAL_KINDS.some((kind) => withdrawal[kind] > 0);
 
   return (
-    <Screen title={editing ? 'This treatment' : 'Record a treatment'} back>
-      <Text style={[styles.label, { color: colors.muted }]}>{group.name}</Text>
-
+    <Screen title={editing ? 'This treatment' : 'Record a treatment'} subtitle={group.name} back>
       <Field label="What did you give them?">
         <TextField
           value={name}
@@ -388,11 +384,5 @@ export function TreatmentScreen({ route }: ScreenProps<'Treatment'>): React.Reac
 }
 
 const styles = StyleSheet.create({
-  label: {
-    fontFamily: FONTS.data,
-    fontSize: TYPE.label,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.md },
 });

@@ -213,6 +213,37 @@ export interface SyncResponse {
   serverTs: number;
 }
 
+/**
+ * A result as it arrives off the wire — the shape, not the vocabulary.
+ *
+ * The client used to look for an array under `results` and cast the rest, so
+ * a row that was `null`, or one whose `status` was a word the build did not
+ * know, reached the store as a `MutationResult` by assertion alone. Invariant
+ * 11 says an API response is parsed at the boundary; this is the parse.
+ *
+ * `status` is any word here rather than the enum above, on purpose: a server
+ * that learns a fifth status must not turn every batch an older build sends
+ * into "unreadable", which ripens into the rejected inbox six answers later
+ * with a sentence that blames the server. The shape is settled here and the
+ * word is judged per row with `isMutationStatus`, so one strange row costs
+ * one row.
+ */
+export const wireMutationResultSchema = z
+  .object({
+    id: z.string(),
+    status: z.string(),
+    reason: z.string().optional(),
+  })
+  .passthrough();
+
+export const syncResponseSchema = z
+  .object({ results: z.array(wireMutationResultSchema) })
+  .passthrough();
+
+export function isMutationStatus(status: string): status is MutationStatus {
+  return (MUTATION_STATUSES as readonly string[]).includes(status);
+}
+
 // ── Pull ─────────────────────────────────────────────────────────────────────
 
 /** Page size for hydration. Kept modest so a cold device streams rather than stalls. */
