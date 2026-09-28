@@ -1,12 +1,12 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
-import { type ActiveWithdrawal, dailyProductsOf, type Due, type DueBundle, enteredToStored, entryUnit, gramsToUg, longestWithdrawal, massIn, type Measure, mlToUl, type Product, todayBundles, type UnitSystem, volumeIn } from '@homefarm/contracts';
+import { type ActiveWithdrawal, dailyProductsOf, type Due, type DueBundle, enteredToStored, entryUnit, gramsToUg, longestWithdrawal, massIn, type Measure, mlToUl, type Product, todayBundles, type UnitSystem, volumeIn, withdrawalsFor } from '@homefarm/contracts';
 import type { Group } from '@homefarm/core/read/groups';
 import { basketConfirmation } from '@homefarm/core/voice';
 import { DueRow } from '../components/DueRow';
 import { ExposureNotice } from '../components/ExposureNotice';
 import { Icon } from '../components/Icon';
-import { Body, Panel } from '../components/Panel';
+import { Body, Label, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { Tally } from '../components/Tally';
 import { Touch } from '../components/Touch';
@@ -339,7 +339,17 @@ export function TodayScreen(): React.ReactElement {
               ? (eggs.get(item.group.id) ?? 0)
               : (produce.get(`${item.group.id}:${item.product}`)?.amount ?? 0)
           }
-          withdrawal={longestWithdrawal(withdrawals.get(item.group.id) ?? [])}
+          /**
+           * The holds on *this* product, not every hold on the group.
+           *
+           * `useGroups` hands over every kind together, and the tally beside
+           * a goat herd is a milk tally: an egg period on a wound spray must
+           * not demand a second press before milking, and a milk hold must.
+           * Fibre is never gated — `withdrawalsFor` says why.
+           */
+          withdrawal={longestWithdrawal(
+            withdrawalsFor(withdrawals.get(item.group.id) ?? [], item.product),
+          )}
           open={open === item.key}
           // The only one open closes on a second tap; any other opens instead.
           onToggle={() => setOpened(open === item.key ? null : item.key)}
@@ -493,9 +503,9 @@ function ProductTally({
 
         <View style={styles.name}>
           <Text style={[styles.groupName, { color: colors.ink }]}>{group.name}</Text>
-          <Text style={[styles.label, { color: colors.muted }]}>
+          <Label>
             {heading} · {group.count} head
-          </Text>
+          </Label>
         </View>
 
         {/* The number, still visible when collapsed — it is the answer to the
@@ -503,9 +513,9 @@ function ProductTally({
         {today > 0 ? (
           <View style={styles.today}>
             <Text style={[styles.todayCount, { color: colors.ink }]}>{produced.value}</Text>
-            <Text style={[styles.label, { color: colors.muted }]}>
+            <Label>
               {produced.unit === '' ? 'today' : `${produced.unit} today`}
-            </Text>
+            </Label>
           </View>
         ) : null}
 
@@ -561,9 +571,9 @@ function ProductTally({
               testID={`tally-fix-${item.key}`}
               style={({ pressed }) => [styles.fix, { opacity: pressed ? 0.7 : 1 }]}
             >
-              <Text style={[styles.label, { color: colors.muted }]}>
+              <Label>
                 Logged the wrong one? Put it right in What happened
-              </Text>
+              </Label>
             </Touch>
           ) : null}
         </Animated.View>
@@ -574,7 +584,6 @@ function ProductTally({
 
 const styles = StyleSheet.create({
   fix: { alignSelf: 'flex-start', paddingVertical: SPACE.xs, paddingHorizontal: SPACE.md },
-  dues: { gap: SPACE.sm, marginBottom: SPACE.sm },
   duesBelow: { gap: SPACE.sm, marginTop: SPACE.md },
   /**
    * The same list, with the gap that separated it from the tallies removed.
@@ -611,10 +620,4 @@ const styles = StyleSheet.create({
   today: { alignItems: 'flex-end' },
   groupName: { fontFamily: FONTS.display, fontSize: TYPE.title },
   todayCount: { fontFamily: FONTS.display, fontSize: TYPE.title, fontVariant: ['tabular-nums'] },
-  label: {
-    fontFamily: FONTS.data,
-    fontSize: TYPE.label,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
 });

@@ -46,7 +46,7 @@ describeDb('spending a code', () => {
 
     const result = await redeemPromoCode(code, ulid(), ulid());
 
-    expect(result).toEqual({ ok: true, grant: { days: 365 } });
+    expect(result).toEqual({ ok: true, grant: { days: 365 }, already: false });
   });
 
   it('refuses a code nobody minted', async () => {
@@ -118,8 +118,9 @@ describeDb('the same farm, twice', () => {
     const first = await redeemPromoCode(code, org, ulid());
     const again = await redeemPromoCode(code, org, ulid());
 
-    expect(first).toEqual({ ok: true, grant: { days: 90 } });
-    expect(again).toEqual({ ok: true, grant: { days: 90 } });
+    expect(first).toEqual({ ok: true, grant: { days: 90 }, already: false });
+    // Said outright, because the route must not count a fresh period from now.
+    expect(again).toEqual({ ok: true, grant: { days: 90 }, already: true });
 
     // The second use is still there for somebody else.
     expect((await redeemPromoCode(code, ulid(), ulid())).ok).toBe(true);
@@ -193,5 +194,119 @@ describeDb('what the database holds', () => {
 
     expect(row?.redeemedBy).toHaveLength(1);
     expect(row?.redeemedBy[0]?.orgId).toBe(org);
+  });
+});
+
+/**
+ * The route, and the two things it must not do with a grant.
+ *
+ * `redeemPromoCode` above is idempotent, and the route used to spend that
+ * idempotency on the farm's behalf: every re-post of a spent code wrote a
+ * *fresh* period counted from the moment of the re-post, so a thirty-day code
+ * posted again on day twenty-nine bought thirty more, for ever. And a promo
+ * shorter than what the farm already had — a fortnight over a paid year —
+ * replaced it.
+ */
+describeDb('the promo route', () => {
+  const SECRET = 'a-test-secret-long-enough-for-hs256-abcdef';
+  const DAY = 86_400_000;
+
+  async function server() {
+    const Fastify = (await import('fastify')).default;
+    const { billingRoutes } = await import('@homefarm/api/routes/billing');
+    const { readEnv } = await import('@homefarm/api/env');
+    const app = Fastify({ logger: false });
+    await billingRoutes(
+      app,
+      readEnv({ AUTH_SECRET: SECRET, MONGODB_URI: harness!.uri, MONGODB_DB: 'homefarm_promo' }),
+    );
+    return app;
+  }
+
+  async function aFarm(subscription?: Record<string, unknown>): Promise<{ orgId: string; bearer: string }> {
+    const orgId = ulid();
+    const userId = ulid();
+    await harness!.db.collection('orgs').insertOne({
+      _id: orgId as never,
+      name: 'Hollow Farm',
+      createdAt: new Date(),
+      ...(subscription === undefined ? {} : { subscription }),
+    } as never);
+    await harness!.db.collection('users').insertOne({
+      _id: userId as never,
+      email: `${userId}@example.test`,
+      name: 'Owner',
+      orgId,
+      role: 'owner',
+      createdAt: new Date(),
+    } as never);
+    const { startSession } = await import('@homefarm/api/auth/refresh');
+    const { accessToken } = await startSession({ userId, orgId, role: 'owner' }, SECRET);
+    return { orgId, bearer: `Bearer ${accessToken}` };
+  }
+
+  async function redeem(bearer: string, code: string) {
+    const app = await server();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/billing/promo',
+      headers: { authorization: bearer },
+      payload: { code },
+    });
+    await app.close();
+    return { status: res.statusCode, body: res.json<{ expiresAt: number | null; state: string }>() };
+  }
+
+  async function stored(orgId: string) {
+    const org = await harness!.db.collection('orgs').findOne({ _id: orgId as never });
+    return org?.subscription as { state: string; expiresAt?: number; source?: string } | undefined;
+  }
+
+  it('does not count a fresh period when a spent code is posted again', async () => {
+    const { createPromoCode, mintPromoCode } = await promo();
+    const code = mintPromoCode();
+    await createPromoCode({ code, grant: { days: 30 }, maxRedemptions: 1 });
+    const farm = await aFarm();
+
+    const first = await redeem(farm.bearer, code);
+    expect(first.status).toBe(200);
+    const granted = await stored(farm.orgId);
+    expect(granted?.expiresAt).toBeDefined();
+
+    // Twenty-nine days later, somebody presses the button again.
+    await harness!.db
+      .collection('orgs')
+      .updateOne({ _id: farm.orgId as never }, { $set: { 'subscription.expiresAt': Date.now() + DAY } });
+
+    const again = await redeem(farm.bearer, code);
+    expect(again.status).toBe(200);
+    const kept = await stored(farm.orgId);
+    expect(kept?.expiresAt).toBeLessThanOrEqual(Date.now() + DAY);
+    expect(again.body.expiresAt).toBe(kept?.expiresAt ?? null);
+  });
+
+  it('does not shorten a farm that has paid for longer', async () => {
+    const { createPromoCode, mintPromoCode } = await promo();
+    const code = mintPromoCode();
+    await createPromoCode({ code, grant: { days: 14 }, maxRedemptions: 1 });
+    const year = Date.now() + 365 * DAY;
+    const farm = await aFarm({ state: 'active', source: 'play', expiresAt: year, updatedAt: Date.now() });
+
+    const answer = await redeem(farm.bearer, code);
+    expect(answer.status).toBe(200);
+    expect(answer.body.expiresAt).toBe(year);
+    expect((await stored(farm.orgId))?.source).toBe('play');
+  });
+
+  it('still gives a lapsed farm the grant', async () => {
+    const { createPromoCode, mintPromoCode } = await promo();
+    const code = mintPromoCode();
+    await createPromoCode({ code, grant: { days: 14 }, maxRedemptions: 1 });
+    const farm = await aFarm({ state: 'lapsed', source: 'play', updatedAt: Date.now() });
+
+    const answer = await redeem(farm.bearer, code);
+    expect(answer.status).toBe(200);
+    expect(answer.body.state).toBe('active');
+    expect((await stored(farm.orgId))?.source).toBe('promo');
   });
 });

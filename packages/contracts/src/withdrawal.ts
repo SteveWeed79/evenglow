@@ -1,4 +1,4 @@
-import type { WithdrawalKind } from './entities';
+import { type Product, WITHDRAWAL_KINDS, type WithdrawalKind } from './entities';
 
 /**
  * Withdrawal-period arithmetic (W2).
@@ -219,4 +219,56 @@ export function withdrawalMessage(active: ActiveWithdrawal, now: number = Date.n
   });
 
   return `${noun} withheld — ${active.medication}. Clear ${when} (${days} ${days === 1 ? 'day' : 'days'}).`;
+}
+
+/**
+ * The withdrawal kind that holds a product, or null for one nothing holds.
+ *
+ * Spelled out rather than derived from the words: `'eggs'` and `'egg'` differ
+ * by one letter, and a lookup that strips an `s` is one new product away from
+ * being wrong quietly. Fibre is the null on purpose — a fleece is not eaten,
+ * and no label carries a wool withdrawal — so a shearing is never gated.
+ */
+export function withdrawalKindFor(product: Product): WithdrawalKind | null {
+  switch (product) {
+    case 'eggs':
+      return 'egg';
+    case 'milk':
+      return 'milk';
+    case 'fibre':
+      return null;
+  }
+}
+
+/**
+ * The withdrawals among `active` that hold this product, in the order given.
+ *
+ * This is the filter Today needs beside each tally. Its list arrives with
+ * every kind mixed together, and handing a milk tally the egg holds — which is
+ * what happened when the list was egg-only and the tally did not ask — gates
+ * the wrong bucket in both directions: a wound spray with an egg period on it
+ * would demand a second press before milking, and a milk hold would not.
+ */
+export function withdrawalsFor(
+  active: readonly ActiveWithdrawal[],
+  product: Product,
+): ActiveWithdrawal[] {
+  const kind = withdrawalKindFor(product);
+  return kind === null ? [] : active.filter((withdrawal) => withdrawal.kind === kind);
+}
+
+/**
+ * The one that matters per kind — one entry for each kind currently held, in
+ * `WITHDRAWAL_KINDS` order, each the last of its kind to clear.
+ *
+ * A group screen shows a band per kind rather than one band, because "Eggs
+ * withheld" over a goat herd that is also on a meat hold is not a warning
+ * about the meat. `longestWithdrawal` over the mixed list would pick whichever
+ * kind happens to clear last and say nothing about the others.
+ */
+export function longestPerKind(active: readonly ActiveWithdrawal[]): ActiveWithdrawal[] {
+  return WITHDRAWAL_KINDS.flatMap((kind) => {
+    const longest = longestWithdrawal(active.filter((withdrawal) => withdrawal.kind === kind));
+    return longest === null ? [] : [longest];
+  });
 }

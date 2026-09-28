@@ -5,7 +5,7 @@ import { reportTrouble } from '../hooks/useTrouble';
 import { describeLogFailure } from '@homefarm/core/sync/failure';
 import { Surface } from './Surface';
 import { Icon, type IconName } from './Icon';
-import { Body, Panel } from './Panel';
+import { Body, Label, Panel } from './Panel';
 import { useRevealOnFocus } from './reveal';
 import { Touch } from './Touch';
 import { useFade } from '../theme/motion';
@@ -38,11 +38,9 @@ export function Field({
   hint?: string;
   children: React.ReactNode;
 }): React.ReactElement {
-  const { colors } = useTheme();
-
   return (
     <View style={styles.field}>
-      <Text style={[styles.label, { color: colors.muted }]}>{label}</Text>
+      <Label>{label}</Label>
       {hint === undefined ? null : <Body>{hint}</Body>}
       {children}
     </View>
@@ -58,6 +56,7 @@ export function TextField({
   keyboardType,
   secret = false,
   caps = false,
+  search = false,
   accessibilityLabel,
   testID,
 }: {
@@ -78,6 +77,12 @@ export function TextField({
   secret?: boolean;
   /** A code read off somebody else's screen. Uppercase, never autocorrected. */
   caps?: boolean;
+  /**
+   * A filter over a list. Nothing typed here is prose: "sungold" must not
+   * become "Sungold" or "sun gold" on the way to the match, and the return
+   * key says what it does.
+   */
+  search?: boolean;
   accessibilityLabel?: string;
   testID?: string;
 }): React.ReactElement {
@@ -97,9 +102,10 @@ export function TextField({
       multiline={multiline}
       {...(keyboardType === undefined ? {} : { keyboardType })}
       {...(secret ? { secureTextEntry: true, textContentType: 'password' as const } : {})}
-      {...(secret || caps || keyboardType === 'email-address'
+      {...(secret || caps || search || keyboardType === 'email-address'
         ? { autoCorrect: false, autoCapitalize: caps ? ('characters' as const) : ('none' as const) }
         : {})}
+      {...(search ? { returnKeyType: 'search' as const } : {})}
       {...(accessibilityLabel === undefined ? {} : { accessibilityLabel })}
       {...(testID === undefined ? {} : { testID })}
       style={[
@@ -889,12 +895,6 @@ const styles = StyleSheet.create({
     minHeight: TYPE.body * 1.4,
   },
   field: { gap: SPACE.sm },
-  label: {
-    fontFamily: FONTS.data,
-    fontSize: TYPE.label,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
   input: {
     minHeight: TAP.min,
     borderRadius: RADII.softHead,

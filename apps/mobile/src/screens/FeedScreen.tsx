@@ -360,9 +360,7 @@ export function FeedScreen({ route }: ScreenProps<'Feed'>): React.ReactElement {
   const fed = lastFed?.get(groupId);
 
   return (
-    <Screen title="Log a feed" back>
-      <Text style={[styles.label, { color: colors.muted }]}>{group.name}</Text>
-
+    <Screen title="Log a feed" subtitle={group.name} back>
       {fed === undefined ? null : (
         <Panel label="Last fed">
           <Body>

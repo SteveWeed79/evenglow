@@ -336,10 +336,21 @@ export async function listHistory(
       listPlantings(),
       listVarieties(),
       listInventory(),
-      // A completion event names its schedule and not the words on it, so the
-      // title has to come from the schedule the way a group's name does.
-      listTasks(),
-      listServices(),
+      /**
+       * A completion event names its schedule and not the words on it, so the
+       * title has to come from the schedule the way a group's name does.
+       *
+       * **Archived ones included, and this is the whole reason the option
+       * exists.** These two lists are read for titles and subjects only, and a
+       * schedule replaced by a new interval is exactly the one whose six years
+       * of completions a farm is trying to hand over with the machine. Read
+       * live-only, `scheduleOf` had no entry for it, the rows lost their
+       * `equipmentId`, and `withinScope` dropped every one of them from the
+       * machine's own timeline — the "full service history" the masterplan
+       * advertises, gone the day the interval was corrected.
+       */
+      listTasks({ includeArchived: true }),
+      listServices({ includeArchived: true }),
     ]);
 
   /**

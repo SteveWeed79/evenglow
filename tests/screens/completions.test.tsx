@@ -199,6 +199,33 @@ describe('a machine serviced more than once', () => {
   });
 
   /**
+   * The schedule can go and the services stay on the machine.
+   *
+   * A schedule is replaced, not edited, when an interval changes — and the
+   * history builder read its titles and machines from the *live* schedules
+   * only. So the day somebody corrected "every 365 days" to "every 200 hours"
+   * the old schedule's six years of completions lost their `equipmentId`,
+   * `withinScope` dropped them from the machine's own timeline, and farm-wide
+   * they read "A service — a machine". The record you hand over with the
+   * tractor, gone at the moment the tractor got a better schedule.
+   */
+  it('keeps every service on the machine after its schedule is replaced', async () => {
+    await aTractor();
+    const screen = await mount(<ServiceDoneScreen {...routeProps({ serviceId: SCHEDULE })} />);
+    await screen.press('save-done');
+    screen.unmount();
+
+    await enqueue({ entity: 'maintenance', op: 'delete', targetId: SCHEDULE, payload: {} });
+
+    const onTheMachine = (await listHistory('metric', { subject: MACHINE }))
+      .flatMap((day) => day.events)
+      .filter((event) => event.entity === 'serviceCompletion');
+    expect(onTheMachine).toHaveLength(1);
+    expect(onTheMachine[0]?.title).toBe('Oil and filter — The tractor');
+    expect(onTheMachine[0]?.subjects).toEqual([MACHINE]);
+  });
+
+  /**
    * `serviceDue` counts an hours interval from `lastDoneAtHours` and did not
    * change. The reading now arrives from the newest event under the same name.
    */

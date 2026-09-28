@@ -1,18 +1,19 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import {
+  daysBetween,
   formatMass,
   formatProduce,
   formatRange,
   libraryBreed,
+  longestPerKind,
   productsOf,
-  longestWithdrawal,
   SPECIES_TRAITS,
 } from '@homefarm/contracts';
 import { groupPhrase } from '@homefarm/core/voice';
 import { latestWeightBySubject, listWeights } from '@homefarm/core/read/breeding';
 import { type Group, lastFedByGroup, listGroups, lossesByGroup, produceToday } from '@homefarm/core/read/groups';
-import { withdrawalsBySubject } from '@homefarm/core/read/withdrawals';
+import { allWithdrawalsBySubject } from '@homefarm/core/read/withdrawals';
 import { Row } from '../components/Form';
 import { Icon } from '../components/Icon';
 import { Loading, Missing } from '../components/Missing';
@@ -83,8 +84,16 @@ export function GroupBody({ group }: { group: Group }): React.ReactElement {
 
   const [more, setMore] = useState(false);
 
+  /**
+   * Every kind, because this is the screen `TreatmentScreen` points at.
+   *
+   * It asked for `'egg'`, so the band it promised — *"you will see a band on
+   * this group"* — appeared for hens and never for a doe on a milk hold or a
+   * steer on a meat one. One band per kind held, so a herd on two holds is
+   * told about both rather than about whichever clears last.
+   */
   const withdrawals = useLive(
-    useCallback(() => withdrawalsBySubject('egg', [groupId]), [groupId]),
+    useCallback(() => allWithdrawalsBySubject([groupId]), [groupId]),
   );
   const produce = useLive(produceToday);
   const losses = useLive(lossesByGroup);
@@ -99,7 +108,7 @@ export function GroupBody({ group }: { group: Group }): React.ReactElement {
     (product) => product !== 'eggs',
   );
   const breed = group.breedId === undefined ? undefined : libraryBreed(group.breedId);
-  const withdrawal = longestWithdrawal(withdrawals?.get(groupId) ?? []);
+  const held = longestPerKind(withdrawals?.get(groupId) ?? []);
   const grow = growOutWindow(group);
   const lay = layOnsetWindow(group);
   const lost = losses?.get(groupId) ?? 0;
@@ -130,8 +139,10 @@ export function GroupBody({ group }: { group: Group }): React.ReactElement {
         })}
       </Text>
 
-      {/* Informs, does not interrupt (R10). */}
-      {withdrawal ? <WithdrawalBanner withdrawal={withdrawal} /> : null}
+      {/* Informs, does not interrupt (R10). One band per kind held. */}
+      {held.map((withdrawal) => (
+        <WithdrawalBanner key={withdrawal.kind} withdrawal={withdrawal} />
+      ))}
 
       {grow || lay || weight || lost > 0 || fed !== undefined ? (
         <Panel label="Where they are">
@@ -385,8 +396,6 @@ export function GroupBody({ group }: { group: Group }): React.ReactElement {
   );
 }
 
-const DAY_MS = 86_400_000;
-
 /**
  * The processing date, said as a date.
  *
@@ -394,7 +403,7 @@ const DAY_MS = 86_400_000;
  * in a barn holding a bird. The date is the answer they were after.
  */
 function describeWhen(at: number): string {
-  const days = Math.round((at - Date.now()) / DAY_MS);
+  const days = daysBetween(Date.now(), at);
   const date = new Date(at).toLocaleDateString(undefined, { day: 'numeric', month: 'long' });
 
   if (days < 0) return `that was ${date}`;
@@ -405,7 +414,7 @@ function describeWhen(at: number): string {
 
 /** Days, never a timestamp. Nobody in a yard needs to know it was 06:14. */
 function relative(at: number): string {
-  const days = Math.round((Date.now() - at) / DAY_MS);
+  const days = daysBetween(at, Date.now());
   if (days <= 0) return 'today';
   if (days === 1) return 'yesterday';
   if (days < 14) return `${days} days ago`;

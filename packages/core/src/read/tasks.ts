@@ -23,7 +23,12 @@ export interface Task {
 
 const stored = taskCreateSchema.partial();
 
-export async function listTasks(): Promise<Task[]> {
+/**
+ * `includeArchived` is for a reader that needs the *name* of a task that is
+ * gone — `history.ts`, whose completion rows say what was done. Nothing that
+ * lists jobs to do asks for it.
+ */
+export async function listTasks(options: { includeArchived?: boolean } = {}): Promise<Task[]> {
   const [records, done] = await Promise.all([
     localStore().readRecordsByEntity('task'),
     /**
@@ -40,7 +45,7 @@ export async function listTasks(): Promise<Task[]> {
   ]);
 
   return records
-    .filter((record) => !record.deleted)
+    .filter((record) => options.includeArchived === true || !record.deleted)
     .flatMap((record) => {
       const parsed = stored.safeParse(record.value);
       if (!parsed.success || parsed.data.title === undefined) return [];

@@ -108,6 +108,34 @@ describe('a flush interrupted by a farm switch', () => {
     expect(await queueDepth()).toBe(0);
   });
 
+  /**
+   * The three answers that write farm-wide state.
+   *
+   * A 401, a 402 and a 426 each write `lastError` — and the two payment ones
+   * the sync hold — through `localStore()` as it stands when the round trip
+   * ends, and the fence used to sit past all three. So a free-tier farm's 402
+   * arriving after a switch to a paid farm held the *paid* farm as
+   * `unsubscribed`, and its chip explained a state that was never its own
+   * until its next successful flush — which, in a barn, is never.
+   */
+  it.each([
+    [402, { error: 'Subscribe to send.', refusal: 'unsubscribed' }],
+    [426, { error: 'Update the app to keep syncing.' }],
+    [401, {}],
+  ])('does not hold or mark the farm that replaced it on a %s mid-flight', async (status, body) => {
+    await enqueue(eggLog());
+
+    const outcome = await flushOnce(async () => {
+      await switchFarm();
+      return { status, body };
+    });
+
+    expect(outcome.deferred).toBe('farm-switched');
+    // Farm B is a fresh store: nothing held against it, nothing said to it.
+    expect(await localStore().getSyncHeld()).toBeNull();
+    expect(await localStore().getLastError()).toBeNull();
+  });
+
   it("leaves the original farm's work queued for its own next pass", async () => {
     await enqueue(eggLog());
     const store = localStore();

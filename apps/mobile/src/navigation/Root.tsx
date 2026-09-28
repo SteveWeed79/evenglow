@@ -185,7 +185,7 @@ export type RootParamList = {
   CareRoutine: { groupId: string };
   /** What this group has produced over a season, against what it has eaten. */
   Trend: { groupId: string };
-  Weigh: { groupId: string };
+  Weigh: { groupId: string; animalId?: string };
   /** A clip. Offered only on a group kept for fibre. */
   Shearing: { groupId: string };
   Produce: { groupId: string };

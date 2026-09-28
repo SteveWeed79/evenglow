@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { describeLogFailure } from '@homefarm/core/sync/failure';
@@ -89,6 +89,24 @@ export function Tally({
   const saidOpacity = useFade(confirmation !== null);
 
   /**
+   * The confirmation's own clock, cleared when the tally goes.
+   *
+   * `LogHours` and `Produce` leave the screen the moment a commit lands, so
+   * the three-second timer outlived its component on every one of those
+   * paths and set state on a tally that no longer existed. React has stopped
+   * warning about that, which is not the same as it being right; and a
+   * second commit inside the window used to leave the *first* timer to clear
+   * the second sentence early.
+   */
+  const said = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (said.current !== null) clearTimeout(said.current);
+    },
+    [],
+  );
+
+  /**
    * A fraction of the shorter edge, bounded by the column it has to share and
    * by a floor and a ceiling. See `theme/tally.ts` — the fraction alone put a
    * 94px numeral on a 430pt-tall screen the moment a phone was turned sideways.
@@ -168,7 +186,11 @@ export function Tally({
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     // One short sentence — the whole whimsy allowance on this path.
     setConfirmation(confirm ? confirm(committed) : loggedConfirmation(committed, unit));
-    setTimeout(() => setConfirmation(null), 3_000);
+    if (said.current !== null) clearTimeout(said.current);
+    said.current = setTimeout(() => {
+      said.current = null;
+      setConfirmation(null);
+    }, 3_000);
   }, [count, unit, confirm, onCommit, requireConfirm, armed]);
 
   /**

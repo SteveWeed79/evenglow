@@ -136,6 +136,24 @@ describe('a flush that meets a lapsed session', () => {
     expect(message).not.toContain('sign in again');
   });
 
+  /**
+   * The third case, which used to borrow the second's sentence: a renewal
+   * that produced a token, and a server that refused the batch under it too.
+   * That server was reached twice, and "could not be reached" sent somebody
+   * to check their signal.
+   */
+  it('says the session was refused when a renewed one was refused too', async () => {
+    await enqueue(eggLog());
+    setSessionRefresher(refresher('renewed'));
+
+    await flushOnce(() => Promise.resolve({ status: 401, body: null }));
+
+    const message = await localStore().getLastError();
+    expect(message).toContain('would not accept');
+    expect(message).toContain('Sign in again');
+    expect(message).not.toContain('could not be reached');
+  });
+
   it('still reassures that nothing is lost, either way', async () => {
     await enqueue(eggLog());
 

@@ -9,7 +9,7 @@ import {
 import { Icon } from '../components/Icon';
 import { DayEvents } from '../components/Timeline';
 import { Loading } from '../components/Missing';
-import { Body, Panel } from '../components/Panel';
+import { Body, Label, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { Touch } from '../components/Touch';
 import { useLive } from '../hooks/useLive';
@@ -300,7 +300,7 @@ function DayBlock({
         <View style={styles.name}>
           <Text style={[styles.heading, { color: colors.ink }]}>{heading}</Text>
           {/* The readout, and the whole reason a closed day is worth having. */}
-          <Text style={[styles.label, { color: colors.muted }]}>{day.summary}</Text>
+          <Label>{day.summary}</Label>
         </View>
 
         {/**
@@ -362,36 +362,5 @@ const styles = StyleSheet.create({
   },
   monthName: { fontFamily: FONTS.display, fontSize: TYPE.title },
   monthSummary: { fontFamily: FONTS.data, fontSize: TYPE.label, letterSpacing: 0.4 },
-  record: { gap: SPACE.xs },
-  // A row is a tap target now, so it gets the height of one (R3).
-  event: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACE.md,
-    minHeight: TAP.min,
-    paddingHorizontal: SPACE.md,
-  },
-  actions: { gap: SPACE.sm, paddingHorizontal: SPACE.md, paddingBottom: SPACE.sm },
-  more: { alignSelf: 'flex-start', paddingVertical: SPACE.xs, paddingHorizontal: SPACE.sm },
   heading: { fontFamily: FONTS.display, fontSize: TYPE.title },
-  title: { fontFamily: FONTS.body, fontSize: TYPE.body },
-  detail: { fontFamily: FONTS.data, fontSize: TYPE.label },
-  time: {
-    fontFamily: FONTS.data,
-    fontSize: TYPE.label,
-    fontVariant: ['tabular-nums'],
-    minWidth: 64,
-  },
-  label: {
-    fontFamily: FONTS.data,
-    fontSize: TYPE.label,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-  moreLabel: {
-    fontFamily: FONTS.data,
-    fontSize: TYPE.label,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
 });

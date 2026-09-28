@@ -139,5 +139,10 @@ export function serialiseBackup(file: BackupFile): string {
  * file where the restore reads it.
  */
 export function backupFilename(at: number): string {
-  return `${PRODUCT_NAME.toLowerCase()}-farm-${new Date(at).toISOString().slice(0, 10)}.json`;
+  // The local date, not the UTC one: a backup written at eight in the evening
+  // in Kansas is written on the day the person writing it would name, and
+  // `toISOString` named the day after.
+  const date = new Date(at);
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  return `${PRODUCT_NAME.toLowerCase()}-farm-${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}.json`;
 }

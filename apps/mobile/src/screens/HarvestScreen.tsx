@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
 import {
   HARVEST_UNITS,
   MASS_ENTRY_CHOICES,
@@ -19,8 +18,6 @@ import { useLeave } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import { reportTrouble } from '../hooks/useTrouble';
 import type { ScreenProps } from '../navigation/Root';
-import { useTheme } from '../theme/ThemeProvider';
-import { FONTS, TYPE } from '../theme/tokens';
 
 /**
  * What came off, this morning.
@@ -56,7 +53,6 @@ const MASS_UNIT_LABELS: Record<MassEntryUnit, string> = {
 export function HarvestScreen({ route }: ScreenProps<'Harvest'>): React.ReactElement {
   const { plantingId } = route.params;
   const log = useLog();
-  const { colors } = useTheme();
 
   const plantings = useLive(listPlantings);
   const varieties = useLive(listVarieties);
@@ -173,10 +169,7 @@ export function HarvestScreen({ route }: ScreenProps<'Harvest'>): React.ReactEle
   const variety = varieties?.find((v) => v.id === planting.varietyId);
 
   return (
-    <Screen title="Log a harvest" back>
-      <Text style={[styles.label, { color: colors.muted }]}>
-        {variety?.name ?? 'This planting'}
-      </Text>
+    <Screen title="Log a harvest" subtitle={variety?.name ?? 'This planting'} back>
 
       <Field label="How are you measuring it?">
         <Choice options={HARVEST_UNITS} value={unit} onChange={setUnit} labels={UNIT_LABELS} />
@@ -238,11 +231,3 @@ export function HarvestScreen({ route }: ScreenProps<'Harvest'>): React.ReactEle
   );
 }
 
-const styles = StyleSheet.create({
-  label: {
-    fontFamily: FONTS.data,
-    fontSize: TYPE.label,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-});

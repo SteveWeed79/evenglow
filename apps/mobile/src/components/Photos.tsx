@@ -414,13 +414,17 @@ export function Photos({
                       *
                       * `uploadedAt` is set by `sync/photos.ts` once the bytes
                       * are on the server, so its absence is precisely "this is
-                      * the only copy". Muted, one line, no colour: it is a fact
+                      * the only copy". Quiet, one line, no colour: it is a fact
                       * worth knowing, not an alarm, and the alarming version
                       * would be a badge on every photo of a farm that has
                       * chosen to stay on one phone.
+                      *
+                      * `inkQuiet` in the body face rather than `muted` in the
+                      * data face: it is a sentence, and `muted` is held to the
+                      * label contrast, not the reading one.
                       */}
                     {photo.uploadedAt === undefined ? (
-                      <Text style={[styles.label, { color: colors.muted }]}>
+                      <Text style={[styles.only, { color: colors.inkQuiet }]}>
                         Only on this phone — a backup file will not carry it
                       </Text>
                     ) : null}
@@ -571,4 +575,10 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: SPACE.sm },
   action: { flex: 1 },
   label: { fontFamily: FONTS.data, fontSize: TYPE.label, textAlign: 'center' },
+  only: {
+    fontFamily: FONTS.body,
+    fontSize: TYPE.body - 2,
+    lineHeight: (TYPE.body - 2) * 1.35,
+    textAlign: 'center',
+  },
 });

@@ -121,7 +121,18 @@ describe('what goes in the file', () => {
   });
 
   it('names itself for the day it was written', () => {
-    expect(backupFilename(Date.UTC(2026, 7, 7))).toBe(
+    expect(backupFilename(new Date(2026, 7, 7, 9).getTime())).toBe(
+      `${PRODUCT_NAME.toLowerCase()}-farm-2026-08-07.json`,
+    );
+  });
+
+  /**
+   * The local day, whatever UTC says it is. `toISOString` named a backup
+   * written at eight in the evening in Kansas for the day after, and the name
+   * is the one thing about the file a person reads.
+   */
+  it('names the local day, not the UTC one', () => {
+    expect(backupFilename(new Date(2026, 7, 7, 23, 30).getTime())).toBe(
       `${PRODUCT_NAME.toLowerCase()}-farm-2026-08-07.json`,
     );
   });

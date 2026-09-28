@@ -2,14 +2,15 @@ import { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import {
   breedsForSpecies,
+  dayStart,
   type FlockPurpose,
   formatRange,
   newId,
   purposeGroupsFor,
   purposesFor,
+  type Species,
   SPECIES_TRAITS,
   suggestedGrowOutWeeks,
-  type Species,
 } from '@homefarm/contracts';
 import { defaultGroupName } from '@homefarm/core/naming';
 import {
@@ -23,7 +24,7 @@ import {
   Toggle,
   useSaver,
 } from '../components/Form';
-import { Body, Panel } from '../components/Panel';
+import { Body, Label, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useGroups } from '../hooks/useGroups';
 import { useLeave } from '../hooks/useNav';
@@ -81,7 +82,7 @@ export function AddGroupScreen(): React.ReactElement {
   const [breedId, setBreedId] = useState<string | null>(null);
   const [processAt, setProcessAt] = useState<number | null>(null);
   const [knowsBirth, setKnowsBirth] = useState(false);
-  const [bornAt, setBornAt] = useState(() => startOfDay(Date.now()));
+  const [bornAt, setBornAt] = useState(() => dayStart(Date.now()));
 
   const { saving, failure, save } = useSaver(useLeave());
 
@@ -133,7 +134,7 @@ export function AddGroupScreen(): React.ReactElement {
 
   return (
     <Screen title="Add stock" back>
-      <Text style={[styles.label, { color: colors.muted }]}>What do you keep?</Text>
+      <Label>What do you keep?</Label>
 
       {GROUPINGS.map(({ title, group }) => {
         const options = (Object.keys(SPECIES_TRAITS) as Species[]).filter(
@@ -299,21 +300,9 @@ export function AddGroupScreen(): React.ReactElement {
   );
 }
 
-function startOfDay(at: number): number {
-  const date = new Date(at);
-  date.setHours(0, 0, 0, 0);
-  return date.getTime();
-}
-
 const styles = StyleSheet.create({
   section: { gap: SPACE.sm },
   groupTitle: {
-    fontFamily: FONTS.data,
-    fontSize: TYPE.label,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-  label: {
     fontFamily: FONTS.data,
     fontSize: TYPE.label,
     letterSpacing: 1.2,

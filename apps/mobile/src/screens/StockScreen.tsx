@@ -6,7 +6,7 @@ import { groupPhrase } from '@homefarm/core/voice';
 import { Primary } from '../components/Form';
 import { Grid } from '../components/Grid';
 import { Icon } from '../components/Icon';
-import { Card, Body, Panel } from '../components/Panel';
+import { Body, Card, Label, Panel } from '../components/Panel';
 import { PaneTitle, Screen } from '../components/Screen';
 import { growOutWindow, layOnsetWindow } from '../hooks/useDues';
 import { useGroups } from '../hooks/useGroups';
@@ -142,7 +142,7 @@ function GroupCard({ group, onPress }: { group: Group; onPress: () => void }): R
 
         <View style={styles.count}>
           <Text style={[styles.countValue, { color: colors.ink }]}>{group.count}</Text>
-          <Text style={[styles.label, { color: colors.muted }]}>head</Text>
+          <Label>head</Label>
         </View>
       </View>
 
@@ -184,12 +184,6 @@ const styles = StyleSheet.create({
   count: { alignItems: 'flex-end' },
   groupName: { fontFamily: FONTS.display, fontSize: TYPE.title },
   countValue: { fontFamily: FONTS.display, fontSize: TYPE.title, fontVariant: ['tabular-nums'] },
-  label: {
-    fontFamily: FONTS.data,
-    fontSize: TYPE.label,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
   // `label` stays for "head" and "Open" — a unit and a control, which is what
   // the data face is actually for.
   lede: { fontFamily: FONTS.body, fontSize: TYPE.body, lineHeight: TYPE.body * 1.35 },

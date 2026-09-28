@@ -515,6 +515,20 @@ describeDb('deleting a photo', () => {
     expect(answer.body.toString()).toContain('deleted');
   });
 
+  /**
+   * A device whose upload was still queued when another device deleted the
+   * photo arrives after the archive. Taking its bytes would put the picture
+   * back into a bucket nothing will ever remove them from.
+   */
+  it('refuses bytes that arrive after the photo was deleted', async () => {
+    const id = ulid();
+    await record(id, ORG_A);
+    await archive(id);
+
+    expect((await put(USERS.ownerA, id)).status).toBe(410);
+    expect(await harness!.db.collection('photoBytes.files').countDocuments({})).toBe(0);
+  });
+
   it('still says "not uploaded yet" for a record whose bytes never came', async () => {
     const id = ulid();
     await record(id, ORG_A);

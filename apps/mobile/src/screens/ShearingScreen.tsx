@@ -1,5 +1,4 @@
 import { useCallback, useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
 import { formatMass, gramsToUg, newId, poundsToUg } from '@homefarm/contracts';
 import { listAnimals } from '@homefarm/core/read/animals';
 import { listGroups } from '@homefarm/core/read/groups';
@@ -21,8 +20,6 @@ import { useLeave } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import { useUnits } from '../hooks/useUnits';
 import type { ScreenProps } from '../navigation/Root';
-import { useTheme } from '../theme/ThemeProvider';
-import { FONTS, TYPE } from '../theme/tokens';
 
 /**
  * A clip.
@@ -52,7 +49,6 @@ import { FONTS, TYPE } from '../theme/tokens';
 export function ShearingScreen({ route }: ScreenProps<'Shearing'>): React.ReactElement {
   const { groupId } = route.params;
   const log = useLog();
-  const { colors } = useTheme();
   const units = useUnits();
 
   const groups = useLive(listGroups);
@@ -107,9 +103,7 @@ export function ShearingScreen({ route }: ScreenProps<'Shearing'>): React.ReactE
       : null;
 
   return (
-    <Screen title="Record a clip" back>
-      <Text style={[styles.label, { color: colors.muted }]}>{group.name}</Text>
-
+    <Screen title="Record a clip" subtitle={group.name} back>
       {named.length > 0 ? (
         <Field label="Who?">
           <Choice
@@ -133,7 +127,7 @@ export function ShearingScreen({ route }: ScreenProps<'Shearing'>): React.ReactE
           onChangeText={setAmount}
           placeholder="7.5"
           suffix={heavy}
-          accessibilityLabel="Fleece weight in pounds"
+          accessibilityLabel={`Fleece weight in ${heavy === 'kg' ? 'kilos' : 'pounds'}`}
           testID="clip-amount"
         />
       </Field>
@@ -174,11 +168,3 @@ export function ShearingScreen({ route }: ScreenProps<'Shearing'>): React.ReactE
   );
 }
 
-const styles = StyleSheet.create({
-  label: {
-    fontFamily: FONTS.data,
-    fontSize: TYPE.label,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-});

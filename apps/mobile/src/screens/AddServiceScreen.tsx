@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { newId } from '@homefarm/contracts';
 import { listInventory, listMachines } from '@homefarm/core/read/iron';
 import {
@@ -20,8 +20,7 @@ import { useLive } from '../hooks/useLive';
 import { useLeave } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import type { ScreenProps } from '../navigation/Root';
-import { useTheme } from '../theme/ThemeProvider';
-import { FONTS, SPACE, TYPE } from '../theme/tokens';
+import { SPACE } from '../theme/tokens';
 
 /**
  * A service schedule.
@@ -79,7 +78,6 @@ const PRESETS = [
 export function AddServiceScreen({ route }: ScreenProps<'AddService'>): React.ReactElement {
   const { machineId } = route.params;
   const log = useLog();
-  const { colors } = useTheme();
 
   const machines = useLive(listMachines);
   const inventory = useLive(listInventory);
@@ -147,9 +145,7 @@ export function AddServiceScreen({ route }: ScreenProps<'AddService'>): React.Re
   const noTrigger = intervalHours === undefined && intervalDays === undefined;
 
   return (
-    <Screen title="Add a schedule" back>
-      <Text style={[styles.label, { color: colors.muted }]}>{machine.name}</Text>
-
+    <Screen title="Add a schedule" subtitle={machine.name} back>
       <Field label="Common ones">
         <View style={styles.chips}>
           {PRESETS.filter((preset) => machine.hasHourMeter || !('hours' in preset)).map((preset) => (
@@ -296,10 +292,4 @@ export function AddServiceScreen({ route }: ScreenProps<'AddService'>): React.Re
 
 const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.md },
-  label: {
-    fontFamily: FONTS.data,
-    fontSize: TYPE.label,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
 });

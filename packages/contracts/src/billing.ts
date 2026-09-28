@@ -300,3 +300,42 @@ export function subscriptionFromPromo(grant: PromoGrant, now: number): Subscript
     updatedAt: now,
   };
 }
+
+/**
+ * What a farm holds after redeeming, which is not always the grant.
+ *
+ * Pure, like `subscriptionFromPromo`, so the two rules below can be tested
+ * without a database — and they are the two rules the route got wrong.
+ *
+ * ## A retry is answered with what the farm already has
+ *
+ * `redeemPromoCode` treats a second redemption by the same farm as the first
+ * one again, which is right: two hands, one code, one bad signal. But the
+ * route then wrote a *fresh* grant, with `expiresAt` counted from the moment
+ * of the retry — so a thirty-day code posted again on day twenty-nine bought
+ * thirty more, and again, for ever. Nothing limited it because nothing about
+ * the code changed: the farm was already on its list. An `already` redemption
+ * therefore keeps whatever is stored; only a farm with nothing stored at all
+ * is handed the grant.
+ *
+ * ## A promo never shortens what a farm is entitled to
+ *
+ * Redeeming a fortnight's code on a farm with a year of Play subscription
+ * overwrote the year with the fortnight and refused sync when the fortnight
+ * ran out. A grant that ends before the farm's current entitlement does is
+ * not applied; one that ends later, or never, is. `entitlementOf` is the
+ * judge of "current", so a stored subscription that has lapsed or expired is
+ * replaced like an absent one.
+ */
+export function promoOutcome(
+  current: Subscription | undefined,
+  granted: Subscription,
+  already: boolean,
+  now: number,
+): Subscription {
+  if (already) return current ?? granted;
+  if (current === undefined || !entitlementOf(current, now).syncing) return granted;
+  if (current.expiresAt === undefined) return current;
+  if (granted.expiresAt === undefined) return granted;
+  return current.expiresAt >= granted.expiresAt ? current : granted;
+}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { aOrAn, entityNoun } from '@homefarm/contracts';
 import type { QueuedMutation } from '@homefarm/core/db/records';
 import { discardRejected, listRejected, retryRejected } from '@homefarm/core/sync/inbox';
 import { nudge, subscribe } from '@homefarm/core/sync/engine';
@@ -22,35 +23,6 @@ import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
  * So it sits here, in the farm's own words where possible, with exactly two
  * ways out — send it again, or throw it away on purpose.
  */
-
-/** What each entity is called to the person who typed it, not on the wire. */
-const NOUNS: Record<string, string> = {
-  eggLog: 'egg count',
-  productionLog: 'production',
-  feedLog: 'feeding',
-  mortality: 'a loss',
-  predator: 'a predator sighting',
-  hourReading: 'an hour reading',
-  weight: 'a weight',
-  shearing: 'a shearing',
-  harvest: 'a harvest',
-  careLog: 'a job done',
-  flock: 'a group',
-  animal: 'an animal',
-  medication: 'a treatment',
-  equipment: 'a machine',
-  maintenance: 'a service',
-  planting: 'a planting',
-  bed: 'a bed',
-  variety: 'a variety',
-  site: 'your ground',
-  breeding: 'a mating',
-  incubation: 'a set of eggs',
-  feedPlan: 'a ration',
-  task: 'a job',
-  inventory: 'stock on the shelf',
-  photo: 'a photo',
-};
 
 export function InboxScreen(): React.ReactElement {
   const { colors } = useTheme();
@@ -120,7 +92,12 @@ export function InboxScreen(): React.ReactElement {
           <View style={styles.head}>
             <View style={styles.words}>
               <Text style={[styles.title, { color: colors.ink }]}>
-                {NOUNS[mutation.entity] ?? mutation.entity}
+                {/* The contracts table, so every entity has a word here. This
+                    kept its own copy and the copy stopped at twenty-four: a
+                    refused note, shelf adjustment or completion was titled
+                    by its wire name, which is the exact sentence
+                    `ENTITY_NOUNS` was written to end. */}
+                {aOrAn(entityNoun(mutation.entity))}
               </Text>
               <Text style={[styles.when, { color: colors.muted }]}>
                 {new Date(mutation.clientTs).toLocaleString(undefined, {

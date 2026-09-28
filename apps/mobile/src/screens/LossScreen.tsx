@@ -1,5 +1,4 @@
 import { useCallback, useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
 import { MORTALITY_CAUSES } from '@homefarm/contracts';
 import { listGroups, lossesByGroup } from '@homefarm/core/read/groups';
 import {
@@ -18,8 +17,6 @@ import { useLive } from '../hooks/useLive';
 import { useLeave } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import type { ScreenProps } from '../navigation/Root';
-import { useTheme } from '../theme/ThemeProvider';
-import { FONTS, TYPE } from '../theme/tokens';
 
 /**
  * A death, a cull, or a predator.
@@ -67,7 +64,6 @@ const LOSS_CAUSES = MORTALITY_CAUSES.filter((cause) => cause !== 'harvest');
 export function LossScreen({ route }: ScreenProps<'Loss'>): React.ReactElement {
   const { groupId } = route.params;
   const log = useLog();
-  const { colors } = useTheme();
 
   const groups = useLive(listGroups);
   const losses = useLive(lossesByGroup);
@@ -131,9 +127,7 @@ export function LossScreen({ route }: ScreenProps<'Loss'>): React.ReactElement {
   const already = losses?.get(groupId) ?? 0;
 
   return (
-    <Screen title="Record a loss" back>
-      <Text style={[styles.label, { color: colors.muted }]}>{group.name}</Text>
-
+    <Screen title="Record a loss" subtitle={group.name} back>
       <Field label="How many?">
         {/* Negative, because this screen is headed "Record a loss" and a `+5`
             under that heading reads as five more animals rather than five
@@ -185,11 +179,3 @@ export function LossScreen({ route }: ScreenProps<'Loss'>): React.ReactElement {
   );
 }
 
-const styles = StyleSheet.create({
-  label: {
-    fontFamily: FONTS.data,
-    fontSize: TYPE.label,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-});

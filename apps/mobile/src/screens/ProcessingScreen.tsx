@@ -1,5 +1,4 @@
 import { useCallback, useRef, useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
 import {
   formatMass,
   MASS_ENTRY_CHOICES,
@@ -26,8 +25,6 @@ import { useLeave } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import { useUnits } from '../hooks/useUnits';
 import type { ScreenProps } from '../navigation/Root';
-import { useTheme } from '../theme/ThemeProvider';
-import { FONTS, TYPE } from '../theme/tokens';
 
 /**
  * Taking a group for meat.
@@ -90,7 +87,6 @@ function toMass(raw: string, unit: Unit): number | null {
 export function ProcessingScreen({ route }: ScreenProps<'Processing'>): React.ReactElement {
   const { groupId } = route.params;
   const log = useLog();
-  const { colors } = useTheme();
   const units = useUnits();
 
   const groups = useLive(listGroups);
@@ -224,9 +220,7 @@ export function ProcessingScreen({ route }: ScreenProps<'Processing'>): React.Re
    */
   if (finished) {
     return (
-      <Screen title="Take them for meat" back>
-        <Text style={[styles.label, { color: colors.muted }]}>{group.name}</Text>
-
+      <Screen title="Take them for meat" subtitle={group.name} back>
         <Panel label="That is the whole group">
           <Body>
             {done.count} taken from {group.name}
@@ -253,9 +247,7 @@ export function ProcessingScreen({ route }: ScreenProps<'Processing'>): React.Re
   }
 
   return (
-    <Screen title="Take them for meat" back>
-      <Text style={[styles.label, { color: colors.muted }]}>{group.name}</Text>
-
+    <Screen title="Take them for meat" subtitle={group.name} back>
       <Field label="How many?">
         {/* Positive, unlike the loss screen's. This is the batch coming off,
             not a shortfall — and the two screens reading the same way would be
@@ -306,11 +298,3 @@ export function ProcessingScreen({ route }: ScreenProps<'Processing'>): React.Re
   );
 }
 
-const styles = StyleSheet.create({
-  label: {
-    fontFamily: FONTS.data,
-    fontSize: TYPE.label,
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
-});

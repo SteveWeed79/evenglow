@@ -101,6 +101,14 @@
       }
     },
     {
+      "name": "more",
+      "group": "actions",
+      "elements": {
+        "24": 3,
+        "32": 3
+      }
+    },
+    {
       "name": "sky-clear",
       "group": "weather",
       "elements": {

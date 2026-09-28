@@ -167,6 +167,21 @@ export async function photoRoutes(app: FastifyInstance, env: Env): Promise<void>
       }
 
       /**
+       * Bytes for a photo the farm has deleted are refused, not stored.
+       *
+       * The archive removes the image and then marks the record; a device
+       * whose upload was still queued when another device deleted the photo
+       * arrives here afterwards, and taking its bytes would put the picture
+       * back into a bucket nothing will ever remove them from — served by the
+       * GET below to anyone on the farm, for a photo the farm decided it did
+       * not want. 410 rather than 404 so the client's "the record has not
+       * arrived yet, try later" reading of a 404 does not apply.
+       */
+      if (record.archivedAt !== undefined && record.archivedAt !== null) {
+        return reply.status(410).send({ error: 'That photo was deleted.' });
+      }
+
+      /**
        * Which permission a PUT actually needs, and it is not one answer.
        *
        * The role matrix lets a hand CREATE a photo and not UPDATE one. Gating

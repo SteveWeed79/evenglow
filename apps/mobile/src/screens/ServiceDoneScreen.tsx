@@ -1,5 +1,4 @@
 import { useCallback, useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
 import { listInventory, listMachines, listServices } from '@homefarm/core/read/iron';
 import { jobTitle, newId, partsNote } from '@homefarm/contracts';
 import { Confirm, Failure, Field, NumberField, Primary, Toggle, useSaver } from '../components/Form';
@@ -10,8 +9,6 @@ import { useLive } from '../hooks/useLive';
 import { useLeave } from '../hooks/useNav';
 import { useLog, useLogAll } from '../hooks/useSync';
 import type { ScreenProps } from '../navigation/Root';
-import { useTheme } from '../theme/ThemeProvider';
-import { FONTS, TYPE } from '../theme/tokens';
 
 /**
  * Recording that a service was done.
@@ -30,7 +27,6 @@ export function ServiceDoneScreen({ route }: ScreenProps<'ServiceDone'>): React.
   const { serviceId } = route.params;
   const log = useLog();
   const logAll = useLogAll();
-  const { colors } = useTheme();
 
   const services = useLive(listServices);
   const machines = useLive(listMachines);
@@ -175,10 +171,7 @@ export function ServiceDoneScreen({ route }: ScreenProps<'ServiceDone'>): React.
   const checks = service.checks ?? [];
 
   return (
-    <Screen title={service.title} back>
-      {machine === null ? null : (
-        <Text style={[styles.label, { color: colors.muted }]}>{machine.name}</Text>
-      )}
+    <Screen title={service.title} {...(machine === null ? {} : { subtitle: machine.name })} back>
 
       <Panel label="How often">
         <Body>
@@ -271,11 +264,3 @@ export function ServiceDoneScreen({ route }: ScreenProps<'ServiceDone'>): React.
   );
 }
 
-const styles = StyleSheet.create({
-  label: {
-    fontFamily: FONTS.data,
-    fontSize: TYPE.label,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-});

@@ -159,7 +159,15 @@ export interface Service {
 
 const storedMaintenance = z.object(maintenanceCreateSchema.shape).partial();
 
-export async function listServices(): Promise<Service[]> {
+/**
+ * `includeArchived` is for `history.ts`, which hangs six years of service
+ * completions on the schedule they name — a schedule that has since been
+ * replaced by a new interval included. Every reader of what is *due* leaves
+ * it off.
+ */
+export async function listServices(
+  options: { includeArchived?: boolean } = {},
+): Promise<Service[]> {
   const [records, done] = await Promise.all([
     localStore().readRecordsByEntity('maintenance'),
     /**
@@ -175,7 +183,7 @@ export async function listServices(): Promise<Service[]> {
   ]);
 
   return records
-    .filter((record) => !record.deleted)
+    .filter((record) => options.includeArchived === true || !record.deleted)
     .flatMap((record) => {
       const parsed = storedMaintenance.safeParse(record.value);
       if (!parsed.success || parsed.data.equipmentId === undefined || parsed.data.title === undefined) {

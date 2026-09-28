@@ -293,11 +293,14 @@ export const MIGRATIONS: readonly Migration[] = [
        * and drops everything that arrived by pull. A pre-image has no such
        * flaw — it is the record itself, whatever produced it.
        *
-       * `after` is what makes the restore safe. It holds the `updatedAt` this
-       * device's optimistic write produced, and the restore only happens when
-       * the record still carries it. Anything else means a pull or a later edit
-       * has landed since, and newer wins — so the pre-image is dropped rather
-       * than resurrecting a value the farm has moved past.
+       * `after` holds the `updatedAt` this device's optimistic write produced.
+       * It was the restore's guard — restore only while the record still
+       * carried it — and is not any more: a pull can land a newer `updatedAt`
+       * while leaving the refused fields exactly as this device wrote them, so
+       * `restoreBefore` now compares the record field by field against the
+       * refused command instead, and its own header says why. The column is
+       * still written, because it says which local write a pre-image belongs
+       * to, which is worth knowing when reading the table by hand.
        *
        * One row per outstanding local update or delete, removed when the
        * mutation leaves the outbox in either direction. A table rather than

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import {
   isValidMonthDay,
@@ -9,15 +9,13 @@ import {
   splitMonthDay,
 } from '@homefarm/contracts';
 import { readSiteOrBlank } from '@homefarm/core/read/growing';
-import { describeLogFailure } from '@homefarm/core/sync/failure';
+import { Chip, Failure, Field, NumberField, Primary, TextField, useSaver } from '../components/Form';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
-import { Touch } from '../components/Touch';
 import { useLive } from '../hooks/useLive';
-import { useNav } from '../hooks/useNav';
+import { useLeave } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
-import { useTheme } from '../theme/ThemeProvider';
-import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
+import { SPACE } from '../theme/tokens';
 
 /**
  * Where the farm is, in the two senses that matter.
@@ -36,6 +34,15 @@ import { FONTS, RADII, SPACE, TAP, TYPE } from '../theme/tokens';
  * lookup both exist to save someone typing on day one — they are conveniences
  * over this screen, not replacements for it, because a farmer knows their own
  * land better than a postcode does.
+ *
+ * ## Built from the form parts, like every other form
+ *
+ * This screen predated `Form.tsx` and kept its own `Field`, its own text
+ * inputs, its own month chips and its own save button — so it was the one
+ * form whose fields did not scroll clear of the keyboard (`useRevealOnFocus`
+ * lives in `TextField`), whose chips were a different height from every other
+ * chip, and whose save could be left dead by a throw. Same testIDs, same
+ * words, the shared parts underneath.
  */
 
 const MONTHS = [
@@ -45,8 +52,6 @@ const MONTHS = [
 
 export function SiteSetupScreen(): React.ReactElement {
   const log = useLog();
-  const nav = useNav();
-  const { colors } = useTheme();
 
   /**
    * The site this farm already has, if any.
@@ -71,8 +76,8 @@ export function SiteSetupScreen(): React.ReactElement {
   const [lastDay, setLastDay] = useState('15');
   const [firstMonth, setFirstMonth] = useState(9); // October
   const [firstDay, setFirstDay] = useState('5');
-  const [saving, setSaving] = useState(false);
-  const [failure, setFailure] = useState<string | null>(null);
+
+  const { saving, failure, save } = useSaver(useLeave());
 
   /**
    * Fill the form from the site, once.
@@ -118,13 +123,12 @@ export function SiteSetupScreen(): React.ReactElement {
   const firstAutumn = monthDay(firstMonth + 1, Number(firstDay) || 0);
   const datesValid = isValidMonthDay(lastSpring) && isValidMonthDay(firstAutumn);
 
-  const save = useCallback(async () => {
-    if (saving || !datesValid || site === null) return;
-    setSaving(true);
+  const commit = (): void => {
+    if (!datesValid || site === null) return;
 
     const known = site.id !== '';
 
-    try {
+    void save(async () => {
       await log({
         entity: 'site',
         op: known ? 'update' : 'create',
@@ -157,15 +161,8 @@ export function SiteSetupScreen(): React.ReactElement {
             : { zone: { system: 'usda' as const, value: normaliseZoneValue(zone) } }),
         },
       });
-    } catch (error) {
-      setSaving(false);
-      setFailure(describeLogFailure(error));
-      return;
-    }
-
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    nav.goBack();
-  }, [saving, datesValid, site, log, name, lastSpring, firstAutumn, zone, nav]);
+    });
+  };
 
   return (
     <Screen title="Your ground" back>
@@ -178,17 +175,7 @@ export function SiteSetupScreen(): React.ReactElement {
       </Panel>
 
       <Field label="What do you call this place?">
-        <TextInput
-          value={name}
-          onChangeText={setName}
-          placeholder="The farm"
-          placeholderTextColor={colors.muted}
-          maxLength={80}
-          style={[
-            styles.field,
-            { backgroundColor: colors.raised, borderColor: colors.border, color: colors.ink },
-          ]}
-        />
+        <TextField value={name} onChangeText={setName} placeholder="The farm" maxLength={80} />
       </Field>
 
       <Field label="Last spring frost">
@@ -211,66 +198,24 @@ export function SiteSetupScreen(): React.ReactElement {
         />
       </Field>
 
-      <Field label="Hardiness zone (optional)">
-        <TextInput
-          value={zone}
-          onChangeText={setZone}
-          placeholder="7a"
-          placeholderTextColor={colors.muted}
-          autoCapitalize="none"
-          maxLength={8}
-          // Nothing could drive this field from a test, which is part of why a
-          // zone that could not be cleared went unnoticed.
-          testID="site-zone"
-          style={[
-            styles.field,
-            { backgroundColor: colors.raised, borderColor: colors.border, color: colors.ink },
-          ]}
-        />
-        <Body>
-          USDA. Leave it blank if you do not know — it only affects what the app says about
-          perennials surviving winter, and it warns rather than stops you.
-        </Body>
+      <Field
+        label="Hardiness zone (optional)"
+        hint="USDA. Leave it blank if you do not know — it only affects what the app says about perennials surviving winter, and it warns rather than stops you."
+      >
+        {/* `caps` because a zone is a code, not a word: "7a" and "7A" are the
+            same zone, `normaliseZoneValue` lowercases on save, and a keyboard
+            that autocorrects "7a" to something it likes better is the one
+            thing this field must not have. Nothing could drive this field from
+            a test, which is part of why a zone that could not be cleared went
+            unnoticed. */}
+        <TextField value={zone} onChangeText={setZone} placeholder="7a" maxLength={8} caps testID="site-zone" />
       </Field>
 
-      {!datesValid ? (
-        <Panel>
-          <Body>Those dates are not both real days. Check the numbers.</Body>
-        </Panel>
-      ) : null}
+      <Failure message={datesValid ? null : 'Those dates are not both real days. Check the numbers.'} />
+      <Failure message={failure} />
 
-      {failure ? (
-        <Panel>
-          <Body>{failure}</Body>
-        </Panel>
-      ) : null}
-
-      <Touch affordance="brass"
-        onPress={() => void save()}
-        disabled={saving || !datesValid}
-        accessibilityRole="button"
-        testID="save-site"
-        style={({ pressed }) => [
-          styles.save,
-          {
-            backgroundColor: colors.lantern,
-            opacity: saving || !datesValid ? 0.4 : pressed ? 0.8 : 1,
-          },
-        ]}
-      >
-        <Text style={[styles.saveLabel, { color: colors.lanternOn }]}>Save</Text>
-      </Touch>
+      <Primary label="Save" onPress={commit} disabled={saving || !datesValid} testID="save-site" />
     </Screen>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  const { colors } = useTheme();
-  return (
-    <View style={styles.section}>
-      <Text style={[styles.label, { color: colors.muted }]}>{label}</Text>
-      {children}
-    </View>
   );
 }
 
@@ -302,99 +247,36 @@ function DatePick({
    * wrong date to every farm went unnoticed.
    */
   testID?: string;
-}) {
-  const { colors } = useTheme();
-
+}): React.ReactElement {
   return (
     <View style={styles.date}>
       <View style={styles.months}>
         {MONTHS.map((label, index) => (
-          <Touch affordance="check"
+          <Chip
             key={label}
+            label={label}
+            selected={month === index}
             onPress={() => {
               void Haptics.selectionAsync();
               onMonth(index);
             }}
-            accessibilityRole="button"
-            accessibilityState={{ selected: month === index }}
-            style={({ pressed }) => [
-              styles.month,
-              {
-                backgroundColor: month === index ? colors.lantern : colors.raised,
-                borderColor: month === index ? colors.lanternInk : colors.border,
-                opacity: pressed ? 0.75 : 1,
-              },
-            ]}
-          >
-            <Text
-              style={[styles.monthLabel, { color: month === index ? colors.lanternOn : colors.ink }]}
-            >
-              {label}
-            </Text>
-          </Touch>
+          />
         ))}
       </View>
 
-      <TextInput
-        {...(testID === undefined ? {} : { testID })}
+      <NumberField
         value={day}
-        onChangeText={(text) => onDay(text.replace(/[^0-9]/g, '').slice(0, 2))}
-        keyboardType="number-pad"
-        inputMode="numeric"
-        maxLength={2}
+        // Two digits is every day of every month; a third is a slip.
+        onChangeText={(text) => onDay(text.slice(0, 2))}
+        whole
         accessibilityLabel="Day of the month"
-        style={[
-          styles.day,
-          { backgroundColor: colors.raised, borderColor: colors.border, color: colors.ink },
-        ]}
+        {...(testID === undefined ? {} : { testID })}
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  section: { gap: SPACE.sm },
-  label: {
-    fontFamily: FONTS.data,
-    fontSize: TYPE.label,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-  field: {
-    minHeight: TAP.min,
-    borderRadius: RADII.softHead,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: SPACE.lg,
-    fontFamily: FONTS.body,
-    fontSize: TYPE.body,
-  },
   date: { gap: SPACE.sm },
   months: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
-  month: {
-    minWidth: 64,
-    minHeight: TAP.min,
-    borderRadius: RADII.softHead,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  monthLabel: { fontFamily: FONTS.body, fontSize: TYPE.body },
-  day: {
-    minHeight: TAP.min,
-    width: 96,
-    borderRadius: RADII.softHead,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: SPACE.lg,
-    fontFamily: FONTS.data,
-    fontSize: TYPE.lede,
-    textAlign: 'center',
-  },
-  save: {
-    minHeight: TAP.primary,
-    borderRadius: RADII.softHead,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: SPACE.lg,
-  },
-  saveLabel: { fontFamily: FONTS.display, fontSize: TYPE.lede },
 });

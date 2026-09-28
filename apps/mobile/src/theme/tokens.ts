@@ -342,7 +342,16 @@ export const FONTS = {
 export const TYPE = { tally: 0.22, hero: 32, title: 24, lede: 19, body: 17, label: 13 } as const;
 
 /** Coziness never costs a millimetre. dp, not px — already density-independent. */
-export const TAP = { min: 56, primary: 64, gap: 12 } as const;
+/**
+ * `floor` is the accessibility minimum, not a size anything should aim for.
+ *
+ * R4 sets 56 and it holds everywhere a control stands on its own. The one
+ * control that cannot be 56 tall is a button that sits *inside* a 56 row —
+ * a due row's Done — where the row's padding leaves 44, and a `hitSlop` of 8
+ * carries the reach past the box on both sides. `tap-size.test.tsx` pins it at
+ * exactly this, so it cannot drift down and nothing else can quietly adopt it.
+ */
+export const TAP = { min: 56, primary: 64, gap: 12, floor: 44 } as const;
 
 export const SPACE = { xs: 4, sm: 8, md: 12, lg: 20, xl: 32 } as const;
 

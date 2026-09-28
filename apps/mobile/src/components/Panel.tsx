@@ -149,6 +149,32 @@ export function Card({
 /** @deprecated The arch is gone; this is `<Card>` under its old name. */
 export const ArchCard = Card;
 
+/**
+ * A tracked-caps label in the data face: a section heading, a unit, the name
+ * of a readout. Never a sentence — `muted` is the label tier, held to 4.5:1
+ * where body text gets 7:1, and `contrast.test.ts` says so in as many words.
+ *
+ * One recipe, here, because it had been copied into fifteen stylesheets by
+ * hand and the copies had started to drift.
+ */
+export function Label({
+  children,
+  testID,
+}: {
+  children: React.ReactNode;
+  testID?: string;
+}): React.ReactElement {
+  const { colors } = useTheme();
+  return (
+    <Text
+      style={[styles.label, { color: colors.muted }]}
+      {...(testID === undefined ? {} : { testID })}
+    >
+      {children}
+    </Text>
+  );
+}
+
 export function Body({ children }: { children: React.ReactNode }): React.ReactElement {
   const { colors } = useTheme();
   return <Text style={[styles.body, { color: colors.ink }]}>{children}</Text>;

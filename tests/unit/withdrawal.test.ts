@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   activeWithdrawals,
   daysUntilClear,
+  longestPerKind,
   longestWithdrawal,
   type ActiveWithdrawal,
   type TreatmentRecord,
+  withdrawalKindFor,
   withdrawalMessage,
+  withdrawalsFor,
   withdrawalWindow,
 } from '@homefarm/contracts';
 
@@ -232,5 +235,45 @@ describe('the message', () => {
     const [active] = activeWithdrawals([milk], 'milk', [FLOCK], START + DAY);
 
     expect(withdrawalMessage(active!, START + DAY)).toContain('Milk withheld');
+  });
+});
+
+/**
+ * Splitting a mixed list back up by the produce a screen is about.
+ *
+ * `useGroups` hands Today every kind together, and a tally that took the lot
+ * gated milk with egg holds. These are the seams the screens cut along.
+ */
+describe('per product', () => {
+  const held = (): ActiveWithdrawal[] => {
+    const egg = treatment({ id: 'E'.repeat(26), name: 'Spray', withdrawalDays: { egg: 7 } });
+    const milk = treatment({ id: 'K'.repeat(26), name: 'Oxytet', withdrawalDays: { milk: 4, meat: 28 } });
+    return [
+      ...activeWithdrawals([egg, milk], 'egg', [FLOCK], START + DAY),
+      ...activeWithdrawals([egg, milk], 'milk', [FLOCK], START + DAY),
+      ...activeWithdrawals([egg, milk], 'meat', [FLOCK], START + DAY),
+    ];
+  };
+
+  it('maps a product to the kind that holds it, and fibre to nothing', () => {
+    expect(withdrawalKindFor('eggs')).toBe('egg');
+    expect(withdrawalKindFor('milk')).toBe('milk');
+    // No label carries a wool withdrawal; a shearing is never gated.
+    expect(withdrawalKindFor('fibre')).toBeNull();
+  });
+
+  it('keeps only the holds on the product asked about', () => {
+    expect(withdrawalsFor(held(), 'milk').map((w) => w.medication)).toEqual(['Oxytet']);
+    expect(withdrawalsFor(held(), 'eggs').map((w) => w.medication)).toEqual(['Spray']);
+    expect(withdrawalsFor(held(), 'fibre')).toEqual([]);
+  });
+
+  it('picks the last to clear for each kind held, in kind order', () => {
+    expect(longestPerKind(held()).map((w) => [w.kind, w.medication])).toEqual([
+      ['egg', 'Spray'],
+      ['meat', 'Oxytet'],
+      ['milk', 'Oxytet'],
+    ]);
+    expect(longestPerKind([])).toEqual([]);
   });
 });

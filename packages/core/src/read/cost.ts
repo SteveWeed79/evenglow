@@ -1,3 +1,4 @@
+import { addCalendarDays } from '@homefarm/contracts';
 import { z } from 'zod';
 import { localStore } from '../db/store';
 import { bucketsBack, bucketStart, type Grain, type Point } from './trend';
@@ -137,7 +138,16 @@ export async function feedCostPerEgg(
   days: number,
   now: number = Date.now(),
 ): Promise<PerEgg> {
-  const from = now - days * 86_400_000;
+  /**
+   * `days` whole calendar days ending today, from the first one's midnight.
+   *
+   * This was `now - days × 86,400,000`, measured from the minute the screen
+   * opened — so the feedings inside "the last 12 weeks" changed between
+   * breakfast and supper with nothing logged, and the sentence sat under a
+   * `feedSpend` chart whose buckets are calendar-aligned. The same class of
+   * bug `DueRow` had; `calendar.ts` says how many times.
+   */
+  const from = addCalendarDays(now, 1 - days);
 
   const inWindow = (await feedings(groupId)).filter(
     (feeding) => feeding.at >= from && feeding.at <= now,

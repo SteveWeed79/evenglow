@@ -12,23 +12,26 @@ import { hasRail } from '../theme/window';
 import { FONTS, LAYOUT, SPACE, TAP, TYPE } from '../theme/tokens';
 
 /**
- * The tabs (UX-SPEC §4). Four, five where a farm runs everything — not six,
- * because every additional tab is a decision made at 6am.
+ * The tabs (UX-SPEC §4). Three, the same three for every farm — Today, the
+ * farm, and what happened — because every additional tab is a decision made
+ * at 6am. `tab-marks.ts` has the argument in full and is where the names and
+ * marks live; this file only mounts what it lists.
  *
- * The bar is built per farm, which is what makes room for the fifth: a keeper
- * with only animals never sees Growing or Iron, so "four" was always "at most
- * four". Only a farm running all three enterprises sees five.
+ * This comment used to say "four, five where a farm runs everything", from
+ * when Stock, Growing and Iron each had a tab and the bar grew and shrank with
+ * what a farm ran. They are rows inside the farm tab now, so the bar does not
+ * change shape under somebody's thumb, and the count here stopped being true
+ * long before the sentence was corrected.
  *
  * Real navigation rather than the `useState` switch the web shell used. That
  * choice was right for a precached web shell and wrong for an app: a back
  * stack, a back gesture, and screen transitions are three of the things that
  * separate a page from an app, and none of them can be faked.
  *
- * **Growing took More's place, and More was the right one to lose.** Crops are
- * half of a small farm and had no home in the bar at all; More was never a
- * place you go, it was a drawer. What was in it — diagnostics, the rejected
- * inbox, export, sign-out — is reached from the header instead, which is where
- * settings belong and where R3 will hang the sync chip beside them.
+ * **More was the right one to lose.** It was never a place you go, it was a
+ * drawer. What was in it — diagnostics, the rejected inbox, export, sign-out —
+ * is reached from the header instead, which is where settings belong and
+ * where R3 hangs the sync chip beside them.
  */
 
 /** The screen behind each tab. The names live in `tab-marks.ts`. */

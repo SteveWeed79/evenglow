@@ -1,10 +1,11 @@
 import {
+  isMutationStatus,
   MAX_BATCH_SIZE,
   type Mutation,
   type MutationResult,
   type SyncRefusal,
-  type SyncResponse,
-} from '@homefarm/contracts';
+  syncResponseSchema,
+} from '@homefarm/contracts'
 import { apiUrl, renewSession, type SessionRenewal, syncHeaders } from '../api';
 import { localStore } from '../db/store';
 import { tenantFence, type TenantMove } from './tenant';
@@ -108,11 +109,31 @@ export function flushOnce(transport: SyncTransport = defaultTransport): Promise<
   return inFlight;
 }
 
-function isSyncResponse(body: unknown): body is SyncResponse {
-  return (
-    typeof body === 'object' &&
-    body !== null &&
-    Array.isArray((body as { results?: unknown }).results)
+/**
+ * The server's answer, parsed rather than trusted (invariant 11).
+ *
+ * Null when the body is not an answer at all — a captive portal's page, a
+ * proxy's error — which the caller treats as it always has. A row whose
+ * status this build does not know becomes a rejection the person can see and
+ * send again, rather than a row the store applies or keeps according to
+ * whichever branch the unknown word happened to miss.
+ */
+function readResults(body: unknown): MutationResult[] | null {
+  const parsed = syncResponseSchema.safeParse(body);
+  if (!parsed.success) return null;
+
+  return parsed.data.results.map((result) =>
+    isMutationStatus(result.status)
+      ? {
+          id: result.id,
+          status: result.status,
+          ...(result.reason === undefined ? {} : { reason: result.reason }),
+        }
+      : {
+          id: result.id,
+          status: 'rejected',
+          reason: `The server answered "${result.status}", which this version of the app does not understand.`,
+        },
   );
 }
 
@@ -162,14 +183,45 @@ async function runFlush(transport: SyncTransport): Promise<FlushOutcome> {
      * that would spin.
      */
     if (isLapsed(response.status)) {
+      // A renewal is for the session that sent the batch. Once the farm has
+      // changed, that session is over and the next farm's sign-in owns the
+      // token; renewing here would race it and retry under it.
+      const mid = moved();
+      if (mid) return { ...outcome, deferred: mid };
+
       renewal = await renewSession();
       if (renewal === 'renewed') response = await transport(batch.map(toEnvelope));
     }
   } catch (error) {
+    const mid = moved();
+    if (mid) return { ...outcome, deferred: mid };
+
     // Network failure: keep everything queued and count the attempt (A1).
     await recordAttempt(batch, error instanceof Error ? error.message : 'Network error');
     return { ...outcome, deferred: 'offline' };
   }
+
+  /**
+   * And the answer goes back to the farm that asked, or nowhere.
+   *
+   * Asked here, before any branch below writes, rather than only before
+   * `applyResults`. The fence used to sit past the 401, 402 and 426 branches,
+   * each of which writes **farm-wide state keyed by nothing** — `lastError`,
+   * the sync hold — through `localStore()` as it stands when the round trip
+   * ends. A free-tier farm's 402 landing after a switch to a paid farm wrote
+   * `unsubscribed` onto the paid farm's meta, and its chip explained a state
+   * that was never its own until its next successful flush — which, in a
+   * barn, is never. `applyResults` had already said in so many words why those
+   * two writes must sit behind the fence; these three were the same writes
+   * one function up. `tests/offline/farm-switch.test.ts` drives each branch.
+   *
+   * A switch can land during the round trip as easily as before it, and
+   * writing results into another farm's outbox would match no rows while
+   * still moving its cleared counter — which `checkIntegrity` would later
+   * read as that farm having lost work.
+   */
+  const after = moved();
+  if (after) return { ...outcome, deferred: after };
 
   // 5xx is the server's problem — retry later, keep the work.
   if (response.status >= 500) {
@@ -194,15 +246,24 @@ async function runFlush(transport: SyncTransport): Promise<FlushOutcome> {
    */
   if (isLapsed(response.status)) {
     /**
-     * Reached only when a renewal was tried and did not produce a token, so the
-     * two answers are genuinely different actions. Telling somebody to sign in
-     * when they already are, and the server simply could not be reached, is the
-     * same class of defect as the sentence this one replaced.
+     * Three situations, three sentences, and each has to be the true one.
+     * Telling somebody to sign in when they already are, or that the server
+     * could not be reached when it answered twice, is the same class of
+     * defect as the sentence this replaced.
+     *
+     * `signed-out`: the renewal found no session, so signing in is the action.
+     * `renewed`: a token was minted and the server refused the batch under it
+     * as well — a refusal of the session, not an outage, and it used to be
+     * reported as the server being unreachable, which it demonstrably was
+     * not. `unavailable`: the renewal itself could not be tried, and nothing
+     * here can say more than that.
      */
     await setLastError(
       renewal === 'signed-out'
         ? 'Nothing is lost — sign in again to send the work waiting here.'
-        : 'Nothing is lost — this session needs renewing and the farm server could not be reached.',
+        : renewal === 'renewed'
+          ? 'Nothing is lost — the farm server would not accept this session. Sign in again to send the work waiting here.'
+          : 'Nothing is lost — this session needs renewing and the farm server could not be reached.',
     );
     return { ...outcome, deferred: 'unauthenticated' };
   }
@@ -251,7 +312,8 @@ async function runFlush(transport: SyncTransport): Promise<FlushOutcome> {
     return { ...outcome, deferred: 'app-too-old' };
   }
 
-  if (!isSyncResponse(response.body)) {
+  const results = readResults(response.body);
+  if (results === null) {
     // A 4xx with no per-mutation results (a malformed batch) is not retryable
     // in any useful sense, but it must not loop forever either.
     await recordAttempt(batch, `Unreadable response (${response.status})`);
@@ -272,18 +334,10 @@ async function runFlush(transport: SyncTransport): Promise<FlushOutcome> {
     return { ...outcome, deferred: `unreadable-${response.status}` };
   }
 
-  /**
-   * And the answers go back to the farm that asked, or nowhere.
-   *
-   * Checked again rather than once: a switch can land during the round trip as
-   * easily as before it, and writing these results into another farm's outbox
-   * would match no rows while still moving its cleared counter — which
-   * `checkIntegrity` would later read as that farm having lost work.
-   */
-  const after = moved();
-  if (after) return { ...outcome, deferred: after };
-
-  return applyResults(batch, response.body.results, outcome, moved);
+  // No await between the fence above and here on this path: every branch
+  // between them returned, so the store `applyResults` reads is the one that
+  // was checked.
+  return applyResults(batch, results, outcome, moved);
 }
 
 async function applyResults(

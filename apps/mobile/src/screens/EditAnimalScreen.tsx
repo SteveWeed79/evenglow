@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { SPECIES_TRAITS } from '@homefarm/contracts';
+import { dayStart, SPECIES_TRAITS } from '@homefarm/contracts';
 import { listAnimals } from '@homefarm/core/read/animals';
 import {
   Chip,
@@ -186,7 +186,7 @@ export function EditAnimalScreen({ route }: ScreenProps<'EditAnimal'>): React.Re
       <Toggle
         label="I know when she was born"
         value={current.bornAt !== null}
-        onChange={(known) => change({ bornAt: known ? startOfDay(Date.now()) : null })}
+        onChange={(known) => change({ bornAt: known ? dayStart(Date.now()) : null })}
       />
 
       {current.bornAt === null ? null : (
@@ -232,12 +232,6 @@ export function EditAnimalScreen({ route }: ScreenProps<'EditAnimal'>): React.Re
       </Panel>
     </Screen>
   );
-}
-
-function startOfDay(at: number): number {
-  const date = new Date(at);
-  date.setHours(0, 0, 0, 0);
-  return date.getTime();
 }
 
 const styles = StyleSheet.create({

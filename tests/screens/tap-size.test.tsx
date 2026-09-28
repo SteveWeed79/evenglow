@@ -76,7 +76,17 @@ const SIZED_BY_CONTENT = [
   'group-more',
 ];
 
-const contentSized = (id: string): boolean => SIZED_BY_CONTENT.some((p) => id.startsWith(p));
+/**
+ * The Done button inside a due row is not the row.
+ *
+ * It shares the `due-` prefix, so the list above covered it by accident: a
+ * 25dp button was passing an audit that says 56, on the one row a farmer
+ * taps twice. It is measured on its own below, against `TAP.floor`.
+ */
+const DONE = 'due-done-';
+
+const contentSized = (id: string): boolean =>
+  !id.startsWith(DONE) && SIZED_BY_CONTENT.some((p) => id.startsWith(p));
 
 /**
  * The five controls in the header, at half the floor, on purpose.
@@ -125,7 +135,7 @@ describe('every control is at least a glove wide', () => {
 
     for (const touch of screen.tree.root.findAllByType(Touch)) {
       const id = nameOf(touch);
-      if (contentSized(id) || isChrome(id)) continue;
+      if (contentSized(id) || isChrome(id) || id.startsWith(DONE)) continue;
 
       const height = declaredHeight(touch);
       if (height === null || height < TAP.min) {
@@ -204,5 +214,44 @@ describe('the header chrome stays the one size it was allowed', () => {
 
     screen.unmount();
     expect([...new Set(wrong)], `${name}: the chrome is ${TAP.min / 2}px plus slop`).toEqual([]);
+  });
+});
+
+/**
+ * And the one control that lives inside another.
+ *
+ * A due row is 56 tall with `SPACE.md` padding, which leaves 44 for anything
+ * standing inside it — so Done cannot be 56 and is not. It is pinned at
+ * `TAP.floor` with `hitSlop={8}`, which is 60 of reach: past R4's number, on a
+ * box that is exactly the accessibility minimum. Asserted rather than
+ * exempted, for the same reason the chrome is: a control that only stops
+ * being measured is a control that will shrink.
+ *
+ * Every screen in `SCREENS` is walked because the button is rendered by the
+ * row component, and any screen that lists dues gets it.
+ */
+describe('a due row’s Done button stands on the floor', () => {
+  it.each(SCREENS)('%s', async (name, render) => {
+    await freshStore();
+    await stockTheFarm();
+
+    const screen = await mount(render());
+    const wrong: string[] = [];
+
+    for (const touch of screen.tree.root.findAllByType(Touch)) {
+      const id = nameOf(touch);
+      if (!id.startsWith(DONE)) continue;
+
+      const height = declaredHeight(touch);
+      if (height !== TAP.floor) {
+        wrong.push(`${id} (${height === null ? 'no height declared' : `${height}px`})`);
+      }
+      if (touch.props['hitSlop'] !== 8) {
+        wrong.push(`${id} (no hitSlop to carry it past the floor)`);
+      }
+    }
+
+    screen.unmount();
+    expect([...new Set(wrong)], `${name}: Done is ${TAP.floor}px plus slop`).toEqual([]);
   });
 });

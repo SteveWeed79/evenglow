@@ -13,7 +13,6 @@ import { describeLogFailure } from '@homefarm/core/sync/failure';
 import { Body, Panel } from '../components/Panel';
 import { Screen } from '../components/Screen';
 import { useLive } from '../hooks/useLive';
-import { useNav } from '../hooks/useNav';
 import { useLog } from '../hooks/useSync';
 import { reportTrouble } from '../hooks/useTrouble';
 import type { ScreenProps } from '../navigation/Root';
@@ -113,7 +112,6 @@ export function CareRoutineScreen({ route }: ScreenProps<'CareRoutine'>): React.
 
 function Routine({ group }: { group: Group }): React.ReactElement {
   const log = useLog();
-  const nav = useNav();
   const { colors } = useTheme();
 
   /**
@@ -216,12 +214,14 @@ function Routine({ group }: { group: Group }): React.ReactElement {
 
       <Failure message={failure} />
 
-      <Text
-        style={[styles.footnote, { color: colors.muted }]}
-        onPress={() => nav.goBack()}
-      >
-        Changes are kept as you make them.
-      </Text>
+      {/**
+        * A sentence, not a control. It carried an `onPress` that popped the
+        * screen, so brushing the footnote while reaching for the last chip
+        * row left the screen — an unsignalled pressable on a line of muted
+        * text is the affordance rule's whole reason for existing. The header's
+        * back arrow is the way out.
+        */}
+      <Text style={[styles.footnote, { color: colors.muted }]}>Changes are kept as you make them.</Text>
     </>
   );
 }
