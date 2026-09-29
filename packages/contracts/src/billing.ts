@@ -339,3 +339,65 @@ export function promoOutcome(
   if (granted.expiresAt === undefined) return granted;
   return current.expiresAt >= granted.expiresAt ? current : granted;
 }
+
+/**
+ * Every way a farm's subscription can change, as one decision.
+ *
+ * Three routes write `orgs.subscription`: a promo code, a purchase token a
+ * member posted, and a store notification about a purchase. Each carried its
+ * own "never downgrade a paying farm" rule, written separately, and the rules
+ * disagreed — a retried promo reset its own clock, a token Google had never
+ * heard of wrote `lapsed` over a paid year, and there was no one place to
+ * read what the farm would end up with. This is that place. The routes hand
+ * it what they learned and write only when it says to.
+ *
+ * ## The evidence, and what each kind is allowed to do
+ *
+ * - **promo**: `promoOutcome` above. A retry keeps what is held; a grant
+ *   never shortens a longer entitlement.
+ * - **play**: a member posted a purchase token and the store answered.
+ *   `null` means the store does not know the token, which entitles nothing
+ *   and changes nothing. An answer about the farm's **own** bound token is
+ *   authoritative, a lapse included — that is a real lapse. An answer about
+ *   some other token is taken only if it entitles the farm, or if the farm
+ *   had nothing live to lose: a dead token that is not the farm's must not
+ *   end a subscription the farm is paying for, whoever posted it.
+ * - **notification**: the store telling us about a token it was matched
+ *   to this farm by. Authoritative when it knows the token, nothing when it
+ *   has forgotten it.
+ *
+ * Returns what to store, or null to leave the stored record alone. Null is
+ * deliberately a non-write rather than "the current value": a retry, a
+ * forgotten token and a dead foreign one all end with the document exactly
+ * as it was, which is what the tests can see.
+ */
+export type SubscriptionEvidence =
+  | { kind: 'promo'; grant: PromoGrant; already: boolean }
+  | { kind: 'play'; answer: Subscription | null; ownToken: boolean }
+  | { kind: 'notification'; answer: Subscription | null };
+
+export function nextSubscription(
+  current: Subscription | undefined,
+  evidence: SubscriptionEvidence,
+  now: number,
+): Subscription | null {
+  switch (evidence.kind) {
+    case 'promo': {
+      const chosen = promoOutcome(
+        current,
+        subscriptionFromPromo(evidence.grant, now),
+        evidence.already,
+        now,
+      );
+      return chosen === current ? null : chosen;
+    }
+    case 'play': {
+      if (evidence.answer === null) return null;
+      if (evidence.ownToken) return evidence.answer;
+      if (entitlementOf(evidence.answer, now).syncing) return evidence.answer;
+      return current !== undefined && entitlementOf(current, now).syncing ? null : evidence.answer;
+    }
+    case 'notification':
+      return evidence.answer;
+  }
+}

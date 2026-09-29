@@ -2,12 +2,12 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
   entitlementOf,
+  nextSubscription,
   normalizeJoinCode,
-  promoOutcome,
   promoRedeemSchema,
-  subscriptionFromPromo,
+  type Subscription,
   syncRefusalMessage,
-} from '@homefarm/contracts'
+} from '@homefarm/contracts';
 import { redeemPromoCode } from '../db/promo-codes';
 import { requireClaims, requireMutationClaims } from '../auth/require';
 import { readPlaySubscription } from '../billing/play';
@@ -65,6 +65,18 @@ const payloadSchema = z.object({
  */
 export interface BillingDeps {
   readSubscription: typeof readPlaySubscription;
+}
+
+/** What a route says about a farm's subscription, in the one shape the app reads. */
+function said(
+  subscription: Subscription | undefined,
+  now: number,
+): { state: Subscription['state']; expiresAt: number | null; syncing: boolean } {
+  return {
+    state: subscription?.state ?? 'none',
+    expiresAt: subscription?.expiresAt ?? null,
+    syncing: entitlementOf(subscription, now).syncing,
+  };
 }
 
 export async function billingRoutes(
@@ -163,29 +175,23 @@ export async function billingRoutes(
         }
 
         /**
-         * Not simply the grant. `promoOutcome` says which of the two rules
-         * apply: a farm re-posting a code it already spent keeps what it has
-         * rather than a period counted afresh from this retry, and a farm with
-         * a longer entitlement — a Play year against a promo fortnight — keeps
-         * the longer one. Written only when it changed, so a retry writes
-         * nothing at all.
+         * Not simply the grant. `nextSubscription` says what the farm ends
+         * up with: a farm re-posting a code it already spent keeps what it
+         * has rather than a period counted afresh from this retry, and a farm
+         * with a longer entitlement — a Play year against a promo fortnight —
+         * keeps the longer one. Written only when it says to, so a retry
+         * writes nothing at all.
          */
         const now = Date.now();
         const org = await findOrgById(claims.orgId);
-        const subscription = promoOutcome(
+        const next = nextSubscription(
           org?.subscription,
-          subscriptionFromPromo(result.grant, now),
-          result.already,
+          { kind: 'promo', grant: result.grant, already: result.already },
           now,
         );
-        if (subscription !== org?.subscription) await setSubscription(claims.orgId, subscription);
+        if (next !== null) await setSubscription(claims.orgId, next);
 
-        return reply.send({
-          state: subscription.state,
-          expiresAt: subscription.expiresAt ?? null,
-          syncing: entitlementOf(subscription, now).syncing,
-          message: null,
-        });
+        return reply.send({ ...said(next ?? org?.subscription, now), message: null });
       } catch (error) {
         const { status, body } = errorBody(error);
         return reply.status(status).send(body);
@@ -270,10 +276,26 @@ export async function billingRoutes(
           );
         }
 
-        // The token is stored beside the state so a later store notification —
-        // which names the purchase and not the farm — can be matched back.
+        /**
+         * What the farm ends up with is `nextSubscription`'s call, not the
+         * store's answer verbatim. A lapse on the farm's own bound token is a
+         * real lapse and is written; a dead token that is not the farm's own
+         * — an old purchase off another account, posted by a hand — must not
+         * end a subscription the farm is paying for, and is not.
+         *
+         * The token is stored beside the state so a later store notification —
+         * which names the purchase and not the farm — can be matched back.
+         */
+        const now = Date.now();
+        const org = await findOrgById(claims.orgId);
+        const next = nextSubscription(
+          org?.subscription,
+          { kind: 'play', answer: subscription, ownToken: boundTo === claims.orgId },
+          now,
+        );
+
         try {
-          await setSubscription(claims.orgId, subscription, parsed.data.purchaseToken);
+          if (next !== null) await setSubscription(claims.orgId, next, parsed.data.purchaseToken);
         } catch (error) {
           /**
            * Two farms posting one token in the same instant.
@@ -293,11 +315,7 @@ export async function billingRoutes(
           throw error;
         }
 
-        return reply.status(200).send({
-          state: subscription.state,
-          expiresAt: subscription.expiresAt ?? null,
-          syncing: entitlementOf(subscription, Date.now()).syncing,
-        });
+        return reply.status(200).send(said(next ?? org?.subscription, now));
       } catch (error) {
         const { status, body } = errorBody(error);
         return reply.status(status).send(body);
@@ -435,11 +453,13 @@ export async function billingRoutes(
       if (org === null) return reply.status(200).send({ ok: true });
 
       try {
-        const current = await readSubscription(config, purchaseToken);
         // A notification about a token the store has since forgotten says
         // nothing about the farm; whatever is stored stands, as it would for
-        // an outage.
-        if (current !== null) await setSubscription(org, current);
+        // an outage. `nextSubscription` is what says so.
+        const answer = await readSubscription(config, purchaseToken);
+        const farm = await findOrgById(org);
+        const next = nextSubscription(farm?.subscription, { kind: 'notification', answer }, Date.now());
+        if (next !== null) await setSubscription(org, next);
       } catch {
         /**
          * The store was unreachable while telling us about itself.

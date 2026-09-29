@@ -5,7 +5,7 @@ import {
   type MutationResult,
   type SyncRefusal,
   syncResponseSchema,
-} from '@homefarm/contracts'
+} from '@homefarm/contracts';
 import { apiUrl, renewSession, type SessionRenewal } from '../api';
 import type { QueuedMutation } from '../db/records';
 import { beginPass, type Headers, type Pass } from './pass';
