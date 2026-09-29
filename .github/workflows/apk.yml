@@ -33,6 +33,30 @@ name: APK
 # the right answer written in the description — which is not a guard, it is a
 # hope, and a typo there produces an APK no device will accept.
 #
+# ## What green means now
+#
+# `docs/TESTING-BUILD.md` and `CLAUDE.md` both say the same thing about this
+# project: every serious bug so far was one only a handset could show, and
+# the bundler is not a handset. Until the `smoke` job existed the pipeline
+# agreed and did nothing about it — the APK was built, its signature and
+# version were verified, and it was published without ever being run.
+#
+# `smoke` installs the built APK on an emulator, opens it, and refuses to let
+# `publish` run unless the process is alive, the app's activity is on top,
+# logcat carries no crash, and the first screen shows a word a farmer would
+# see. It proves the app opens, not that it works — but "opens" is the floor
+# the last three device-only bugs fell through. The judgement is in
+# `scripts/lib/smoke.mjs`, held by `tests/unit/smoke.test.ts`, for the same
+# reason the version arithmetic is: a workflow step cannot be made to fail on
+# purpose before the run that matters.
+#
+# `reactivecircus/android-emulator-runner` is a dependency this file did not
+# have. What it replaces is the `sdkmanager`/`avdmanager`/`emulator` dance
+# written by hand — create the AVD, boot it headless, poll `sys.boot_completed`,
+# tear it down — which is a page of shell whose every line is a known way to
+# hang a runner. The platform primitive is there; it is the boot-wait that
+# nobody gets right first time.
+#
 # ## What it deliberately does not do
 #
 # It does not put the APK on the box. §7 is explicit that there is no upload
@@ -323,8 +347,59 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-  publish:
+  # Opens the built APK on a device, and stands between `build` and `publish`.
+  # See "What green means now" at the top of this file.
+  smoke:
     needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # GitHub's Linux runners have KVM; the emulator will not boot without
+      # it and cannot use it until the device node is world-readable.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      # The smoke script uses nothing outside Node's standard library, so
+      # there is no install step: only the runtime the rest of the repo pins.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.apk }}
+          path: dist
+      - name: Open it on a device
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: >
+            node scripts/apk-smoke.mjs
+            --apk "dist/${{ needs.build.outputs.apk }}"
+            --package dev.swbuild.homefarm
+            --out "$RUNNER_TEMP/smoke"
+      # Kept whatever the verdict: a failure arrives with a screenshot, the
+      # window hierarchy and the log, not a red cross.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-${{ needs.build.outputs.apk }}
+          path: ${{ runner.temp }}/smoke
+          if-no-files-found: ignore
+          retention-days: 30
+
+  publish:
+    needs: [build, smoke]
     if: inputs.release
     runs-on: ubuntu-latest
     timeout-minutes: 10
