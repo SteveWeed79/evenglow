@@ -32,6 +32,13 @@ export interface RefreshTokenDoc {
   /** Set when this token is exchanged. A second exchange is theft. */
   usedAt?: Date;
   revokedAt?: Date;
+  /**
+   * The token this one was exchanged from — absent on a sign-in's root.
+   *
+   * What lets a retry inside the grace window *supersede* the successor the
+   * first exchange minted rather than sit beside it. See `rotateSession`.
+   */
+  issuedFrom?: string;
 }
 
 async function tokens(): Promise<Collection<RefreshTokenDoc>> {
@@ -138,6 +145,24 @@ export async function revokeFamily(familyId: string, at: Date): Promise<void> {
  * Returns how many were killed, for the journal. A number greater than zero on
  * a reset nobody expected is the shape of an account that really was taken.
  */
+/**
+ * Every live token exchanged from this one, revoked.
+ *
+ * A token presented again inside the grace window is this app retrying, and
+ * the first exchange's successor is one nobody has — the response carrying it
+ * never arrived, or the process died before writing it. It is revoked rather
+ * than left live, so a family only ever has one working lineage and a copy
+ * of the old token in someone else's hands buys a session the next honest
+ * refresh will end.
+ */
+export async function revokeSuccessors(ofHash: string, at: Date): Promise<number> {
+  const result = await (await tokens()).updateMany(
+    { issuedFrom: ofHash, revokedAt: { $exists: false } },
+    { $set: { revokedAt: at } },
+  );
+  return result.modifiedCount;
+}
+
 export async function revokeAllForUser(userId: string, at: Date): Promise<number> {
   const result = await (await tokens()).updateMany(
     { userId, revokedAt: { $exists: false } },

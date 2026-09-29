@@ -55,9 +55,9 @@ describe('flush', () => {
     for (let i = 0; i < 10; i++) await enqueue(eggLog());
 
     const seen: number[] = [];
-    await flushOnce((mutations) => {
+    await flushOnce((mutations, headers) => {
       seen.push(...mutations.map((m) => m.clientSeq));
-      return respondAll('applied')(mutations);
+      return respondAll('applied')(mutations, headers);
     });
 
     expect(seen).toEqual([...seen].sort((a, b) => a - b));
@@ -68,9 +68,9 @@ describe('flush', () => {
     for (let i = 0; i < MAX_BATCH_SIZE + 5; i++) await enqueue(eggLog());
 
     let sent = 0;
-    await flushOnce((mutations) => {
+    await flushOnce((mutations, headers) => {
       sent = mutations.length;
-      return respondAll('applied')(mutations);
+      return respondAll('applied')(mutations, headers);
     });
 
     expect(sent).toBe(MAX_BATCH_SIZE);

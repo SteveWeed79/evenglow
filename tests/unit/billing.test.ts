@@ -4,6 +4,7 @@ import {
   formatPromoCode,
   HELD_LABEL,
   heldLabel,
+  nextSubscription,
   normalizeJoinCode,
   PROMO_CODE_LENGTH,
   promoGrantSchema,
@@ -14,7 +15,7 @@ import {
   subscriptionSchema,
   SYNC_REFUSALS,
   syncRefusalMessage,
-} from '@homefarm/contracts'
+} from '@homefarm/contracts';
 import { readPlayConfig, subscriptionFrom } from '@homefarm/api/billing/play';
 import { readEnv } from '@homefarm/api/env';
 
@@ -527,5 +528,72 @@ describe('promoOutcome', () => {
     const ran = { state: 'active' as const, source: 'play' as const, expiresAt: NOW - DAY, updatedAt: NOW };
     expect(promoOutcome(lapsed, promo(14), false, NOW)).toEqual(promo(14));
     expect(promoOutcome(ran, promo(14), false, NOW)).toEqual(promo(14));
+  });
+});
+
+/**
+ * The one decision the three billing routes share. Each kind of evidence is
+ * driven through every state the farm can be in, because the rules used to
+ * live in three places and disagreed in exactly the corners a table shows.
+ */
+describe('nextSubscription', () => {
+  const NOW = Date.parse('2026-08-05T14:00:00Z');
+  const DAY = 86_400_000;
+  const paidYear = { state: 'active' as const, source: 'play' as const, expiresAt: NOW + 365 * DAY, updatedAt: NOW };
+  const lapsedPlay = { state: 'lapsed' as const, source: 'play' as const, updatedAt: NOW };
+  const activePlay = { state: 'active' as const, source: 'play' as const, expiresAt: NOW + 30 * DAY, updatedAt: NOW };
+
+  describe('a promo code', () => {
+    it('is the grant for a farm with nothing', () => {
+      expect(nextSubscription(undefined, { kind: 'promo', grant: { days: 30 }, already: false }, NOW)).toEqual(
+        subscriptionFromPromo({ days: 30 }, NOW),
+      );
+    });
+
+    it('writes nothing on a retry', () => {
+      const held = { ...subscriptionFromPromo({ days: 30 }, NOW), expiresAt: NOW + DAY };
+      expect(nextSubscription(held, { kind: 'promo', grant: { days: 30 }, already: true }, NOW)).toBeNull();
+    });
+
+    it('writes nothing when the farm holds something longer', () => {
+      expect(nextSubscription(paidYear, { kind: 'promo', grant: { days: 14 }, already: false }, NOW)).toBeNull();
+    });
+  });
+
+  describe('a purchase a member posted', () => {
+    it('changes nothing when the store does not know the token', () => {
+      expect(nextSubscription(paidYear, { kind: 'play', answer: null, ownToken: false }, NOW)).toBeNull();
+      expect(nextSubscription(undefined, { kind: 'play', answer: null, ownToken: true }, NOW)).toBeNull();
+    });
+
+    it('takes a lapse on the farm’s own token at its word', () => {
+      expect(nextSubscription(paidYear, { kind: 'play', answer: lapsedPlay, ownToken: true }, NOW)).toBe(lapsedPlay);
+    });
+
+    it('takes a working purchase whoever’s token it was', () => {
+      expect(nextSubscription(undefined, { kind: 'play', answer: activePlay, ownToken: false }, NOW)).toBe(activePlay);
+      expect(nextSubscription(lapsedPlay, { kind: 'play', answer: activePlay, ownToken: false }, NOW)).toBe(activePlay);
+    });
+
+    it('never lets a dead token that is not the farm’s end a live subscription', () => {
+      expect(nextSubscription(paidYear, { kind: 'play', answer: lapsedPlay, ownToken: false }, NOW)).toBeNull();
+    });
+
+    it('records a dead foreign token when the farm had nothing live to lose', () => {
+      expect(nextSubscription(undefined, { kind: 'play', answer: lapsedPlay, ownToken: false }, NOW)).toBe(lapsedPlay);
+      const ran = { ...activePlay, expiresAt: NOW - DAY };
+      expect(nextSubscription(ran, { kind: 'play', answer: lapsedPlay, ownToken: false }, NOW)).toBe(lapsedPlay);
+    });
+  });
+
+  describe('a store notification', () => {
+    it('is authoritative when the store knows the token', () => {
+      expect(nextSubscription(paidYear, { kind: 'notification', answer: lapsedPlay }, NOW)).toBe(lapsedPlay);
+      expect(nextSubscription(lapsedPlay, { kind: 'notification', answer: activePlay }, NOW)).toBe(activePlay);
+    });
+
+    it('changes nothing when the store has forgotten it', () => {
+      expect(nextSubscription(paidYear, { kind: 'notification', answer: null }, NOW)).toBeNull();
+    });
   });
 });

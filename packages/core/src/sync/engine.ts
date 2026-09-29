@@ -1,11 +1,12 @@
 import type { SyncRefusal } from '@homefarm/contracts';
+import { engineContext, updateContext } from '../context';
 import { localStore } from '../db/store';
 import { reportEngineError } from './report';
 import { backoffDelay, flushOnce, type SyncTransport } from './flush';
 import { SYNC_LOCK, withSyncLock } from './lock';
 import { transferPhotos } from './photos';
-import { pullOnce, type PullOutcome, pulledThrough } from './pull';
-import { checkIntegrity, queueDepth, rejectedCount } from './queue';
+import { pullOnce, type PullOutcome } from './pull';
+import { checkIntegrity, pulledThrough, queueDepth, rejectedCount } from './queue';
 
 /**
  * Drives the flush loop.
@@ -134,11 +135,10 @@ async function publish(): Promise<void> {
  * engine already handles correctly. The cost of a wrong `false` is a queue that
  * never sends. Only one of those is recoverable without a person noticing.
  */
-let online = true;
 
 export function setOnline(next: boolean): void {
-  const changed = online !== next;
-  online = next;
+  const changed = engineContext().online !== next;
+  updateContext({ online: next });
 
   // Regaining the network is worth acting on immediately: somebody who has
   // walked back into signal is usually looking at the sync chip.
@@ -149,7 +149,7 @@ export function setOnline(next: boolean): void {
 }
 
 function isOnline(): boolean {
-  return online;
+  return engineContext().online;
 }
 
 /** Runs one flush and schedules the next. Never throws to the caller. */
@@ -451,7 +451,7 @@ export function nudge(transport?: SyncTransport, options: NudgeOptions = {}): vo
     // Cleared rather than bypassed for this one tick: if the belief was stale,
     // it stays cleared and the loop resumes normally. If it was right, the
     // failed flush is what corrects it, and the OS listener will say so again.
-    online = true;
+    updateContext({ online: true });
   }
 
   if (running) schedule(0, transport);

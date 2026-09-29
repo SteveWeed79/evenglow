@@ -5,11 +5,10 @@ import {
   type MutationResult,
   type SyncRefusal,
   syncResponseSchema,
-} from '@homefarm/contracts'
-import { apiUrl, renewSession, type SessionRenewal, syncHeaders } from '../api';
-import { localStore } from '../db/store';
-import { tenantFence, type TenantMove } from './tenant';
+} from '@homefarm/contracts';
+import { apiUrl, renewSession, type SessionRenewal } from '../api';
 import type { QueuedMutation } from '../db/records';
+import { beginPass, type Headers, type Pass } from './pass';
 
 /**
  * The flush loop.
@@ -73,15 +72,23 @@ function toEnvelope(queued: QueuedMutation): Mutation {
   };
 }
 
-export type SyncTransport = (mutations: Mutation[]) => Promise<{
+/**
+ * `headers` are the pass's — they carry the token for the farm whose batch
+ * this is, and the pass refuses to hand any over while the token names
+ * another farm. A fake transport in a test is free to ignore them.
+ */
+export type SyncTransport = (
+  mutations: Mutation[],
+  headers: Headers,
+) => Promise<{
   status: number;
   body: unknown;
 }>;
 
-const defaultTransport: SyncTransport = async (mutations) => {
+const defaultTransport: SyncTransport = async (mutations, headers) => {
   const res = await fetch(apiUrl('sync'), {
     method: 'POST',
-    headers: syncHeaders({ 'content-type': 'application/json' }),
+    headers: { ...headers, 'content-type': 'application/json' },
     body: JSON.stringify({ mutations }),
   });
 
@@ -139,20 +146,22 @@ function readResults(body: unknown): MutationResult[] | null {
 
 async function runFlush(transport: SyncTransport): Promise<FlushOutcome> {
   /**
-   * Which farm this pass belongs to, captured before the first await.
+   * Which farm this pass belongs to, fixed before the first await.
    *
-   * A device holds one farm's database at a time, and every step below spans a
-   * round trip. A farm switch landing inside that gap would send THIS farm's
-   * queued work under the NEXT farm's token, and write the answers back into
-   * the wrong outbox — neither of which `scoped()` can see, because the server
-   * is doing exactly what the token it was given says.
+   * A device holds one farm's database at a time, and every step below spans
+   * a round trip. A farm switch landing inside that gap used to send THIS
+   * farm's queued work under the NEXT farm's token, or write the answers back
+   * into the wrong outbox — neither of which `scoped()` can see, because the
+   * server is doing exactly what the token it was given says.
    *
-   * `tenantFence` also asks the question the generation cannot: whether the
-   * token and the store name the same farm at all. They stop doing so for the
-   * length of a sign-in, which is where this went wrong. See `tenant.ts`.
+   * `pass.store` is the only store this function writes, so the second of
+   * those cannot happen whatever lands mid-pass; `pass.send()` is the only
+   * source of headers, and it refuses while the token names another farm, so
+   * neither can the first. `pass.ts` says why that is a different thing from
+   * the fence it replaced.
    */
-  const moved = tenantFence();
-  const all = await localStore().readOutboxBySeq();
+  const pass = beginPass();
+  const all = await pass.store.readOutboxBySeq();
   const batch = all.filter((m) => m.status === 'queued').slice(0, MAX_BATCH_SIZE);
 
   const outcome: FlushOutcome = { attempted: batch.length, applied: 0, duplicate: 0, rejected: 0 };
@@ -161,13 +170,13 @@ async function runFlush(transport: SyncTransport): Promise<FlushOutcome> {
   // Nothing is sent under a token that belongs to a different farm. Not a
   // deferral to back off from: the switch has already started the next farm's
   // sync, and this pass simply has nothing left to do.
-  const before = moved();
-  if (before) return { ...outcome, deferred: before };
+  const send = pass.send();
+  if (!send.ok) return { ...outcome, deferred: send.because };
 
   let response: { status: number; body: unknown };
   let renewal: SessionRenewal = 'renewed';
   try {
-    response = await transport(batch.map(toEnvelope));
+    response = await transport(batch.map(toEnvelope), send.headers);
 
     /**
      * One renewal, one retry, and only for a lapsed session.
@@ -181,51 +190,47 @@ async function runFlush(transport: SyncTransport): Promise<FlushOutcome> {
      * Once, not in a loop: a second 401 after a successful renewal is a
      * refusal about this request rather than about the session, and retrying
      * that would spin.
+     *
+     * The retry asks the pass for headers again rather than reusing the
+     * first set. A renewal reads the token as it is *now*, and a sign-in to
+     * another farm may have replaced it while this waited — in which case the
+     * pass refuses and the batch stays where it is, for the farm it belongs
+     * to.
      */
     if (isLapsed(response.status)) {
-      // A renewal is for the session that sent the batch. Once the farm has
-      // changed, that session is over and the next farm's sign-in owns the
-      // token; renewing here would race it and retry under it.
-      const mid = moved();
-      if (mid) return { ...outcome, deferred: mid };
-
       renewal = await renewSession();
-      if (renewal === 'renewed') response = await transport(batch.map(toEnvelope));
+      if (renewal === 'renewed') {
+        const again = pass.send();
+        if (!again.ok) return { ...outcome, deferred: again.because };
+        response = await transport(batch.map(toEnvelope), again.headers);
+      }
     }
   } catch (error) {
-    const mid = moved();
-    if (mid) return { ...outcome, deferred: mid };
+    if (pass.moved()) return { ...outcome, deferred: 'farm-switched' };
 
     // Network failure: keep everything queued and count the attempt (A1).
-    await recordAttempt(batch, error instanceof Error ? error.message : 'Network error');
+    await recordAttempt(pass, batch, error instanceof Error ? error.message : 'Network error');
     return { ...outcome, deferred: 'offline' };
   }
 
   /**
-   * And the answer goes back to the farm that asked, or nowhere.
+   * A store replaced under this pass is reported, and its writes skipped.
    *
-   * Asked here, before any branch below writes, rather than only before
-   * `applyResults`. The fence used to sit past the 401, 402 and 426 branches,
-   * each of which writes **farm-wide state keyed by nothing** — `lastError`,
-   * the sync hold — through `localStore()` as it stands when the round trip
-   * ends. A free-tier farm's 402 landing after a switch to a paid farm wrote
-   * `unsubscribed` onto the paid farm's meta, and its chip explained a state
-   * that was never its own until its next successful flush — which, in a
-   * barn, is never. `applyResults` had already said in so many words why those
-   * two writes must sit behind the fence; these three were the same writes
-   * one function up. `tests/offline/farm-switch.test.ts` drives each branch.
-   *
-   * A switch can land during the round trip as easily as before it, and
-   * writing results into another farm's outbox would match no rows while
-   * still moving its cleared counter — which `checkIntegrity` would later
-   * read as that farm having lost work.
+   * Reporting rather than protection: every branch below writes to
+   * `pass.store`, the farm that asked, so a switch can no longer redirect a
+   * hold or an error onto the farm that replaced it — the defect the 402
+   * branch used to have, when it reached for the installed store as it stood
+   * when the round trip ended. What a replaced store *is* is one whose handle
+   * the opener has closed, and writing to it would only throw where this says
+   * why. The batch stays queued and goes up again on that farm's next pass,
+   * as a duplicate the server already knows how to answer.
    */
-  const after = moved();
+  const after = pass.moved();
   if (after) return { ...outcome, deferred: after };
 
   // 5xx is the server's problem — retry later, keep the work.
   if (response.status >= 500) {
-    await recordAttempt(batch, `Server error ${response.status}`);
+    await recordAttempt(pass, batch, `Server error ${response.status}`);
     return { ...outcome, deferred: `server-${response.status}` };
   }
 
@@ -259,6 +264,7 @@ async function runFlush(transport: SyncTransport): Promise<FlushOutcome> {
      * here can say more than that.
      */
     await setLastError(
+      pass,
       renewal === 'signed-out'
         ? 'Nothing is lost — sign in again to send the work waiting here.'
         : renewal === 'renewed'
@@ -288,8 +294,8 @@ async function runFlush(transport: SyncTransport): Promise<FlushOutcome> {
    * things. See `syncRefusalMessage`.
    */
   if (response.status === 402) {
-    await setLastError(heldMessage(response.body));
-    await localStore().setSyncHeld(refusalIn(response.body));
+    await setLastError(pass, heldMessage(response.body));
+    await pass.store.setSyncHeld(refusalIn(response.body));
     return { ...outcome, deferred: 'unsubscribed' };
   }
 
@@ -307,8 +313,8 @@ async function runFlush(transport: SyncTransport): Promise<FlushOutcome> {
    * The day the app is updated, the batch goes up untouched.
    */
   if (response.status === 426) {
-    await setLastError(heldMessage(response.body));
-    await localStore().setSyncHeld('appTooOld');
+    await setLastError(pass, heldMessage(response.body));
+    await pass.store.setSyncHeld('appTooOld');
     return { ...outcome, deferred: 'app-too-old' };
   }
 
@@ -316,7 +322,7 @@ async function runFlush(transport: SyncTransport): Promise<FlushOutcome> {
   if (results === null) {
     // A 4xx with no per-mutation results (a malformed batch) is not retryable
     // in any useful sense, but it must not loop forever either.
-    await recordAttempt(batch, `Unreadable response (${response.status})`);
+    await recordAttempt(pass, batch, `Unreadable response (${response.status})`);
     /**
      * Counted apart from the attempt above, and it is the count that decides.
      *
@@ -329,22 +335,19 @@ async function runFlush(transport: SyncTransport): Promise<FlushOutcome> {
      * it: `attempts` because a delivery was tried and did not land, this
      * because something answered and decided nothing.
      */
-    await recordUndecided(batch);
-    await rejectExhausted(batch, `The server could not read that batch (${response.status}).`);
+    await recordUndecided(pass, batch);
+    await rejectExhausted(pass, batch, `The server could not read that batch (${response.status}).`);
     return { ...outcome, deferred: `unreadable-${response.status}` };
   }
 
-  // No await between the fence above and here on this path: every branch
-  // between them returned, so the store `applyResults` reads is the one that
-  // was checked.
-  return applyResults(batch, results, outcome, moved);
+  return applyResults(pass, batch, results, outcome);
 }
 
 async function applyResults(
+  pass: Pass,
   batch: QueuedMutation[],
   results: MutationResult[],
   outcome: FlushOutcome,
-  moved: () => TenantMove | null,
 ): Promise<FlushOutcome> {
   const byId = new Map(results.map((r) => [r.id, r]));
 
@@ -352,34 +355,27 @@ async function applyResults(
   // left queued with its attempt counted. This function only tallies what the
   // server said, so the outcome the UI reads and the rows on disk cannot
   // describe different things.
-  //
-  // Safe without another fence: the caller checked immediately above and
-  // `localStore()` is read synchronously here, so nothing can land between.
-  await localStore().resolveBatch(batch, results);
+  await pass.store.resolveBatch(batch, results);
 
   /**
-   * And the fence again, because `resolveBatch` is an await like any other.
+   * The two writes that used to need a fence of their own.
    *
-   * `tenant.ts` says the fence is *"captured once, at the top of a pass, and
-   * asked again after each await"*. This function asked no more, and the two
-   * writes below are the ones where that costs the most — because unlike the
-   * row work above, **they are farm-wide state keyed by nothing.**
-   *
-   * A switch landing inside `resolveBatch` sends them to the farm that just
-   * opened. `markSynced` stamps a farm that has flushed nothing as having
-   * synced this instant, and `setSyncHeld(null)` clears a hold that is
+   * `resolveBatch` is an await like any other, and before the pass held its
+   * store a switch landing inside it sent these to the farm that had just
+   * opened: `markSynced` stamped a farm that had flushed nothing as having
+   * synced this instant, and `setSyncHeld(null)` cleared a hold that was
    * genuinely true of it — a free-tier farm's `noAccount`, an unpaid farm's
-   * `unsubscribed`, an old build's `appTooOld`. Every one of those turns the
+   * `unsubscribed`, an old build's `appTooOld`. Every one of those turned the
    * chip from a sentence that explains the state into "waiting", which is the
    * exact failure D13 exists to prevent, arrived at from the other end.
    *
-   * `rejectExhausted` goes behind it too, though for a smaller reason: it
-   * matches rows by mutation id, so on another farm's store it would find
-   * nothing. Skipping is what running it would amount to, said honestly — and
-   * the next flush on the right farm counts and ripens them properly.
+   * They go to `pass.store` now, the farm whose batch went up, which is the
+   * farm that earned them. The `moved()` check is only what keeps a closed
+   * handle from throwing here; `tests/offline/farm-switch.test.ts` holds the
+   * farm that replaced this one untouched either way.
    */
-  if (moved() === null) {
-    await localStore().markSynced(Date.now());
+  if (pass.moved() === null) {
+    await pass.store.markSynced(Date.now());
 
     /**
      * A batch got through, so whatever was holding this farm is over.
@@ -390,7 +386,7 @@ async function applyResults(
      * into a barn stays "on this phone" until the first flush lands, which is
      * correct: nothing has reached the server yet.
      */
-    await localStore().setSyncHeld(null);
+    await pass.store.setSyncHeld(null);
 
     /**
      * Answered, but without mentioning these.
@@ -406,6 +402,7 @@ async function applyResults(
     const unanswered = batch.filter((queued) => !byId.has(queued.id));
     if (unanswered.length > 0) {
       await rejectExhausted(
+        pass,
         unanswered,
         'The server kept answering without saying what happened to this record.',
       );
@@ -415,12 +412,11 @@ async function applyResults(
   /**
    * Tallied either way, and NOT reported as deferred.
    *
-   * `resolveBatch` landed on the right farm — the fence above it is the
-   * caller's, one line up with no await between — so this batch really was
-   * delivered and really was resolved. `deferred` means the opposite ("could
-   * not be delivered at all; entries stay queued") and the engine counts it as
-   * a consecutive failure, which would back a farm off for work that went
-   * through.
+   * `resolveBatch` landed on the farm that sent the batch — the pass holds
+   * its store — so this batch really was delivered and really was resolved.
+   * `deferred` means the opposite ("could not be delivered at all; entries
+   * stay queued") and the engine counts it as a consecutive failure, which
+   * would back a farm off for work that went through.
    */
   const next = { ...outcome };
   for (const queued of batch) {
@@ -461,20 +457,23 @@ function heldMessage(body: unknown): string {
     : 'Kept on this phone. Nothing has been lost.';
 }
 
-async function recordAttempt(batch: QueuedMutation[], error: string): Promise<void> {
-  await localStore().recordAttempt(batch, error);
+// Every helper below writes to the pass's store and nothing else, which is
+// the whole of the guarantee: there is no other store to reach from here.
+
+async function recordAttempt(pass: Pass, batch: QueuedMutation[], error: string): Promise<void> {
+  await pass.store.recordAttempt(batch, error);
 }
 
 /** One more answer that decided nothing about these — the count that ripens. */
-async function recordUndecided(batch: QueuedMutation[]): Promise<void> {
-  await localStore().recordUndecided(batch);
+async function recordUndecided(pass: Pass, batch: QueuedMutation[]): Promise<void> {
+  await pass.store.recordUndecided(batch);
 }
 
 /** Routes mutations past the undecided-answer ceiling to the inbox so the queue can drain. */
-async function rejectExhausted(batch: QueuedMutation[], reason: string): Promise<void> {
-  await localStore().rejectExhausted(batch, MAX_ATTEMPTS, reason);
+async function rejectExhausted(pass: Pass, batch: QueuedMutation[], reason: string): Promise<void> {
+  await pass.store.rejectExhausted(batch, MAX_ATTEMPTS, reason);
 }
 
-async function setLastError(message: string): Promise<void> {
-  await localStore().setLastError(message);
+async function setLastError(pass: Pass, message: string): Promise<void> {
+  await pass.store.setLastError(message);
 }

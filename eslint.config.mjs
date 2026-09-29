@@ -335,6 +335,75 @@ const eslintConfig = defineConfig([
   },
 
   /**
+   * A sync pass writes to the store it captured, and sends with the headers
+   * its pass hands it — never the store or the token installed *now*.
+   *
+   * `packages/core/src/sync/pass.ts` says why: a farm switch landing inside a
+   * round trip used to send one farm's work under another's token, or write
+   * the answers into another's outbox, and the fence that guarded against it
+   * had to be asked again after every await. Three writes were found without
+   * it, then three more. This is the rule that ends the finding: the three
+   * files that run a pass cannot reach the installed store at all, and cannot
+   * build request headers except through the pass.
+   *
+   * **Every earlier restriction is carried, deliberately.** `no-restricted-
+   * imports` replaces its options when a later block sets it again, exactly
+   * as `no-restricted-syntax` does above, so a block that named only its own
+   * paths would silently disarm the Mongo, SQLite and secure-store guards for
+   * these three files. `tests/unit/guards.test.ts` asserts they still fire.
+   */
+  {
+    files: [
+      'packages/core/src/sync/flush.ts',
+      'packages/core/src/sync/pull.ts',
+      'packages/core/src/sync/photos.ts',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '../db/store',
+              message:
+                'A sync pass writes to the store it captured at its start — beginPass() from ./pass, ' +
+                'never localStore(). See packages/core/src/sync/pass.ts.',
+            },
+            {
+              name: '../api',
+              importNames: ['syncHeaders', 'currentAccessToken'],
+              message:
+                'A request inside a pass carries the headers pass.send() returns, which refuse a ' +
+                'token that names another farm.',
+            },
+            { name: 'mongodb', message: 'Shared code must not import the Mongo driver.' },
+            {
+              name: 'expo-sqlite',
+              message: 'Only apps/mobile/src/db/open.ts may name the SQLite native module.',
+            },
+            {
+              name: 'expo-secure-store',
+              message: 'Only apps/mobile/src/auth/store.ts may name secure storage.',
+            },
+          ],
+          patterns: [
+            {
+              group: ['@homefarm/api', '@homefarm/api/*'],
+              message: 'Shared code must not import server modules.',
+            },
+            {
+              group: ['**/db/sqlite-store', '**/db/expo-driver'],
+              message:
+                'Use localStore() from db/store — importing an implementation directly ' +
+                'pins a caller to one backing and reads the wrong database on device.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  /**
    * Every tappable thing in the app says what pressing it promises.
    *
    * The arch used to answer "you can act on this" by shape, which meant a

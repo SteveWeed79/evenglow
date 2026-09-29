@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { newId } from '@homefarm/contracts';
-import { setAccessToken } from '@homefarm/core/api';
+import { setAccessToken, setSessionRefresher } from '@homefarm/core/api';
 import { setLocalStore, localStore, storeGeneration } from '@homefarm/core/db/store';
 import { openSqliteStore } from '@homefarm/core/db/sqlite-store';
 import { flushOnce } from '@homefarm/core/sync/flush';
@@ -155,7 +155,7 @@ describe('a flush interrupted by a farm switch', () => {
    *
    * `runFlush` checks before sending and again before applying, and stops
    * there. `applyResults` then does three writes with awaits between them, and
-   * `tenant.ts` is explicit that the fence is *"asked again after each await"*.
+   * `pass.ts` holds the store the pass began on, so the fence is no longer *"asked again after each await"* — it does not need to be.
    * A switch landing inside `resolveBatch` therefore reached the two writes
    * after it — and those are the ones that hurt, because unlike the row work
    * they are **farm-wide state keyed by nothing**, so they do not miss on the
@@ -363,12 +363,18 @@ describe('a token that has moved ahead of the store', () => {
   });
 
   /**
-   * The mirror window. A pass that begins legitimately and has the token move
-   * under it must not write the answers back either — resending is safe, since
-   * the server dedupes on the mutation id, and marking rows applied on a farm
-   * whose work may never have been sent is not.
+   * The results of a batch belong to the farm that sent it, whatever the
+   * token says by the time they arrive.
+   *
+   * This used to refuse them. The fence could not tell which store
+   * `localStore()` would answer with by the time the round trip ended, so a
+   * token that had moved mid-flight meant "write nothing" — correct, and a
+   * duplicate round trip for the farm that had done nothing wrong. The pass
+   * holds the store it began on now, so the answers can only land on the
+   * farm that asked, and the batch that went up under farm L's token is
+   * resolved in farm L's outbox.
    */
-  it('does not write results back once the token has moved mid-flight', async () => {
+  it('writes the results back to the farm that sent them when the token moves mid-flight', async () => {
     nameCurrentFarm(ORG_LEFT);
     setAccessToken('the-left-farms-token', ORG_LEFT);
     await enqueue(eggLog());
@@ -385,13 +391,39 @@ describe('a token that has moved ahead of the store', () => {
       return { status: 200, body };
     });
 
-    expect(outcome.deferred).toBe('farm-switching');
-    expect(await store.readOutboxBySeq()).toHaveLength(1);
+    expect(outcome.deferred).toBeUndefined();
+    expect(outcome.applied).toBe(1);
+    expect(await queueDepth()).toBe(0);
+    expect((await store.checkIntegrity()).cleared).toBe(1);
+  });
 
-    // The cleared counter is what catches a phantom, for the reason the
-    // generation suite above gives: `missing` is clamped at zero.
-    const report = await store.checkIntegrity();
-    expect(report.cleared).toBe(0);
+  /**
+   * The retry after a renewal asks for the token again.
+   *
+   * A 401 renews the session and sends the batch once more, and the renewal
+   * reads the token as it is *now*. A sign-in to another farm landing in that
+   * gap replaces it — so the pass asks before the retry, exactly as it asked
+   * before the first send, and farm L's work is not sent under farm J's name.
+   */
+  it('does not retry a lapsed batch under a token that moved during the renewal', async () => {
+    nameCurrentFarm(ORG_LEFT);
+    setAccessToken('the-left-farms-token', ORG_LEFT);
+    await enqueue(eggLog());
+    setSessionRefresher(() => {
+      setAccessToken('the-joined-farms-token', ORG_JOINED);
+      return Promise.resolve('renewed');
+    });
+
+    let calls = 0;
+    const outcome = await flushOnce(() => {
+      calls += 1;
+      return Promise.resolve({ status: 401, body: null });
+    });
+    setSessionRefresher(null);
+
+    expect(calls).toBe(1);
+    expect(outcome.deferred).toBe('farm-switching');
+    expect(await queueDepth()).toBe(1);
   });
 
   it('asks for no page while the token and the store disagree', async () => {

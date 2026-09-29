@@ -61,9 +61,9 @@ function respondAll(status: MutationStatus): SyncTransport {
  */
 function recordingTransport(status: MutationStatus = 'applied') {
   const batches: Mutation[][] = [];
-  const transport: SyncTransport = (mutations) => {
+  const transport: SyncTransport = (mutations, headers) => {
     batches.push([...mutations]);
-    return respondAll(status)(mutations);
+    return respondAll(status)(mutations, headers);
   };
   return { batches, transport, sent: () => batches.flat() };
 }

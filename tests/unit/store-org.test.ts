@@ -6,7 +6,7 @@ import { nodeSqlDriver } from '../support/sqlite';
  * The store says which farm it holds, and `openLocalStore` is what says so.
  *
  * The other half of the wiring `tests/unit/token-org.test.ts` covers. The
- * fence in `core/sync/tenant.ts` compares two values; either one going missing
+ * fence in `core/sync/pass.ts` compares two values; either one going missing
  * turns it off silently, because a null means *unknown* and never blocks. This
  * is the store's half.
  *

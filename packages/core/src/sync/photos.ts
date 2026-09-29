@@ -1,7 +1,7 @@
-import { photoUrl, syncHeaders } from '../api';
-import { localStore } from '../db/store';
+import { photoUrl } from '../api';
 import { listPhotos } from '../read/photos';
-import { enqueue } from './queue';
+import { beginPass, type Pass } from './pass';
+import { enqueueAll } from './queue';
 
 /**
  * Getting a photo's bytes to the server, and back to a second phone.
@@ -128,7 +128,11 @@ async function runTransfer(): Promise<TransferResult> {
   const store = bytes;
   if (store === null) return NOTHING;
 
-  const photos = await listPhotos();
+  // The farm this pass moves pictures for, fixed here: an `uploadedAt` must
+  // land in the outbox of the farm whose photo went up, not whichever farm
+  // is open by the time the upload finishes. See `pass.ts`.
+  const pass = beginPass();
+  const photos = await listPhotos(pass.store);
   let uploaded = 0;
   let downloaded = 0;
   let pending = 0;
@@ -154,7 +158,7 @@ async function runTransfer(): Promise<TransferResult> {
    * one request, and the photo stays exactly where it is.
    */
   const owed = new Set(
-    (await localStore().readOutboxBySeq())
+    (await pass.store.readOutboxBySeq())
       .filter((mutation) => mutation.status === 'queued' || mutation.status === 'sending')
       .map((mutation) => mutation.targetId),
   );
@@ -183,28 +187,33 @@ async function runTransfer(): Promise<TransferResult> {
   pending = Math.max(0, toUpload.length - PER_PASS) + Math.max(0, toDownload.length - PER_PASS);
 
   for (const id of toUpload.slice(0, PER_PASS)) {
-    if (await upload(id, store)) uploaded += 1;
+    if (await upload(id, store, pass)) uploaded += 1;
     else pending += 1;
   }
 
   for (const id of toDownload.slice(0, PER_PASS)) {
-    if (await download(id, store)) downloaded += 1;
+    if (await download(id, store, pass)) downloaded += 1;
     else pending += 1;
   }
 
   return { uploaded, downloaded, pending };
 }
 
-async function upload(id: string, store: PhotoBytes): Promise<boolean> {
+async function upload(id: string, store: PhotoBytes, pass: Pass): Promise<boolean> {
   try {
     const body = await store.read(id);
     // The record says there are bytes and the file is gone — a photo deleted
     // out from under the app. Nothing to send and nothing to fix here.
     if (body === null) return false;
 
+    // Refused, not sent, while the token names another farm: a picture put
+    // up under the wrong credentials is filed on the wrong farm for good.
+    const send = pass.send({ 'content-type': 'image/jpeg' });
+    if (!send.ok) return false;
+
     const res = await fetch(photoUrl(id), {
       method: 'PUT',
-      headers: syncHeaders({ 'content-type': 'image/jpeg' }),
+      headers: send.headers,
       body: body as BodyInit,
     });
 
@@ -225,12 +234,10 @@ async function upload(id: string, store: PhotoBytes): Promise<boolean> {
      * question — does this record's image exist on the server — and the answer
      * is carried by the field being present rather than by its value.
      */
-    await enqueue({
-      entity: 'photo',
-      op: 'update',
-      targetId: id,
-      payload: { uploadedAt: Date.now() },
-    });
+    await enqueueAll(
+      [{ entity: 'photo', op: 'update', targetId: id, payload: { uploadedAt: Date.now() } }],
+      pass.store,
+    );
 
     return true;
   } catch {
@@ -240,9 +247,12 @@ async function upload(id: string, store: PhotoBytes): Promise<boolean> {
   }
 }
 
-async function download(id: string, store: PhotoBytes): Promise<boolean> {
+async function download(id: string, store: PhotoBytes, pass: Pass): Promise<boolean> {
   try {
-    const res = await fetch(photoUrl(id), { headers: syncHeaders() });
+    const send = pass.send();
+    if (!send.ok) return false;
+
+    const res = await fetch(photoUrl(id), { headers: send.headers });
     // 404 here is a record whose `uploadedAt` says the bytes exist and the
     // server disagrees. Nothing to retry into; the gallery already says this
     // device does not have the image, which stays true.

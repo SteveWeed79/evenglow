@@ -1,4 +1,5 @@
 import { ulid } from 'ulid';
+import type { Subscription } from '@homefarm/contracts';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { startTestDb } from '../support/mongo';
 
@@ -218,7 +219,7 @@ describeDb('a purchase token belongs to one farm', () => {
  * member may pay; that is the reason a bad post has to be harmless.
  */
 describeDb('a token the store does not know', () => {
-  async function withStore(answer: null) {
+  async function withStore(answer: Subscription | null) {
     const Fastify = (await import('fastify')).default;
     const { billingRoutes } = await import('@homefarm/api/routes/billing');
     const { readEnv } = await import('@homefarm/api/env');
@@ -249,6 +250,49 @@ describeDb('a token the store does not know', () => {
     await app.close();
 
     expect(response.statusCode).toBe(404);
+    const org = await harness!.db.collection('orgs').findOne({ _id: ORG_A as never });
+    expect(org?.subscription).toMatchObject({ state: 'active', source: 'play' });
+    expect(org?.playPurchaseToken).toBe(TOKEN);
+  });
+});
+
+/**
+ * A dead token that is not the farm's own must not end what the farm pays for.
+ *
+ * Google knows the token — it is an old purchase off some other account — and
+ * says it has lapsed. That is a true fact about *that purchase*, and it used
+ * to be written over the farm's own active year and bound to it, because the
+ * route stored whatever the store said. `nextSubscription` is what stops it.
+ */
+describeDb('a lapsed token that is not the farm’s own', () => {
+  it('is not written over a subscription the farm is paying for', async () => {
+    const Fastify = (await import('fastify')).default;
+    const { billingRoutes } = await import('@homefarm/api/routes/billing');
+    const { readEnv } = await import('@homefarm/api/env');
+    const app = Fastify({ logger: false });
+    await billingRoutes(
+      app,
+      readEnv({
+        AUTH_SECRET: SECRET,
+        MONGODB_URI: harness!.uri,
+        MONGODB_DB: 'homefarm_purchase',
+        GOOGLE_PLAY_SERVICE_ACCOUNT: PLAY_ACCOUNT,
+        GOOGLE_PLAY_PACKAGE: 'dev.swbuild.homefarm',
+      }),
+      { readSubscription: async () => ({ state: 'lapsed', source: 'play', updatedAt: Date.now() }) },
+    );
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/billing/play',
+      headers: { authorization: await tokenFor(OWNER_A, ORG_A) },
+      payload: { purchaseToken: 'somebody-elses-old-purchase' },
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    // Answered with what the farm actually has, and the document untouched.
+    expect(response.json<{ state: string }>().state).toBe('active');
     const org = await harness!.db.collection('orgs').findOne({ _id: ORG_A as never });
     expect(org?.subscription).toMatchObject({ state: 'active', source: 'play' });
     expect(org?.playPurchaseToken).toBe(TOKEN);

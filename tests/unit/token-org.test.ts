@@ -7,7 +7,7 @@ import { refreshSession, signIn, signOut } from '../../apps/mobile/src/auth/sess
 /**
  * The token says which farm it is for, and the sign-in paths are what say so.
  *
- * **The fence in `core/sync/tenant.ts` is only as good as this wiring**, and
+ * **The fence in `core/sync/pass.ts` is only as good as this wiring**, and
  * the wiring is a second argument that a refactor can quietly drop: it
  * defaults to null, and null is *unknown*, so forgetting it does not fail —
  * it silently returns the engine to the state H2 describes, where the bearer
