@@ -100,6 +100,43 @@ describeDb('refresh token rotation', () => {
   });
 
   /**
+   * The retry takes the successor's place rather than sitting beside it.
+   *
+   * The window used to mint a second lineage, and the first one stayed live —
+   * so a token stolen and replayed inside thirty seconds bought a session
+   * that reuse detection could never reach, because the two lineages never
+   * collided. Now the first exchange's successor is revoked by the retry, and
+   * presenting it ends the family: whichever copy refreshes next, the other
+   * stops working.
+   */
+  it('supersedes the successor the first exchange issued', async () => {
+    const { rotateSession, startSession } = await import('@homefarm/api/auth/refresh');
+
+    const first = await startSession(CLAIMS, SECRET);
+    const successor = await rotateSession(first.refreshToken, SECRET);
+    const retried = await rotateSession(first.refreshToken, SECRET);
+
+    // The superseded token is dead — and presenting it takes the family down,
+    // which is the detection: somebody held a token the retrying client never
+    // received.
+    await expect(rotateSession(successor.refreshToken, SECRET)).rejects.toThrow(/expired/i);
+    await expect(rotateSession(retried.refreshToken, SECRET)).rejects.toThrow(/expired/i);
+  });
+
+  it('lets the retrying client carry on when nobody else holds a copy', async () => {
+    const { rotateSession, startSession } = await import('@homefarm/api/auth/refresh');
+
+    const first = await startSession(CLAIMS, SECRET);
+    await rotateSession(first.refreshToken, SECRET);
+    const retried = await rotateSession(first.refreshToken, SECRET);
+
+    // The honest case: the successor was never received, so nobody presents
+    // it, and the retry's lineage refreshes like any other.
+    const onward = await rotateSession(retried.refreshToken, SECRET);
+    expect(onward.refreshToken).not.toBe(retried.refreshToken);
+  });
+
+  /**
    * The theft case, and the reason families exist.
    *
    * An honest client re-presents a token within seconds or not at all. Minutes

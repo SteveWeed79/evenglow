@@ -6,6 +6,7 @@ import {
   hashRefreshToken,
   insertRefreshToken,
   revokeFamily,
+  revokeSuccessors,
 } from '../db/refresh-tokens';
 import { findUserById } from '../db/identity';
 import { HttpError } from '../http';
@@ -48,6 +49,7 @@ async function issue(
   familyId: string,
   secret: string,
   now: Date,
+  issuedFrom?: string,
 ): Promise<TokenPair> {
   const refreshToken = mintRefreshToken();
 
@@ -57,6 +59,7 @@ async function issue(
     familyId,
     issuedAt: now,
     expiresAt: new Date(now.getTime() + REFRESH_TTL_MS),
+    ...(issuedFrom === undefined ? {} : { issuedFrom }),
   });
 
   const accessToken = await mintAccessToken(claims, secret, now);
@@ -131,7 +134,25 @@ export async function rotateSession(
   const lapsed = new HttpError(401, 'Your session has expired. Sign in again.');
 
   const existing = await findRefreshToken(hashRefreshToken(presented));
-  if (!existing || existing.revokedAt) throw lapsed;
+  if (!existing) throw lapsed;
+
+  /**
+   * A revoked token presented again ends its whole family, not just this
+   * request.
+   *
+   * Most revocations already took the family with them — sign-out, a password
+   * reset, a removed member — and revoking it again costs nothing. The one
+   * that did not is a *superseded* successor: the token a first exchange
+   * minted and a grace-window retry replaced. If it is presented at all,
+   * somebody holds it — and since the retrying client never received it, that
+   * somebody is not the client. Ending the family here is what makes the
+   * supersede below a detection and not merely a tidy-up: whichever copy
+   * refreshes next, honest or stolen, the other stops working.
+   */
+  if (existing.revokedAt) {
+    await revokeFamily(existing.familyId, now);
+    throw lapsed;
+  }
 
   if (existing.expiresAt <= now) throw lapsed;
 
@@ -171,6 +192,31 @@ export async function rotateSession(
     throw lapsed;
   }
 
+  /**
+   * ## A retry supersedes; it does not sit beside
+   *
+   * The grace window used to mint a *second* lineage: the first exchange's
+   * successor stayed live and the retry got another, so a token stolen and
+   * replayed inside thirty seconds bought a session that reuse detection
+   * could never reach — the two lineages never collided, and the thirty
+   * seconds of exposure the comment above admits to was permanent.
+   *
+   * Now the retry revokes whatever the first exchange issued and takes its
+   * place. The honest cases lose nothing by it: the process that died and the
+   * request that timed out never received the successor, so revoking it
+   * revokes a token nobody holds. The theft case turns into a race the thief
+   * loses either way — if the client refreshed first, the thief's replay
+   * revokes a token the client holds, the client presents it, and the family
+   * ends; if the thief refreshed first, the client's retry revokes the
+   * thief's token and the thief's next refresh ends the family.
+   *
+   * The `already-used` outcome from the consume below is the same situation
+   * at the microsecond scale — two exchanges of one token racing — and is
+   * treated the same way. The client is single-flight, so a legitimate pair
+   * of exchanges is a wake-and-regain colliding at most once.
+   */
+  if (existing.usedAt !== undefined) await revokeSuccessors(existing._id, now);
+
   if (existing.usedAt === undefined) {
     const outcome = await consumeRefreshToken(existing._id, now);
 
@@ -197,6 +243,7 @@ export async function rotateSession(
       await revokeFamily(existing.familyId, now);
       throw lapsed;
     }
+    if (outcome === 'already-used') await revokeSuccessors(existing._id, now);
   }
 
   /**
@@ -236,6 +283,7 @@ export async function rotateSession(
     existing.familyId,
     secret,
     now,
+    existing._id,
   );
 }
 

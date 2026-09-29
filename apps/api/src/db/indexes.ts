@@ -247,6 +247,9 @@ const IDENTITY_INDEXES: Record<string, IndexDescription[]> = {
     // Family revocation touches every row in a family, on the theft path where
     // latency matters least but correctness matters most.
     { key: { familyId: 1 } },
+    // A grace-window retry revokes the successors of the token it presents;
+    // partial, because a sign-in's root token has none to name.
+    { key: { issuedFrom: 1 }, partialFilterExpression: { issuedFrom: { $type: 'string' } } },
     /**
      * Expired tokens delete themselves. Revocation state is the security
      * control and it lives in the row, so a row that has outlived its own
