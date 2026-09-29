@@ -1,3 +1,4 @@
+import { engineContext, updateContext } from '../context';
 import type { LocalStore } from './port';
 
 /**
@@ -16,67 +17,65 @@ import type { LocalStore } from './port';
  *
  * So an unset store throws, naming the fix. There is exactly one storage
  * implementation now, and exactly one place that installs it.
- */
-
-let current: LocalStore | null = null;
-
-/**
- * Which farm's store is installed, as a number that only moves forward.
+ *
+ * ## What a sync pass does instead
  *
  * **A device holds one farm's database at a time and swaps files to change
  * farms, so "the store" is not a stable thing to have read a moment ago.** The
  * sync loop reads the outbox, awaits a round trip, and writes the answers back
- * — and a farm switch landing inside that gap meant one farm's queued work
- * could be sent under another farm's token, or another farm's results written
- * into this one's outbox. Neither is caught by `scoped()`: the server is doing
- * exactly what the token says, and the mistake is on the device.
+ * — and a farm switch landing inside that gap used to mean one farm's results
+ * written into another's outbox, or one farm's hold stamped onto another's
+ * meta. Neither is caught by `scoped()`: the server is doing exactly what the
+ * token says, and the mistake is on the device.
  *
- * So every step that spans an await captures this first and refuses to
- * continue if it moved. Cheaper and harder to get wrong than passing a store
- * handle down every call — and it fails closed, because a stale generation can
- * only stop work, never misdirect it.
+ * The engine no longer calls this after an await. A pass captures the handle
+ * once through `sync/pass.ts` and writes to that handle for its whole length,
+ * so its answers can only reach the farm that asked; the generation below is
+ * what lets it *say* the store moved, not what keeps it safe. The screens and
+ * the reads still come here, because they want whichever farm is open now.
  */
-let generation = 0;
+
+export function setLocalStore(store: LocalStore, orgId: string | null = null): void {
+  updateContext({
+    store,
+    storeOrgId: orgId,
+    storeGeneration: engineContext().storeGeneration + 1,
+  });
+}
+
+/** Captured at the start of a pass, compared later. See `sync/pass.ts`. */
+export function storeGeneration(): number {
+  return engineContext().storeGeneration;
+}
 
 /**
- * Which farm the installed store holds, or null when the caller did not say.
+ * The farm whose database is installed, if the installer was told.
  *
- * The generation above answers "did the store move?". It cannot answer "is
- * this the farm the token belongs to?", and those are different questions the
- * moment the two halves of a sign-in stop moving together — which they do, by
+ * The generation answers "did the store move?". It cannot answer "is this the
+ * farm the token belongs to?", and those are different questions the moment
+ * the two halves of a sign-in stop moving together — which they do, by
  * design: the token is set several awaits before the database is opened. See
  * `accessTokenOrg` in `../api` for the failure that pairing catches.
  */
-let currentOrgId: string | null = null;
-
-export function setLocalStore(store: LocalStore, orgId: string | null = null): void {
-  current = store;
-  currentOrgId = orgId;
-  generation += 1;
-}
-
-/** Captured before an await, re-read after it. See the note above. */
-export function storeGeneration(): number {
-  return generation;
-}
-
-/** The farm whose database is installed, if the installer was told. */
 export function storeOrgId(): string | null {
-  return currentOrgId;
+  return engineContext().storeOrgId;
 }
 
 export function localStore(): LocalStore {
-  if (current === null) {
+  const { store } = engineContext();
+  if (store === null) {
     throw new Error(
       'No local store installed. Call setLocalStore() during startup — see apps/mobile/src/db/store.ts.',
     );
   }
-  return current;
+  return store;
 }
 
 /** Tests only: drops the handle so the next call must install one again. */
 export function resetLocalStore(): void {
-  current = null;
-  currentOrgId = null;
-  generation += 1;
+  updateContext({
+    store: null,
+    storeOrgId: null,
+    storeGeneration: engineContext().storeGeneration + 1,
+  });
 }

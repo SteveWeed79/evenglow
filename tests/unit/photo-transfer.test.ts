@@ -419,8 +419,8 @@ describe('the tick that carries photos', () => {
    */
   async function oneTick(transport: SyncTransport): Promise<void> {
     let flushed = false;
-    startSync(async (mutations) => {
-      const answer = await transport(mutations);
+    startSync(async (mutations, headers) => {
+      const answer = await transport(mutations, headers);
       flushed = true;
       return answer;
     });

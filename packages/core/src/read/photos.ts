@@ -1,4 +1,5 @@
 import { photoCreateSchema } from '@homefarm/contracts';
+import type { LocalStore } from '../db/port';
 import { localStore } from '../db/store';
 
 /**
@@ -23,8 +24,8 @@ export interface Photo {
 
 const stored = photoCreateSchema.partial();
 
-export async function listPhotos(): Promise<Photo[]> {
-  const records = await localStore().readRecordsByEntity('photo');
+export async function listPhotos(store: LocalStore = localStore()): Promise<Photo[]> {
+  const records = await store.readRecordsByEntity('photo');
 
   return records
     .filter((record) => !record.deleted)

@@ -15,6 +15,9 @@
  */
 
 import { CLIENT_VERSION_HEADER } from '@homefarm/contracts';
+import { engineContext, type SessionRefresher, type SessionRenewal, updateContext } from './context';
+
+export type { SessionRenewal } from './context';
 
 export type Endpoint = 'sync' | 'snapshot' | 'photo' | 'support';
 
@@ -34,7 +37,6 @@ const PATHS: Record<Endpoint, { sameOrigin: string; api: string }> = {
 };
 
 /** null means same-origin — the browser build, and the default. */
-let base: string | null = null;
 
 /**
  * Points the client at an absolute API origin.
@@ -62,16 +64,16 @@ export function setApiBase(url: string): void {
 
   // Trailing slash removed so joining is plain concatenation and cannot
   // produce a double slash the server may or may not treat as the same route.
-  base = url.replace(/\/+$/, '');
+  updateContext({ apiBase: url.replace(/\/+$/, '') });
 }
 
 /** Back to same-origin. Exported for tests. */
 export function resetApiBase(): void {
-  base = null;
+  updateContext({ apiBase: null });
 }
 
 export function apiBase(): string | null {
-  return base;
+  return engineContext().apiBase;
 }
 
 /**
@@ -80,6 +82,7 @@ export function apiBase(): string | null {
  */
 export function apiUrl(endpoint: Endpoint, query = ''): string {
   const paths = PATHS[endpoint];
+  const base = engineContext().apiBase;
   const path = base === null ? paths.sameOrigin : `${base}${paths.api}`;
   return query === '' ? path : `${path}?${query}`;
 }
@@ -118,7 +121,6 @@ export function photoUrl(id: string): string {
  * thing worth storing; keeping this one out of any store means a database or
  * a file disclosure yields nothing that is still valid.
  */
-let accessToken: string | null = null;
 
 /**
  * Which farm the token in hand belongs to, or null when nobody has said.
@@ -138,7 +140,6 @@ let accessToken: string | null = null;
  * on every mutation regardless. What it buys is a device that can tell its own
  * two halves apart while they are out of step. See `sync/tenant.ts`.
  */
-let accessTokenOrgId: string | null = null;
 
 /**
  * Null for the org is *unknown*, not *any* — see `tenantFence`, which blocks
@@ -146,17 +147,16 @@ let accessTokenOrgId: string | null = null;
  * to hand leaves the device exactly as it was rather than stalling it.
  */
 export function setAccessToken(token: string | null, orgId: string | null = null): void {
-  accessToken = token;
-  accessTokenOrgId = orgId;
+  updateContext({ accessToken: token, accessTokenOrgId: orgId });
 }
 
 export function currentAccessToken(): string | null {
-  return accessToken;
+  return engineContext().accessToken;
 }
 
 /** The org the current token was issued for, if the setter was told. */
 export function accessTokenOrg(): string | null {
-  return accessTokenOrgId;
+  return engineContext().accessTokenOrgId;
 }
 
 /**
@@ -167,7 +167,6 @@ export function accessTokenOrg(): string | null {
  * server that could not be reached means wait, and telling somebody to sign in
  * when they already are is the copy defect this distinction exists to avoid.
  */
-export type SessionRenewal = 'renewed' | 'signed-out' | 'unavailable';
 
 /**
  * How the platform renews a session, told rather than detected.
@@ -183,12 +182,10 @@ export type SessionRenewal = 'renewed' | 'signed-out' | 'unavailable';
  * stopped until a lifecycle event happened to occur. Every enqueue then nudged
  * the loop into one more immediate 401.
  */
-type SessionRefresher = () => Promise<SessionRenewal>;
 
-let refresher: SessionRefresher | null = null;
 
 export function setSessionRefresher(next: SessionRefresher | null): void {
-  refresher = next;
+  updateContext({ refresher: next });
 }
 
 /**
@@ -199,6 +196,7 @@ export function setSessionRefresher(next: SessionRefresher | null): void {
  * told how to renew, which is the correct answer for a build with no session.
  */
 export async function renewSession(): Promise<SessionRenewal> {
+  const { refresher } = engineContext();
   if (refresher === null) return 'unavailable';
   try {
     return await refresher();
@@ -217,6 +215,7 @@ export async function renewSession(): Promise<SessionRenewal> {
  */
 export function syncHeaders(extra: Record<string, string> = {}): Record<string, string> {
   const headers: Record<string, string> = { 'x-homefarm-sync': '1', ...extra };
+  const { clientVersion, accessToken } = engineContext();
   if (clientVersion !== null) headers[CLIENT_VERSION_HEADER] = clientVersion;
   if (accessToken !== null) headers['authorization'] = `Bearer ${accessToken}`;
   return headers;
@@ -231,8 +230,7 @@ export function syncHeaders(extra: Record<string, string> = {}): Record<string, 
  * and the browser build want, and which a server with no floor accepts exactly
  * as it always did.
  */
-let clientVersion: string | null = null;
 
 export function setClientVersion(version: string | null): void {
-  clientVersion = version;
+  updateContext({ clientVersion: version });
 }

@@ -1,6 +1,6 @@
 import { newId, payloadSchemaFor, type Entity, type Op } from '@homefarm/contracts';
 import { InvalidMutationError, StorageFullError } from '../db/errors';
-import type { IntegrityReport } from '../db/port';
+import type { IntegrityReport, LocalStore } from '../db/port';
 import { localStore } from '../db/store';
 import type { QueuedMutation } from '../db/records';
 
@@ -54,7 +54,15 @@ export async function enqueue(input: EnqueueInput): Promise<QueuedMutation> {
  * refused, which is the split state this exists to rule out — and a refusal is
  * far likelier than a crash.
  */
-export async function enqueueAll(inputs: readonly EnqueueInput[]): Promise<QueuedMutation[]> {
+/**
+ * `store` is for a sync pass, which owes its rows to the farm it started on
+ * rather than to whichever is installed by the time it writes — see
+ * `sync/pass.ts`. Everything else takes the installed one.
+ */
+export async function enqueueAll(
+  inputs: readonly EnqueueInput[],
+  store: LocalStore = localStore(),
+): Promise<QueuedMutation[]> {
   const requests = inputs.map((input) => {
     // Refuse locally what the server would refuse anyway, so an impossible
     // mutation never occupies the queue or the rejected inbox.
@@ -80,7 +88,7 @@ export async function enqueueAll(inputs: readonly EnqueueInput[]): Promise<Queue
 
   // Storage is the store's job from here. Everything above is contract
   // validation, which is the same whatever is underneath.
-  return localStore().enqueueAll(requests);
+  return store.enqueueAll(requests);
 }
 
 export async function queueDepth(): Promise<number> {
@@ -107,6 +115,11 @@ export async function unsentCount(): Promise<number> {
  * Detects what comparing two local copies would have detected, using two
  * integers instead of a duplicate of the entire store.
  */
+/** The pull watermark of the farm that is open now — the sheet's number, not a pass's. */
+export async function pulledThrough(): Promise<number> {
+  return (await localStore().pulledThrough()).through;
+}
+
 export async function checkIntegrity(): Promise<IntegrityReport> {
   return localStore().checkIntegrity();
 }

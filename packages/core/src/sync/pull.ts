@@ -4,10 +4,9 @@ import {
   type PulledMutation,
   readableRows,
 } from '@homefarm/contracts';
-import { apiUrl, renewSession, syncHeaders } from '../api';
-import type { PullResult } from '../db/port';
-import { localStore } from '../db/store';
-import { tenantFence } from './tenant';
+import { apiUrl, renewSession } from '../api';
+import type { LocalStore, PullResult } from '../db/port';
+import { beginPass, type Headers } from './pass';
 
 /**
  * Hydration — the read half of sync.
@@ -37,16 +36,19 @@ export interface PullOutcome {
   unmodelable: number;
 }
 
+/**
+ * `headers` are the pass's, which refuse a token for another farm; a fake
+ * transport in a test is free to ignore them.
+ */
 export type PullTransport = (
   since: number,
   sinceId: string | null,
+  headers: Headers,
 ) => Promise<{ status: number; body: unknown }>;
 
-const defaultTransport: PullTransport = async (since, sinceId) => {
+const defaultTransport: PullTransport = async (since, sinceId, headers) => {
   const query = sinceId === null ? `since=${since}` : `since=${since}&sinceId=${sinceId}`;
-  const res = await fetch(apiUrl('snapshot', query), {
-    headers: syncHeaders(),
-  });
+  const res = await fetch(apiUrl('snapshot', query), { headers });
   const body: unknown = await res.json().catch(() => null);
   return { status: res.status, body };
 };
@@ -70,16 +72,18 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
    * because this is the only loop that can also tell when the replay has
    * finished — and the sweep at the end is safe only then.
    */
-  // The farm this pass belongs to. Applying a page into a store that has since
-  // been swapped would write one farm's records into another's database, which
-  // is the worst version of this hazard and the one no server check can catch.
-  // `tenantFence` also refuses while the token and the store disagree, which is
-  // every moment of a sign-in and is not a swap the generation can see.
-  const moved = tenantFence();
-  const repairing = !(await localStore().projectionRepairDone());
-  if (repairing) await localStore().startProjectionRepair();
+  // The farm this pass belongs to, and the only store it writes. Applying a
+  // page into a store that has since been swapped would write one farm's
+  // records into another's database, which is the worst version of this
+  // hazard and the one no server check can catch — so the handle is captured
+  // here and every write below goes to it. `pass.send()` refuses while the
+  // token and the store disagree, which is every moment of a sign-in and is
+  // not a swap the generation can see. See `pass.ts`.
+  const pass = beginPass();
+  const repairing = !(await pass.store.projectionRepairDone());
+  if (repairing) await pass.store.startProjectionRepair();
 
-  const watermark = await localStore().pulledThrough();
+  const watermark = await pass.store.pulledThrough();
   let since = watermark.through;
   let sinceId = watermark.throughId;
 
@@ -101,12 +105,12 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
      * write anywhere, and after a switch it also stops the *next* page being
      * fetched under a token the loop has already been told not to trust.
      */
-    const beforeAsking = moved();
-    if (beforeAsking) return { ...outcome, deferred: beforeAsking };
+    const send = pass.send();
+    if (!send.ok) return { ...outcome, deferred: send.because };
 
     let response: { status: number; body: unknown };
     try {
-      response = await transport(since, sinceId);
+      response = await transport(since, sinceId, send.headers);
     } catch {
       return { ...outcome, deferred: 'offline' };
     }
@@ -124,8 +128,13 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
         return { ...outcome, deferred: 'unauthenticated' };
       }
 
+      // Asked again: the renewal read the token as it is now, and a sign-in
+      // may have replaced it with another farm's while this waited.
+      const again = pass.send();
+      if (!again.ok) return { ...outcome, deferred: again.because };
+
       try {
-        response = await transport(since, sinceId);
+        response = await transport(since, sinceId, again.headers);
       } catch {
         return { ...outcome, deferred: 'offline' };
       }
@@ -155,13 +164,16 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
      * locally advances past what was skipped, exactly as the server's own
      * unknown-entity skip does.
      */
-    const elsewhere = moved();
+    // Reporting, not protection: the page below goes to the captured store
+    // either way, and a replaced store is one whose handle the opener has
+    // closed — writing would only throw where this says why.
+    const elsewhere = pass.moved();
     if (elsewhere) return { ...outcome, deferred: elsewhere };
 
     const { known, unmodelable } = readableRows(parsed.data.mutations);
     outcome.unmodelable += unmodelable;
 
-    const result = await applyPage(known, parsed.data);
+    const result = await applyPage(pass.store, known, parsed.data);
     outcome.applied += result.applied;
     outcome.skipped += result.skipped;
     outcome.more = parsed.data.more;
@@ -179,7 +191,7 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
      * page that throws notes nothing, which is also right: nothing of it was
      * kept.
      */
-    if (!result.paused) await localStore().noteUnmodelable(unmodelable);
+    if (!result.paused) await pass.store.noteUnmodelable(unmodelable);
 
     /**
      * ── A pull counts as having synced, and only a flush used to ────────────
@@ -204,7 +216,7 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
      * Inside the loop rather than after it, so a pass that pages for a while
      * and then defers still records the contact it genuinely made.
      */
-    if (result.applied > 0) await localStore().markSynced(Date.now());
+    if (result.applied > 0) await pass.store.markSynced(Date.now());
 
     /**
      * The store stopped at a record this device still owes, and did not move
@@ -217,7 +229,7 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
      * it continues from exactly here.
      */
     if (result.paused) {
-      outcome.through = (await localStore().pulledThrough()).through;
+      outcome.through = (await pass.store.pulledThrough()).through;
       return outcome;
     }
 
@@ -257,13 +269,14 @@ async function runPull(transport: PullTransport): Promise<PullOutcome> {
    * from where it got to.
    */
   if (repairing && !outcome.more) {
-    outcome.repaired = await localStore().finishProjectionRepair();
+    outcome.repaired = await pass.store.finishProjectionRepair();
   }
 
   return outcome;
 }
 
 async function applyPage(
+  store: LocalStore,
   mutations: readonly PulledMutation[],
   page: PullResponse,
 ): Promise<PullResult> {
@@ -271,16 +284,12 @@ async function applyPage(
   // the watermark in the same transaction as the records they cover, are the
   // store's guarantees now — stated in port.ts and asserted against every
   // implementation.
-  return localStore().applyPulled(inServerOrder(mutations), {
+  return store.applyPulled(inServerOrder(mutations), {
     through: page.through,
     throughId: page.throughId,
   });
 }
 
-/** Exported for the diagnostics sheet and for tests. */
-export async function pulledThrough(): Promise<number> {
-  return (await localStore().pulledThrough()).through;
-}
 
 /**
  * Sorting is the server's job, but a defensive re-sort costs nothing — and
@@ -293,6 +302,10 @@ export async function pulledThrough(): Promise<number> {
  * invisible: two updates to one record inside a millisecond, applied
  * backwards, leave the older value in place with nothing to show for it.
  */
+// Kept here for the callers that always found it here. It reads the installed
+// store, which a pass must not, so it lives with the other such reads.
+export { pulledThrough } from './queue';
+
 export function inServerOrder(mutations: readonly PulledMutation[]): PulledMutation[] {
   return [...mutations].sort((a, b) =>
     a.serverTs === b.serverTs ? a.id.localeCompare(b.id) : a.serverTs - b.serverTs,

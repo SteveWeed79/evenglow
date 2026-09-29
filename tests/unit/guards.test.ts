@@ -299,3 +299,73 @@ describe('proxy trust (invariant 10)', () => {
     expect(source).not.toMatch(/trustProxy:\s*true/);
   });
 });
+
+/**
+ * The tenant fence, made structural.
+ *
+ * `packages/core/src/sync/pass.ts` captures a farm's store once and hands out
+ * request headers that refuse another farm's token. That is only a guarantee
+ * if the three files that run a pass cannot reach the installed store or the
+ * bare headers some other way — which is this rule, and this is what proves
+ * the rule fires where it must and nowhere it must not.
+ */
+describe('sync pass guard', () => {
+  const PASS_FILES = [
+    'packages/core/src/sync/flush.ts',
+    'packages/core/src/sync/pull.ts',
+    'packages/core/src/sync/photos.ts',
+  ];
+
+  const STORE_VIOLATION = `
+import { localStore } from '../db/store';
+export function probe(): unknown {
+  return localStore();
+}
+`;
+
+  const HEADERS_VIOLATION = `
+import { syncHeaders } from '../api';
+export function probe(): unknown {
+  return syncHeaders();
+}
+`;
+
+  const MONGO_IN_A_PASS = `
+import { MongoClient } from 'mongodb';
+export function probe(client: MongoClient): unknown {
+  return client;
+}
+`;
+
+  it('refuses the installed store inside a pass', async () => {
+    for (const file of PASS_FILES) {
+      expect(await rulesFiredIn(file, STORE_VIOLATION), file).toContain('no-restricted-imports');
+    }
+  });
+
+  it('refuses headers that did not come from the pass', async () => {
+    for (const file of PASS_FILES) {
+      expect(await rulesFiredIn(file, HEADERS_VIOLATION), file).toContain('no-restricted-imports');
+    }
+  });
+
+  /**
+   * Setting `no-restricted-imports` again replaces its options for the files
+   * the block covers. The pass block carries the earlier guards on purpose;
+   * this is what notices if one is dropped.
+   */
+  it('still carries the shared-code guards for those files', async () => {
+    for (const file of PASS_FILES) {
+      expect(await rulesFiredIn(file, MONGO_IN_A_PASS), file).toContain('no-restricted-imports');
+    }
+  });
+
+  it('leaves the rest of the engine free to read the installed store', async () => {
+    expect(await rulesFiredIn('packages/core/src/sync/queue.ts', STORE_VIOLATION)).not.toContain(
+      'no-restricted-imports',
+    );
+    expect(await rulesFiredIn('packages/core/src/sync/pass.ts', STORE_VIOLATION)).not.toContain(
+      'no-restricted-imports',
+    );
+  });
+});
